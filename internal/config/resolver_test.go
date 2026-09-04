@@ -201,6 +201,42 @@ func TestResolveRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestResolveMCPArgsInheritReplaceAndClear(t *testing.T) {
+	global := layer(model.ScopeGlobal, map[string]model.MCPDefinition{
+		"shared": {ID: "shared", Command: "server", Args: []string{"--global", "value"}},
+	}, nil, nil)
+
+	inherited, err := Resolve(global, nil, layerp(model.ScopeProject, map[string]model.MCPDefinition{
+		"shared": {ID: "shared"},
+	}, nil, nil), nil)
+	if err != nil {
+		t.Fatalf("Resolve(inherit) error = %v", err)
+	}
+	if !reflect.DeepEqual(inherited.MCPs["shared"].Args, []string{"--global", "value"}) || inherited.MCPs["shared"].Source != model.ScopeGlobal {
+		t.Fatalf("inherited args = %+v", inherited.MCPs["shared"])
+	}
+
+	replaced, err := Resolve(global, nil, layerp(model.ScopeProject, map[string]model.MCPDefinition{
+		"shared": {ID: "shared", Args: []string{"--project"}},
+	}, nil, nil), nil)
+	if err != nil {
+		t.Fatalf("Resolve(replace) error = %v", err)
+	}
+	if !reflect.DeepEqual(replaced.MCPs["shared"].Args, []string{"--project"}) || replaced.MCPs["shared"].Source != model.ScopeProject {
+		t.Fatalf("replaced args = %+v", replaced.MCPs["shared"])
+	}
+
+	cleared, err := Resolve(global, nil, layerp(model.ScopeProject, map[string]model.MCPDefinition{
+		"shared": {ID: "shared", Args: []string{}},
+	}, nil, nil), nil)
+	if err != nil {
+		t.Fatalf("Resolve(clear) error = %v", err)
+	}
+	if cleared.MCPs["shared"].Args == nil || len(cleared.MCPs["shared"].Args) != 0 || cleared.MCPs["shared"].Source != model.ScopeProject {
+		t.Fatalf("cleared args = %+v", cleared.MCPs["shared"])
+	}
+}
+
 func TestResolveDoesNotMutateOrAliasInputs(t *testing.T) {
 	global := layer(model.ScopeGlobal,
 		map[string]model.MCPDefinition{
@@ -208,6 +244,7 @@ func TestResolveDoesNotMutateOrAliasInputs(t *testing.T) {
 				ID:      "github",
 				Enabled: boolp(true),
 				Command: "github-mcp",
+				Args:    []string{"serve", "--global"},
 				Env:     map[string]string{"BASE": "shared", "MODE": "global"},
 			},
 		},
@@ -238,6 +275,7 @@ func TestResolveDoesNotMutateOrAliasInputs(t *testing.T) {
 
 	resolved := got.MCPs["github"]
 	resolved.Env["MODE"] = "mutated-output"
+	resolved.Args[0] = "mutated-output"
 	*resolved.Enabled = false
 	got.MCPs["github"] = resolved
 
@@ -246,6 +284,9 @@ func TestResolveDoesNotMutateOrAliasInputs(t *testing.T) {
 	}
 	if project.MCPs["github"].Env["MODE"] != "project" {
 		t.Fatalf("output env aliases project input: %+v", project.MCPs["github"].Env)
+	}
+	if global.MCPs["github"].Args[0] != "serve" {
+		t.Fatalf("output args alias global input: %+v", global.MCPs["github"].Args)
 	}
 	assertBool(t, global.MCPs["github"].Enabled, true)
 

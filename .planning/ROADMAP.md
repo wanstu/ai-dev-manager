@@ -148,13 +148,78 @@
 
 ---
 
-## Later Milestones
+## Milestone v0.2 — Usable Control Plane ✅ Completed 2026-09-04
 
-### v0.2 — Docker / Process / Debug
-- Docker ps / compose / logs / inspect。
-- Process start/stop/status/logs。
-- 开发服务器启动、日志读取、接口验证闭环。
-- Debug / DAP feasibility。
+**Goal:** 把 v0.1 Core 组合成真正可启动、可检查、可连接的本地运行时产品入口；CLI 只是第一个 Control Plane client。
+
+## Phase 7 — Control Plane Composition & Introspection ✅ Completed 2026-09-04
+
+**Goal:** 建立 application/control-plane service，以 Workspace ID 作为入口统一组装 EffectiveConfig、Native Runtime、Runtime Adapter 与 MCP Host 生命周期，并提供结构化 introspection。
+
+**Requirements:** CTRL-01..03
+
+**Scope:**
+- 新增 `internal/controlplane`，组合 Store / Workspace Registry / ConfigService / Native Runtime / Runtime Adapter / Host Manager。
+- 支持按 Workspace ID resolve + build runtime，不让 CLI/MCP client 手工拼装底层组件。
+- 提供 workspace/runtime introspection snapshot，暴露 identity、policy、capabilities、effective MCP/Skill/Verifier 与 Source/EnabledSource。
+- 提供本进程内 StartMCP/Get/List/StopMCP 生命周期；继续 loopback-only。
+- Native 以外的 runtime selection 返回结构化 unsupported error，不伪装成 Native。
+
+**Exit criteria:**
+1. 从持久化 Workspace ID 能建立可工作的 Native runtime adapter。
+2. introspection 能证明 Project/Profile/Global 来源信息仍正确。
+3. Control Plane 启动的 MCP endpoint 可被官方 client 连接并读 workspace 文件。
+4. 两个 Workspace 通过同一 Control Plane 仍保持隔离。
+5. `go test ./...` 与 `go vet ./...` 通过。
+
+---
+
+## Phase 8 — CLI & Foreground MCP Serve ✅ Completed 2026-09-04
+
+**Goal:** 提供第一个真正的 `ai-dev-manager` 可执行入口，让用户无需测试代码即可注册/查看 Workspace 并启动 MCP endpoint。
+
+**Requirements:** CLI-01..03
+
+**Scope:**
+- 新增 `cmd/ai-dev-manager`，仅解析输入/格式化输出并调用 Control Plane / Registry。
+- 支持 config root 显式指定，便于测试与多环境使用。
+- workspace add/list/show。
+- inspect/effective runtime snapshot。
+- `serve --workspace <id>` foreground MCP；输出 endpoint，处理 Ctrl+C/termination 后优雅 stop。
+- JSON 输出作为稳定机器接口；人类可读输出保持最小。
+
+**Exit criteria:**
+1. 可以用真实二进制注册一个 temp workspace，再 list/show。
+2. inspect 输出包含 runtime capabilities 与 effective config source 信息。
+3. `serve` 启动后官方 MCP client 能连接并调用 read。
+4. CLI 不直接 import config resolver 或 Native 的内部实现细节来重复 composition。
+5. `go test ./...`、`go vet ./...`、`go build ./cmd/ai-dev-manager` 通过。
+
+---
+
+## Phase 9 — Configured MCP Activation & Health ✅ Completed 2026-09-04
+
+**Goal:** 把 Phase 3 的 MCP Catalog 从“配置可解析”推进到“Enabled MCP 可真实 activation/probe，并可查看 health”的运行闭环。
+
+**Requirements:** MCPA-01..03
+
+**Scope:**
+- 为 stdio / Streamable HTTP MCP Definition 建立显式 activation contract；只实现当前测试需要的 transport，不扩展任意 shell。
+- EnvRefs 在 activation 边界从宿主环境解析；普通状态/错误不输出 secret value。
+- disabled inherited MCP 不 activation；Project override/disable 保持 Workspace 隔离。
+- Control Plane 提供 configured MCP status/health；CLI 增加检查入口。
+- 失败保持结构化状态，不把 `configured` 当作 `healthy`。
+
+**Exit criteria:**
+1. 一个 Global configured MCP 能被两个 Workspace 各自 activation/probe。
+2. Workspace A disable 后只阻止 A，Workspace B 仍可 healthy。
+3. EnvRefs 缺失返回明确错误且不泄露其他环境值。
+4. 至少一个真实 local stdio MCP fixture 完成 initialize/list-tools 或等价健康探测。
+5. v0.2 全量 `go test ./...`、`go vet ./...` 通过，并完成 CLI → Workspace → Runtime → MCP endpoint → read/verify 的最终闭环。
+
+---
+
+## Later Milestones
 
 ### v0.3 — Agents / GSD Runtime
 - Agent / subagent registry。
@@ -162,11 +227,21 @@
 - Planner / Executor / Reviewer workflow。
 - 多 worktree 多会话隔离。
 
-### v0.4 — Compatibility & UI
+### v0.4 — Docker / Process / Debug
+- Docker ps / compose / logs / inspect。
+- Process start/stop/status/logs。
+- 开发服务器启动、日志读取、接口验证闭环。
+- Debug / DAP feasibility。
+
+### v0.5 — Compatibility
 - DevSpace adapter 完善。
 - CodexPro / codexprov4 adapter。
 - Codex CLI / Claude Code / OpenCode executor adapters。
+
+### v0.6 — UI / Remote Access
 - 独立 Desktop UI 是否需要，在此时再决定。
+- codexprov4 UI integration。
+- HTTPS / tunnel / auth / remote lifecycle。
 
 ## Requirement Traceability
 
@@ -185,6 +260,9 @@
 | SEC-01 | 4 |
 | VERIFY-* | 5 |
 | COMPAT-* | 1, 6 |
+| CTRL-* | 7 |
+| CLI-* | 8 |
+| MCPA-* | 9 |
 
 ## GSD Development Rules
 

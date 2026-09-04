@@ -181,6 +181,10 @@ func mergeMCP(current model.ResolvedMCP, incoming model.MCPDefinition, scope mod
 		merged.Command = incoming.Command
 		bodyChanged = true
 	}
+	if incoming.Args != nil {
+		merged.Args = cloneStringSlicePreserveEmpty(incoming.Args)
+		bodyChanged = true
+	}
 	if incoming.URL != "" {
 		merged.URL = incoming.URL
 		bodyChanged = true
@@ -298,6 +302,7 @@ func cloneResolvedVerifier(source model.ResolvedVerifier) model.ResolvedVerifier
 func cloneMCPDefinition(source model.MCPDefinition) model.MCPDefinition {
 	clone := source
 	clone.Enabled = cloneBoolPtr(source.Enabled)
+	clone.Args = cloneStringSlicePreserveEmpty(source.Args)
 	clone.Env = cloneStringMap(source.Env)
 	clone.EnvRefs = cloneStringMap(source.EnvRefs)
 	return clone
@@ -349,6 +354,16 @@ func cloneStringMap(source map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
+}
+
+func cloneStringSlicePreserveEmpty(source []string) []string {
+	if source == nil {
+		return nil
+	}
+	if len(source) == 0 {
+		return []string{}
+	}
+	return append([]string(nil), source...)
 }
 
 func sortedMCPKeys(values map[string]model.MCPDefinition) []string {

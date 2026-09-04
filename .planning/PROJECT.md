@@ -23,9 +23,9 @@
 - DevSpace：借鉴 worktree、runtime、skills、agents、execution contract 等成熟思路。
 - 本项目不 fork CodexPro 或 DevSpace，不把两边代码直接揉在一起；优先借鉴设计，并通过 Adapter / Capability 接口保持兼容空间。
 
-## Current Milestone: v0.1 Core Foundation
+## Current Milestone: v0.2 Usable Control Plane
 
-**Goal:** 建立可测试的核心领域模型和配置继承引擎，形成第一条“Global → Profile → Project → Runtime Override → EffectiveConfig”的闭环，为后续 MCP、Skill、Runtime、Execution 提供稳定基础。
+**Goal:** 把 v0.1 已验证的 Core 从“库 + 测试”推进成真正可启动、可检查、可连接的本地开发运行时：由统一 Control Plane 从 Workspace ID 组装 EffectiveConfig、Native Runtime、Runtime Adapter 与 MCP Host，并提供 CLI 作为第一个薄客户端。
 
 ## Requirements
 
@@ -66,43 +66,34 @@
 - [x] **COMPAT-03**: 为未来 DevSpace Runtime Adapter 预留稳定接口。— Runtime Adapter contract and mapping documented in Phase 6
 - [x] **COMPAT-04**: 为外部 MCP / Agent runtime 预留 Adapter 接口，不要求重写 Core。— Validated in Phase 6 with a non-Native fake external runtime hosted through the same manager/MCP status path
 
-### Active
+### Active — v0.2
 
-#### Configuration
+#### Control Plane
 
-(Core resolver + v1 JSON persistence are validated; future configuration extensions are tracked by the capability phases that need them.)
+- [x] **CTRL-01**: 从 Workspace ID 统一解析 Workspace + EffectiveConfig，并构造 Native Runtime / Runtime Adapter；调用方不再手工拼装这些组件。— Phase 7 validated with persisted Workspace → Resolve → NativeAdapter composition and structured unsupported-runtime errors
+- [x] **CTRL-02**: Control Plane 提供 Workspace runtime introspection，至少返回 workspace identity、runtime selection、policy、capabilities、MCP/Skill/Verifier effective state 与来源信息。— Phase 7 validated deterministic safe snapshot with Source/EnabledSource and no Env/EnvRefs values
+- [x] **CTRL-03**: Control Plane 统一管理本进程内 MCP Host instance 的 start/list/get/stop 生命周期，并保持一个 instance 固定绑定一个 Workspace Runtime。— Phase 7 validated two persisted Workspace MCP instances with official clients, isolation, stop independence and loopback host reuse
 
-#### Workspace
+#### CLI
 
-(Workspace registration, isolation and managed worktree requirements are validated through Phase 5.)
+- [x] **CLI-01**: 提供真正的 `ai-dev-manager` 可执行入口，并保持 CLI 为 Control Plane 的薄客户端，不复制 resolver/runtime 逻辑。— Phase 8 validated standard-library CLI entrypoint importing Control Plane/Workspace only for composition/CRUD
+- [x] **CLI-02**: CLI 支持 workspace add/list/show 与 effective/runtime inspect 的最小日常管理闭环。— Phase 8 validated temp-root add/list/show/inspect JSON flow
+- [x] **CLI-03**: CLI 支持按 Workspace 启动 foreground loopback MCP serve，输出可连接 endpoint，并在进程退出/信号时安全停止。— Phase 8 validated cancellable foreground serve with official MCP client read and graceful shutdown
 
-#### MCP / Skills
+#### MCP Runtime Activation
 
-(MCP Catalog and Skill discovery requirements are validated through Phase 3.)
+- [x] **MCPA-01**: 已配置且 Enabled 的 MCP Definition 能从 EffectiveConfig 进入显式 activation/probe 生命周期；disabled 项不启动。— Phase 9 validated real stdio and Streamable HTTP Connect + ListTools probes; disabled entries are not activated
+- [x] **MCPA-02**: Global/Profile/Project 的 MCP 继承差异在真实 activation 中保持 Workspace 隔离，实际 secret 只在启动边界通过 EnvRefs 解析，不写回配置或普通状态输出。— Phase 9 validated Global MCP A/B isolation, Project disable, EnvRef resolution and safe status output
+- [x] **MCPA-03**: activation health/status 可通过 Control Plane/CLI 检查；失败必须结构化报告，不能把配置存在误报成 runtime healthy。— Phase 9 validated unprobed/disabled/healthy/error lifecycle, structured missing-EnvRef failure and CLI MCP surface
 
-#### Agents
+## Out of Scope — v0.2
 
-(Agent/Subagent orchestration is deferred beyond v0.1; see Out of Scope.)
-
-#### Runtime & Execution
-
-(Runtime capability, multi-instance hosting and future extension interfaces are validated through Phase 6.)
-
-#### Verification
-
-(Structured verifier declaration, execution and traceability are validated through Phase 5.)
-
-#### Compatibility
-
-(Runtime Adapter compatibility boundaries are validated/documented through Phase 6.)
-
-## Out of Scope — v0.1
-
-- **AGENT-01** Agent / Subagent Registry 与 orchestration — 延后到 v0.3 Agents / GSD Runtime，不在 v0.1 创建空抽象。
-- 桌面 UI / 托盘 — `codexprov4` 当前负责用户日常使用；新 Core 先不做 UI。
-- 完整 DevSpace 兼容层 — 先稳定自身接口，避免被外部实现反向绑架架构。
-- Docker 结构化 API — v0.1 只预留 capability，后续再实现。
-- Debugger / DAP 深度集成 — 后续阶段。
+- **AGENT-01** Agent / Subagent Registry 与 orchestration — 延后到 v0.3 Agents / GSD Runtime，不在 v0.2 创建空抽象。
+- 桌面 UI / 托盘 — `codexprov4` 当前负责用户日常使用；v0.2 只交付 CLI/Control Plane surface。
+- 后台 daemon / service manager — v0.2 先用 foreground MCP serve 验证真实使用闭环，不为了 `start/stop` 跨进程语法提前引入常驻守护进程。
+- 完整 DevSpace / CodexPro runtime 兼容层 — 先用 Native Runtime 验证 Control Plane 产品边界。
+- Docker 结构化 API、Process Manager、Debugger / DAP — 延后到后续 milestone。
+- 公网 HTTPS / tunnel / auth — v0.2 继续 loopback-only。
 - 多机远程 Runtime — 后续阶段。
 - 云端账号、团队协作、计费 — 当前是本地个人开发工具。
 - 一开始支持所有 OS — 架构尽量不锁死 Windows，但 v0.x 优先保证当前 Windows 开发环境。
@@ -170,6 +161,10 @@ Go 的原因：单文件部署友好、并发和进程管理适合本地 runtime
 | v0.1 HTTP Host 默认且仅允许 loopback listen | 防止本地开发 Runtime 被无意暴露；公网 HTTPS/tunnel/auth 后续由 Control Plane 显式管理 | Accepted |
 | MCP Host 只依赖协议无关 Runtime Adapter interface，不依赖 Native/Config Store/Workspace Registry | CodexPro、DevSpace、其他外部 runtime 可以通过 adapter 接入而不重写 Core | Accepted |
 | 未知 external capability 只通过 runtime_info 展示，不自动生成可执行 MCP tool | 防止 capability 名称自动变成未经设计/审核的远程执行入口 | Accepted |
+| v0.2 先做 Usable Control Plane，而不是优先 Docker / Process / Debug | v0.1 已有强 Core 但没有产品入口；先验证 Workspace → EffectiveConfig → Runtime → MCP 的真实日常闭环 | Accepted |
+| CLI 是 Control Plane 的薄客户端，不承载 resolver/runtime 业务逻辑 | 未来 Desktop/codexprov4/API 都应复用同一 application service，避免 CLI 成为第二套架构 | Accepted |
+| v0.2 先提供 foreground MCP serve，不引入后台 daemon | 跨进程 start/stop 会强迫提前解决守护进程、IPC、持久状态；当前 vertical slice 只需要真实可连接 endpoint | Accepted |
+| Configured MCP activation 必须显式解析 Enabled/EnvRefs 并报告真实 health | 配置存在不等于 runtime healthy；secret 只应在启动边界解析，不能写回配置或普通状态 | Accepted |
 
 ## Evolution Rules
 

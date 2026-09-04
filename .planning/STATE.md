@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1
-milestone_name: Core Foundation
+milestone: v0.2
+milestone_name: Usable Control Plane
 status: complete
-last_updated: "2026-09-04T21:00:00+08:00"
+last_updated: "2026-09-04T22:09:00+08:00"
 last_activity: 2026-09-04
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
   percent: 100
 ---
 
@@ -17,11 +17,11 @@ progress:
 
 ## Current Position
 
-Milestone: v0.1 — Core Foundation
-Phase: 6 of 6 — MCP Host / External Runtime Adapter
-Plan: 06-01 — MCP host + multi-instance runtime adapter vertical slice
+Milestone: v0.2 — Usable Control Plane
+Phase: 9 of 9 — Configured MCP Activation & Health
+Plan: 09-01 — configured MCP activation + health vertical slice
 Status: Completed
-Last activity: 2026-09-04 — Phase 6 and v0.1 exit criteria verified; auto-advance stopped at milestone boundary
+Last activity: 2026-09-04 — Phase 9 and v0.2 exit criteria verified; auto-advance stopped at milestone boundary
 
 ## Completed
 
@@ -132,15 +132,39 @@ D:/tools/go/go1.26.5/bin/go.exe vet ./...
 → PASS
 ```
 
-MCP SDK scope search under `internal/` found imports only in:
+At the v0.1 boundary, MCP SDK imports were isolated to the MCP adapter/host test boundary. v0.2 intentionally adds official MCP SDK client usage in `internal/mcp/activation.go` and its tests for configured MCP probing. Core packages (`model/config/runtime/workspace/skill`) still do not import the MCP SDK.
+
+## v0.2 Completed
+
+### Phase 7 — Control Plane Composition & Introspection
+
+Validated persisted Workspace ID → EffectiveConfig → Native Runtime → Runtime Adapter → MCP Host composition, deterministic safe introspection, unsupported runtime errors, and two-workspace isolation.
+
+### Phase 8 — CLI & Foreground MCP Serve
+
+Validated the real `ai-dev-manager` executable with workspace add/list/show, runtime inspect, foreground loopback MCP serve, official MCP client read, and graceful cancellation.
+
+### Phase 9 — Configured MCP Activation & Health
+
+Validated structured MCP argv inheritance/override/clear, real stdio and Streamable HTTP activation/probe, EnvRefs-at-launch without secret output, health/status, Global inheritance with Project disable isolation, and process-local stop behavior.
+
+## Final v0.2 Verification
 
 ```text
-internal/adapter/mcpserver/server.go
-internal/adapter/mcpserver/server_test.go
-internal/host/manager_test.go
+go fmt ./...
+→ PASS
+
+go test ./...
+→ all packages PASS
+
+go vet ./...
+→ PASS
+
+go build -o NUL ./cmd/ai-dev-manager
+→ PASS
 ```
 
-Core packages (`model/config/runtime/workspace/skill`) do not import the MCP SDK.
+Manual Windows acceptance also validated a built `ai-dev-manager.exe` for workspace add/list/inspect and foreground `serve`, resolving the workspace to `native` / `read-only` and binding a loopback `/mcp` endpoint.
 
 ## Locked Direction
 
@@ -168,7 +192,7 @@ Core packages (`model/config/runtime/workspace/skill`) do not import the MCP SDK
 - official MCP Go SDK v1.7.0 changes the module `go` directive to 1.25.0.
 - Windows atomic config replacement and symlink containment tests passed on the current host.
 
-## Deferred Beyond v0.1
+## Deferred Beyond v0.2
 
 - final product name.
 - desktop UI / tray integration.
@@ -178,9 +202,10 @@ Core packages (`model/config/runtime/workspace/skill`) do not import the MCP SDK
 - Docker structured API.
 - Process manager / Debug / DAP.
 - Agent / Subagent orchestration and deeper GSD runtime integration.
+- background daemon / persistent cross-process runtime supervision.
 - multi-machine remote runtime.
 - raw shell interpreter capability, if ever justified separately from structured exec.
 
 ## Next Action
 
-v0.1 milestone is complete. `workflow.auto_advance=true` stops here because there is no approved next milestone plan. Before code continues, create/approve the v0.2 roadmap and requirements rather than silently expanding scope.
+v0.2 milestone is complete. `workflow.auto_advance=true` stops at this milestone boundary. Before code continues, create/approve the v0.3 Agents / GSD Runtime roadmap and requirements rather than silently expanding scope.

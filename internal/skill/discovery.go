@@ -165,6 +165,9 @@ func cloneLayer(source model.ConfigLayer) model.ConfigLayer {
 func cloneMCP(source model.MCPDefinition) model.MCPDefinition {
 	clone := source
 	clone.Enabled = cloneBool(source.Enabled)
+	if source.Args != nil {
+		clone.Args = append([]string{}, source.Args...)
+	}
 	clone.Env = cloneMap(source.Env)
 	clone.EnvRefs = cloneMap(source.EnvRefs)
 	return clone

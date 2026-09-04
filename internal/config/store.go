@@ -369,6 +369,7 @@ type mcpDTO struct {
 	Enabled   *bool             `json:"enabled,omitempty"`
 	Transport string            `json:"transport,omitempty"`
 	Command   string            `json:"command,omitempty"`
+	Args      []string          `json:"args,omitempty"`
 	URL       string            `json:"url,omitempty"`
 	Env       map[string]string `json:"env,omitempty"`
 	EnvRefs   map[string]string `json:"env_refs,omitempty"`
@@ -470,6 +471,7 @@ func mcpDTOFromModel(definition model.MCPDefinition) mcpDTO {
 		Enabled:   cloneBool(definition.Enabled),
 		Transport: definition.Transport,
 		Command:   definition.Command,
+		Args:      cloneStringSlicePreserveEmpty(definition.Args),
 		URL:       definition.URL,
 		Env:       cloneMap(definition.Env),
 		EnvRefs:   cloneMap(definition.EnvRefs),
@@ -482,6 +484,7 @@ func (d mcpDTO) toModel() model.MCPDefinition {
 		Enabled:   cloneBool(d.Enabled),
 		Transport: d.Transport,
 		Command:   d.Command,
+		Args:      cloneStringSlicePreserveEmpty(d.Args),
 		URL:       d.URL,
 		Env:       cloneMap(d.Env),
 		EnvRefs:   cloneMap(d.EnvRefs),

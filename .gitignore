@@ -9,6 +9,7 @@ build/
 # Local runtime state
 .runtime/
 .ai-dev-manager/runtime/
+.tmp-adm-config/
 
 # IDE / OS
 .vscode/

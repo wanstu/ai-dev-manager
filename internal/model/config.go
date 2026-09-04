@@ -28,6 +28,7 @@ type MCPDefinition struct {
 	Enabled   *bool
 	Transport string
 	Command   string
+	Args      []string
 	URL       string
 	Env       map[string]string
 	EnvRefs   map[string]string

@@ -40,7 +40,7 @@ func TestStoreUserConfigRoundTripAndOverwrite(t *testing.T) {
 			Scope: model.ScopeGlobal,
 			MCPs: map[string]model.MCPDefinition{
 				"github": {
-					ID: "github", Enabled: storeBool(true), Transport: "stdio", Command: "github-mcp",
+					ID: "github", Enabled: storeBool(true), Transport: "stdio", Command: "github-mcp", Args: []string{"serve", "--stdio"},
 					Env: map[string]string{"MODE": "共享"}, EnvRefs: map[string]string{"SERVICE_CREDENTIAL": "REFERENCE_NAME"},
 				},
 			},
