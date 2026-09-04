@@ -1,0 +1,25 @@
+# Build outputs
+bin/
+dist/
+build/
+*.exe
+*.test
+*.out
+
+# Local runtime state
+.runtime/
+.ai-dev-manager/runtime/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets / local overrides
+.env
+.env.*
+*.local
+
+# Logs
+*.log
