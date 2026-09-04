@@ -48,13 +48,28 @@ func NewManager() *Manager {
 }
 
 func (m *Manager) StartHTTP(instanceID string, adapter runtimeadapter.Runtime, addr string) (Instance, error) {
+	return m.startHTTP(instanceID, adapter, addr, false)
+}
+
+// StartHTTPExposed is an explicit opt-in path for callers that intentionally
+// need an MCP listener reachable outside host loopback (for example from a
+// local Docker container). StartHTTP remains loopback-only by default.
+func (m *Manager) StartHTTPExposed(instanceID string, adapter runtimeadapter.Runtime, addr string) (Instance, error) {
+	return m.startHTTP(instanceID, adapter, addr, true)
+}
+
+func (m *Manager) startHTTP(instanceID string, adapter runtimeadapter.Runtime, addr string, allowNonLoopback bool) (Instance, error) {
 	if strings.TrimSpace(instanceID) == "" || adapter == nil {
 		return Instance{}, fmt.Errorf("invalid MCP instance")
 	}
 	if strings.TrimSpace(addr) == "" {
 		addr = "127.0.0.1:0"
 	}
-	if err := validateLoopbackAddress(addr); err != nil {
+	if allowNonLoopback {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			return Instance{}, fmt.Errorf("invalid MCP listen address %q", addr)
+		}
+	} else if err := validateLoopbackAddress(addr); err != nil {
 		return Instance{}, err
 	}
 
@@ -64,12 +79,26 @@ func (m *Manager) StartHTTP(instanceID string, adapter runtimeadapter.Runtime, a
 		return Instance{}, fmt.Errorf("MCP instance %q already exists", instanceID)
 	}
 
-	listener, err := net.Listen("tcp", addr)
+	network := "tcp"
+	if host, _, splitErr := net.SplitHostPort(addr); splitErr == nil && host == "0.0.0.0" {
+		network = "tcp4"
+	}
+	listener, err := net.Listen(network, addr)
 	if err != nil {
 		return Instance{}, fmt.Errorf("listen MCP instance %q: %w", instanceID, err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", mcpserver.NewHTTPHandler(adapter))
+	handler := mcpserver.NewHTTPHandler(adapter)
+	if allowNonLoopback {
+		bindHost, _, _ := net.SplitHostPort(addr)
+		options := mcpserver.ExposedHTTPOptions{AllowedHosts: []string{bindHost}}
+		if bindHost == "0.0.0.0" || bindHost == "::" || bindHost == "" {
+			options.AllowedHosts = []string{"host.docker.internal"}
+			options.AllowIPLiteral = true
+		}
+		handler = mcpserver.NewExposedHTTPHandler(adapter, options)
+	}
+	mux.Handle("/mcp", handler)
 	httpServer := &http.Server{Handler: mux}
 
 	actualAddress := listener.Addr().String()

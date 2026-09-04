@@ -209,6 +209,14 @@ func (s *Service) StartMCP(instanceID, workspaceID string, runtimeOverride *mode
 	return s.host.StartHTTP(instanceID, adapter, addr)
 }
 
+func (s *Service) StartMCPExposed(instanceID, workspaceID string, runtimeOverride *model.ConfigLayer, addr string) (host.Instance, error) {
+	adapter, err := s.BuildRuntime(workspaceID, runtimeOverride)
+	if err != nil {
+		return host.Instance{}, err
+	}
+	return s.host.StartHTTPExposed(instanceID, adapter, addr)
+}
+
 func (s *Service) GetMCP(instanceID string) (host.Instance, bool) { return s.host.Get(instanceID) }
 func (s *Service) ListMCP() []host.Instance                       { return s.host.List() }
 func (s *Service) StopMCP(ctx context.Context, instanceID string) error {

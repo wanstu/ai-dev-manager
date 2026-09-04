@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.2
-milestone_name: Usable Control Plane
+milestone: v0.3.1
+milestone_name: Usability Acceptance
 status: complete
-last_updated: "2026-09-04T22:09:00+08:00"
+last_updated: "2026-09-04T23:55:00+08:00"
 last_activity: 2026-09-04
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 2
+  completed_plans: 2
   percent: 100
 ---
 
@@ -17,11 +17,11 @@ progress:
 
 ## Current Position
 
-Milestone: v0.2 — Usable Control Plane
-Phase: 9 of 9 — Configured MCP Activation & Health
-Plan: 09-01 — configured MCP activation + health vertical slice
+Milestone: v0.3.1 — Usability Acceptance
+Phase: 14 — Daily CLI UX
+Plan: 14-01 — up/down/ps/ctl usability vertical slice
 Status: Completed
-Last activity: 2026-09-04 — Phase 9 and v0.2 exit criteria verified; auto-advance stopped at milestone boundary
+Last activity: 2026-09-04 — v0.3.1 verified with real Docker MCP initialize plus one-shot up/down/ps/ctl lifecycle acceptance
 
 ## Completed
 
@@ -166,6 +166,154 @@ go build -o NUL ./cmd/ai-dev-manager
 
 Manual Windows acceptance also validated a built `ai-dev-manager.exe` for workspace add/list/inspect and foreground `serve`, resolving the workspace to `native` / `read-only` and binding a loopback `/mcp` endpoint.
 
+## v0.3 Progress
+
+### Phase 10 — Local Daemon & Control API ✅
+
+Validated:
+
+- config-root-scoped `runtime/daemon.json` discovery metadata and heartbeat owner lease.
+- loopback-only local Control API with health/stop and client-side endpoint revalidation.
+- daemon owns one long-lived `controlplane.Service` and cleans it with `StopAll` on shutdown.
+- `start/status/stop` CLI works across independent processes; repeat start is idempotent to the same instance/PID.
+- stale lease recovery is bounded by heartbeat freshness rather than trusting a PID file alone.
+
+Acceptance:
+
+```text
+go fmt ./... → PASS
+go test ./... → PASS
+go vet ./... → PASS
+go build ./cmd/ai-dev-manager → PASS
+
+real ai-dev-manager-phase10.exe:
+start  → daemon_03b25ea27a87132e20c6e7c9a7ccaaf9 pid=10224 running
+status → same instance / same pid
+start  → same instance / same pid
+stop   → same instance stopped
+status → stopped
+```
+
+### Phase 11 — Persistent Workspace Runtime Ownership ✅
+
+Validated:
+
+- daemon-owned `RuntimeOwner` uses the same long-lived `controlplane.Service` for Workspace MCP Host and configured MCP activation.
+- `runtime start/status/stop/list` are local Control API operations; CLI does not locally rebuild a persistent runtime.
+- one Workspace has one idempotent runtime Host; two Workspaces receive independent loopback endpoints.
+- configured MCP session remains `healthy` across later status calls; activation failure rolls back the Workspace Host/session and records observed error state.
+- stop A does not affect B; daemon shutdown closes remaining owned runtimes before final Control Plane cleanup.
+
+Acceptance:
+
+```text
+go fmt ./... → PASS
+go test ./... → PASS
+go vet ./... → PASS
+go build ./cmd/ai-dev-manager → PASS
+
+real ai-dev-manager-phase11.exe:
+daemon → daemon_dd47bee4bbbdc2c1a94a9527226dfaf7 pid=33064
+A → ws_474118cbf1f0dd6535e797dd7e22ab8a endpoint 127.0.0.1:46190
+B → ws_35a7c4d98c6a0eedeae14d12b8494256 endpoint 127.0.0.1:46192
+repeat A → same endpoint
+stop A → A stopped
+status B → B still running
+stop daemon → stopped
+```
+
+### Phase 12 — Restart Reconciliation & Lifecycle Acceptance ✅
+
+Validated:
+
+- persisted `runtime/desired-runtimes.json` stores only schema version + deterministic sorted Workspace IDs.
+- explicit `runtime start` persists desired=true before observed startup; activation failure keeps desired=true for later retry.
+- explicit `runtime stop` removes desired state before teardown; daemon shutdown preserves desired state while stopping only observed Host/session resources.
+- daemon startup reconciles desired Workspaces through the same RuntimeOwner/Control Plane path and never restores old endpoint/session objects.
+- corrupt desired state blocks healthy daemon publication rather than silently treating desired state as empty.
+- direct daemon kill leaves stale discovery/lease, and a new `start` waits for heartbeat staleness, safely reclaims ownership, creates a new daemon identity and rebuilds the desired runtime.
+- old runtime endpoints are unreachable after clean/crash shutdown and are never used as evidence of new health.
+
+Acceptance:
+
+```text
+go fmt ./... → PASS
+go test ./... → PASS
+go vet ./... → PASS
+go build ./cmd/ai-dev-manager → PASS
+
+process-level tests:
+TestCLIDaemonCleanRestartReconcilesDesiredRuntimes → PASS
+TestCLIDaemonCrashRestartReclaimsStaleLeaseAndReconciles → PASS
+
+real ai-dev-manager-phase12.exe clean restart:
+first daemon  → daemon_73a5f6bf7ee45fc9e436a60f64981e1c pid=28996
+first runtime → ws_e0ac652b045670ebde6d46b3a81b4504 endpoint 127.0.0.1:30924
+stop daemon   → observed runtime stopped, desired preserved
+second daemon → daemon_a11c0ef8fad9fa7990cd743a1adb8d76 pid=3156
+reconciled    → same Workspace running at rebuilt endpoint 127.0.0.1:30927
+```
+
+## Final v0.3 Verification
+
+```text
+go fmt ./... → PASS
+go test ./... → all packages PASS
+go vet ./... → PASS
+go build ./cmd/ai-dev-manager → PASS
+```
+
+v0.3 completes the persistent ownership foundation. Auto-advance stopped there until real-user usability acceptance resumed as v0.3.1.
+
+## v0.3.1 — Usability Acceptance ✅
+
+### Phase 13 — Docker-reachable Workspace MCP
+
+Validated:
+
+- default Workspace MCP path remains loopback-only; explicit exposed path is separate.
+- `runtime start --docker` binds IPv4 wildcard intentionally and reports both Local and `host.docker.internal` endpoints.
+- desired runtime schema v2 persists listen/exposure intent while reading legacy v1 desired state as loopback defaults.
+- changing an already-running Workspace from loopback to Docker exposure rebuilds only that observed Host without requiring a manual stop first.
+- daemon restart reconciles the persisted Docker exposure rather than reverting to loopback.
+- exposed HTTP disables the SDK localhost-only check only on the explicit exposure path and replaces it with an ai-dev-manager Host/Origin allowlist; unexpected Host/Origin remains HTTP 403.
+- MCP tool structured output is normalized to an object envelope (`{"result": ...}`), and the matching output schema uses explicit `{"result": {}}` instead of boolean JSON Schema `true`, preserving MCP data while remaining compatible with the tested MCP Hub/Zod stack.
+- daemon Control API remains loopback-only.
+
+Real Docker acceptance using the running `mcphub` container:
+
+```text
+Workspace: ws_8062e3c4b7ce9eeae7aa0f8bab45cf42
+Docker MCP: http://host.docker.internal:33997/mcp
+GET /mcp from mcphub → HTTP 405 + Allow: POST (handler reached)
+POST initialize from mcphub → HTTP 200 text/event-stream
+serverInfo.name → ai-dev-manager
+protocolVersion → 2025-11-25
+```
+
+### Phase 14 — Daily CLI UX
+
+Validated:
+
+- `up [path|workspace-id]` defaults to current directory, auto-registers an unknown directory, starts/reuses daemon, and starts Runtime.
+- `up --docker` emits directly usable Local and Docker MCP URLs; repeated `up` reuses the same Workspace ID.
+- `down [path|workspace-id]` defaults to current directory and explicitly clears that Workspace desired-running state without stopping daemon.
+- `ps` merges persisted Workspace/desired state with observed daemon runtime state and remains useful when daemon is stopped.
+- `ctl start|status|stop|restart|shutdown` centralizes daemon management.
+- `ctl stop`/`restart` preserve desired runtime; `ctl shutdown` clears desired runtimes so a later start does not resurrect them.
+- original low-level lifecycle commands remain compatible.
+
+Final verification:
+
+```text
+go fmt ./... → PASS
+go test ./... → all packages PASS
+go vet ./... → PASS
+go build -o ai-dev-manager.exe ./cmd/ai-dev-manager → PASS
+```
+
+v0.3.1 makes the persistent runtime usable through the daily CLI while keeping advanced low-level commands available. Auto-advance stops at this milestone boundary before v0.4 Agents/GSD Runtime.
+
 ## Locked Direction
 
 1. Independent project; do not modify or depend on `codexprov4` implementation details.
@@ -182,7 +330,16 @@ Manual Windows acceptance also validated a built `ai-dev-manager.exe` for worksp
 12. One HTTP MCP instance binds one Workspace Runtime.
 13. v0.1 HTTP listen remains loopback-only.
 14. Unknown external capabilities require explicit host-tool mappings before becoming executable MCP tools.
-15. Agent/Subagent orchestration is deferred to v0.3 rather than represented by speculative empty interfaces.
+15. Agent/Subagent orchestration was deferred rather than represented by speculative empty interfaces; after v0.2 review it is now scheduled for v0.4 behind persistent lifecycle ownership.
+
+## v0.3 Direction
+
+1. Persistent local Control Plane ownership is the immediate priority; Agent/Subagent/GSD orchestration moves to v0.4.
+2. Phase 10 establishes only daemon + local Control API + cross-process CLI lifecycle.
+3. Phase 11 moves Workspace Runtime/MCP ownership under the daemon.
+4. Phase 12 adds desired-state reconciliation and restart/crash acceptance.
+5. v0.3 does not implement generic Process Manager, Docker, Debug/DAP, Desktop UI, remote access, or Agent orchestration.
+6. Desired state may persist; observed runtime/session objects never persist and must be rebuilt after restart.
 
 ## Environment Findings
 
@@ -192,7 +349,7 @@ Manual Windows acceptance also validated a built `ai-dev-manager.exe` for worksp
 - official MCP Go SDK v1.7.0 changes the module `go` directive to 1.25.0.
 - Windows atomic config replacement and symlink containment tests passed on the current host.
 
-## Deferred Beyond v0.2
+## Deferred Beyond v0.3
 
 - final product name.
 - desktop UI / tray integration.
@@ -201,11 +358,11 @@ Manual Windows acceptance also validated a built `ai-dev-manager.exe` for worksp
 - complete DevSpace adapter implementation.
 - Docker structured API.
 - Process manager / Debug / DAP.
-- Agent / Subagent orchestration and deeper GSD runtime integration.
-- background daemon / persistent cross-process runtime supervision.
+- Agent / Subagent orchestration and deeper GSD runtime integration (v0.4).
+- generic Process Manager / development service lifecycle beyond the minimum daemon-owned child cleanup primitive.
 - multi-machine remote runtime.
 - raw shell interpreter capability, if ever justified separately from structured exec.
 
 ## Next Action
 
-v0.2 milestone is complete. `workflow.auto_advance=true` stops at this milestone boundary. Before code continues, create/approve the v0.3 Agents / GSD Runtime roadmap and requirements rather than silently expanding scope.
+v0.3.1 is complete, including real Docker MCP initialize/tool-call acceptance and MCP Hub structuredContent compatibility. Stop at this milestone boundary before v0.4 Agents / GSD Runtime.

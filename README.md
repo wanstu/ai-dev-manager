@@ -18,3 +18,56 @@
 规划入口：`.planning/PROJECT.md`
 路线图：`.planning/ROADMAP.md`
 当前状态：`.planning/STATE.md`
+
+## 当前日常用法（v0.3.1）
+
+构建：
+
+```powershell
+go build -o ai-dev-manager.exe ./cmd/ai-dev-manager
+```
+
+在项目目录中，一条命令即可自动注册 Workspace、启动 daemon 和 Runtime：
+
+```powershell
+.\ai-dev-manager.exe up
+```
+
+如果 MCP Client 运行在 Docker 中：
+
+```powershell
+.\ai-dev-manager.exe up --docker
+```
+
+输出会同时给出本机与 Docker 可用地址，例如：
+
+```text
+local     http://127.0.0.1:31857/mcp
+docker    http://host.docker.internal:31857/mcp
+```
+
+查看全部 Workspace / Runtime：
+
+```powershell
+.\ai-dev-manager.exe ps
+```
+
+停止当前 Workspace，并取消后续自动恢复：
+
+```powershell
+.\ai-dev-manager.exe down
+```
+
+Daemon 管理：
+
+```powershell
+.\ai-dev-manager.exe ctl status
+.\ai-dev-manager.exe ctl start
+.\ai-dev-manager.exe ctl stop
+.\ai-dev-manager.exe ctl restart
+.\ai-dev-manager.exe ctl shutdown
+```
+
+`ctl stop` 只停止 daemon，保留 desired runtime，因此下次 `ctl start` 会自动恢复。`ctl shutdown` 会清除 desired runtime 后再停止 daemon，下次启动不会自动恢复。
+
+原有 `workspace`、`runtime`、`start/status/stop`、`inspect`、`serve`、`mcp` 等底层命令继续保留，适合脚本、调试和详细控制。

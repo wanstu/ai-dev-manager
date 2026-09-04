@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"ai-dev-manager/internal/adapter/runtimeadapter"
 	admruntime "ai-dev-manager/internal/runtime"
@@ -151,17 +154,96 @@ func NewHTTPHandler(adapter runtimeadapter.Runtime) http.Handler {
 	}, &mcp.StreamableHTTPOptions{Stateless: true})
 }
 
+type ExposedHTTPOptions struct {
+	AllowedHosts   []string
+	AllowIPLiteral bool
+}
+
+// NewExposedHTTPHandler is an explicit non-loopback transport path. The SDK's
+// localhost protection must be disabled for Docker hostnames such as
+// host.docker.internal, so this wrapper replaces it with a narrow Host/Origin
+// allowlist instead of accepting arbitrary hostnames.
+func NewExposedHTTPHandler(adapter runtimeadapter.Runtime, options ExposedHTTPOptions) http.Handler {
+	server := New(adapter)
+	base := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
+		return server
+	}, &mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true})
+
+	allowed := make(map[string]struct{}, len(options.AllowedHosts))
+	for _, host := range options.AllowedHosts {
+		host = normalizeHTTPHost(host)
+		if host != "" {
+			allowed[host] = struct{}{}
+		}
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !allowedHTTPHost(r.Host, allowed, options.AllowIPLiteral) {
+			http.Error(w, "Forbidden: invalid Host header", http.StatusForbidden)
+			return
+		}
+		if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+			parsed, err := url.Parse(origin)
+			if err != nil || !allowedHTTPHost(parsed.Host, allowed, options.AllowIPLiteral) {
+				http.Error(w, "Forbidden: invalid Origin header", http.StatusForbidden)
+				return
+			}
+		}
+		base.ServeHTTP(w, r)
+	})
+}
+
+func allowedHTTPHost(authority string, allowed map[string]struct{}, allowIPLiteral bool) bool {
+	host := normalizeHTTPHost(authority)
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || allowIPLiteral
+	}
+	_, ok := allowed[host]
+	return ok
+}
+
+func normalizeHTTPHost(authority string) string {
+	authority = strings.TrimSpace(authority)
+	if host, _, err := net.SplitHostPort(authority); err == nil {
+		authority = host
+	}
+	authority = strings.Trim(authority, "[]")
+	authority = strings.TrimSuffix(strings.ToLower(authority), ".")
+	return authority
+}
+
+type InvokeToolOutput struct {
+	Result any `json:"result"`
+}
+
 func addInvokeTool[In any](server *mcp.Server, adapter runtimeadapter.Runtime, name, description, operation string, _ In) {
-	mcp.AddTool(server, &mcp.Tool{Name: name, Description: description}, func(ctx context.Context, _ *mcp.CallToolRequest, input In) (*mcp.CallToolResult, any, error) {
+	tool := &mcp.Tool{
+		Name:        name,
+		Description: description,
+		OutputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"result": map[string]any{},
+			},
+			"required":             []string{"result"},
+			"additionalProperties": false,
+		},
+	}
+	mcp.AddTool(server, tool, func(ctx context.Context, _ *mcp.CallToolRequest, input In) (*mcp.CallToolResult, InvokeToolOutput, error) {
 		args, err := toMap(input)
 		if err != nil {
-			return nil, nil, fmt.Errorf("invalid tool input")
+			return nil, InvokeToolOutput{}, fmt.Errorf("invalid tool input")
 		}
 		output, err := adapter.Invoke(ctx, operation, args)
 		if err != nil {
-			return nil, nil, sanitizeError(operation, err)
+			return nil, InvokeToolOutput{}, sanitizeError(operation, err)
 		}
-		return nil, output, nil
+		return nil, InvokeToolOutput{Result: output}, nil
 	})
 }
 

@@ -219,26 +219,141 @@
 
 ---
 
+## Milestone v0.3 — Persistent Control Plane / Runtime Lifecycle ✅ Completed 2026-09-04
+
+**Goal:** 给 v0.2 已验证的 Control Plane 一个稳定、唯一、长期存在的本地 ownership boundary，使 CLI 退出后 Workspace Runtime / MCP 生命周期仍可被同一个本地服务管理，并为后续 Agent/GSD orchestration 提供正确的跨进程生命周期基础。
+
+## Phase 10 — Local Daemon & Control API ✅ Completed 2026-09-04
+
+**Goal:** 建立最小本地 daemon 与跨进程 Control API，让多个独立 CLI invocation 操作同一个长期 Control Plane 实例。
+
+**Requirements:** LIFE-01, LIFE-02, LIFE-03
+
+**Scope:**
+- `ai-dev-manager start/status/stop` 最小 daemon lifecycle。
+- daemon 进程拥有一个长期 `controlplane.Service`。
+- local-only control endpoint；继续禁止非 loopback 暴露。
+- 最小 daemon discovery/state metadata，只保存可恢复的标识和 endpoint，不序列化 Go runtime/session object。
+- CLI lifecycle 命令作为 thin client，不复制 Control Plane 业务逻辑。
+- graceful stop 与 stale daemon metadata 清理。
+
+**Exit criteria:**
+1. 一个 CLI 启动 daemon 后退出，daemon 仍存活。
+2. 第二个独立 CLI 可以 `status` 并证明连接到同一 daemon instance。
+3. 第三个独立 CLI 可以 `stop`，daemon 优雅退出并清理 discovery metadata。
+4. 同一 config root 不允许两个健康 daemon 同时成为 owner。
+5. control endpoint 只监听 loopback，状态输出不泄露 secret。
+6. `go test ./...`、`go vet ./...` 与真实 binary lifecycle acceptance 通过。
+
+---
+
+## Phase 11 — Persistent Workspace Runtime Ownership ✅ Completed 2026-09-04
+
+**Goal:** 把 v0.2 进程内 Host/MCP activation 生命周期迁移到 daemon ownership，使 Workspace Runtime 与 configured MCP session 可以跨 CLI invocation 保持运行。
+
+**Requirements:** LIFE-04, LIFE-05, LIFE-06
+
+**Scope:**
+- daemon-owned Workspace runtime instance registry。
+- desired state / observed state 分离。
+- runtime start/status/stop 控制面。
+- MCP Host 与 configured MCP Activator 由 daemon 中的长期 Control Plane 持有。
+- Workspace A/B 独立生命周期与失败隔离。
+- owned child-process cleanup primitive 仅服务 daemon/runtime/MCP，不扩展成通用 Process Manager 产品能力。
+
+**Exit criteria:**
+1. `runtime start --workspace A` 后启动命令退出，A 仍为 running。
+2. 新 CLI invocation 能查询同一个 observed runtime/MCP 状态。
+3. Workspace A/B 可同时运行且 stop A 不影响 B。
+4. daemon stop 会关闭 MCP sessions、HTTP hosts 与 owned children。
+5. 不持久化 ClientSession、listener、Go pointer 等不可恢复对象。
+
+---
+
+## Phase 12 — Restart Reconciliation & Lifecycle Acceptance ✅ Completed 2026-09-04
+
+**Goal:** 验证 daemon 崩溃/重启后的 desired-state reconciliation，并完成 v0.3 跨进程生命周期闭环。
+
+**Requirements:** LIFE-07, LIFE-08
+
+**Scope:**
+- 持久化最小 desired runtime state。
+- daemon startup reconciliation。
+- stale observed state / dead process metadata 修复。
+- clean restart 与 crash-restart acceptance。
+- 多 Workspace + MCP endpoint 的真实 binary acceptance。
+
+**Exit criteria:**
+1. daemon restart 后能从 desired state 重建应该运行的 Workspace runtime/MCP，而不是尝试恢复旧内存对象。
+2. crash 后 stale metadata 不会永久阻止下一次 daemon 启动。
+3. restart 后 runtime identity/status 可解释，旧 endpoint/session 不被误报 healthy。
+4. 两个 Workspace 的 desired/observed state 仍隔离。
+5. v0.3 全量测试、vet、build 与 Windows binary acceptance 通过。
+
+---
+
+## Milestone v0.3.1 — Usability Acceptance ✅ Completed 2026-09-04
+
+**Goal:** 把 v0.3 已验证的 persistent runtime 从底层验收接口提升为可日常使用的本地工具，同时修复 Docker client 无法连接 loopback-only Workspace MCP Host 的实际验收问题。
+
+## Phase 13 — Docker-reachable Workspace MCP ✅ Completed 2026-09-04
+
+**Goal:** 默认保持 loopback-only，但允许用户显式把某个 Workspace MCP 暴露给 Docker，并在 daemon restart 后保持该 desired bind intent。
+
+**Requirements:** USE-01
+
+**Exit criteria:**
+1. 默认 runtime 仍绑定 `127.0.0.1:0`。
+2. `runtime start --workspace X --docker` 可绑定可从 Docker host gateway 访问的地址，并返回 `host.docker.internal` client endpoint。
+3. daemon Control API 仍严格 loopback-only。
+4. desired-state 向后兼容 v1；Docker/custom listen intent 可跨 daemon restart 恢复。
+5. tests/vet/build 通过。
+
+---
+
+## Phase 14 — Daily CLI UX ✅ Completed 2026-09-04
+
+**Goal:** 保留底层 workspace/runtime 命令，同时提供不要求用户手工管理 Workspace ID/daemon 顺序的日常命令。
+
+**Requirements:** USE-02
+
+**Scope:**
+- `up [path|workspace-id]`：自动注册/复用 Workspace、确保 daemon running、启动 runtime。
+- `down [path|workspace-id]`：显式停止 Workspace runtime。
+- `ps`：汇总 Workspace + runtime 状态。
+- `ctl start|status|stop|restart|shutdown`：集中管理 daemon；`shutdown` 清除 desired runtimes 后停 daemon。
+- `up --docker` 直接输出 Docker MCP endpoint。
+
+**Exit criteria:**
+1. 新用户对一个未注册目录执行一次 `up` 即可得到 running runtime/MCP endpoint。
+2. `down` 不要求记 Workspace ID。
+3. `ctl restart` 保留 desired runtime；`ctl shutdown` 不会在下一次 start 时恢复 runtime。
+4. 旧 `start/status/stop/workspace/runtime` 命令保持兼容。
+5. full tests/vet/build 与真实 CLI acceptance 通过。
+
+---
+
 ## Later Milestones
 
-### v0.3 — Agents / GSD Runtime
+### v0.4 — Agents / GSD Runtime
 - Agent / subagent registry。
 - GSD phase executor / verifier integration。
 - Planner / Executor / Reviewer workflow。
 - 多 worktree 多会话隔离。
+- Agent run lifecycle/status/cancel 建立在 v0.3 daemon ownership 之上。
 
-### v0.4 — Docker / Process / Debug
+### v0.5 — Docker / Process / Debug
 - Docker ps / compose / logs / inspect。
 - Process start/stop/status/logs。
 - 开发服务器启动、日志读取、接口验证闭环。
 - Debug / DAP feasibility。
 
-### v0.5 — Compatibility
+### v0.6 — Compatibility
 - DevSpace adapter 完善。
 - CodexPro / codexprov4 adapter。
 - Codex CLI / Claude Code / OpenCode executor adapters。
 
-### v0.6 — UI / Remote Access
+### v0.7 — UI / Remote Access
 - 独立 Desktop UI 是否需要，在此时再决定。
 - codexprov4 UI integration。
 - HTTPS / tunnel / auth / remote lifecycle。
@@ -253,7 +368,7 @@
 | WORK-03 | 5 |
 | MCP-* | 3 |
 | SKILL-* | 2-3 |
-| AGENT-01 | v0.3 Agents / GSD Runtime |
+| AGENT-01 | v0.4 Agents / GSD Runtime |
 | RUN-01 | 1 |
 | RUN-02..03 | 4, 6 |
 | EXEC-* | 4-5 |
@@ -263,6 +378,9 @@
 | CTRL-* | 7 |
 | CLI-* | 8 |
 | MCPA-* | 9 |
+| LIFE-01..03 | 10 |
+| LIFE-04..06 | 11 |
+| LIFE-07..08 | 12 |
 
 ## GSD Development Rules
 

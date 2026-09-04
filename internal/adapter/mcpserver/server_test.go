@@ -2,6 +2,8 @@ package mcpserver
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -58,6 +60,22 @@ func TestInMemoryMCPReadOnlyToolSurfaceAndRead(t *testing.T) {
 		t.Fatalf("unexpected read tool result: %s", text)
 	}
 
+	if structured, ok := result.StructuredContent.(map[string]any); !ok || structured["result"] == nil {
+		t.Fatalf("read structuredContent = %#v, want object with result", result.StructuredContent)
+	}
+
+	treeResult, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "tree", Arguments: map[string]any{"max_depth": 1, "max_entries": 10}})
+	if err != nil || treeResult.IsError {
+		t.Fatalf("tree failed: err=%v result=%+v", err, treeResult)
+	}
+	treeStructured, ok := treeResult.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("tree structuredContent type = %T, want map[string]any", treeResult.StructuredContent)
+	}
+	if _, ok := treeStructured["result"].([]any); !ok {
+		t.Fatalf("tree structuredContent = %#v, want result array inside object", treeStructured)
+	}
+
 	info, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "runtime_info", Arguments: map[string]any{}})
 	if err != nil || info.IsError {
 		t.Fatalf("runtime_info failed: err=%v result=%+v", err, info)
@@ -65,6 +83,44 @@ func TestInMemoryMCPReadOnlyToolSurfaceAndRead(t *testing.T) {
 	infoText := toolText(t, info)
 	if !strings.Contains(infoText, `"id":"native-a"`) || !strings.Contains(infoText, `"workspace_id":"ws_a"`) {
 		t.Fatalf("unexpected runtime_info: %s", infoText)
+	}
+}
+
+func TestExposedHTTPHandlerAllowsDockerHostAndRejectsUnexpectedHostOrOrigin(t *testing.T) {
+	root := t.TempDir()
+	native, err := admruntime.NewNative(model.Workspace{ID: "ws_docker", Path: root}, model.EffectiveConfig{})
+	if err != nil {
+		t.Fatalf("NewNative() error = %v", err)
+	}
+	adapter, err := runtimeadapter.NewNative("native-docker", native)
+	if err != nil {
+		t.Fatalf("NewNativeAdapter() error = %v", err)
+	}
+	handler := NewExposedHTTPHandler(adapter, ExposedHTTPOptions{AllowedHosts: []string{"host.docker.internal"}, AllowIPLiteral: true})
+
+	allowed := httptest.NewRequest(http.MethodGet, "http://host.docker.internal:31857/mcp", nil)
+	allowed.Host = "host.docker.internal:31857"
+	allowedRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(allowedRecorder, allowed)
+	if allowedRecorder.Code == http.StatusForbidden {
+		t.Fatalf("Docker Host was rejected: status=%d body=%s", allowedRecorder.Code, allowedRecorder.Body.String())
+	}
+
+	badHost := httptest.NewRequest(http.MethodGet, "http://evil.example:31857/mcp", nil)
+	badHost.Host = "evil.example:31857"
+	badHostRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(badHostRecorder, badHost)
+	if badHostRecorder.Code != http.StatusForbidden {
+		t.Fatalf("unexpected Host status=%d, want 403", badHostRecorder.Code)
+	}
+
+	badOrigin := httptest.NewRequest(http.MethodGet, "http://host.docker.internal:31857/mcp", nil)
+	badOrigin.Host = "host.docker.internal:31857"
+	badOrigin.Header.Set("Origin", "https://evil.example")
+	badOriginRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(badOriginRecorder, badOrigin)
+	if badOriginRecorder.Code != http.StatusForbidden {
+		t.Fatalf("unexpected Origin status=%d, want 403", badOriginRecorder.Code)
 	}
 }
 

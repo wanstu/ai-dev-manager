@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ai-dev-manager/internal/controlplane"
+	"ai-dev-manager/internal/daemon"
 	"ai-dev-manager/internal/model"
 	"ai-dev-manager/internal/workspace"
 )
@@ -36,15 +37,42 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	remaining := global.Args()
 	if len(remaining) == 0 {
-		return errors.New("usage: ai-dev-manager [--config-root PATH] [--json] <workspace|inspect|serve> ...")
+		return errors.New("usage: ai-dev-manager [--config-root PATH] [--json] <up|down|ps|ctl|start|status|stop|runtime|workspace|inspect|serve|mcp> ...")
 	}
 
-	service, err := controlplane.New(*configRoot)
+	resolvedRoot, err := daemon.ResolveRoot(*configRoot)
 	if err != nil {
 		return err
 	}
-
 	switch remaining[0] {
+	case "start":
+		return runDaemonStart(ctx, resolvedRoot, stdout, *jsonOutput)
+	case "status":
+		return runDaemonStatus(ctx, resolvedRoot, stdout, *jsonOutput)
+	case "stop":
+		return runDaemonStop(ctx, resolvedRoot, stdout, *jsonOutput)
+	case "runtime":
+		return runRuntime(ctx, resolvedRoot, remaining[1:], stdout, stderr, *jsonOutput)
+	case "ctl":
+		return runCtl(ctx, resolvedRoot, remaining[1:], stdout, *jsonOutput)
+	case "_daemon-run":
+		return daemon.Run(ctx, resolvedRoot, "")
+	}
+
+	service, err := controlplane.New(resolvedRoot)
+	if err != nil {
+		return err
+	}
+	switch remaining[0] {
+	case "up":
+		return runUp(ctx, resolvedRoot, service, remaining[1:], stdout, stderr, *jsonOutput)
+	case "down":
+		return runDown(ctx, resolvedRoot, service, remaining[1:], stdout, stderr, *jsonOutput)
+	case "ps":
+		if len(remaining) != 1 {
+			return errors.New("usage: ai-dev-manager ps")
+		}
+		return runPS(ctx, resolvedRoot, service, stdout, *jsonOutput)
 	case "workspace":
 		return runWorkspace(service, remaining[1:], stdout, stderr, *jsonOutput)
 	case "inspect":
@@ -56,6 +84,110 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	default:
 		return fmt.Errorf("unknown command %q", remaining[0])
 	}
+}
+
+func runDaemonStart(ctx context.Context, configRoot string, stdout io.Writer, jsonOutput bool) error {
+	meta, err := daemon.Start(ctx, configRoot, "")
+	if err != nil {
+		return err
+	}
+	return writeDaemon(stdout, meta, jsonOutput)
+}
+
+func runDaemonStatus(ctx context.Context, configRoot string, stdout io.Writer, jsonOutput bool) error {
+	statusCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	meta, err := daemon.Status(statusCtx, configRoot)
+	if errors.Is(err, daemon.ErrNotRunning) {
+		return writeDaemon(stdout, daemon.Metadata{State: daemon.StateStopped}, jsonOutput)
+	}
+	if err != nil {
+		return err
+	}
+	return writeDaemon(stdout, meta, jsonOutput)
+}
+
+func runDaemonStop(ctx context.Context, configRoot string, stdout io.Writer, jsonOutput bool) error {
+	stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	meta, err := daemon.Stop(stopCtx, configRoot)
+	if err != nil {
+		return err
+	}
+	return writeDaemon(stdout, meta, jsonOutput)
+}
+
+func writeDaemon(w io.Writer, meta daemon.Metadata, jsonOutput bool) error {
+	if jsonOutput {
+		return writeJSON(w, meta)
+	}
+	if meta.State == daemon.StateStopped && meta.InstanceID == "" {
+		_, err := fmt.Fprintln(w, "daemon stopped")
+		return err
+	}
+	_, err := fmt.Fprintf(w, "daemon %s instance=%s pid=%d endpoint=%s\n", meta.State, meta.InstanceID, meta.PID, meta.ControlEndpoint)
+	return err
+}
+
+func runRuntime(ctx context.Context, configRoot string, args []string, stdout, stderr io.Writer, jsonOutput bool) error {
+	if len(args) == 0 {
+		return errors.New("usage: ai-dev-manager runtime <start|status|stop|list> ...")
+	}
+	flags := flag.NewFlagSet("runtime "+args[0], flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	workspaceID := flags.String("workspace", "", "workspace id")
+	listen := flags.String("listen", "", "explicit MCP listen address")
+	dockerAccess := flags.Bool("docker", false, "expose MCP to local Docker via host.docker.internal")
+	if err := flags.Parse(args[1:]); err != nil {
+		return err
+	}
+
+	var (
+		value any
+		err   error
+	)
+	switch args[0] {
+	case "start":
+		if strings.TrimSpace(*workspaceID) == "" {
+			return errors.New("runtime start requires --workspace")
+		}
+		if *dockerAccess && strings.TrimSpace(*listen) != "" {
+			return errors.New("runtime start accepts either --docker or --listen, not both")
+		}
+		options := daemon.RuntimeStartOptions{}
+		if *dockerAccess {
+			options.Listen = daemon.DockerRuntimeListen
+			options.Exposed = true
+		} else if strings.TrimSpace(*listen) != "" {
+			options.Listen = strings.TrimSpace(*listen)
+			options.Exposed = true
+		}
+		value, err = daemon.RuntimeStartWithOptions(ctx, configRoot, *workspaceID, options)
+	case "status":
+		if strings.TrimSpace(*workspaceID) == "" {
+			return errors.New("runtime status requires --workspace")
+		}
+		value, err = daemon.RuntimeGetStatus(ctx, configRoot, *workspaceID)
+	case "stop":
+		if strings.TrimSpace(*workspaceID) == "" {
+			return errors.New("runtime stop requires --workspace")
+		}
+		value, err = daemon.RuntimeStop(ctx, configRoot, *workspaceID)
+	case "list":
+		if strings.TrimSpace(*workspaceID) != "" {
+			return errors.New("runtime list does not accept --workspace")
+		}
+		value, err = daemon.RuntimeList(ctx, configRoot)
+	default:
+		return fmt.Errorf("unknown runtime command %q", args[0])
+	}
+	if err != nil {
+		return err
+	}
+	if jsonOutput {
+		return writeJSON(stdout, value)
+	}
+	return writePrettyJSON(stdout, value)
 }
 
 type workspaceOutput struct {

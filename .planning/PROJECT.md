@@ -23,9 +23,9 @@
 - DevSpace：借鉴 worktree、runtime、skills、agents、execution contract 等成熟思路。
 - 本项目不 fork CodexPro 或 DevSpace，不把两边代码直接揉在一起；优先借鉴设计，并通过 Adapter / Capability 接口保持兼容空间。
 
-## Current Milestone: v0.2 Usable Control Plane
+## Current Milestone: v0.3.1 Usability Acceptance
 
-**Goal:** 把 v0.1 已验证的 Core 从“库 + 测试”推进成真正可启动、可检查、可连接的本地开发运行时：由统一 Control Plane 从 Workspace ID 组装 EffectiveConfig、Native Runtime、Runtime Adapter 与 MCP Host，并提供 CLI 作为第一个薄客户端。
+**Goal:** 给 v0.2 已验证的 Control Plane 一个长期本地 owner。CLI、未来 Desktop/codexprov4 与 Agent Runtime 都通过 local Control API 操作同一个 daemon-owned Control Plane；Runtime/MCP 的真实运行生命周期不再等同于某一次 CLI process lifetime。
 
 ## Requirements
 
@@ -66,7 +66,7 @@
 - [x] **COMPAT-03**: 为未来 DevSpace Runtime Adapter 预留稳定接口。— Runtime Adapter contract and mapping documented in Phase 6
 - [x] **COMPAT-04**: 为外部 MCP / Agent runtime 预留 Adapter 接口，不要求重写 Core。— Validated in Phase 6 with a non-Native fake external runtime hosted through the same manager/MCP status path
 
-### Active — v0.2
+### Validated — v0.2
 
 #### Control Plane
 
@@ -86,14 +86,41 @@
 - [x] **MCPA-02**: Global/Profile/Project 的 MCP 继承差异在真实 activation 中保持 Workspace 隔离，实际 secret 只在启动边界通过 EnvRefs 解析，不写回配置或普通状态输出。— Phase 9 validated Global MCP A/B isolation, Project disable, EnvRef resolution and safe status output
 - [x] **MCPA-03**: activation health/status 可通过 Control Plane/CLI 检查；失败必须结构化报告，不能把配置存在误报成 runtime healthy。— Phase 9 validated unprobed/disabled/healthy/error lifecycle, structured missing-EnvRef failure and CLI MCP surface
 
-## Out of Scope — v0.2
+### Validated — v0.3 Phase 10
 
-- **AGENT-01** Agent / Subagent Registry 与 orchestration — 延后到 v0.3 Agents / GSD Runtime，不在 v0.2 创建空抽象。
-- 桌面 UI / 托盘 — `codexprov4` 当前负责用户日常使用；v0.2 只交付 CLI/Control Plane surface。
-- 后台 daemon / service manager — v0.2 先用 foreground MCP serve 验证真实使用闭环，不为了 `start/stop` 跨进程语法提前引入常驻守护进程。
+#### Local Daemon / Control API
+
+- [x] **LIFE-01**: 提供一个 local-only daemon，长期持有单一 `controlplane.Service`；启动 CLI 退出后 daemon 继续存活。— Phase 10 validated with cross-process CLI test and real Windows binary acceptance
+- [x] **LIFE-02**: 独立 CLI invocation 可以通过稳定 discovery metadata 找到同一个 daemon，并完成 status/stop；同一 config root 只有一个健康 owner。— Phase 10 validated same instance/PID across start/status/repeat-start/stop
+- [x] **LIFE-03**: daemon lifecycle metadata 只保存 PID/instance identity/control endpoint 等可恢复信息；不序列化 Runtime、MCP ClientSession、listener 或其他内存对象。— Phase 10 validated JSON metadata + heartbeat lease + loopback endpoint safety
+
+### Validated — v0.3 Phase 11
+
+#### Persistent Workspace Runtime Ownership
+
+- [x] **LIFE-04**: daemon 可以长期拥有多个 Workspace runtime instance，并提供跨进程 start/status/stop。— Phase 11 validated daemon-owned RuntimeOwner, two persistent Workspace MCP hosts, runtime list/status/stop and real binary acceptance
+- [x] **LIFE-05**: configured MCP activation 与 MCP Host instance 由 daemon 中同一个长期 Control Plane 管理，CLI 退出不再自动结束 session。— Phase 11 validated retained configured HTTP MCP session stays healthy through later owner status calls and daemon control surface
+- [x] **LIFE-06**: Workspace runtime lifecycle 使用 desired/observed state；A/B ownership、health 与 stop/failure 相互隔离。— Phase 11 validated idempotent start, activation rollback, distinct A/B endpoints and stop-A-with-B-still-running
+
+### Validated — v0.3 Phase 12
+
+#### Restart / Reconciliation
+
+- [x] **LIFE-07**: daemon 重启可从最小 desired state 重建应该运行的 Workspace runtime/MCP，不尝试恢复已经失效的内存对象。— Phase 12 validated persisted sorted desired Workspace IDs, clean restart reconciliation, explicit-stop persistence and rebuilt runtime/MCP endpoints
+- [x] **LIFE-08**: crash/stale metadata 可安全修复；重启后旧 endpoint/session 不会被误报 healthy，并通过真实多进程 acceptance。— Phase 12 validated direct daemon kill, old endpoint unreachability, bounded stale-lease reclaim, new daemon identity and recovered live runtime
+
+### Validated — v0.3.1
+
+- [x] **USE-01**: Workspace MCP 默认 loopback-only，但可由用户显式选择 Docker-reachable bind；该 desired bind intent 跨 daemon restart 保留，Control API 不随之暴露。— Phase 13 validated explicit exposed Host path, v1→v2 desired compatibility, `runtime start --docker`, restart reconciliation, Host/Origin allowlist and real `mcphub` Docker MCP initialize
+- [x] **USE-02**: 提供 `up/down/ps/ctl` 日常 CLI，隐藏常规 Workspace ID 与 daemon 启动顺序，同时保留现有底层命令兼容性。— Phase 14 validated one-shot path auto-registration, `up --docker`, path-based `down`, merged `ps`, desired-preserving `ctl restart/stop`, and desired-clearing `ctl shutdown`
+
+## Out of Scope — v0.3
+
+- **AGENT-01** Agent / Subagent Registry 与 orchestration — 顺延到 v0.4；先建立它所依赖的 persistent ownership boundary。
+- 桌面 UI / 托盘 — `codexprov4` 当前继续独立使用；v0.3 只交付 local daemon/control surface。
 - 完整 DevSpace / CodexPro runtime 兼容层 — 先用 Native Runtime 验证 Control Plane 产品边界。
-- Docker 结构化 API、Process Manager、Debugger / DAP — 延后到后续 milestone。
-- 公网 HTTPS / tunnel / auth — v0.2 继续 loopback-only。
+- Docker 结构化 API、通用 Process Manager、Debugger / DAP — 延后到后续 milestone；v0.3 只允许为 daemon/runtime/MCP ownership 实现最小 child-process cleanup primitive。
+- 公网 HTTPS / tunnel / auth — v0.3 继续 loopback-only。
 - 多机远程 Runtime — 后续阶段。
 - 云端账号、团队协作、计费 — 当前是本地个人开发工具。
 - 一开始支持所有 OS — 架构尽量不锁死 Windows，但 v0.x 优先保证当前 Windows 开发环境。
@@ -158,13 +185,19 @@ Go 的原因：单文件部署友好、并发和进程管理适合本地 runtime
 | MCP adapter 使用官方 Go SDK v1.7.0，协议目标为 2026-07-28 | 避免自行维护协议细节；当前官方 Tier-1 SDK 已覆盖目标协议与本地/HTTP transport | Accepted |
 | MCP SDK v1.7.0 将项目最低 Go baseline 从 1.22 提升到 1.25.0 | 这是 Phase 6 adapter 依赖带来的真实工具链要求，不是 Phase 1–5 Core 本身需要的新语言特性 | Accepted |
 | Streamable HTTP 使用 stateless handler；一个 HTTP instance 固定绑定一个 Runtime Adapter/Workspace | 对齐当前协议模型，并把 Workspace 隔离放在 server instance 边界而不是请求参数 | Accepted |
-| v0.1 HTTP Host 默认且仅允许 loopback listen | 防止本地开发 Runtime 被无意暴露；公网 HTTPS/tunnel/auth 后续由 Control Plane 显式管理 | Accepted |
+| v0.1 HTTP Host 默认且仅允许 loopback listen | 防止本地开发 Runtime 被无意暴露；v0.3.1 仅在用户显式 Docker/custom listen 时增加受控 exposure path，默认行为不变 | Accepted |
 | MCP Host 只依赖协议无关 Runtime Adapter interface，不依赖 Native/Config Store/Workspace Registry | CodexPro、DevSpace、其他外部 runtime 可以通过 adapter 接入而不重写 Core | Accepted |
 | 未知 external capability 只通过 runtime_info 展示，不自动生成可执行 MCP tool | 防止 capability 名称自动变成未经设计/审核的远程执行入口 | Accepted |
 | v0.2 先做 Usable Control Plane，而不是优先 Docker / Process / Debug | v0.1 已有强 Core 但没有产品入口；先验证 Workspace → EffectiveConfig → Runtime → MCP 的真实日常闭环 | Accepted |
 | CLI 是 Control Plane 的薄客户端，不承载 resolver/runtime 业务逻辑 | 未来 Desktop/codexprov4/API 都应复用同一 application service，避免 CLI 成为第二套架构 | Accepted |
 | v0.2 先提供 foreground MCP serve，不引入后台 daemon | 跨进程 start/stop 会强迫提前解决守护进程、IPC、持久状态；当前 vertical slice 只需要真实可连接 endpoint | Accepted |
 | Configured MCP activation 必须显式解析 Enabled/EnvRefs 并报告真实 health | 配置存在不等于 runtime healthy；secret 只应在启动边界解析，不能写回配置或普通状态 | Accepted |
+| v0.3 优先 Persistent Control Plane / Runtime Lifecycle，Agents/GSD 顺延到 v0.4 | v0.2 已证明 Host/MCP session 与 CLI process lifetime 绑定；若先做 Agent orchestration，会把 run ownership 错绑在前台进程并在 daemon 化时返工 | Accepted |
+| v0.3 daemon 只建立 local ownership，不提前实现通用 Process Manager/Docker/Agent | 当前真实 vertical slice 是跨进程 Control Plane 生命周期；保持 small vertical slices，避免 daemon milestone 膨胀 | Accepted |
+| Runtime lifecycle 使用 desired state / observed state，而不是持久化内存 runtime/session object | listener、ClientSession、Go pointer 无法跨进程恢复；restart 应通过 reconcile 重建真实 observed state | Accepted |
+| v0.3 desired runtime state 只持久化 sorted Workspace ID 集合 | 只保存用户运行意图；daemon identity、endpoint、MCP session 和 observed health 都必须由新进程重新建立 | Accepted |
+| daemon stop 保留 desired state，显式 runtime stop 才移除 desired Workspace | clean restart 应恢复持续运行的 Workspace；用户显式停止则必须跨 restart 保持 stopped | Accepted |
+| crash recovery 通过 health probe + heartbeat lease stale reclaim 建立新 owner | crash 后旧 metadata/endpoint 不可信；reclaim 必须有 bounded wait，且旧 owner heartbeat 不得 touch 新 owner lease | Accepted |
 
 ## Evolution Rules
 

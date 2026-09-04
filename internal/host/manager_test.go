@@ -102,6 +102,18 @@ func TestManagerRejectsNonLoopbackAndDuplicateInstanceID(t *testing.T) {
 	if _, err := manager.StartHTTP("public", adapter, "0.0.0.0:0"); err == nil {
 		t.Fatal("non-loopback listen unexpectedly accepted")
 	}
+	exposed, err := manager.StartHTTPExposed("public-explicit", adapter, "0.0.0.0:0")
+	if err != nil {
+		t.Fatalf("StartHTTPExposed() error = %v", err)
+	}
+	if !strings.HasPrefix(exposed.Address, "0.0.0.0:") {
+		t.Fatalf("exposed address = %q, want 0.0.0.0:*", exposed.Address)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = manager.Stop(ctx, exposed.ID)
+	})
 	instance, err := manager.StartHTTP("same", adapter, "")
 	if err != nil {
 		t.Fatalf("StartHTTP() error = %v", err)
