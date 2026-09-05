@@ -23,6 +23,7 @@ var (
 type GatewayDesired struct {
 	DesiredRunning bool   `json:"desired_running"`
 	Listen         string `json:"listen,omitempty"`
+	Exposed        bool   `json:"exposed,omitempty"`
 }
 
 type gatewayStateFile struct {

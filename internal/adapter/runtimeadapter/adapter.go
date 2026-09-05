@@ -17,6 +17,7 @@ const (
 	OpRead              = "files.read"
 	OpWrite             = "files.write"
 	OpEdit              = "files.edit"
+	OpDelete            = "files.delete"
 	OpSearch            = "search.text"
 	OpExec              = "shell.exec"
 	OpGitStatus         = "git.status"
@@ -175,6 +176,15 @@ func (a *NativeAdapter) Invoke(_ context.Context, operation string, input map[st
 			return nil, err
 		}
 		return a.runtime.Edit(args.Path, args.OldText, args.NewText, args.ExpectedReplacements)
+
+	case OpDelete:
+		var args struct {
+			Path string `json:"path"`
+		}
+		if err := decodeInput(operation, input, &args); err != nil {
+			return nil, err
+		}
+		return a.runtime.Delete(args.Path)
 
 	case OpSearch:
 		var args struct {

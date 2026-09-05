@@ -80,6 +80,7 @@ func (s *Service) Info() Info {
 			"git_branch",
 			"write",
 			"edit",
+			"delete",
 			"exec",
 			"run_verifier",
 			"run_verifiers",

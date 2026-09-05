@@ -78,6 +78,8 @@ func TestNativeWorkspaceContainmentAndBlockedWrites(t *testing.T) {
 
 	_, err = runtimeA.Write(filepath.Join(rootB, "new.txt"), []byte("x"), false)
 	assertRuntimeErrorKind(t, err, ErrPathOutsideWorkspace)
+	_, err = runtimeA.Delete(filepath.Join(rootB, "b.txt"))
+	assertRuntimeErrorKind(t, err, ErrPathOutsideWorkspace)
 	_, err = runtimeA.Write(filepath.Join(".git", "config"), []byte("x"), true)
 	assertRuntimeErrorKind(t, err, ErrPathBlocked)
 	_, err = runtimeA.Write(filepath.Join(".ai-dev-manager", "runtime", "state.json"), []byte("x"), true)
@@ -141,6 +143,11 @@ func TestNativeRejectsSymlinkEscapeWhenSupported(t *testing.T) {
 	assertRuntimeErrorKind(t, err, ErrPathOutsideWorkspace)
 	_, err = runtime.Write(filepath.Join("dir-link", "new.txt"), []byte("x"), false)
 	assertRuntimeErrorKind(t, err, ErrPathOutsideWorkspace)
+	_, err = runtime.Delete("file-link.txt")
+	assertRuntimeErrorKind(t, err, ErrPathOutsideWorkspace)
+	if _, statErr := os.Stat(outsideFile); statErr != nil {
+		t.Fatalf("outside target changed after rejected delete: %v", statErr)
+	}
 }
 
 func mustNative(t *testing.T, root string, policy model.Policy) *Native {

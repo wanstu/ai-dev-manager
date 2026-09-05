@@ -48,6 +48,8 @@ func TestReadOnlyFilesAndSearchAreReadableButNotWritable(t *testing.T) {
 	assertRuntimeErrorKind(t, err, ErrReadOnly)
 	_, err = runtime.Edit("a.txt", "hello", "bye", 1)
 	assertRuntimeErrorKind(t, err, ErrReadOnly)
+	_, err = runtime.Delete("a.txt")
+	assertRuntimeErrorKind(t, err, ErrReadOnly)
 }
 
 func TestWorkspaceWriteCanWriteAndExactEditAtomically(t *testing.T) {
@@ -86,6 +88,145 @@ func TestWorkspaceWriteCanWriteAndExactEditAtomically(t *testing.T) {
 	}
 	if !reflect.DeepEqual(after, before) {
 		t.Fatalf("failed edit modified file: before=%q after=%q", before, after)
+	}
+}
+
+func TestWorkspaceWriteCanDeleteSingleFileSafely(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "remove.txt"), []byte("remove me"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "dir"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	runtime := mustNative(t, root, model.Policy{Mode: string(ModeWorkspaceWrite)})
+
+	deleted, err := runtime.Delete("remove.txt")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted.Path != "remove.txt" {
+		t.Fatalf("Delete().Path = %q, want remove.txt", deleted.Path)
+	}
+	if _, err := os.Stat(filepath.Join(root, "remove.txt")); !os.IsNotExist(err) {
+		t.Fatalf("deleted file still exists or unexpected stat error: %v", err)
+	}
+
+	_, err = runtime.Delete("missing.txt")
+	assertRuntimeErrorKind(t, err, ErrNotFound)
+	_, err = runtime.Delete("dir")
+	assertRuntimeErrorKind(t, err, ErrInvalidPath)
+	_, err = runtime.Delete(".")
+	assertRuntimeErrorKind(t, err, ErrInvalidPath)
+	_, err = runtime.Delete(filepath.Join(".git", "config"))
+	assertRuntimeErrorKind(t, err, ErrPathBlocked)
+	_, err = runtime.Delete(filepath.Join(".ai-dev-manager", "runtime", "state.json"))
+	assertRuntimeErrorKind(t, err, ErrPathBlocked)
+}
+
+func TestExactEditAdaptsConsistentLFAndCRLF(t *testing.T) {
+	tests := []struct {
+		name    string
+		before  string
+		oldText string
+		newText string
+		want    string
+	}{
+		{
+			name:    "CRLF file accepts LF edit and preserves CRLF",
+			before:  "alpha\r\nbeta\r\ngamma\r\n",
+			oldText: "alpha\nbeta\n",
+			newText: "alpha\nchanged\n",
+			want:    "alpha\r\nchanged\r\ngamma\r\n",
+		},
+		{
+			name:    "LF file accepts CRLF edit and preserves LF",
+			before:  "alpha\nbeta\ngamma\n",
+			oldText: "alpha\r\nbeta\r\n",
+			newText: "alpha\r\nchanged\r\n",
+			want:    "alpha\nchanged\ngamma\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "edit.txt")
+			if err := os.WriteFile(path, []byte(tt.before), 0o644); err != nil {
+				t.Fatalf("WriteFile() error = %v", err)
+			}
+			runtime := mustNative(t, root, model.Policy{Mode: string(ModeWorkspaceWrite)})
+
+			edit, err := runtime.Edit("edit.txt", tt.oldText, tt.newText, 1)
+			if err != nil {
+				t.Fatalf("Edit() error = %v", err)
+			}
+			if edit.Replacements != 1 {
+				t.Fatalf("Edit().Replacements = %d, want 1", edit.Replacements)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile() error = %v", err)
+			}
+			if string(got) != tt.want {
+				t.Fatalf("edited file = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExactEditNewlineFallbackRemainsStrict(t *testing.T) {
+	tests := []struct {
+		name    string
+		before  string
+		oldText string
+		newText string
+	}{
+		{
+			name:    "adapted replacement count must match",
+			before:  "alpha\r\nbeta\r\nalpha\r\nbeta\r\n",
+			oldText: "alpha\nbeta\n",
+			newText: "changed\n",
+		},
+		{
+			name:    "mixed target newlines are not normalized",
+			before:  "alpha\r\nbeta\ngamma\r\n",
+			oldText: "alpha\nbeta\n",
+			newText: "changed\n",
+		},
+		{
+			name:    "whitespace differences stay exact",
+			before:  "alpha\r\n  beta\r\n",
+			oldText: "alpha\n beta\n",
+			newText: "changed\n",
+		},
+		{
+			name:    "mixed replacement newlines are rejected",
+			before:  "alpha\r\nbeta\r\n",
+			oldText: "alpha\nbeta\n",
+			newText: "changed\nnext\r\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "edit.txt")
+			if err := os.WriteFile(path, []byte(tt.before), 0o644); err != nil {
+				t.Fatalf("WriteFile() error = %v", err)
+			}
+			runtime := mustNative(t, root, model.Policy{Mode: string(ModeWorkspaceWrite)})
+
+			_, err := runtime.Edit("edit.txt", tt.oldText, tt.newText, 1)
+			assertRuntimeErrorKind(t, err, ErrInvalidEdit)
+			got, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatalf("ReadFile() error = %v", readErr)
+			}
+			if string(got) != tt.before {
+				t.Fatalf("failed edit modified file: got=%q want=%q", got, tt.before)
+			}
+		})
 	}
 }
 

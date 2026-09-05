@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "mcps": {},
+  "skills": {},
+  "verifiers": {
+    "go-test": {
+      "id": "go-test",
+      "kind": "test",
+      "enabled": true,
+      "executable": "go",
+      "args": [
+        "test",
+        "./..."
+      ],
+      "timeout_seconds": 120
+    }
+  }
+}

@@ -12,12 +12,14 @@ const (
 
 // Workspace is the persistent identity needed by the control plane.
 // Runtime state such as PID, port, or process handles deliberately does not
-// belong here.
+// belong here. LocalPolicy is user-machine state and is persisted only in the
+// user-level Workspace registry, never in project configuration.
 type Workspace struct {
-	ID        string
-	Path      string
-	ProfileID string
-	RuntimeID string
+	ID          string
+	Path        string
+	ProfileID   string
+	RuntimeID   string
+	LocalPolicy *Policy
 }
 
 // MCPDefinition is an MCP configuration fragment. Empty string fields mean

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -214,7 +215,7 @@ func newWorkspaceOutput(value model.Workspace) workspaceOutput {
 
 func runWorkspace(service *controlplane.Service, args []string, stdout, stderr io.Writer, jsonOutput bool) error {
 	if len(args) == 0 {
-		return errors.New("usage: ai-dev-manager workspace <add|list|show> ...")
+		return errors.New("usage: ai-dev-manager workspace <add|list|show|prepare> ...")
 	}
 	switch args[0] {
 	case "add":
@@ -234,6 +235,126 @@ func runWorkspace(service *controlplane.Service, args []string, stdout, stderr i
 			return err
 		}
 		return writeWorkspace(stdout, newWorkspaceOutput(value), jsonOutput)
+	case "prepare":
+		flags := flag.NewFlagSet("workspace prepare", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		goExecutable := flags.String("go", "", "absolute Go executable to authorize and configure with a go-test verifier")
+		prepareArgs := append([]string(nil), args[1:]...)
+		workspaceID := ""
+		if len(prepareArgs) > 0 && !strings.HasPrefix(prepareArgs[0], "-") {
+			workspaceID = strings.TrimSpace(prepareArgs[0])
+			prepareArgs = prepareArgs[1:]
+		}
+		if err := flags.Parse(prepareArgs); err != nil {
+			return err
+		}
+		if workspaceID == "" {
+			if len(flags.Args()) != 1 {
+				return errors.New("usage: ai-dev-manager workspace prepare <workspace-id> [--go ABSOLUTE-GO-EXECUTABLE]")
+			}
+			workspaceID = strings.TrimSpace(flags.Args()[0])
+		} else if len(flags.Args()) != 0 {
+			return errors.New("usage: ai-dev-manager workspace prepare <workspace-id> [--go ABSOLUTE-GO-EXECUTABLE]")
+		}
+		value, err := service.Registry().Get(workspaceID)
+		if err != nil {
+			return err
+		}
+		layer, err := service.Store().LoadProject(value.Path)
+		if err != nil {
+			return err
+		}
+		localPolicy := model.Policy{}
+		if value.LocalPolicy != nil {
+			localPolicy = *value.LocalPolicy
+			localPolicy.AllowedExecutables = append([]string(nil), value.LocalPolicy.AllowedExecutables...)
+			if value.LocalPolicy.ToolPaths != nil {
+				localPolicy.ToolPaths = make(map[string]string, len(value.LocalPolicy.ToolPaths))
+				for key, path := range value.LocalPolicy.ToolPaths {
+					localPolicy.ToolPaths[key] = path
+				}
+			}
+		}
+		switch strings.TrimSpace(localPolicy.Mode) {
+		case "", "read-only", "workspace-write":
+			localPolicy.Mode = "standard"
+		case "standard", "full":
+		default:
+			return fmt.Errorf("workspace local policy mode %q is not supported", localPolicy.Mode)
+		}
+		if !containsFold(localPolicy.AllowedExecutables, "git") {
+			localPolicy.AllowedExecutables = append(localPolicy.AllowedExecutables, "git")
+		}
+
+		resolvedGo := strings.TrimSpace(*goExecutable)
+		projectChanged := false
+		if resolvedGo != "" {
+			if !filepath.IsAbs(resolvedGo) {
+				return errors.New("workspace prepare --go requires an absolute executable path")
+			}
+			resolvedGo = filepath.Clean(resolvedGo)
+			info, statErr := os.Stat(resolvedGo)
+			if statErr != nil || info.IsDir() {
+				return fmt.Errorf("workspace prepare --go executable is not usable: %q", resolvedGo)
+			}
+			if !containsFold(localPolicy.AllowedExecutables, "go") {
+				localPolicy.AllowedExecutables = append(localPolicy.AllowedExecutables, "go")
+			}
+			if localPolicy.ToolPaths == nil {
+				localPolicy.ToolPaths = map[string]string{}
+			}
+			localPolicy.ToolPaths["go"] = resolvedGo
+			if layer.Verifiers == nil {
+				layer.Verifiers = map[string]model.VerifierDefinition{}
+			}
+			if _, exists := layer.Verifiers["go-test"]; !exists {
+				enabled := true
+				layer.Verifiers["go-test"] = model.VerifierDefinition{
+					ID:             "go-test",
+					Kind:           "test",
+					Enabled:        &enabled,
+					Executable:     "go",
+					Args:           []string{"test", "./..."},
+					TimeoutSeconds: 120,
+				}
+				projectChanged = true
+			}
+		}
+		if projectChanged {
+			layer.Scope = model.ScopeProject
+			if err := service.Store().SaveProject(value.Path, layer); err != nil {
+				return err
+			}
+		}
+		value, err = service.Registry().SetLocalPolicy(value.ID, &localPolicy)
+		if err != nil {
+			return err
+		}
+		runtime, err := service.BuildRuntime(value.ID, nil)
+		if err != nil {
+			return err
+		}
+		if !containsFold(runtime.Capabilities(), "git.worktree") {
+			return errors.New("workspace preparation did not enable managed git worktrees")
+		}
+		if resolvedGo != "" && !containsFold(runtime.Capabilities(), "verify.run") {
+			return errors.New("workspace Go preparation did not enable verifier execution")
+		}
+		snapshot, err := service.Inspect(value.ID, nil)
+		if err != nil {
+			return err
+		}
+		if jsonOutput {
+			return writeJSON(stdout, map[string]any{
+				"workspace":           newWorkspaceOutput(value),
+				"policy_mode":         snapshot.Runtime.PolicyMode,
+				"allowed_executables": append([]string(nil), localPolicy.AllowedExecutables...),
+				"tool_paths":          localPolicy.ToolPaths,
+				"capabilities":        runtime.Capabilities(),
+			})
+		}
+		_, err = fmt.Fprintf(stdout, "prepared\t%s\tmode=%s\tallowed=%s\n", value.ID, snapshot.Runtime.PolicyMode, strings.Join(localPolicy.AllowedExecutables, ","))
+		return err
 	case "list":
 		if len(args) != 1 {
 			return errors.New("usage: ai-dev-manager workspace list")
@@ -267,6 +388,15 @@ func runWorkspace(service *controlplane.Service, args []string, stdout, stderr i
 	default:
 		return fmt.Errorf("unknown workspace command %q", args[0])
 	}
+}
+
+func containsFold(values []string, target string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), target) {
+			return true
+		}
+	}
+	return false
 }
 
 func runInspect(service *controlplane.Service, args []string, stdout, stderr io.Writer, jsonOutput bool) error {

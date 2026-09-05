@@ -8,7 +8,8 @@ import (
 )
 
 type gatewayRequest struct {
-	Listen string `json:"listen,omitempty"`
+	Listen  string `json:"listen,omitempty"`
+	Exposed bool   `json:"exposed,omitempty"`
 }
 
 func registerGatewayHandlers(mux *http.ServeMux, owner *GatewayOwner) {
@@ -26,7 +27,13 @@ func registerGatewayHandlers(mux *http.ServeMux, owner *GatewayOwner) {
 			writeControlError(w, http.StatusBadRequest, "invalid request")
 			return
 		}
-		status, err := owner.Up(r.Context(), strings.TrimSpace(request.Listen))
+		var status GatewayStatus
+		var err error
+		if request.Exposed {
+			status, err = owner.UpDocker(r.Context())
+		} else {
+			status, err = owner.Up(r.Context(), strings.TrimSpace(request.Listen))
+		}
 		if err != nil {
 			writeControlError(w, http.StatusConflict, err.Error())
 			return
@@ -62,6 +69,14 @@ func registerGatewayHandlers(mux *http.ServeMux, owner *GatewayOwner) {
 }
 
 func GatewayUp(ctx context.Context, root, listen string) (GatewayStatus, error) {
+	return gatewayUpRequest(ctx, root, gatewayRequest{Listen: strings.TrimSpace(listen)})
+}
+
+func GatewayUpDocker(ctx context.Context, root string) (GatewayStatus, error) {
+	return gatewayUpRequest(ctx, root, gatewayRequest{Exposed: true})
+}
+
+func gatewayUpRequest(ctx context.Context, root string, request gatewayRequest) (GatewayStatus, error) {
 	meta, err := Status(ctx, root)
 	if err != nil {
 		return GatewayStatus{}, err
@@ -70,7 +85,7 @@ func GatewayUp(ctx context.Context, root, listen string) (GatewayStatus, error) 
 	if err != nil {
 		return GatewayStatus{}, err
 	}
-	body, err := json.Marshal(gatewayRequest{Listen: strings.TrimSpace(listen)})
+	body, err := json.Marshal(request)
 	if err != nil {
 		return GatewayStatus{}, err
 	}

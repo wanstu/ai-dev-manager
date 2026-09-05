@@ -44,9 +44,6 @@ func (r *Native) Search(options SearchOptions) ([]SearchMatch, error) {
 	if err != nil {
 		return nil, &RuntimeError{Kind: ErrIO, Path: options.Path, Err: err}
 	}
-	if !info.IsDir() {
-		return nil, &RuntimeError{Kind: ErrInvalidPath, Path: options.Path}
-	}
 
 	maxFiles := options.MaxFiles
 	if maxFiles <= 0 {
@@ -66,28 +63,15 @@ func (r *Native) Search(options SearchOptions) ([]SearchMatch, error) {
 
 	matches := make([]SearchMatch, 0)
 	filesSeen := 0
-	err = filepath.WalkDir(start, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-		info, infoErr := entry.Info()
-		if infoErr != nil {
-			return infoErr
-		}
-		if !info.Mode().IsRegular() {
+	searchFile := func(path string, fileInfo fs.FileInfo) error {
+		if !fileInfo.Mode().IsRegular() {
 			return nil
 		}
 		filesSeen++
 		if filesSeen > maxFiles {
 			return &RuntimeError{Kind: ErrLimitExceeded}
 		}
-		if info.Size() > int64(maxBytes) {
+		if fileInfo.Size() > int64(maxBytes) {
 			return nil
 		}
 		data, readErr := os.ReadFile(path)
@@ -99,19 +83,44 @@ func (r *Native) Search(options SearchOptions) ([]SearchMatch, error) {
 		}
 		lines := strings.Split(string(data), "\n")
 		for index, line := range lines {
-			if strings.Contains(line, options.Query) {
-				rel, relErr := filepath.Rel(r.root, path)
-				if relErr != nil {
-					return relErr
-				}
-				matches = append(matches, SearchMatch{Path: filepath.Clean(rel), Line: index + 1, Text: strings.TrimSuffix(line, "\r")})
-				if len(matches) > maxMatches {
-					return &RuntimeError{Kind: ErrLimitExceeded}
-				}
+			if !strings.Contains(line, options.Query) {
+				continue
+			}
+			rel, relErr := filepath.Rel(r.root, path)
+			if relErr != nil {
+				return relErr
+			}
+			matches = append(matches, SearchMatch{Path: filepath.Clean(rel), Line: index + 1, Text: strings.TrimSuffix(line, "\r")})
+			if len(matches) > maxMatches {
+				return &RuntimeError{Kind: ErrLimitExceeded}
 			}
 		}
 		return nil
-	})
+	}
+
+	if info.IsDir() {
+		err = filepath.WalkDir(start, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			if entry.Type()&os.ModeSymlink != 0 {
+				return nil
+			}
+			entryInfo, infoErr := entry.Info()
+			if infoErr != nil {
+				return infoErr
+			}
+			return searchFile(path, entryInfo)
+		})
+	} else {
+		if !info.Mode().IsRegular() {
+			return nil, &RuntimeError{Kind: ErrInvalidPath, Path: options.Path}
+		}
+		err = searchFile(start, info)
+	}
 	if err != nil {
 		if runtimeErr, ok := err.(*RuntimeError); ok {
 			return nil, runtimeErr

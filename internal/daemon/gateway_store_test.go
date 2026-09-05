@@ -19,7 +19,7 @@ func TestGatewayStoreRoundTripAndVersionErrors(t *testing.T) {
 		t.Fatalf("empty gateway desired = %+v", initial)
 	}
 
-	want := GatewayDesired{DesiredRunning: true, Listen: "127.0.0.1:43127"}
+	want := GatewayDesired{DesiredRunning: true, Listen: "0.0.0.0:43127", Exposed: true}
 	if err := store.Save(want); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}

@@ -2,6 +2,9 @@ package mcpgateway
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
@@ -101,9 +104,16 @@ func TestGatewayToolSurfaceAndDiscoveryCalls(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	sort.Strings(names)
-	want := []string{"edit", "environment_create", "environment_destroy", "environment_inspect", "environment_list", "environment_writer_acquire", "environment_writer_release", "exec", "gateway_info", "git_branch", "git_diff", "git_status", "read", "run_verifier", "run_verifiers", "search", "tree", "workspace_list", "write"}
+	want := []string{"delete", "edit", "environment_create", "environment_destroy", "environment_inspect", "environment_list", "environment_writer_acquire", "environment_writer_release", "exec", "gateway_info", "git_branch", "git_diff", "git_status", "read", "run_verifier", "run_verifiers", "search", "tree", "workspace_list", "write"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("gateway tools = %+v, want %+v", names, want)
+	}
+	encodedTools, err := json.Marshal(tools.Tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encodedTools), `"result":true`) {
+		t.Fatalf("gateway tools contain MCPHub-incompatible boolean result schema: %s", encodedTools)
 	}
 
 	for _, call := range []mcp.CallToolParams{
@@ -123,6 +133,7 @@ func TestGatewayToolSurfaceAndDiscoveryCalls(t *testing.T) {
 		{Name: "git_branch", Arguments: map[string]any{"environment_id": "env_a"}},
 		{Name: "write", Arguments: map[string]any{"environment_id": "env_a", "writer_owner": "owner-a", "path": "a.txt", "content": "x"}},
 		{Name: "edit", Arguments: map[string]any{"environment_id": "env_a", "writer_owner": "owner-a", "path": "a.txt", "old_text": "x", "new_text": "y"}},
+		{Name: "delete", Arguments: map[string]any{"environment_id": "env_a", "writer_owner": "owner-a", "path": "a.txt"}},
 		{Name: "exec", Arguments: map[string]any{"environment_id": "env_a", "writer_owner": "owner-a", "executable": "git", "args": []any{"status"}}},
 		{Name: "run_verifier", Arguments: map[string]any{"environment_id": "env_a", "writer_owner": "owner-a", "id": "test"}},
 		{Name: "run_verifiers", Arguments: map[string]any{"environment_id": "env_a", "writer_owner": "owner-a"}},
@@ -134,6 +145,41 @@ func TestGatewayToolSurfaceAndDiscoveryCalls(t *testing.T) {
 		if result.StructuredContent == nil {
 			t.Fatalf("CallTool(%s) missing structured content", call.Name)
 		}
+	}
+}
+
+func TestExposedGatewayHandlerRestrictsHostAndOrigin(t *testing.T) {
+	handler := NewExposedHTTPHandler(fakeDiscovery{}, ExposedHTTPOptions{AllowedHosts: []string{"host.docker.internal"}})
+
+	for _, tc := range []struct {
+		name       string
+		host       string
+		origin     string
+		wantStatus int
+	}{
+		{name: "bad host", host: "evil.example:41137", wantStatus: http.StatusForbidden},
+		{name: "bad origin", host: "host.docker.internal:41137", origin: "https://evil.example", wantStatus: http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "http://host.docker.internal:41137/mcp", strings.NewReader(`{}`))
+			req.Host = tc.host
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, req)
+			if recorder.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d body=%s", recorder.Code, tc.wantStatus, recorder.Body.String())
+			}
+		})
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "http://host.docker.internal:41137/mcp", strings.NewReader(`{}`))
+	req.Host = "host.docker.internal:41137"
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code == http.StatusForbidden {
+		t.Fatalf("allowed Docker Host was rejected: %s", recorder.Body.String())
 	}
 }
 

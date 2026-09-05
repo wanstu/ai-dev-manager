@@ -36,6 +36,10 @@ type EditResult struct {
 	BytesAfter   int
 }
 
+type DeleteResult struct {
+	Path string
+}
+
 type TreeOptions struct {
 	MaxDepth   int
 	MaxEntries int
@@ -165,6 +169,44 @@ func (r *Native) Write(path string, data []byte, createParents bool) (WriteResul
 	return WriteResult{Path: rel, Bytes: len(data)}, nil
 }
 
+func (r *Native) Delete(path string) (DeleteResult, error) {
+	if !r.canWrite() {
+		return DeleteResult{}, &RuntimeError{Kind: ErrReadOnly}
+	}
+	lexicalTarget, err := r.guard.lexical(path)
+	if err != nil {
+		return DeleteResult{}, err
+	}
+	rootRel, relErr := filepath.Rel(r.root, lexicalTarget)
+	if relErr != nil {
+		return DeleteResult{}, &RuntimeError{Kind: ErrInvalidPath, Path: path, Err: relErr}
+	}
+	if rootRel == "." {
+		return DeleteResult{}, &RuntimeError{Kind: ErrInvalidPath, Path: path}
+	}
+	target, rel, err := r.guard.WriteTarget(path)
+	if err != nil {
+		return DeleteResult{}, err
+	}
+	if rel == "." {
+		return DeleteResult{}, &RuntimeError{Kind: ErrInvalidPath, Path: path}
+	}
+	info, err := os.Lstat(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return DeleteResult{}, &RuntimeError{Kind: ErrNotFound, Path: path, Err: err}
+		}
+		return DeleteResult{}, &RuntimeError{Kind: ErrIO, Path: path, Err: err}
+	}
+	if info.IsDir() || (!info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0) {
+		return DeleteResult{}, &RuntimeError{Kind: ErrInvalidPath, Path: path}
+	}
+	if err := os.Remove(target); err != nil {
+		return DeleteResult{}, &RuntimeError{Kind: ErrIO, Path: path, Err: err}
+	}
+	return DeleteResult{Path: rel}, nil
+}
+
 func (r *Native) Edit(path, oldText, newText string, expectedReplacements int) (EditResult, error) {
 	if !r.canWrite() {
 		return EditResult{}, &RuntimeError{Kind: ErrReadOnly}
@@ -180,11 +222,32 @@ func (r *Native) Edit(path, oldText, newText string, expectedReplacements int) (
 		return EditResult{}, err
 	}
 	before := string(data)
-	count := strings.Count(before, oldText)
+	matchText := oldText
+	replacementText := newText
+	count := strings.Count(before, matchText)
 	if count != expectedReplacements {
-		return EditResult{}, &RuntimeError{Kind: ErrInvalidEdit, Path: path}
+		if count != 0 {
+			return EditResult{}, &RuntimeError{Kind: ErrInvalidEdit, Path: path}
+		}
+
+		fileStyle, fileStyleOK := consistentNewlineStyle(before)
+		oldStyle, oldStyleOK := consistentNewlineStyle(oldText)
+		if !fileStyleOK || !oldStyleOK || fileStyle == oldStyle {
+			return EditResult{}, &RuntimeError{Kind: ErrInvalidEdit, Path: path}
+		}
+
+		matchText, _ = adaptNewlineStyle(oldText, fileStyle)
+		var replacementOK bool
+		replacementText, replacementOK = adaptNewlineStyle(newText, fileStyle)
+		if !replacementOK {
+			return EditResult{}, &RuntimeError{Kind: ErrInvalidEdit, Path: path}
+		}
+		count = strings.Count(before, matchText)
+		if count != expectedReplacements {
+			return EditResult{}, &RuntimeError{Kind: ErrInvalidEdit, Path: path}
+		}
 	}
-	after := strings.Replace(before, oldText, newText, expectedReplacements)
+	after := strings.Replace(before, matchText, replacementText, expectedReplacements)
 	writeResult, err := r.Write(path, []byte(after), false)
 	if err != nil {
 		return EditResult{}, err
@@ -195,6 +258,50 @@ func (r *Native) Edit(path, oldText, newText string, expectedReplacements int) (
 		BytesBefore:  len(data),
 		BytesAfter:   len(after),
 	}, nil
+}
+
+func consistentNewlineStyle(text string) (string, bool) {
+	style := ""
+	for i := 0; i < len(text); i++ {
+		switch text[i] {
+		case '\r':
+			if i+1 >= len(text) || text[i+1] != '\n' {
+				return "", false
+			}
+			if style == "\n" {
+				return "", false
+			}
+			style = "\r\n"
+			i++
+		case '\n':
+			if style == "\r\n" {
+				return "", false
+			}
+			style = "\n"
+		}
+	}
+	return style, style != ""
+}
+
+func adaptNewlineStyle(text, targetStyle string) (string, bool) {
+	style, ok := consistentNewlineStyle(text)
+	if !ok {
+		if strings.ContainsAny(text, "\r\n") {
+			return "", false
+		}
+		return text, true
+	}
+	if style == targetStyle {
+		return text, true
+	}
+	switch targetStyle {
+	case "\n":
+		return strings.ReplaceAll(text, "\r\n", "\n"), true
+	case "\r\n":
+		return strings.ReplaceAll(text, "\n", "\r\n"), true
+	default:
+		return "", false
+	}
 }
 
 func atomicWrite(path string, data []byte) error {

@@ -30,11 +30,36 @@ ADM 管理 Environment 的事实、能力、安全边界与执行；Agent 管理
 - `codexprov4`：继续独立存在；不作为 ADM Core 的依赖。
 - 本项目不 fork CodexPro 或 DevSpace Core；优先吸收设计，并通过 Adapter / Capability / MCP 接口保持兼容空间。
 
-## Current Milestone: v0.6 Agent MCP Gateway ✅ Complete
+## Current Milestone: v0.7 External Agent Dogfood & Development Environment Capabilities ✅ Complete
 
-**Goal:** 让外部 Agent 只配置一个长期稳定的 ADM MCP Gateway，通过 `environment_id` 发现、管理和操作多个隔离 Environment；Gateway 复用 v0.5 Environment Core 与现有 Runtime Adapter，不要求每个任务新增 MCP 配置，也不替代现有 Direct MCP。
+**Goal:** 先让真实外部 Agent 通过 v0.6 的单一 Gateway MCP 完成真实开发任务，用 dogfood 证据决定下一批 Environment 能力优先级；Process/dev server、logs、ports、HTTP verification、Gateway exposure/auth 按真实阻塞排序，不按旧 roadmap 猜测排序。
 
 ## Requirements
+
+### Validated — v0.7 Phase 29
+
+- [x] **FILE-01**: Agent-facing Runtime/Gateway 提供 writer-guarded `files.delete`，外部 Agent 已无需绕到 `git clean` 或 shell 删除自己创建的单个文件。— Post-restart real `@pjadm write → delete` dogfood passed.
+- [x] **FILE-02**: Delete 继续服从 write policy、workspace containment 与 blocked metadata path；workspace root 和普通目录被拒绝，missing path 保持 `not_found` Runtime kind，单个允许 symlink 只删除链接 entry。— Runtime safety regressions passed.
+- [x] **FILE-03**: Runtime → Adapter → Environment → Gateway 全链路、wrong-writer failure、full verifier/focused race/vet/build/diff-check 与 post-restart real `@pjadm` delete dogfood 全部验证。— Phase 29 gate complete.
+
+### Validated — v0.7 Phase 28
+
+- [x] **EDIT-01**: Exact edit 保持原始 exact match 优先；仅在 exact count=0、目标文件与 `old_text` 都是各自一致且相反的 LF/CRLF 风格时进行换行适配，`new_text` 同步适配到目标文件风格。— CRLF↔LF 双向 Runtime regression passed.
+- [x] **EDIT-02**: `expected_replacements` 继续严格生效；非零但数量错误的 exact match 立即失败，fallback 计数仍必须精确相等；mixed newline、bare-CR/混合 replacement、空白差异不做 fuzzy 匹配，失败保持文件不变。— Strict failure/atomicity regressions passed.
+- [x] **EDIT-03**: `go-test` verifier、focused race、`go vet ./...`、review build 和 `git diff --check` 全部通过。— Phase 28 gate complete.
+
+### Validated — v0.7 Phase 27
+
+- [x] **TOOL-01**: Workspace 默认保持 read-only；`workspace prepare --go <absolute-path>` 只把 machine-local `standard + git + go + ToolPaths.go` 写入用户级 Workspace LocalPolicy，Project config 仅保存可共享 verifier；Project `full` 不被本地 minimum 降级，Runtime Override 仍最高优先级。— Config resolution/idempotence tests passed.
+- [x] **TOOL-02**: 当前 Go 项目已通过真实 `@pjadm run_verifier(go-test)` 和 `run_verifiers` 在原 Phase 26 Environment 内完成 `go test ./...` 验证，不再需要切回另一个 MCP 执行器。— Final verifier PASS.
+- [x] **TOOL-03**: `search` 已支持单文件路径；Runtime/Gateway 错误暴露稳定 kind（含 `limit_exceeded`），base Runtime 缺 `git.worktree` 时返回 `capability_missing` 而非误报 `worktree_missing`；daemon 私有环境变量不再污染 verifier 子进程。— Real dogfood + regression/full gate passed.
+
+### Validated — v0.7 Phase 26
+
+- [x] **DOG-01**: ChatGPT 通过 MCPHub → 单一 ADM Gateway 创建 `env_c288406b777466cc18139f25131a4480`，完成 writer、routed read/search/git、write/edit、structured exec 与最终 review state；Agent 未配置 per-Environment MCP，也未使用 raw worktree path。
+- [x] **DOG-02**: 真实 connector reachability 已验证为本机 Docker → `host.docker.internal`；显式 `gateway up --docker` 保持稳定端口，并通过 Host/Origin 受限的本机 Docker exposure。正式远程/LAN exposure 仍要求后续 auth。
+- [x] **DOG-03**: Phase 26 记录并修复三类真实 blocker：Docker reachability、MCPHub boolean output-schema compatibility、Workspace 默认 read-only 导致 Environment create 缺少 managed Git capability；下一 Phase 由“项目验证仍需切回 @pj”这一真实缺口驱动。
+
 
 ### Validated — v0.6 Phase 25
 
@@ -283,6 +308,10 @@ Go 的原因：单文件部署友好、并发和进程管理适合本地 runtime
 | stale Environment 不自动删除；dirty/unpushed destroy 默认拒绝 | 自动清理可能丢失工作；只提供状态/警告，潜在数据丢失必须显式 force | Accepted |
 | Agent-facing 长期入口是一个 MCP Gateway，而不是一 Environment 一 MCP 配置 | 用户新增任务只创建 Environment，不应该重新配置 Agent/MCP；由 environment_id 做安全路由 | Accepted |
 | codexpro-plus 稳定版不承载 ADM 实验改造 | 它已作为 CodexPro 进程 Manager 发布并验证；未来 UI/Manager 集成如需要先 fork/独立实验，不影响原功能 | Accepted |
+| Human UI 与 Windows client shell 使用独立项目 | `winapp` 与 `ai-dev-manager-client` 不进入 ADM Core 仓库；Client 只通过 local Control API 使用 daemon，避免 Wails/桌面依赖和实验污染 Core | Accepted |
+| Workspace toolchain 的 machine-local 授权放用户级 LocalPolicy，Project 只保存可共享 verifier intent | 绝对工具路径不应污染仓库配置；本地 minimum policy 只升级必要权限且不能覆盖更高 Project/Runtime policy | Accepted |
+| Exact edit 只为明确 LF ↔ CRLF 表示差异做兼容，不升级为 fuzzy patch | 真实 Windows dogfood 已证明换行差异是摩擦点；保持 replacement count、空白与上下文严格可避免模糊编辑风险 | Accepted |
+| Agent-facing 文件删除先只支持单文件/允许 symlink entry，不提供递归目录删除 | 真实 dogfood 只证明了清理单文件需要绕 Git；最小安全能力即可解除阻塞，同时避免把 destructive directory cleanup 偷渡进普通文件工具 | Accepted |
 
 ## Evolution Rules
 

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -99,6 +100,81 @@ func TestCLIWorkspaceAddListShowAndInspect(t *testing.T) {
 	}
 	if snapshot.Workspace.ID != added.ID || snapshot.Runtime.RuntimeID != "native" || !containsString(snapshot.Runtime.Capabilities, "files.read") {
 		t.Fatalf("inspect output = %+v", snapshot)
+	}
+}
+
+func TestCLIWorkspacePrepareEnablesAgentEnvironmentCapabilitiesAndPreservesProjectConfig(t *testing.T) {
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+
+	var addOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "workspace", "add", "--path", workspaceRoot}, &addOut, io.Discard); err != nil {
+		t.Fatalf("workspace add error = %v", err)
+	}
+	var added workspaceOutput
+	if err := json.Unmarshal(addOut.Bytes(), &added); err != nil {
+		t.Fatal(err)
+	}
+
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Verifiers: map[string]model.VerifierDefinition{
+			"keep": {ID: "keep", Kind: "command", Executable: "go", Args: []string{"test", "./..."}},
+		},
+		Policy: &model.Policy{
+			Mode:               "workspace-write",
+			AllowedExecutables: []string{"go"},
+			ToolPaths:          map[string]string{"go": `D:\\tools\\go.exe`},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < 2; i++ {
+		var prepareOut bytes.Buffer
+		if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "workspace", "prepare", added.ID}, &prepareOut, io.Discard); err != nil {
+			t.Fatalf("workspace prepare error = %v", err)
+		}
+		var prepared struct {
+			PolicyMode         string   `json:"policy_mode"`
+			AllowedExecutables []string `json:"allowed_executables"`
+			Capabilities       []string `json:"capabilities"`
+		}
+		if err := json.Unmarshal(prepareOut.Bytes(), &prepared); err != nil {
+			t.Fatalf("decode prepare output: %v output=%s", err, prepareOut.String())
+		}
+		if prepared.PolicyMode != "standard" || containsString(prepared.AllowedExecutables, "go") || !containsString(prepared.AllowedExecutables, "git") || !containsString(prepared.Capabilities, "git.worktree") {
+			t.Fatalf("prepared workspace = %+v", prepared)
+		}
+	}
+
+	project, err := service.Store().LoadProject(workspaceRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if project.Policy == nil || project.Policy.Mode != "workspace-write" || len(project.Policy.AllowedExecutables) != 1 || project.Policy.AllowedExecutables[0] != "go" || project.Policy.ToolPaths["go"] != `D:\\tools\\go.exe` {
+		t.Fatalf("prepare mutated project policy = %+v", project.Policy)
+	}
+	preparedWorkspace, err := service.Registry().Get(added.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preparedWorkspace.LocalPolicy == nil || preparedWorkspace.LocalPolicy.Mode != "standard" || len(preparedWorkspace.LocalPolicy.AllowedExecutables) != 1 || preparedWorkspace.LocalPolicy.AllowedExecutables[0] != "git" {
+		t.Fatalf("prepared local policy = %+v", preparedWorkspace.LocalPolicy)
+	}
+	_, effective, err := service.Resolve(added.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effective.Policy == nil || !containsString(effective.Policy.Policy.AllowedExecutables, "go") || !containsString(effective.Policy.Policy.AllowedExecutables, "git") {
+		t.Fatalf("effective policy did not compose project + local = %+v", effective.Policy)
+	}
+	if verifier, ok := project.Verifiers["keep"]; !ok || verifier.Executable != "go" {
+		t.Fatalf("project verifier was not preserved: %+v", project.Verifiers)
 	}
 }
 
@@ -1878,6 +1954,88 @@ func TestCLIGatewayDiscoveryStableAcrossDaemonRestart(t *testing.T) {
 	var down daemon.GatewayStatus
 	if err := json.Unmarshal(downOut.Bytes(), &down); err != nil || down.DesiredRunning || down.State != daemon.GatewayStopped {
 		t.Fatalf("gateway down = %+v decode=%v", down, err)
+	}
+}
+
+func TestCLIGatewayDockerExposureAcrossDaemonRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
+	configRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	var localOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "up"}, &localOut, io.Discard); err != nil {
+		t.Fatalf("local gateway up error = %v", err)
+	}
+	var local daemon.GatewayStatus
+	if err := json.Unmarshal(localOut.Bytes(), &local); err != nil {
+		t.Fatalf("decode local gateway: %v output=%s", err, localOut.String())
+	}
+	_, localPort, err := net.SplitHostPort(local.Listen)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var dockerOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "up", "--docker"}, &dockerOut, io.Discard); err != nil {
+		t.Fatalf("docker gateway up error = %v", err)
+	}
+	var docker daemon.GatewayStatus
+	if err := json.Unmarshal(dockerOut.Bytes(), &docker); err != nil {
+		t.Fatalf("decode docker gateway: %v output=%s", err, dockerOut.String())
+	}
+	bindHost, dockerPort, err := net.SplitHostPort(docker.Listen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !docker.Exposed || bindHost != "0.0.0.0" || dockerPort != localPort {
+		t.Fatalf("docker status = %+v local=%+v", docker, local)
+	}
+	if docker.DockerEndpoint != "http://host.docker.internal:"+localPort+"/mcp" || docker.LocalEndpoint != "http://127.0.0.1:"+localPort+"/mcp" {
+		t.Fatalf("docker endpoints = %+v", docker)
+	}
+
+	connect := func(endpoint string) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		client := mcp.NewClient(&mcp.Implementation{Name: "adm-gateway-docker-test", Version: "v0.7.0"}, nil)
+		session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint}, nil)
+		if err != nil {
+			t.Fatalf("connect %s: %v", endpoint, err)
+		}
+		defer session.Close()
+		if _, err := session.ListTools(ctx, nil); err != nil {
+			t.Fatalf("ListTools(%s): %v", endpoint, err)
+		}
+	}
+	connect(docker.DockerEndpoint)
+	connect(strings.TrimSuffix(docker.DockerEndpoint, "/") + "/")
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "stop"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl stop error = %v", err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "start"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl start error = %v", err)
+	}
+	var statusOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "status"}, &statusOut, io.Discard); err != nil {
+		t.Fatalf("gateway status after restart error = %v", err)
+	}
+	var restarted daemon.GatewayStatus
+	if err := json.Unmarshal(statusOut.Bytes(), &restarted); err != nil {
+		t.Fatal(err)
+	}
+	if !restarted.Exposed || restarted.Listen != docker.Listen || restarted.DockerEndpoint != docker.DockerEndpoint {
+		t.Fatalf("docker gateway moved across restart: before=%+v after=%+v", docker, restarted)
+	}
+	connect(restarted.DockerEndpoint)
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "gateway", "down"}, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
 	}
 }
 

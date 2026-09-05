@@ -26,6 +26,7 @@ const (
 	CapabilityRead        Capability = "files.read"
 	CapabilityWrite       Capability = "files.write"
 	CapabilityEdit        Capability = "files.edit"
+	CapabilityDelete      Capability = "files.delete"
 	CapabilitySearch      Capability = "search.text"
 	CapabilityExec        Capability = "shell.exec"
 	CapabilityGitStatus   Capability = "git.status"
@@ -169,9 +170,9 @@ func (r *Native) Capabilities() []Capability {
 	capabilities := []Capability{CapabilityRead, CapabilitySearch, CapabilityTree}
 	switch r.Mode() {
 	case ModeWorkspaceWrite:
-		capabilities = append(capabilities, CapabilityEdit, CapabilityWrite)
+		capabilities = append(capabilities, CapabilityDelete, CapabilityEdit, CapabilityWrite)
 	case ModeStandard, ModeFull:
-		capabilities = append(capabilities, CapabilityEdit, CapabilityExec, CapabilityWrite)
+		capabilities = append(capabilities, CapabilityDelete, CapabilityEdit, CapabilityExec, CapabilityWrite)
 		if r.Mode() == ModeFull || r.allowedExecutable("git") {
 			capabilities = append(capabilities, CapabilityGitStatus, CapabilityGitDiff, CapabilityGitBranch, CapabilityGitWorktree)
 		}

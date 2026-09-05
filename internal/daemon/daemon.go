@@ -475,6 +475,13 @@ func Stop(ctx context.Context, root string) (Metadata, error) {
 
 // Run owns exactly one long-lived Control Plane for this daemon process.
 func Run(ctx context.Context, root, listen string) error {
+	// This marker exists only to bootstrap a generated Go test binary into the
+	// daemon CLI path. Once the daemon entrypoint is running it must not leak to
+	// Runtime/verifier children, or their own test entrypoints can mis-detect
+	// themselves as ADM daemon children.
+	if err := os.Unsetenv(ChildEnvironmentKey); err != nil {
+		return fmt.Errorf("clear internal daemon child marker: %w", err)
+	}
 	resolved, err := ResolveRoot(root)
 	if err != nil {
 		return err

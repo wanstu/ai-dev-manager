@@ -110,8 +110,32 @@ func (r *Registry) Get(id string) (model.Workspace, error) {
 	}
 	for _, workspace := range cfg.Workspaces {
 		if workspace.ID == id {
+			workspace.LocalPolicy = clonePolicy(workspace.LocalPolicy)
 			return workspace, nil
 		}
+	}
+	return model.Workspace{}, &RegistryError{Kind: ErrNotFound, ID: id}
+}
+
+func (r *Registry) SetLocalPolicy(id string, policy *model.Policy) (model.Workspace, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cfg, err := r.store.LoadUserConfig()
+	if err != nil {
+		return model.Workspace{}, err
+	}
+	for i := range cfg.Workspaces {
+		if cfg.Workspaces[i].ID != id {
+			continue
+		}
+		cfg.Workspaces[i].LocalPolicy = clonePolicy(policy)
+		if err := r.store.SaveUserConfig(cfg); err != nil {
+			return model.Workspace{}, err
+		}
+		updated := cfg.Workspaces[i]
+		updated.LocalPolicy = clonePolicy(updated.LocalPolicy)
+		return updated, nil
 	}
 	return model.Workspace{}, &RegistryError{Kind: ErrNotFound, ID: id}
 }
@@ -125,7 +149,10 @@ func (r *Registry) List() ([]model.Workspace, error) {
 		return nil, err
 	}
 	workspaces := make([]model.Workspace, len(cfg.Workspaces))
-	copy(workspaces, cfg.Workspaces)
+	for i, workspace := range cfg.Workspaces {
+		workspace.LocalPolicy = clonePolicy(workspace.LocalPolicy)
+		workspaces[i] = workspace
+	}
 	return workspaces, nil
 }
 
@@ -156,10 +183,11 @@ func (r *Registry) Update(id string, input Input) (model.Workspace, error) {
 	}
 
 	updated := model.Workspace{
-		ID:        id,
-		Path:      canonical,
-		ProfileID: input.ProfileID,
-		RuntimeID: input.RuntimeID,
+		ID:          id,
+		Path:        canonical,
+		ProfileID:   input.ProfileID,
+		RuntimeID:   input.RuntimeID,
+		LocalPolicy: clonePolicy(cfg.Workspaces[index].LocalPolicy),
 	}
 	cfg.Workspaces[index] = updated
 	if err := r.store.SaveUserConfig(cfg); err != nil {
@@ -225,6 +253,21 @@ func duplicateWorkspacePath(workspaces []model.Workspace, path, excludeID string
 		}
 	}
 	return false
+}
+
+func clonePolicy(source *model.Policy) *model.Policy {
+	if source == nil {
+		return nil
+	}
+	clone := *source
+	clone.AllowedExecutables = append([]string(nil), source.AllowedExecutables...)
+	if source.ToolPaths != nil {
+		clone.ToolPaths = make(map[string]string, len(source.ToolPaths))
+		for key, value := range source.ToolPaths {
+			clone.ToolPaths[key] = value
+		}
+	}
+	return &clone
 }
 
 func newWorkspaceID() (string, error) {

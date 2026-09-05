@@ -430,17 +430,47 @@
 - 普通 `go test ./...` 已改为无人值守、不启动真实 TCP listener；真实 network acceptance 通过固定 daemon/test executable 路径完整运行并 5/5 PASS。
 - v0.6 已完成并停在 milestone boundary；remote exposure、Process/Docker/UI 留给后续 milestone。
 
-### v0.7 — Development Environment Capabilities
-- 根据真实使用补 Process / dev server / logs / ports / HTTP verification。
+### v0.7 — External Agent Dogfood & Development Environment Capabilities
+
+#### Phase 26 — External Agent Dogfood ✅ Completed 2026-09-05
+- ChatGPT 已通过 MCPHub → 单一 ADM Gateway 真实加载 19 tools，并创建隔离 Environment `env_c288406b777466cc18139f25131a4480`。
+- 真实任务跑通 discovery、create(include_changes)、writer、read/search/git、write/edit、structured exec、final status/diff；Agent 不知道也不需要 raw worktree path。
+- 修复了三项真实接入 blocker：Docker reachability (`gateway up --docker`)、MCPHub 对 boolean JSON Schema `true` 的不兼容、默认 read-only Workspace 无法创建 managed worktree。
+- 新增人类显式 `workspace prepare <workspace-id>` 作为最小 Agent-ready 授权边界；默认 Workspace 仍 read-only。
+- Phase 26 evidence 保存在 `26-DOGFOOD.md`，Environment/branch 保留 review，不自动 commit/merge/rebase/destroy。
+
+#### Phase 27 — Project Toolchain & Verifier Onboarding ✅ Completed 2026-09-05
+- `workspace prepare --go <absolute-path>` 已把 machine-local `standard + git + go + ToolPaths.go` 存入用户级 Workspace LocalPolicy；Project config 只保存可共享 `go-test = go test ./...` verifier。
+- Local minimum `standard` 不会降低 Project `full`，显式 Runtime Override 仍保持最高优先级；重复 prepare 幂等并保留已有 Project MCP/Skill/verifier/tool config。
+- 原 Phase 26 Environment 已通过真实 `@pjadm run_verifier(go-test)` / `run_verifiers` 完成项目测试闭环，不再切回其他执行器。
+- `search` 支持单文件路径；Runtime 错误暴露稳定 kind（包括 `limit_exceeded`），缺 `git.worktree` 时返回 `capability_missing`；daemon 私有环境变量不再污染 verifier 子进程。
+- full verifier、focused race、vet、build gate 全部通过。
+
+#### Phase 28 — Agent File Editing Ergonomics ✅ Completed 2026-09-05
+- Runtime exact edit 保持原始 exact match 优先；仅在 exact count=0 且双方是明确相反的一致 LF/CRLF 风格时进行换行兼容。
+- fallback 会把 `old_text` / `new_text` 适配到目标文件换行风格，目标文件原有 CRLF/LF 风格保持不变。
+- `expected_replacements` 未放宽；mixed newline、bare-CR/混合 replacement、空白/缩进差异及其他非换行差异仍返回 `invalid_edit` 且不改文件。
+- CRLF↔LF 双向 regression、strict failure atomicity、`go-test` verifier、focused race、vet、build、`git diff --check` 全部通过。
+- 大文件 read 已用约 104 KB `main_test.go` 实测可用，本 Phase 未加入 ranged read。
+
+#### Phase 29 — Safe File Delete ✅ Completed 2026-09-05
+- Post-restart dogfood 中，为清理 `@pjadm write` 创建的临时文件只能绕到结构化 `git clean -f -- <path>`，因此新增了第一等 Agent-facing `files.delete`。
+- Delete 复用 write policy、workspace containment、blocked metadata path 与 Environment writer guard；wrong writer 在 Runtime 之前返回 `writer_not_owner`。
+- 仅允许删除单文件/允许 symlink entry；workspace root、普通目录/递归删除与 metadata path 继续拒绝，missing path 保持 `not_found` Runtime kind。
+- Runtime → Adapter → Environment → Gateway 全链路、full verifier、focused race、vet、build、diff-check 全部通过。
+- 新 daemon 重启后，真实 `@pjadm write → wrong-owner delete(rejected) → delete(success) → read(not_found) → run_verifier(go-test)` 全部通过；不再使用 exec/Git workaround 清理临时文件。
+
+#### Later v0.7 phases — evidence-driven
+- Process / dev server / logs / ports / HTTP verification 按后续 dogfood 中第一个真实阻塞排序。
 - Docker structured capability 仅在它能改善 Environment 开发体验时加入。
-- 远端 Agent 连接开发机器上的 ADM MCP 属于 MCP exposure/auth 问题，不引入无必要的 SSH Remote Runtime。
+- Gateway exposure/auth 仅在目标外部 Agent 的 reachability 证明需要时前移。
 - Debug / DAP 在真实需求证明后再进入。
 
 ### v0.8 — Human Experience / Manager
-- 先改善 CLI，再按真实需求决定 TUI/Desktop UI。
-- `codexpro-plus` 稳定版保持原 CodexPro 进程管理功能；若验证 ADM Manager，使用 fork/独立实验版本。
-- Agent Manager 保留为可选 orchestration capability，不成为前期产品中心。
-- CodexPro / DevSpace / 其他 runtime compatibility 继续通过 Adapter 演进。
+- Human UI 已被真实使用证明需要前移，但不再放进 ADM Core 仓库；后续使用独立 `winapp` 框架项目与独立 `ai-dev-manager-client` 项目，Client 只通过 ADM local Control API 管理 Core。
+- `codexpro-plus` 与 `ime-lock-v2` 保持独立稳定项目，可作为 winapp 的设计参考和未来迁移候选，不为 ADM Client 实验直接改造。
+- ADM Core 继续保持 headless / daemon-owned；Client 退出或崩溃不能影响 Gateway、Environment 或 Agent 工作。
+- Process/logs/ports 等能力继续按真实 dogfood 阻塞排序；CodexPro / DevSpace / 其他 runtime compatibility 继续通过 Adapter 演进。
 
 ## Requirement Traceability
 
@@ -472,6 +502,7 @@
 | GW-03, GW-06..07 | 23 |
 | GW-04 | 24 |
 | GW-05 | 25 |
+| FILE-* | 29 |
 
 ## GSD Development Rules
 

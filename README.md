@@ -144,7 +144,22 @@ v0.6 Phase 22 增加一个独立的 Agent MCP Gateway。第一次启动可自动
 .\ai-dev-manager.exe gateway down
 ```
 
-当前 Gateway 已包含 discovery + Environment lifecycle，以及 `tree`、`read`、`search`、`git_status`、`git_diff`、`git_branch`。这些 read-only tools 都要求显式 `environment_id`，每次由 Environment Manager 重新验证 managed worktree 后路由到 derived Runtime；不需要 writer lease，也不会刷新 Environment activity。Phase 25 进一步加入 `write`、`edit`、`exec`、`run_verifier`、`run_verifiers`，这些 active/mutation tools 必须同时提供当前 `writer_owner`，并在 Runtime Invoke 前由 ADM 强制校验 single-writer。Lifecycle 完整复用 v0.5 的 include-changes、branch conflict、dirty/unpushed/active-writer guards；domain failure 以 `isError=true` 加结构化 `error.code/facts/warnings/hints` 返回。Gateway 默认只监听 loopback；现有 per-Workspace Direct MCP 完全保留。
+如果 MCP 调用方运行在本机 Docker 容器中，可显式切换为 Docker dogfood 模式；ADM 会保留已持久化的稳定端口并返回本机与容器两个 URL：
+
+```powershell
+.\ai-dev-manager.exe gateway up --docker
+.\ai-dev-manager.exe gateway status
+```
+
+示例：
+
+```text
+running desired=true exposed=true listen=0.0.0.0:41137 local=http://127.0.0.1:41137/mcp docker=http://host.docker.internal:41137/mcp
+```
+
+`--docker` 是显式 opt-in，本机默认仍只监听 loopback。Docker 模式使用 Host/Origin allowlist，只允许 `host.docker.internal` 与 loopback authority 进入 MCP handler；它当前用于可信本机 Docker dogfood，并不等价于带认证的远程/LAN 暴露。正式非本机 exposure 在加入认证前不应使用。
+
+当前 Gateway 已包含 discovery + Environment lifecycle，以及 `tree`、`read`、`search`、`git_status`、`git_diff`、`git_branch`。这些 read-only tools 都要求显式 `environment_id`，每次由 Environment Manager 重新验证 managed worktree 后路由到 derived Runtime；不需要 writer lease，也不会刷新 Environment activity。Phase 25 加入 `write`、`edit`、`exec`、`run_verifier`、`run_verifiers`，Phase 29 进一步加入安全单文件 `delete`；这些 active/mutation tools 必须同时提供当前 `writer_owner`，并在 Runtime Invoke 前由 ADM 强制校验 single-writer。`delete` 继续服从 write policy、workspace containment 与 blocked metadata path，只删除单个文件/允许 symlink entry，不递归删除目录。Lifecycle 完整复用 v0.5 的 include-changes、branch conflict、dirty/unpushed/active-writer guards；domain failure 以 `isError=true` 加结构化 `error.code/facts/warnings/hints` 返回。Gateway 默认只监听 loopback；现有 per-Workspace Direct MCP 完全保留。
 
 ### Unattended tests vs. network acceptance
 

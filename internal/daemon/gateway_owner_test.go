@@ -135,6 +135,62 @@ func TestGatewayOwnerDoesNotMovePersistedPortWhenOccupied(t *testing.T) {
 	}
 }
 
+func TestGatewayOwnerDockerModeKeepsPortAndPersistsAcrossReconcile(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
+	root := t.TempDir()
+	owner, err := NewGatewayOwner(root, daemonGatewayDiscovery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	local, err := owner.Up(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, localPort, err := net.SplitHostPort(local.Listen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docker, err := owner.UpDocker(ctx)
+	if err != nil {
+		t.Fatalf("UpDocker() error = %v", err)
+	}
+	bindHost, dockerPort, err := net.SplitHostPort(docker.Listen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !docker.Exposed || bindHost != "0.0.0.0" || dockerPort != localPort {
+		t.Fatalf("docker gateway = %+v, local=%+v", docker, local)
+	}
+	if docker.LocalEndpoint != "http://127.0.0.1:"+localPort+"/mcp" || docker.DockerEndpoint != "http://host.docker.internal:"+localPort+"/mcp" {
+		t.Fatalf("docker endpoints = %+v", docker)
+	}
+	stored, err := NewGatewayStore(root).Load()
+	if err != nil || !stored.DesiredRunning || !stored.Exposed || stored.Listen != docker.Listen {
+		t.Fatalf("stored docker desired = %+v err=%v", stored, err)
+	}
+
+	if err := owner.CloseObserved(ctx); err != nil {
+		t.Fatal(err)
+	}
+	restartedOwner, err := NewGatewayOwner(root, daemonGatewayDiscovery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := restartedOwner.Reconcile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !restarted.Exposed || restarted.Listen != docker.Listen || restarted.DockerEndpoint != docker.DockerEndpoint || restarted.LocalEndpoint != docker.LocalEndpoint {
+		t.Fatalf("restarted docker gateway = %+v want=%+v", restarted, docker)
+	}
+	if _, err := restartedOwner.Down(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGatewayOwnerRejectsNonLoopbackAndListenChangeWhileRunning(t *testing.T) {
 	testutil.RequireNetworkAcceptance(t)
 	root := t.TempDir()

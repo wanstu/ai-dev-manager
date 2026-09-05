@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"ai-dev-manager/internal/adapter/runtimeadapter"
@@ -142,6 +144,12 @@ type RoutedEditInput struct {
 	ExpectedReplacements int    `json:"expected_replacements,omitempty"`
 }
 
+type RoutedDeleteInput struct {
+	EnvironmentID string `json:"environment_id"`
+	WriterOwner   string `json:"writer_owner"`
+	Path          string `json:"path"`
+}
+
 type RoutedExecInput struct {
 	EnvironmentID  string   `json:"environment_id"`
 	WriterOwner    string   `json:"writer_owner"`
@@ -168,6 +176,19 @@ type RoutedMutationOutput struct {
 	OK     bool                 `json:"ok"`
 	Result any                  `json:"result,omitempty"`
 	Error  *gateway.DomainError `json:"error,omitempty"`
+}
+
+func routedOutputSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"ok":     map[string]any{"type": "boolean"},
+			"result": map[string]any{},
+			"error":  map[string]any{},
+		},
+		"required":             []string{"ok"},
+		"additionalProperties": false,
+	}
 }
 
 func New(discovery Discovery) *mcp.Server {
@@ -296,8 +317,9 @@ func New(discovery Discovery) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "tree",
-		Description: "List files and directories inside one validated Environment. Requires environment_id but no writer lease.",
+		Name:         "tree",
+		Description:  "List files and directories inside one validated Environment. Requires environment_id but no writer lease.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedTreeInput) (*mcp.CallToolResult, RoutedReadOutput, error) {
 		return invokeRoutedRead(ctx, discovery, input.EnvironmentID, runtimeadapter.OpTree, map[string]any{
 			"path": input.Path, "max_depth": input.MaxDepth, "max_entries": input.MaxEntries,
@@ -305,8 +327,9 @@ func New(discovery Discovery) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "read",
-		Description: "Read a text file from one validated Environment. Requires environment_id but no writer lease.",
+		Name:         "read",
+		Description:  "Read a text file from one validated Environment. Requires environment_id but no writer lease.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedReadInput) (*mcp.CallToolResult, RoutedReadOutput, error) {
 		if strings.TrimSpace(input.Path) == "" {
 			return domainToolError(RoutedReadOutput{OK: false, Error: invalidInput("path is required")})
@@ -317,8 +340,9 @@ func New(discovery Discovery) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "search",
-		Description: "Search literal text inside one validated Environment. Requires environment_id but no writer lease.",
+		Name:         "search",
+		Description:  "Search literal text inside one validated Environment. Requires environment_id but no writer lease.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedSearchInput) (*mcp.CallToolResult, RoutedReadOutput, error) {
 		if strings.TrimSpace(input.Query) == "" {
 			return domainToolError(RoutedReadOutput{OK: false, Error: invalidInput("query is required")})
@@ -329,29 +353,33 @@ func New(discovery Discovery) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "git_status",
-		Description: "Return structured Git status for one validated Environment.",
+		Name:         "git_status",
+		Description:  "Return structured Git status for one validated Environment.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedEnvironmentInput) (*mcp.CallToolResult, RoutedReadOutput, error) {
 		return invokeRoutedRead(ctx, discovery, input.EnvironmentID, runtimeadapter.OpGitStatus, nil)
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "git_diff",
-		Description: "Return changed files and Git patch for one validated Environment.",
+		Name:         "git_diff",
+		Description:  "Return changed files and Git patch for one validated Environment.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedEnvironmentInput) (*mcp.CallToolResult, RoutedReadOutput, error) {
 		return invokeRoutedRead(ctx, discovery, input.EnvironmentID, runtimeadapter.OpGitDiff, nil)
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "git_branch",
-		Description: "Return the current Git branch for one validated Environment.",
+		Name:         "git_branch",
+		Description:  "Return the current Git branch for one validated Environment.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedEnvironmentInput) (*mcp.CallToolResult, RoutedReadOutput, error) {
 		return invokeRoutedRead(ctx, discovery, input.EnvironmentID, runtimeadapter.OpGitBranch, nil)
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "write",
-		Description: "Write a text file inside one Environment. Requires the current writer_owner and remains subject to Runtime write policy.",
+		Name:         "write",
+		Description:  "Write a text file inside one Environment. Requires the current writer_owner and remains subject to Runtime write policy.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedWriteInput) (*mcp.CallToolResult, RoutedMutationOutput, error) {
 		if strings.TrimSpace(input.Path) == "" {
 			return domainToolError(RoutedMutationOutput{OK: false, Error: invalidInput("path is required")})
@@ -362,8 +390,9 @@ func New(discovery Discovery) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "edit",
-		Description: "Apply an exact text replacement inside one Environment. Requires the current writer_owner.",
+		Name:         "edit",
+		Description:  "Apply an exact text replacement inside one Environment. Requires the current writer_owner.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedEditInput) (*mcp.CallToolResult, RoutedMutationOutput, error) {
 		if strings.TrimSpace(input.Path) == "" {
 			return domainToolError(RoutedMutationOutput{OK: false, Error: invalidInput("path is required")})
@@ -374,8 +403,22 @@ func New(discovery Discovery) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "exec",
-		Description: "Execute a structured executable plus argv inside one Environment under Runtime policy. Requires the current writer_owner; shell strings are not accepted.",
+		Name:         "delete",
+		Description:  "Delete one file or allowed symlink inside one Environment. Requires the current writer_owner; directories are rejected.",
+		OutputSchema: routedOutputSchema(),
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedDeleteInput) (*mcp.CallToolResult, RoutedMutationOutput, error) {
+		if strings.TrimSpace(input.Path) == "" {
+			return domainToolError(RoutedMutationOutput{OK: false, Error: invalidInput("path is required")})
+		}
+		return invokeRoutedMutation(ctx, discovery, input.EnvironmentID, input.WriterOwner, runtimeadapter.OpDelete, map[string]any{
+			"path": input.Path,
+		})
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:         "exec",
+		Description:  "Execute a structured executable plus argv inside one Environment under Runtime policy. Requires the current writer_owner; shell strings are not accepted.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedExecInput) (*mcp.CallToolResult, RoutedMutationOutput, error) {
 		if strings.TrimSpace(input.Executable) == "" {
 			return domainToolError(RoutedMutationOutput{OK: false, Error: invalidInput("executable is required")})
@@ -386,8 +429,9 @@ func New(discovery Discovery) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "run_verifier",
-		Description: "Run one configured project verifier inside an Environment. Requires the current writer_owner because verifier commands may generate files or active runtime state.",
+		Name:         "run_verifier",
+		Description:  "Run one configured project verifier inside an Environment. Requires the current writer_owner because verifier commands may generate files or active runtime state.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedVerifierInput) (*mcp.CallToolResult, RoutedMutationOutput, error) {
 		if strings.TrimSpace(input.ID) == "" {
 			return domainToolError(RoutedMutationOutput{OK: false, Error: invalidInput("id is required")})
@@ -396,8 +440,9 @@ func New(discovery Discovery) *mcp.Server {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "run_verifiers",
-		Description: "Run selected configured project verifiers, or all when ids is empty, inside one Environment. Requires the current writer_owner.",
+		Name:         "run_verifiers",
+		Description:  "Run selected configured project verifiers, or all when ids is empty, inside one Environment. Requires the current writer_owner.",
+		OutputSchema: routedOutputSchema(),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input RoutedVerifiersInput) (*mcp.CallToolResult, RoutedMutationOutput, error) {
 		return invokeRoutedMutation(ctx, discovery, input.EnvironmentID, input.WriterOwner, runtimeadapter.OpVerifierRunMany, map[string]any{"ids": input.IDs})
 	})
@@ -410,6 +455,68 @@ func NewHTTPHandler(discovery Discovery) http.Handler {
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return server
 	}, &mcp.StreamableHTTPOptions{Stateless: true})
+}
+
+type ExposedHTTPOptions struct {
+	AllowedHosts   []string
+	AllowIPLiteral bool
+}
+
+// NewExposedHTTPHandler is the explicit non-loopback Gateway transport used by
+// local Docker clients. Disabling the SDK localhost protection is paired with a
+// narrow Host/Origin allowlist rather than accepting arbitrary authorities.
+func NewExposedHTTPHandler(discovery Discovery, options ExposedHTTPOptions) http.Handler {
+	server := New(discovery)
+	base := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
+		return server
+	}, &mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true})
+
+	allowed := make(map[string]struct{}, len(options.AllowedHosts))
+	for _, host := range options.AllowedHosts {
+		host = normalizeHTTPHost(host)
+		if host != "" {
+			allowed[host] = struct{}{}
+		}
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !allowedHTTPHost(r.Host, allowed, options.AllowIPLiteral) {
+			http.Error(w, "Forbidden: invalid Host header", http.StatusForbidden)
+			return
+		}
+		if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+			parsed, err := url.Parse(origin)
+			if err != nil || !allowedHTTPHost(parsed.Host, allowed, options.AllowIPLiteral) {
+				http.Error(w, "Forbidden: invalid Origin header", http.StatusForbidden)
+				return
+			}
+		}
+		base.ServeHTTP(w, r)
+	})
+}
+
+func allowedHTTPHost(authority string, allowed map[string]struct{}, allowIPLiteral bool) bool {
+	host := normalizeHTTPHost(authority)
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || allowIPLiteral
+	}
+	_, ok := allowed[host]
+	return ok
+}
+
+func normalizeHTTPHost(authority string) string {
+	authority = strings.TrimSpace(authority)
+	if host, _, err := net.SplitHostPort(authority); err == nil {
+		authority = host
+	}
+	authority = strings.Trim(authority, "[]")
+	authority = strings.TrimSuffix(strings.ToLower(authority), ".")
+	return authority
 }
 
 func invalidInput(message string) *gateway.DomainError {

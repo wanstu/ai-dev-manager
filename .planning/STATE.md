@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.6
-milestone_name: Agent MCP Gateway
+milestone: v0.7
+milestone_name: External Agent Dogfood & Development Environment Capabilities
 status: complete
-last_updated: "2026-09-05T12:56:00+08:00"
+last_updated: "2026-09-05T16:16:00+08:00"
 last_activity: 2026-09-05
 progress:
   total_phases: 4
@@ -17,11 +17,11 @@ progress:
 
 ## Current Position
 
-Milestone: v0.6 — Agent MCP Gateway
-Phase: 25 — Writer-safe Mutation & Verification
-Plan: 25-01 — writer-guarded mutation, execution, and verification
-Status: Completed
-Last activity: 2026-09-05 — v0.6 complete: one stable Gateway MCP routes lifecycle/read/mutation/exec/verify across isolated Environments; fixed-path real network acceptance passed 5/5
+Milestone: v0.7 — External Agent Dogfood & Development Environment Capabilities
+Phase: 29 — Safe File Delete
+Plan: 29-01 — writer-guarded single-file delete through Runtime → Gateway
+Status: Completed — all currently planned v0.7 evidence-driven phases are green; do not invent Phase 30 before the next real dogfood blocker
+Last activity: 2026-09-05 — Phase 29 safe single-file delete passed full gate and real post-restart `@pjadm` write/delete/not_found/verifier dogfood
 
 ## Completed
 
@@ -390,6 +390,24 @@ Validated `tree/read/search/git_status/git_diff/git_branch` routing by explicit 
 
 Validated `write/edit/exec/run_verifier/run_verifiers` with mandatory writer ownership, Runtime policy enforcement, successful-call-only writer/activity renewal, mutation vs release/destroy locking, parallel mutations across different Environments, real dual-Environment MCP acceptance, race/full gate, and fixed-path network acceptance 5/5.
 
+## v0.7 Progress
+
+### Phase 26 — External Agent Dogfood ✅
+
+Validated ChatGPT → MCPHub → single ADM Gateway against a real isolated Environment, including discovery, create/include-changes, writer, routed read/search/git, write/edit, structured exec and review-state preservation. Fixed Docker reachability, MCPHub output-schema compatibility and explicit Workspace prepare for managed worktrees.
+
+### Phase 27 — Project Toolchain & Verifier Onboarding ✅
+
+Validated user-level machine-local Workspace LocalPolicy for explicit Go toolchain authorization, shareable Project `go-test` verifier intent, policy precedence/idempotence, real `@pjadm` verifier closure, single-file search, stable Runtime error kinds including `limit_exceeded`, correct `capability_missing` classification for absent `git.worktree`, verifier environment isolation, and full verifier/race/vet/build gate.
+
+### Phase 28 — Agent File Editing Ergonomics ✅
+
+Validated narrow LF ↔ CRLF compatibility for exact Runtime edit: original exact match remains primary, newline fallback is allowed only for consistent opposite styles after zero exact matches, adapted replacement count remains strict, target newline style is preserved, mixed/bare-CR/whitespace-different cases remain invalid and atomic, and full verifier/race/vet/build/diff-check gate passed.
+
+### Phase 29 — Safe File Delete ✅
+
+Validated first-class writer-guarded `files.delete` across Native Runtime → Runtime Adapter → Environment Manager → Gateway. Delete remains write-policy/path-guarded, rejects workspace root and directories, preserves blocked metadata boundaries, and wrong writer never reaches Runtime. Full verifier/focused race/vet/build/diff-check passed, then a restarted daemon completed real `@pjadm write → wrong-owner delete(rejected) → delete(success) → read(not_found) → run_verifier(go-test)` dogfood without Git/exec cleanup workaround.
+
 ## Locked Direction
 
 1. Product positioning is **AI Coding Environment**, not a new built-in AI Agent.
@@ -442,4 +460,4 @@ Validated `write/edit/exec/run_verifier/run_verifiers` with mandatory writer own
 
 ## Next Action
 
-v0.5 is complete. Stop at this milestone boundary before v0.6 Agent MCP Gateway. Review and commit the full v0.5 change set first; the next milestone should expose one ADM MCP that routes Agent operations by `environment_id` rather than creating one MCP configuration per Environment.
+v0.7 is complete and ready to release as the stable headless ADM Core/Gateway baseline. Human UI work moves to separate `winapp` and `ai-dev-manager-client` projects so desktop experiments cannot interfere with Core; future ADM Core phases remain evidence-driven from real dogfood rather than preselected Process/logs/ports work.

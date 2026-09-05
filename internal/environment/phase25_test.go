@@ -33,7 +33,7 @@ func TestManagerInvokeMutationRequiresWriterAndRenewsOnlyOnSuccess(t *testing.T)
 		func(string) (runtimeadapter.Runtime, error) { return base, nil },
 		func(workspaceID, runtimeID, path string) (runtimeadapter.Runtime, error) {
 			return &phase24Runtime{
-				id: runtimeID, workspaceID: workspaceID, capabilities: []string{"files.write", "files.edit", "shell.exec", "verify.run"},
+				id: runtimeID, workspaceID: workspaceID, capabilities: []string{"files.write", "files.edit", "files.delete", "shell.exec", "verify.run"},
 				invoke: func(operation string, input map[string]any) (any, error) {
 					invokes.Add(1)
 					if failRuntime.Load() {
@@ -49,15 +49,15 @@ func TestManagerInvokeMutationRequiresWriterAndRenewsOnlyOnSuccess(t *testing.T)
 	}
 	manager.now = func() time.Time { return t1 }
 
-	if _, err := manager.InvokeMutation(context.Background(), env.ID, "owner-b", runtimeadapter.OpWrite, map[string]any{"path": "x", "content": "x"}); !isEnvironmentCode(err, ErrWriterNotOwner) {
+	if _, err := manager.InvokeMutation(context.Background(), env.ID, "owner-b", runtimeadapter.OpDelete, map[string]any{"path": "x"}); !isEnvironmentCode(err, ErrWriterNotOwner) {
 		t.Fatalf("wrong owner error = %v, want writer_not_owner", err)
 	}
 	if invokes.Load() != 0 {
 		t.Fatalf("wrong writer reached Runtime: invokes=%d", invokes.Load())
 	}
 
-	if _, err := manager.InvokeMutation(context.Background(), env.ID, "owner-a", runtimeadapter.OpWrite, map[string]any{"path": "x", "content": "x"}); err != nil {
-		t.Fatalf("correct owner mutation error = %v", err)
+	if _, err := manager.InvokeMutation(context.Background(), env.ID, "owner-a", runtimeadapter.OpDelete, map[string]any{"path": "x"}); err != nil {
+		t.Fatalf("correct owner delete mutation error = %v", err)
 	}
 	persisted, err := store.Get(env.ID)
 	if err != nil {

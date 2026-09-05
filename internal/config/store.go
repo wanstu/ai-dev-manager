@@ -398,10 +398,11 @@ type policyDTO struct {
 }
 
 type workspaceDTO struct {
-	ID        string `json:"id"`
-	Path      string `json:"path"`
-	ProfileID string `json:"profile_id,omitempty"`
-	RuntimeID string `json:"runtime_id,omitempty"`
+	ID          string     `json:"id"`
+	Path        string     `json:"path"`
+	ProfileID   string     `json:"profile_id,omitempty"`
+	RuntimeID   string     `json:"runtime_id,omitempty"`
+	LocalPolicy *policyDTO `json:"local_policy,omitempty"`
 }
 
 func layerFileDTOFromModel(layer model.ConfigLayer) layerFileDTO {
@@ -524,11 +525,27 @@ func (d verifierDTO) toModel() model.VerifierDefinition {
 }
 
 func workspaceDTOFromModel(workspace model.Workspace) workspaceDTO {
-	return workspaceDTO{ID: workspace.ID, Path: workspace.Path, ProfileID: workspace.ProfileID, RuntimeID: workspace.RuntimeID}
+	dto := workspaceDTO{ID: workspace.ID, Path: workspace.Path, ProfileID: workspace.ProfileID, RuntimeID: workspace.RuntimeID}
+	if workspace.LocalPolicy != nil {
+		dto.LocalPolicy = &policyDTO{
+			Mode:               workspace.LocalPolicy.Mode,
+			AllowedExecutables: append([]string(nil), workspace.LocalPolicy.AllowedExecutables...),
+			ToolPaths:          cloneMap(workspace.LocalPolicy.ToolPaths),
+		}
+	}
+	return dto
 }
 
 func (d workspaceDTO) toModel() model.Workspace {
-	return model.Workspace{ID: d.ID, Path: d.Path, ProfileID: d.ProfileID, RuntimeID: d.RuntimeID}
+	workspace := model.Workspace{ID: d.ID, Path: d.Path, ProfileID: d.ProfileID, RuntimeID: d.RuntimeID}
+	if d.LocalPolicy != nil {
+		workspace.LocalPolicy = &model.Policy{
+			Mode:               d.LocalPolicy.Mode,
+			AllowedExecutables: append([]string(nil), d.LocalPolicy.AllowedExecutables...),
+			ToolPaths:          cloneMap(d.LocalPolicy.ToolPaths),
+		}
+	}
+	return workspace
 }
 
 func cloneBool(value *bool) *bool {

@@ -101,7 +101,7 @@ func TestServiceDiscoveryUsesRegistryAndEnvironmentSourceWithoutMutatingActivity
 	}
 
 	info := service.Info()
-	if info.Role != ProductRole || info.APIVersion != APIVersion || len(info.Tools) != 19 {
+	if info.Role != ProductRole || info.APIVersion != APIVersion || len(info.Tools) != 20 {
 		t.Fatalf("gateway info = %+v", info)
 	}
 }

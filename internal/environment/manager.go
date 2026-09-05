@@ -15,6 +15,7 @@ import (
 
 	"ai-dev-manager/internal/adapter/runtimeadapter"
 	"ai-dev-manager/internal/model"
+	admruntime "ai-dev-manager/internal/runtime"
 )
 
 type WorkspaceGetter func(string) (model.Workspace, error)
@@ -259,9 +260,20 @@ func (m *Manager) InvokeRead(ctx context.Context, id, operation string, input ma
 	}
 	value, err := derived.Invoke(ctx, operation, input)
 	if err != nil {
-		return nil, &Error{Code: ErrRuntime, EnvironmentID: env.ID, Message: fmt.Sprintf("invoke environment read operation %q", operation), Err: err}
+		return nil, environmentRuntimeError(env.ID, fmt.Sprintf("invoke environment read operation %q", operation), err)
 	}
 	return value, nil
+}
+
+func environmentRuntimeError(environmentID, action string, err error) *Error {
+	message := action
+	var runtimeErr *admruntime.RuntimeError
+	if errors.As(err, &runtimeErr) {
+		message = fmt.Sprintf("%s: %s (%s)", action, runtimeErr.Error(), runtimeErr.Kind)
+	} else if err != nil {
+		message = fmt.Sprintf("%s: %s", action, err.Error())
+	}
+	return &Error{Code: ErrRuntime, EnvironmentID: environmentID, Message: message, Err: err}
 }
 
 func readOperationCapability(operation string) (string, bool) {
@@ -317,7 +329,7 @@ func (m *Manager) InvokeMutation(ctx context.Context, id, owner, operation strin
 	}
 	value, err := derived.Invoke(ctx, operation, input)
 	if err != nil {
-		return nil, &Error{Code: ErrRuntime, EnvironmentID: env.ID, Message: fmt.Sprintf("invoke environment mutation operation %q", operation), Err: err}
+		return nil, environmentRuntimeError(env.ID, fmt.Sprintf("invoke environment mutation operation %q", operation), err)
 	}
 
 	now := m.now()
@@ -336,6 +348,8 @@ func mutationOperationCapability(operation string) (string, bool) {
 		return "files.write", true
 	case runtimeadapter.OpEdit:
 		return "files.edit", true
+	case runtimeadapter.OpDelete:
+		return "files.delete", true
 	case runtimeadapter.OpExec:
 		return "shell.exec", true
 	case runtimeadapter.OpVerifierRun, runtimeadapter.OpVerifierRunMany:
@@ -403,6 +417,9 @@ func (m *Manager) validatedRuntimes(ctx context.Context, env Environment) (runti
 	baseRuntime, err := m.buildRuntime(env.WorkspaceID)
 	if err != nil {
 		return nil, nil, worktreeInfo{}, &Error{Code: ErrRuntime, EnvironmentID: env.ID, Message: "build base runtime", Err: err}
+	}
+	if !hasCapability(baseRuntime.Capabilities(), "git.worktree") {
+		return nil, nil, worktreeInfo{}, &Error{Code: ErrCapabilityMissing, EnvironmentID: env.ID, Message: "base runtime does not support managed git worktrees"}
 	}
 	actual, err := m.getManagedWorktree(ctx, baseRuntime, env.WorktreeName)
 	if err != nil {
