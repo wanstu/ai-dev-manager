@@ -422,12 +422,13 @@
 - Gateway 保持统一 tool surface，在具体 Environment 上二次 capability check；缺能力返回 structured `capability_missing`。
 - read-only 调用不需要 writer、不刷新开发 activity；双 Environment隔离与 daemon restart 后同 endpoint routed read均通过，full gate全绿。
 
-### Phase 25 — Writer-safe Mutation & Verification
-- `write/edit/exec/run_verifier/run_verifiers` 通过 `environment_id + writer_owner` 路由。
-- mutation/active operation 在真正 Runtime Invoke 前强制校验当前 writer；成功调用续租 writer `last_seen_at` 并 touch Environment activity。
-- writer 校验、invoke、destroy/release 之间不得存在可利用的并发删除窗口。
-- 真实双 Environment / 双 writer / daemon restart / MCP client acceptance 验证同一 Project 多任务并行隔离。
-- v0.6 完成后停止于 milestone boundary；remote exposure、Process/Docker/UI 留给后续 milestone。
+### Phase 25 — Writer-safe Mutation & Verification ✅ Completed 2026-09-05
+- `write/edit/exec/run_verifier/run_verifiers` 已通过 `environment_id + writer_owner` 路由。
+- mutation/active operation 在 Runtime Invoke 前强制校验当前 writer；错误 owner 不触达 Runtime，成功调用才续租 writer `last_seen_at` 并 touch Environment activity。
+- Manager 以 RWMutex 保证 mutation 与 writer release/destroy 的原子边界，同时允许不同 Environment 并发 mutation；race tests 已通过。
+- 真实双 Environment / 双 writer / daemon restart / MCP client acceptance 已验证同一 Project 多任务并行隔离，structured exec policy 与 verifier pass/fail 语义保持正确。
+- 普通 `go test ./...` 已改为无人值守、不启动真实 TCP listener；真实 network acceptance 通过固定 daemon/test executable 路径完整运行并 5/5 PASS。
+- v0.6 已完成并停在 milestone boundary；remote exposure、Process/Docker/UI 留给后续 milestone。
 
 ### v0.7 — Development Environment Capabilities
 - 根据真实使用补 Process / dev server / logs / ports / HTTP verification。
@@ -467,6 +468,10 @@
 | ENV-01..02, ENV-04..05, ENV-09, UX-01 foundation | 19 |
 | ENV-03, ENV-07 | 20 |
 | ENV-06, ENV-08, UX-01 completion | 21 |
+| GW-01..02, GW-08 | 22 |
+| GW-03, GW-06..07 | 23 |
+| GW-04 | 24 |
+| GW-05 | 25 |
 
 ## GSD Development Rules
 

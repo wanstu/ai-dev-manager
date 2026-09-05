@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6
 milestone_name: Agent MCP Gateway
-status: in_progress
-last_updated: "2026-09-05T12:17:00+08:00"
+status: complete
+last_updated: "2026-09-05T12:56:00+08:00"
 last_activity: 2026-09-05
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -20,8 +20,8 @@ progress:
 Milestone: v0.6 — Agent MCP Gateway
 Phase: 25 — Writer-safe Mutation & Verification
 Plan: 25-01 — writer-guarded mutation, execution, and verification
-Status: In Progress — implementation and unattended gate complete; explicit fixed-path network acceptance pending
-Last activity: 2026-09-05 — Phase 25 writer-safe mutation/exec/verify and unattended test split verified; ordinary go test no longer opens real TCP listeners
+Status: Completed
+Last activity: 2026-09-05 — v0.6 complete: one stable Gateway MCP routes lifecycle/read/mutation/exec/verify across isolated Environments; fixed-path real network acceptance passed 5/5
 
 ## Completed
 
@@ -377,6 +377,18 @@ Validated structured ahead/behind/diverged/base-moved facts, dirty/upstream/acti
 ### Phase 22 — Gateway Host & Discovery ✅
 
 Validated an independent daemon-owned Agent MCP Gateway with persisted concrete loopback listen, stable endpoint across daemon restart, non-loopback rejection, no silent port migration on conflict, and typed `gateway_info/workspace_list/environment_list/environment_inspect` discovery through the official Streamable HTTP MCP client. Existing Direct MCP tests remain green.
+
+### Phase 23 — Environment Lifecycle MCP ✅
+
+Validated Gateway Environment create/destroy and writer acquire/release through the official MCP client, including include-changes, branch conflict, writer persistence across daemon restart, structured domain errors, unsafe-destroy guards, explicit force semantics, and branch preservation.
+
+### Phase 24 — Routed Read Tools ✅
+
+Validated `tree/read/search/git_status/git_diff/git_branch` routing by explicit `environment_id`, managed-worktree revalidation on every call, capability checks, no writer requirement for reads, no activity touch, multi-Environment isolation, and stable routing across daemon restart.
+
+### Phase 25 — Writer-safe Mutation & Verification ✅
+
+Validated `write/edit/exec/run_verifier/run_verifiers` with mandatory writer ownership, Runtime policy enforcement, successful-call-only writer/activity renewal, mutation vs release/destroy locking, parallel mutations across different Environments, real dual-Environment MCP acceptance, race/full gate, and fixed-path network acceptance 5/5.
 
 ## Locked Direction
 

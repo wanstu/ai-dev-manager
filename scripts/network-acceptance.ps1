@@ -21,7 +21,7 @@ function Invoke-NetworkTestPackage {
         throw "failed to build fixed network test binary for $Package"
     }
 
-    & $testExe -test.run $Pattern -test.count=1
+    & $testExe "-test.run=$Pattern" "-test.count=1"
     if ($LASTEXITCODE -ne 0) {
         throw "network acceptance tests failed for $Package"
     }

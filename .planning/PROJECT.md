@@ -30,15 +30,15 @@ ADM 管理 Environment 的事实、能力、安全边界与执行；Agent 管理
 - `codexprov4`：继续独立存在；不作为 ADM Core 的依赖。
 - 本项目不 fork CodexPro 或 DevSpace Core；优先吸收设计，并通过 Adapter / Capability / MCP 接口保持兼容空间。
 
-## Current Milestone: v0.6 Agent MCP Gateway
+## Current Milestone: v0.6 Agent MCP Gateway ✅ Complete
 
 **Goal:** 让外部 Agent 只配置一个长期稳定的 ADM MCP Gateway，通过 `environment_id` 发现、管理和操作多个隔离 Environment；Gateway 复用 v0.5 Environment Core 与现有 Runtime Adapter，不要求每个任务新增 MCP 配置，也不替代现有 Direct MCP。
 
 ## Requirements
 
-### Active — v0.6 Agent MCP Gateway
+### Validated — v0.6 Phase 25
 
-- [ ] **GW-05**: write/edit/exec/verify 等 mutation/active operation 必须同时提供 `environment_id + writer_owner` 并由 ADM 在 Runtime Invoke 前强制 single-writer 校验；成功调用更新 writer/activity。
+- [x] **GW-05**: `write/edit/exec/run_verifier/run_verifiers` 等 mutation/active operation 必须同时提供 `environment_id + writer_owner`；ADM 在 Runtime Invoke 前强制 single-writer 校验，错误 owner 无法触达 Runtime，成功调用才 renew writer/activity，mutation 与 release/destroy 的并发边界受 Manager 锁保护。— Dual-Environment writer isolation, daemon restart, exec/verifier MCP acceptance, race/full gate and fixed-path network acceptance passed.
 
 ### Validated — v0.6 Phase 24
 
