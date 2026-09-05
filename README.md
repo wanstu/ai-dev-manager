@@ -136,6 +136,38 @@ Phase 21 补齐长期 Environment 的状态与协作边界。`env inspect` 会�
 
 同 owner 再 acquire 是 renew；不同 owner 会得到冲突。7 天 inactivity 目前只作为 advisory stale 状态，不会自动删除 Environment，也不会自动释放 writer。
 
+v0.6 Phase 22 增加一个独立的 Agent MCP Gateway。第一次启动可自动选择空闲 loopback 端口并把实际地址持久化，因此 Agent 只需要配置一次 MCP URL；daemon restart 会复用同一个 endpoint，不会因为 `:0` 重新随机端口：
+
+```powershell
+.\ai-dev-manager.exe gateway up
+.\ai-dev-manager.exe gateway status
+.\ai-dev-manager.exe gateway down
+```
+
+当前 Gateway 已包含 discovery + Environment lifecycle，以及 `tree`、`read`、`search`、`git_status`、`git_diff`、`git_branch`。这些 read-only tools 都要求显式 `environment_id`，每次由 Environment Manager 重新验证 managed worktree 后路由到 derived Runtime；不需要 writer lease，也不会刷新 Environment activity。Phase 25 进一步加入 `write`、`edit`、`exec`、`run_verifier`、`run_verifiers`，这些 active/mutation tools 必须同时提供当前 `writer_owner`，并在 Runtime Invoke 前由 ADM 强制校验 single-writer。Lifecycle 完整复用 v0.5 的 include-changes、branch conflict、dirty/unpushed/active-writer guards；domain failure 以 `isError=true` 加结构化 `error.code/facts/warnings/hints` 返回。Gateway 默认只监听 loopback；现有 per-Workspace Direct MCP 完全保留。
+
+### Unattended tests vs. network acceptance
+
+普通开发验证不会启动真实 TCP listener，因此可以无人值守运行，也不会因为 Go 每次生成新的临时 `.test.exe` 而反复触发 Windows 网络访问授权：
+
+```powershell
+go test ./...
+```
+
+真实 daemon / Runtime MCP / Gateway Streamable HTTP / restart 验收单独显式运行。脚本会使用两个稳定路径：`.test-bin\\ai-dev-manager-network-daemon.exe` 作为真实 daemon，`.test-bin\\ai-dev-manager-network-tests.exe` 依次承载需要真实 listener 的 test package。这样 Windows 看到的始终是固定 executable 路径，而不是每轮 `go test` 新生成的临时 exe。首次可能需要对这两个固定路径完成授权，之后重新编译仍复用同一路径：
+
+```powershell
+.\\scripts\\network-acceptance.ps1
+```
+
+如果 Go 不在 PATH：
+
+```powershell
+.\\scripts\\network-acceptance.ps1 -Go D:\\tools\\go\\go1.26.5\\bin\\go.exe
+```
+
+`ADM_NETWORK_ACCEPTANCE` 和 `ADM_TEST_DAEMON_EXECUTABLE` 只用于显式测试流程；脚本结束时会恢复原环境变量。普通产品运行仍使用当前 `ai-dev-manager` executable，不依赖这些测试变量。
+
 Agent Run 当前是 observed state：daemon stop/restart 会结束 active Runs，新 daemon 不会把旧 Run 伪装成仍在运行。
 
 原有 `workspace`、`runtime`、`start/status/stop`、`inspect`、`serve`、`mcp` 等底层命令继续保留，适合脚本、调试和详细控制。

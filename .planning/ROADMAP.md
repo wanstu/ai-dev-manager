@@ -399,13 +399,35 @@
 - 明显 divergence 或 behind>=10 时最多返回一条非指令性确认 hint，不返回强制 rebase/merge 指令。
 - base 不自动同步；rebase/merge/push/commit 仍属于 Agent/用户显式开发决策；真实 Git + cross-process CLI + full gate 全部通过。
 
-## Later Milestones
+## Milestone v0.6 — Agent MCP Gateway
 
-### v0.6 — Agent MCP Gateway
-- 外部 Agent 只配置一个 ADM MCP，而不是每个 Environment 配一个 MCP。
-- 通过 `environment_id` 将 files/search/edit/git/verify 等能力安全路由到对应 Runtime。
-- 优先设计 Agent-friendly schema、facts/warnings/hints、可恢复错误与 capability discovery。
-- ChatGPT / Codex / Claude Code / OpenCode / WorkBuddy / CodexPro 都作为外部调用方，而不是 ADM 内置 Agent。
+**Goal:** 让外部 Agent 只配置一个长期稳定的 ADM MCP Gateway，就能发现 Project/Environment、创建与管理 Environment，并通过 `environment_id` 把开发操作安全路由到对应 validated Runtime；不要求每个任务新增 MCP 配置，也不把 ADM 变成内置 Agent。
+
+### Phase 22 — Gateway Host & Discovery ✅ Completed 2026-09-05
+- 独立 Gateway MCP server 已实现，现有 per-Workspace Direct MCP contract 保持不变并通过回归测试。
+- daemon-owned Gateway listener 首次可从 loopback `:0` 选择端口并持久化实际地址；daemon restart 后真实 MCP client 复用完全相同 endpoint。
+- `gateway up/status/down` lifecycle 已实现；默认 loopback，non-loopback 被拒绝。
+- discovery tools `gateway_info` / `workspace_list` / `environment_list` / `environment_inspect` 已通过 typed MCP + cross-process acceptance。
+- persisted port 被占用时 Gateway 保持 desired=true/error 且不静默换端口；full fmt/test/vet/build gate 通过。
+
+### Phase 23 — Environment Lifecycle MCP ✅ Completed 2026-09-05
+- Gateway 已增加 `environment_create` / `environment_destroy` / writer acquire/release，并通过官方 MCP client 真实调用。
+- create 保留 v0.5 base/include-changes/branch 语义；destroy 继续服从 dirty/unpushed/active-writer guard，force 仍需显式请求且 branch 保留。
+- domain failure 已通过 `isError=true` + typed structured error code/message/environment_id/facts/warnings/hints 返回，不把开发建议伪装成 required action。
+- Gateway 不暴露 raw `git_worktree_create/remove`；writer conflict、daemon restart persistence、unsafe destroy、duplicate branch 等真实 lifecycle acceptance 与 full gate 全部通过。
+
+### Phase 24 — Routed Read Tools ✅ Completed 2026-09-05
+- `tree/read/search/git_status/git_diff/git_branch` 已通过显式 `environment_id` 路由到 validated derived Runtime。
+- 每次调用重新验证 managed worktree identity并重建 derived Runtime，不信任持久 path；missing worktree真实测试通过。
+- Gateway 保持统一 tool surface，在具体 Environment 上二次 capability check；缺能力返回 structured `capability_missing`。
+- read-only 调用不需要 writer、不刷新开发 activity；双 Environment隔离与 daemon restart 后同 endpoint routed read均通过，full gate全绿。
+
+### Phase 25 — Writer-safe Mutation & Verification
+- `write/edit/exec/run_verifier/run_verifiers` 通过 `environment_id + writer_owner` 路由。
+- mutation/active operation 在真正 Runtime Invoke 前强制校验当前 writer；成功调用续租 writer `last_seen_at` 并 touch Environment activity。
+- writer 校验、invoke、destroy/release 之间不得存在可利用的并发删除窗口。
+- 真实双 Environment / 双 writer / daemon restart / MCP client acceptance 验证同一 Project 多任务并行隔离。
+- v0.6 完成后停止于 milestone boundary；remote exposure、Process/Docker/UI 留给后续 milestone。
 
 ### v0.7 — Development Environment Capabilities
 - 根据真实使用补 Process / dev server / logs / ports / HTTP verification。

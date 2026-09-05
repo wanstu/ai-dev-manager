@@ -30,11 +30,31 @@ ADM 管理 Environment 的事实、能力、安全边界与执行；Agent 管理
 - `codexprov4`：继续独立存在；不作为 ADM Core 的依赖。
 - 本项目不 fork CodexPro 或 DevSpace Core；优先吸收设计，并通过 Adapter / Capability / MCP 接口保持兼容空间。
 
-## Current Milestone: v0.5 Multi-Task Development Environments ✅ Complete
+## Current Milestone: v0.6 Agent MCP Gateway
 
-**Goal:** 把 v0.4 已验证的 managed worktree + derived Runtime 从临时 parallel lane 提升为持久的一等 Environment，使同一 Project 能长期并行承载多个隔离开发任务；先完成 Environment Core，再在后续 milestone 建立统一 Agent MCP Gateway 与人类 Manager/UI。
+**Goal:** 让外部 Agent 只配置一个长期稳定的 ADM MCP Gateway，通过 `environment_id` 发现、管理和操作多个隔离 Environment；Gateway 复用 v0.5 Environment Core 与现有 Runtime Adapter，不要求每个任务新增 MCP 配置，也不替代现有 Direct MCP。
 
 ## Requirements
+
+### Active — v0.6 Agent MCP Gateway
+
+- [ ] **GW-05**: write/edit/exec/verify 等 mutation/active operation 必须同时提供 `environment_id + writer_owner` 并由 ADM 在 Runtime Invoke 前强制 single-writer 校验；成功调用更新 writer/activity。
+
+### Validated — v0.6 Phase 24
+
+- [x] **GW-04**: Gateway 已提供统一 `tree/read/search/git_status/git_diff/git_branch` tools；每次调用显式带 `environment_id` 并通过 Environment Manager 重新验证 managed worktree、重建 derived Runtime、检查具体 capability。Read 不需要 writer、不 touch activity；missing worktree/capability 返回 structured domain error。— Multi-Environment + daemon restart MCP acceptance and full gate passed.
+
+### Validated — v0.6 Phase 23
+
+- [x] **GW-03**: Gateway 已支持 Environment create/destroy 和 writer acquire/release；真实 MCP lifecycle 完整复用 v0.5 include-changes、branch conflict、dirty/unpushed/active-writer guardrails，force 仍需显式请求且 branch 保留。— Real MCP + daemon restart acceptance passed.
+- [x] **GW-06**: lifecycle/domain failure 通过 `isError=true` + typed `structuredContent.error` 暴露稳定 code/message/environment_id/facts/warnings/hints，不泄漏内部错误链，也不产生 required_action/next_step。— SDK in-memory + real lifecycle acceptance passed.
+- [x] **GW-07**: Gateway Agent-facing surface 只暴露 Environment lifecycle，不暴露 raw `git_worktree_create/remove`；worktree 仍由 Environment Manager 内部管理。— Tool-surface and lifecycle acceptance passed.
+
+### Validated — v0.6 Phase 22
+
+- [x] **GW-01**: daemon-owned Gateway MCP 首次可从 loopback `:0` 选取空闲端口并持久化实际 listen；daemon restart 后复用完全相同 endpoint，端口冲突时保持 desired/error 而不静默漂移。— Real listener + cross-process CLI + MCP acceptance passed.
+- [x] **GW-02**: Gateway discovery 已提供 gateway info、Workspace list、Environment list/inspect 与 Environment capability facts；默认 loopback 且 non-loopback listen 被拒绝。— Typed MCP + daemon restart acceptance passed.
+- [x] **GW-08**: Gateway 作为独立 MCP server 新增，现有 per-Workspace Direct MCP tool surface/host tests保持兼容。— Direct MCP regression passed.
 
 ### Validated — v0.5 Phase 21
 

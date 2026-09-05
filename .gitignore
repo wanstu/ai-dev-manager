@@ -7,6 +7,7 @@ build/
 *.out
 
 # Local runtime state
+.test-bin/
 .runtime/
 .ai-dev-manager/runtime/
 .tmp-adm-config/

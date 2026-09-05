@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -20,11 +21,15 @@ import (
 	"ai-dev-manager/internal/daemon"
 	"ai-dev-manager/internal/environment"
 	"ai-dev-manager/internal/model"
+	"ai-dev-manager/internal/testutil"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv(testutil.NetworkAcceptanceEnv) == "1" {
+		daemonStartExecutable = strings.TrimSpace(os.Getenv(testutil.DaemonExecutableEnv))
+	}
 	if os.Getenv(daemon.ChildEnvironmentKey) == "1" {
 		if err := run(context.Background(), os.Args[1:], os.Stdout, os.Stderr); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -98,6 +103,7 @@ func TestCLIWorkspaceAddListShowAndInspect(t *testing.T) {
 }
 
 func TestCLIForegroundServeExposesWorkspaceAndStopsOnCancel(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "value.txt"), []byte("cli-workspace"), 0o644); err != nil {
@@ -184,6 +190,7 @@ func TestCLIForegroundServeExposesWorkspaceAndStopsOnCancel(t *testing.T) {
 }
 
 func TestCLIDaemonLifecycleAcrossProcesses(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -253,6 +260,7 @@ func TestCLIDaemonLifecycleAcrossProcesses(t *testing.T) {
 }
 
 func TestCLIPersistentRuntimeLifecycleAcrossDaemon(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	rootA := t.TempDir()
 	rootB := t.TempDir()
@@ -397,6 +405,7 @@ func assertRuntimeEndpointRead(t *testing.T, endpoint, want string) {
 }
 
 func TestCLIRuntimeDockerExposurePersistsAcrossDaemonRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "value.txt"), []byte("docker-access"), 0o644); err != nil {
@@ -456,6 +465,7 @@ func TestCLIRuntimeDockerExposurePersistsAcrossDaemonRestart(t *testing.T) {
 }
 
 func TestCLIDaemonCleanRestartReconcilesDesiredRuntimes(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	rootA := t.TempDir()
 	rootB := t.TempDir()
@@ -572,6 +582,7 @@ func TestCLIDaemonCleanRestartReconcilesDesiredRuntimes(t *testing.T) {
 }
 
 func TestCLIDaemonCrashRestartReclaimsStaleLeaseAndReconciles(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "value.txt"), []byte("crash-restart"), 0o644); err != nil {
@@ -676,6 +687,7 @@ func leaseStaleBudgetForTest() time.Duration {
 }
 
 func TestCLIUpDownPSAndCtlRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "value.txt"), []byte("ux-flow"), 0o644); err != nil {
@@ -777,6 +789,7 @@ func TestCLIUpDownPSAndCtlRestart(t *testing.T) {
 }
 
 func TestCLICtlShutdownClearsDesiredRuntimes(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	t.Cleanup(func() {
@@ -833,6 +846,7 @@ func TestCLICtlShutdownClearsDesiredRuntimes(t *testing.T) {
 }
 
 func TestCLIAgentRunLifecycleAcrossInvocationsAndRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceA := t.TempDir()
 	workspaceB := t.TempDir()
@@ -947,6 +961,7 @@ func TestCLIAgentRunLifecycleAcrossInvocationsAndRestart(t *testing.T) {
 }
 
 func TestCLIAgentVerifyWorkflowAcrossInvocations(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	t.Cleanup(func() {
@@ -1036,6 +1051,7 @@ func TestCLIAgentVerifyWorkflowAcrossInvocations(t *testing.T) {
 }
 
 func TestCLIAgentGSDWorkflowAcrossInvocations(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	t.Cleanup(func() {
@@ -1162,6 +1178,7 @@ func TestCLIAgentGSDWorkflowAcrossInvocations(t *testing.T) {
 }
 
 func TestCLIAgentParallelVerifyWorktreesAcrossInvocations(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	t.Cleanup(func() {
@@ -1293,6 +1310,7 @@ func TestCLIAgentParallelVerifyWorktreesAcrossInvocations(t *testing.T) {
 }
 
 func TestCLIEnvironmentLifecycleAcrossDaemonRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	t.Cleanup(func() {
@@ -1451,6 +1469,7 @@ func samePathForTest(left, right string) bool {
 }
 
 func TestCLIEnvironmentIncludeChangesAndForceAcrossRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	t.Cleanup(func() {
@@ -1573,6 +1592,7 @@ func TestCLIEnvironmentIncludeChangesAndForceAcrossRestart(t *testing.T) {
 }
 
 func TestCLIEnvironmentWriterAndBaseFactsAcrossRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	configRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
 	t.Cleanup(func() {
@@ -1706,6 +1726,645 @@ func TestCLIEnvironmentWriterAndBaseFactsAcrossRestart(t *testing.T) {
 	var released environment.Environment
 	if err := json.Unmarshal(releaseOut.Bytes(), &released); err != nil || released.Writer != nil {
 		t.Fatalf("force release result writer=%+v decode=%v output=%s", released.Writer, err, releaseOut.String())
+	}
+}
+
+func TestCLIGatewayDiscoveryStableAcrossDaemonRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git required for Gateway acceptance: %v", err)
+	}
+	gitRun := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(gitPath, args...)
+		cmd.Dir = workspaceRoot
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s error = %v output=%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	gitRun("init")
+	gitRun("config", "user.email", "gateway@example.invalid")
+	gitRun("config", "user.name", "Gateway Test")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("gateway\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun("add", "source.txt")
+	gitRun("commit", "-m", "baseline")
+	gitRun("branch", "-M", "dev")
+
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode:               "standard",
+			AllowedExecutables: []string{"git"},
+			ToolPaths:          map[string]string{"git": gitPath},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var createOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "create", "--name", "gateway-discovery", workspaceRoot}, &createOut, io.Discard); err != nil {
+		t.Fatalf("env create error = %v", err)
+	}
+	var created environment.InspectResult
+	if err := json.Unmarshal(createOut.Bytes(), &created); err != nil {
+		t.Fatalf("decode environment create: %v output=%s", err, createOut.String())
+	}
+	activityBefore := created.Environment.LastActivityAt
+
+	var upOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "up"}, &upOut, io.Discard); err != nil {
+		t.Fatalf("gateway up error = %v", err)
+	}
+	var gatewayStatus daemon.GatewayStatus
+	if err := json.Unmarshal(upOut.Bytes(), &gatewayStatus); err != nil {
+		t.Fatalf("decode gateway up: %v output=%s", err, upOut.String())
+	}
+	if gatewayStatus.State != daemon.GatewayRunning || gatewayStatus.Endpoint == "" || strings.HasSuffix(gatewayStatus.Listen, ":0") {
+		t.Fatalf("gateway up status = %+v", gatewayStatus)
+	}
+	firstEndpoint := gatewayStatus.Endpoint
+
+	callDiscovery := func(endpoint string) {
+		t.Helper()
+		clientCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		client := mcp.NewClient(&mcp.Implementation{Name: "adm-gateway-cli-test", Version: "v0.6.0"}, nil)
+		session, err := client.Connect(clientCtx, &mcp.StreamableClientTransport{Endpoint: endpoint}, nil)
+		if err != nil {
+			t.Fatalf("connect Gateway MCP %s: %v", endpoint, err)
+		}
+		defer session.Close()
+		tools, err := session.ListTools(clientCtx, nil)
+		if err != nil {
+			t.Fatalf("gateway ListTools error = %v", err)
+		}
+		names := make([]string, 0, len(tools.Tools))
+		for _, tool := range tools.Tools {
+			names = append(names, tool.Name)
+		}
+		sort.Strings(names)
+		if strings.Join(names, ",") != "edit,environment_create,environment_destroy,environment_inspect,environment_list,environment_writer_acquire,environment_writer_release,exec,gateway_info,git_branch,git_diff,git_status,read,run_verifier,run_verifiers,search,tree,workspace_list,write" {
+			t.Fatalf("gateway tools = %+v", names)
+		}
+		for _, params := range []mcp.CallToolParams{
+			{Name: "gateway_info", Arguments: map[string]any{}},
+			{Name: "workspace_list", Arguments: map[string]any{}},
+			{Name: "environment_list", Arguments: map[string]any{}},
+			{Name: "environment_inspect", Arguments: map[string]any{"environment_id": created.Environment.ID}},
+			{Name: "read", Arguments: map[string]any{"environment_id": created.Environment.ID, "path": "source.txt"}},
+		} {
+			result, err := session.CallTool(clientCtx, &params)
+			if err != nil || result.IsError {
+				t.Fatalf("gateway CallTool(%s) err=%v result=%+v", params.Name, err, result)
+			}
+			if result.StructuredContent == nil {
+				t.Fatalf("gateway CallTool(%s) missing structured content", params.Name)
+			}
+			if params.Name == "read" && !strings.Contains(fmt.Sprint(result.StructuredContent), "gateway") {
+				t.Fatalf("routed read returned wrong Environment content: %#v", result.StructuredContent)
+			}
+		}
+	}
+	callDiscovery(firstEndpoint)
+
+	persisted, err := environment.NewStore(configRoot).Get(created.Environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !persisted.LastActivityAt.Equal(activityBefore) {
+		t.Fatalf("gateway discovery touched Environment activity: before=%v after=%v", activityBefore, persisted.LastActivityAt)
+	}
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "stop"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl stop error = %v", err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "start"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl start error = %v", err)
+	}
+	var statusOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "status"}, &statusOut, io.Discard); err != nil {
+		t.Fatalf("gateway status after restart error = %v", err)
+	}
+	var restarted daemon.GatewayStatus
+	if err := json.Unmarshal(statusOut.Bytes(), &restarted); err != nil {
+		t.Fatalf("decode gateway status: %v output=%s", err, statusOut.String())
+	}
+	if restarted.State != daemon.GatewayRunning || restarted.Endpoint != firstEndpoint || restarted.Listen != gatewayStatus.Listen {
+		t.Fatalf("gateway endpoint moved across daemon restart: before=%+v after=%+v", gatewayStatus, restarted)
+	}
+	callDiscovery(firstEndpoint)
+
+	var downOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "down"}, &downOut, io.Discard); err != nil {
+		t.Fatalf("gateway down error = %v", err)
+	}
+	var down daemon.GatewayStatus
+	if err := json.Unmarshal(downOut.Bytes(), &down); err != nil || down.DesiredRunning || down.State != daemon.GatewayStopped {
+		t.Fatalf("gateway down = %+v decode=%v", down, err)
+	}
+}
+
+func TestCLIGatewayEnvironmentLifecycleAcrossRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git required for Gateway lifecycle acceptance: %v", err)
+	}
+	gitRun := func(cwd string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command(gitPath, args...)
+		cmd.Dir = cwd
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s error = %v output=%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	gitRun(workspaceRoot, "init")
+	gitRun(workspaceRoot, "config", "user.email", "gateway-lifecycle@example.invalid")
+	gitRun(workspaceRoot, "config", "user.name", "Gateway Lifecycle")
+	gitRun(workspaceRoot, "config", "core.autocrlf", "false")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(workspaceRoot, "add", "source.txt")
+	gitRun(workspaceRoot, "commit", "-m", "baseline")
+	gitRun(workspaceRoot, "branch", "-M", "dev")
+
+	var addOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "workspace", "add", "--path", workspaceRoot}, &addOut, io.Discard); err != nil {
+		t.Fatalf("workspace add error = %v", err)
+	}
+	var added workspaceOutput
+	if err := json.Unmarshal(addOut.Bytes(), &added); err != nil || added.ID == "" {
+		t.Fatalf("decode workspace add = %+v err=%v output=%s", added, err, addOut.String())
+	}
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode:               "standard",
+			AllowedExecutables: []string{"git"},
+			ToolPaths:          map[string]string{"git": gitPath},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Real dirty base input proves the MCP include_changes flag reaches the
+	// existing v0.5 Environment Manager instead of a Gateway-side worktree path.
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("base\ndirty tracked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "note.txt"), []byte("untracked note\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var upOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "up"}, &upOut, io.Discard); err != nil {
+		t.Fatalf("gateway up error = %v", err)
+	}
+	var gatewayStatus daemon.GatewayStatus
+	if err := json.Unmarshal(upOut.Bytes(), &gatewayStatus); err != nil || gatewayStatus.State != daemon.GatewayRunning {
+		t.Fatalf("gateway up = %+v decode=%v output=%s", gatewayStatus, err, upOut.String())
+	}
+	endpoint := gatewayStatus.Endpoint
+
+	connect := func() (*mcp.ClientSession, context.Context, context.CancelFunc) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		client := mcp.NewClient(&mcp.Implementation{Name: "adm-gateway-lifecycle-test", Version: "v0.6.0"}, nil)
+		session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint}, nil)
+		if err != nil {
+			cancel()
+			t.Fatalf("connect Gateway MCP: %v", err)
+		}
+		return session, ctx, cancel
+	}
+	call := func(ctx context.Context, session *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
+		t.Helper()
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			t.Fatalf("CallTool(%s) protocol error = %v", name, err)
+		}
+		return result
+	}
+	structured := func(result *mcp.CallToolResult) map[string]any {
+		t.Helper()
+		value, ok := result.StructuredContent.(map[string]any)
+		if !ok {
+			t.Fatalf("structuredContent type = %T value=%#v", result.StructuredContent, result.StructuredContent)
+		}
+		return value
+	}
+	domainCode := func(result *mcp.CallToolResult) string {
+		t.Helper()
+		body := structured(result)
+		errorBody, ok := body["error"].(map[string]any)
+		if !ok {
+			t.Fatalf("domain error body = %#v", body)
+		}
+		code, _ := errorBody["code"].(string)
+		return code
+	}
+	hasFact := func(result *mcp.CallToolResult, code string, want any) bool {
+		t.Helper()
+		body := structured(result)
+		errorBody, ok := body["error"].(map[string]any)
+		if !ok {
+			return false
+		}
+		facts, _ := errorBody["facts"].([]any)
+		for _, raw := range facts {
+			fact, ok := raw.(map[string]any)
+			if ok && fact["code"] == code && fact["value"] == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	session, mcpCtx, cancelMCP := connect()
+	createResult := call(mcpCtx, session, "environment_create", map[string]any{
+		"workspace_id":    added.ID,
+		"name":            "gateway-lifecycle",
+		"include_changes": true,
+	})
+	if createResult.IsError {
+		t.Fatalf("environment_create returned tool error: %#v", createResult.StructuredContent)
+	}
+	createBody := structured(createResult)
+	inspection, ok := createBody["inspection"].(map[string]any)
+	if !ok {
+		t.Fatalf("environment_create inspection = %#v", createBody)
+	}
+	envBody, ok := inspection["environment"].(map[string]any)
+	if !ok {
+		t.Fatalf("environment_create environment = %#v", inspection)
+	}
+	envID, _ := envBody["environment_id"].(string)
+	branch, _ := envBody["branch"].(string)
+	worktreePath, _ := envBody["worktree_path"].(string)
+	if envID == "" || branch == "" || worktreePath == "" {
+		t.Fatalf("environment_create identity = %#v", envBody)
+	}
+	if got := strings.TrimSpace(string(mustReadFile(t, filepath.Join(worktreePath, "note.txt")))); got != "untracked note" {
+		t.Fatalf("include_changes did not transfer untracked file: %q", got)
+	}
+	if got := string(mustReadFile(t, filepath.Join(worktreePath, "source.txt"))); !strings.Contains(got, "dirty tracked") {
+		t.Fatalf("include_changes did not transfer tracked dirty content: %q", got)
+	}
+
+	acquireA := call(mcpCtx, session, "environment_writer_acquire", map[string]any{"environment_id": envID, "owner": "owner-a"})
+	if acquireA.IsError {
+		t.Fatalf("writer A acquire failed: %#v", acquireA.StructuredContent)
+	}
+	_ = session.Close()
+	cancelMCP()
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "stop"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl stop error = %v", err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "start"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl start error = %v", err)
+	}
+	var statusOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "status"}, &statusOut, io.Discard); err != nil {
+		t.Fatalf("gateway status after restart error = %v", err)
+	}
+	var restarted daemon.GatewayStatus
+	if err := json.Unmarshal(statusOut.Bytes(), &restarted); err != nil || restarted.Endpoint != endpoint || restarted.State != daemon.GatewayRunning {
+		t.Fatalf("gateway moved across restart: before=%+v after=%+v decode=%v", gatewayStatus, restarted, err)
+	}
+
+	session, mcpCtx, cancelMCP = connect()
+	defer cancelMCP()
+	defer session.Close()
+
+	inspectAfterRestart := call(mcpCtx, session, "environment_inspect", map[string]any{"environment_id": envID})
+	if inspectAfterRestart.IsError {
+		t.Fatalf("environment_inspect after restart failed: %#v", inspectAfterRestart.StructuredContent)
+	}
+	inspectBody := structured(inspectAfterRestart)
+	inspection, _ = inspectBody["inspection"].(map[string]any)
+	envBody, _ = inspection["environment"].(map[string]any)
+	writerBody, ok := envBody["writer"].(map[string]any)
+	if !ok || writerBody["owner"] != "owner-a" {
+		t.Fatalf("writer did not survive daemon restart: %#v", envBody["writer"])
+	}
+
+	acquireB := call(mcpCtx, session, "environment_writer_acquire", map[string]any{"environment_id": envID, "owner": "owner-b"})
+	if !acquireB.IsError || domainCode(acquireB) != "writer_conflict" || !hasFact(acquireB, "writer_owner", "owner-a") {
+		t.Fatalf("writer conflict result = %#v", acquireB.StructuredContent)
+	}
+
+	destroyActive := call(mcpCtx, session, "environment_destroy", map[string]any{"environment_id": envID})
+	if !destroyActive.IsError || domainCode(destroyActive) != "unsafe_destroy" || !hasFact(destroyActive, "writer_owner", "owner-a") {
+		t.Fatalf("active-writer destroy result = %#v", destroyActive.StructuredContent)
+	}
+
+	releaseA := call(mcpCtx, session, "environment_writer_release", map[string]any{"environment_id": envID, "owner": "owner-a"})
+	if releaseA.IsError {
+		t.Fatalf("writer release failed: %#v", releaseA.StructuredContent)
+	}
+	if err := os.WriteFile(filepath.Join(worktreePath, "dirty-after-release.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	destroyDirty := call(mcpCtx, session, "environment_destroy", map[string]any{"environment_id": envID})
+	if !destroyDirty.IsError || domainCode(destroyDirty) != "unsafe_destroy" || !hasFact(destroyDirty, "dirty", true) {
+		t.Fatalf("dirty destroy result = %#v", destroyDirty.StructuredContent)
+	}
+
+	forceDestroy := call(mcpCtx, session, "environment_destroy", map[string]any{"environment_id": envID, "force": true})
+	if forceDestroy.IsError || structured(forceDestroy)["ok"] != true {
+		t.Fatalf("force destroy failed: %#v", forceDestroy.StructuredContent)
+	}
+	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
+		t.Fatalf("force destroy left worktree: %v", err)
+	}
+	if got := gitRun(workspaceRoot, "branch", "--list", branch); !strings.Contains(got, branch) {
+		t.Fatalf("force destroy deleted Environment branch: %q", got)
+	}
+
+	duplicateBranch := call(mcpCtx, session, "environment_create", map[string]any{
+		"workspace_id": added.ID,
+		"name":         "gateway-lifecycle-reopen",
+		"branch":       branch,
+	})
+	if !duplicateBranch.IsError || domainCode(duplicateBranch) != "branch_exists" {
+		t.Fatalf("duplicate branch result = %#v", duplicateBranch.StructuredContent)
+	}
+}
+
+func TestCLIGatewayWriterSafeMutationExecAndVerifyAcrossRestart(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git required for Gateway mutation acceptance: %v", err)
+	}
+	gitRun := func(cwd string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command(gitPath, args...)
+		cmd.Dir = cwd
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s error = %v output=%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	gitRun(workspaceRoot, "init")
+	gitRun(workspaceRoot, "config", "user.email", "gateway-mutation@example.invalid")
+	gitRun(workspaceRoot, "config", "user.name", "Gateway Mutation")
+	gitRun(workspaceRoot, "config", "core.autocrlf", "false")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(workspaceRoot, "add", "source.txt")
+	gitRun(workspaceRoot, "commit", "-m", "baseline")
+	gitRun(workspaceRoot, "branch", "-M", "dev")
+
+	var addOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "workspace", "add", "--path", workspaceRoot}, &addOut, io.Discard); err != nil {
+		t.Fatalf("workspace add error = %v", err)
+	}
+	var added workspaceOutput
+	if err := json.Unmarshal(addOut.Bytes(), &added); err != nil || added.ID == "" {
+		t.Fatalf("decode workspace add = %+v err=%v output=%s", added, err, addOut.String())
+	}
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode:               "standard",
+			AllowedExecutables: []string{"git"},
+			ToolPaths:          map[string]string{"git": gitPath},
+		},
+		Verifiers: map[string]model.VerifierDefinition{
+			"pass": {ID: "pass", Kind: "custom", Executable: "git", Args: []string{"status", "--short"}},
+			"fail": {ID: "fail", Kind: "custom", Executable: "git", Args: []string{"diff", "--exit-code", "HEAD", "--", "source.txt"}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var upOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "up"}, &upOut, io.Discard); err != nil {
+		t.Fatalf("gateway up error = %v", err)
+	}
+	var gatewayStatus daemon.GatewayStatus
+	if err := json.Unmarshal(upOut.Bytes(), &gatewayStatus); err != nil || gatewayStatus.State != daemon.GatewayRunning {
+		t.Fatalf("gateway up = %+v decode=%v output=%s", gatewayStatus, err, upOut.String())
+	}
+	endpoint := gatewayStatus.Endpoint
+
+	connect := func() (*mcp.ClientSession, context.Context, context.CancelFunc) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		client := mcp.NewClient(&mcp.Implementation{Name: "adm-gateway-mutation-test", Version: "v0.6.0"}, nil)
+		session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint}, nil)
+		if err != nil {
+			cancel()
+			t.Fatalf("connect Gateway MCP: %v", err)
+		}
+		return session, ctx, cancel
+	}
+	call := func(ctx context.Context, session *mcp.ClientSession, name string, args map[string]any) *mcp.CallToolResult {
+		t.Helper()
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			t.Fatalf("CallTool(%s) protocol error = %v", name, err)
+		}
+		return result
+	}
+	structured := func(result *mcp.CallToolResult) map[string]any {
+		t.Helper()
+		value, ok := result.StructuredContent.(map[string]any)
+		if !ok {
+			t.Fatalf("structuredContent type = %T value=%#v", result.StructuredContent, result.StructuredContent)
+		}
+		return value
+	}
+	domainCode := func(result *mcp.CallToolResult) string {
+		t.Helper()
+		body := structured(result)
+		errorBody, ok := body["error"].(map[string]any)
+		if !ok {
+			t.Fatalf("domain error body = %#v", body)
+		}
+		code, _ := errorBody["code"].(string)
+		return code
+	}
+	parseEnvironment := func(result *mcp.CallToolResult) (string, string) {
+		t.Helper()
+		if result.IsError {
+			t.Fatalf("environment_create tool error = %#v", result.StructuredContent)
+		}
+		body := structured(result)
+		inspection, ok := body["inspection"].(map[string]any)
+		if !ok {
+			t.Fatalf("environment_create inspection = %#v", body)
+		}
+		envBody, ok := inspection["environment"].(map[string]any)
+		if !ok {
+			t.Fatalf("environment_create environment = %#v", inspection)
+		}
+		id, _ := envBody["environment_id"].(string)
+		path, _ := envBody["worktree_path"].(string)
+		if id == "" || path == "" {
+			t.Fatalf("environment_create identity = %#v", envBody)
+		}
+		return id, path
+	}
+
+	session, mcpCtx, cancelMCP := connect()
+	createA := call(mcpCtx, session, "environment_create", map[string]any{"workspace_id": added.ID, "name": "mutation-a"})
+	createB := call(mcpCtx, session, "environment_create", map[string]any{"workspace_id": added.ID, "name": "mutation-b"})
+	envA, pathA := parseEnvironment(createA)
+	envB, _ := parseEnvironment(createB)
+	for _, lease := range []struct{ id, owner string }{{envA, "owner-a"}, {envB, "owner-b"}} {
+		result := call(mcpCtx, session, "environment_writer_acquire", map[string]any{"environment_id": lease.id, "owner": lease.owner})
+		if result.IsError {
+			t.Fatalf("writer acquire %s failed: %#v", lease.id, result.StructuredContent)
+		}
+	}
+
+	wrongOwner := call(mcpCtx, session, "write", map[string]any{"environment_id": envA, "writer_owner": "owner-b", "path": "wrong.txt", "content": "wrong"})
+	if !wrongOwner.IsError || domainCode(wrongOwner) != "writer_not_owner" {
+		t.Fatalf("wrong-owner mutation = %#v", wrongOwner.StructuredContent)
+	}
+	if _, err := os.Stat(filepath.Join(pathA, "wrong.txt")); !os.IsNotExist(err) {
+		t.Fatalf("wrong-owner write reached filesystem: %v", err)
+	}
+
+	writeA := call(mcpCtx, session, "write", map[string]any{"environment_id": envA, "writer_owner": "owner-a", "path": "task.txt", "content": "A1\n"})
+	writeB := call(mcpCtx, session, "write", map[string]any{"environment_id": envB, "writer_owner": "owner-b", "path": "task.txt", "content": "B1\n"})
+	if writeA.IsError || writeB.IsError {
+		t.Fatalf("isolated writes failed: A=%#v B=%#v", writeA.StructuredContent, writeB.StructuredContent)
+	}
+	editTracked := call(mcpCtx, session, "edit", map[string]any{"environment_id": envA, "writer_owner": "owner-a", "path": "source.txt", "old_text": "base", "new_text": "base-a", "expected_replacements": 1})
+	if editTracked.IsError {
+		t.Fatalf("tracked edit failed: %#v", editTracked.StructuredContent)
+	}
+
+	readA := call(mcpCtx, session, "read", map[string]any{"environment_id": envA, "path": "task.txt"})
+	readB := call(mcpCtx, session, "read", map[string]any{"environment_id": envB, "path": "task.txt"})
+	if readA.IsError || !strings.Contains(fmt.Sprint(readA.StructuredContent), "A1") || strings.Contains(fmt.Sprint(readA.StructuredContent), "B1") {
+		t.Fatalf("read A = %#v", readA.StructuredContent)
+	}
+	if readB.IsError || !strings.Contains(fmt.Sprint(readB.StructuredContent), "B1") || strings.Contains(fmt.Sprint(readB.StructuredContent), "A1") {
+		t.Fatalf("read B = %#v", readB.StructuredContent)
+	}
+	if _, err := os.Stat(filepath.Join(workspaceRoot, "task.txt")); !os.IsNotExist(err) {
+		t.Fatalf("Environment write leaked into main checkout: %v", err)
+	}
+
+	for _, tc := range []struct{ id, changedPath string }{{envA, "source.txt"}, {envB, "task.txt"}} {
+		status := call(mcpCtx, session, "git_status", map[string]any{"environment_id": tc.id})
+		if status.IsError || !strings.Contains(fmt.Sprint(status.StructuredContent), tc.changedPath) {
+			t.Fatalf("git_status %s = %#v", tc.id, status.StructuredContent)
+		}
+	}
+
+	execOK := call(mcpCtx, session, "exec", map[string]any{"environment_id": envA, "writer_owner": "owner-a", "executable": "git", "args": []any{"status", "--short"}})
+	if execOK.IsError || !strings.Contains(fmt.Sprint(execOK.StructuredContent), "task.txt") {
+		t.Fatalf("safe exec result = %#v", execOK.StructuredContent)
+	}
+	execBlocked := call(mcpCtx, session, "exec", map[string]any{"environment_id": envA, "writer_owner": "owner-a", "executable": "definitely-not-allowed"})
+	if !execBlocked.IsError || domainCode(execBlocked) != "runtime_error" {
+		t.Fatalf("disallowed exec result = %#v", execBlocked.StructuredContent)
+	}
+
+	passVerifier := call(mcpCtx, session, "run_verifier", map[string]any{"environment_id": envA, "writer_owner": "owner-a", "id": "pass"})
+	if passVerifier.IsError || !strings.Contains(strings.ToLower(fmt.Sprint(passVerifier.StructuredContent)), "passed") {
+		t.Fatalf("pass verifier result = %#v", passVerifier.StructuredContent)
+	}
+	failVerifier := call(mcpCtx, session, "run_verifier", map[string]any{"environment_id": envA, "writer_owner": "owner-a", "id": "fail"})
+	if failVerifier.IsError || !strings.Contains(strings.ToLower(fmt.Sprint(failVerifier.StructuredContent)), "failed") {
+		t.Fatalf("failed verifier should remain successful tool result: %#v", failVerifier.StructuredContent)
+	}
+	manyVerifier := call(mcpCtx, session, "run_verifiers", map[string]any{"environment_id": envA, "writer_owner": "owner-a", "ids": []any{"pass", "fail"}})
+	if manyVerifier.IsError || !strings.Contains(strings.ToLower(fmt.Sprint(manyVerifier.StructuredContent)), "passed") || !strings.Contains(strings.ToLower(fmt.Sprint(manyVerifier.StructuredContent)), "failed") {
+		t.Fatalf("run_verifiers result = %#v", manyVerifier.StructuredContent)
+	}
+
+	_ = session.Close()
+	cancelMCP()
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "stop"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl stop error = %v", err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "start"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl start error = %v", err)
+	}
+	var statusOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "gateway", "status"}, &statusOut, io.Discard); err != nil {
+		t.Fatalf("gateway status after restart error = %v", err)
+	}
+	var restarted daemon.GatewayStatus
+	if err := json.Unmarshal(statusOut.Bytes(), &restarted); err != nil || restarted.Endpoint != endpoint || restarted.State != daemon.GatewayRunning {
+		t.Fatalf("Gateway mutation endpoint moved: before=%+v after=%+v decode=%v", gatewayStatus, restarted, err)
+	}
+
+	session, mcpCtx, cancelMCP = connect()
+	defer cancelMCP()
+	defer session.Close()
+	for _, tc := range []struct{ id, owner, oldText, newText string }{
+		{envA, "owner-a", "A1", "A2"},
+		{envB, "owner-b", "B1", "B2"},
+	} {
+		edit := call(mcpCtx, session, "edit", map[string]any{"environment_id": tc.id, "writer_owner": tc.owner, "path": "task.txt", "old_text": tc.oldText, "new_text": tc.newText, "expected_replacements": 1})
+		if edit.IsError {
+			t.Fatalf("post-restart mutation %s failed: %#v", tc.id, edit.StructuredContent)
+		}
+		read := call(mcpCtx, session, "read", map[string]any{"environment_id": tc.id, "path": "task.txt"})
+		if read.IsError || !strings.Contains(fmt.Sprint(read.StructuredContent), tc.newText) {
+			t.Fatalf("post-restart read %s = %#v", tc.id, read.StructuredContent)
+		}
+	}
+
+	for _, id := range []string{envA, envB} {
+		destroy := call(mcpCtx, session, "environment_destroy", map[string]any{"environment_id": id, "force": true})
+		if destroy.IsError {
+			t.Fatalf("force cleanup %s failed: %#v", id, destroy.StructuredContent)
+		}
 	}
 }
 

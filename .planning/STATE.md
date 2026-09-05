@@ -1,27 +1,27 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5
-milestone_name: Multi-Task Development Environments
-status: complete
-last_updated: "2026-09-05T10:00:00+08:00"
+milestone: v0.6
+milestone_name: Agent MCP Gateway
+status: in_progress
+last_updated: "2026-09-05T12:17:00+08:00"
 last_activity: 2026-09-05
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 3
-  total_plans: 3
+  total_plans: 4
   completed_plans: 3
-  percent: 100
+  percent: 75
 ---
 
 # Project State
 
 ## Current Position
 
-Milestone: v0.5 — Multi-Task Development Environments
-Phase: 21 — Environment State / Writer Guard / Base Facts
-Plan: 21-01 — environment state, single-writer guard, and base divergence facts
-Status: Completed
-Last activity: 2026-09-05 — v0.5 complete: persistent isolated Environments, dirty-change transfer, safe destruction, single-writer coordination, and base/activity facts all verified
+Milestone: v0.6 — Agent MCP Gateway
+Phase: 25 — Writer-safe Mutation & Verification
+Plan: 25-01 — writer-guarded mutation, execution, and verification
+Status: In Progress — implementation and unattended gate complete; explicit fixed-path network acceptance pending
+Last activity: 2026-09-05 — Phase 25 writer-safe mutation/exec/verify and unattended test split verified; ordinary go test no longer opens real TCP listeners
 
 ## Completed
 
@@ -373,6 +373,10 @@ Validated `--include-changes` with staged/unstaged preservation, binary patches,
 ### Phase 21 — Environment State / Writer Guard / Base Facts ✅
 
 Validated structured ahead/behind/diverged/base-moved facts, dirty/upstream/activity/stale observations, restrained non-prescriptive hints, persistent single-writer lease with conflict/renew/release/force-release behavior, and writer survival across daemon restart. Full v0.5 fmt/test/vet/build gate passed.
+
+### Phase 22 — Gateway Host & Discovery ✅
+
+Validated an independent daemon-owned Agent MCP Gateway with persisted concrete loopback listen, stable endpoint across daemon restart, non-loopback rejection, no silent port migration on conflict, and typed `gateway_info/workspace_list/environment_list/environment_inspect` discovery through the official Streamable HTTP MCP client. Existing Direct MCP tests remain green.
 
 ## Locked Direction
 

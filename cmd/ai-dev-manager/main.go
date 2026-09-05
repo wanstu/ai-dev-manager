@@ -18,6 +18,8 @@ import (
 	"ai-dev-manager/internal/workspace"
 )
 
+var daemonStartExecutable string
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -37,7 +39,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	remaining := global.Args()
 	if len(remaining) == 0 {
-		return errors.New("usage: ai-dev-manager [--config-root PATH] [--json] <up|down|ps|ctl|agent|env|start|status|stop|runtime|workspace|inspect|serve|mcp> ...")
+		return errors.New("usage: ai-dev-manager [--config-root PATH] [--json] <up|down|ps|ctl|agent|env|gateway|start|status|stop|runtime|workspace|inspect|serve|mcp> ...")
 	}
 
 	resolvedRoot, err := daemon.ResolveRoot(*configRoot)
@@ -77,6 +79,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runAgent(ctx, resolvedRoot, service, remaining[1:], stdout, stderr, *jsonOutput)
 	case "env":
 		return runEnvironment(ctx, resolvedRoot, service, remaining[1:], stdout, stderr, *jsonOutput)
+	case "gateway":
+		return runGateway(ctx, resolvedRoot, remaining[1:], stdout, stderr, *jsonOutput)
 	case "workspace":
 		return runWorkspace(service, remaining[1:], stdout, stderr, *jsonOutput)
 	case "inspect":
@@ -91,7 +95,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 }
 
 func runDaemonStart(ctx context.Context, configRoot string, stdout io.Writer, jsonOutput bool) error {
-	meta, err := daemon.Start(ctx, configRoot, "")
+	meta, err := daemon.Start(ctx, configRoot, daemonStartExecutable)
 	if err != nil {
 		return err
 	}

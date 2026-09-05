@@ -22,6 +22,7 @@ import (
 	"ai-dev-manager/internal/config"
 	"ai-dev-manager/internal/controlplane"
 	"ai-dev-manager/internal/environment"
+	"ai-dev-manager/internal/gateway"
 )
 
 const (
@@ -546,14 +547,34 @@ func Run(ctx context.Context, root, listen string) error {
 	if err != nil {
 		return err
 	}
+	gatewayService, err := gateway.NewService(service.Registry(), environmentManager)
+	if err != nil {
+		return err
+	}
+	gatewayOwner, err := NewGatewayOwner(resolved, gatewayService)
+	if err != nil {
+		return err
+	}
 	if _, err := runtimeOwner.Reconcile(ctx); err != nil {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		_ = service.StopAll(shutdownCtx)
 		return fmt.Errorf("reconcile desired runtimes: %w", err)
 	}
+	if _, err := gatewayOwner.Reconcile(ctx); err != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		_ = runtimeOwner.StopAll(shutdownCtx)
+		_ = service.StopAll(shutdownCtx)
+		return fmt.Errorf("reconcile gateway: %w", err)
+	}
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		_ = gatewayOwner.CloseObserved(shutdownCtx)
+		_ = runtimeOwner.StopAll(shutdownCtx)
+		_ = service.StopAll(shutdownCtx)
 		return fmt.Errorf("listen daemon control endpoint: %w", err)
 	}
 
@@ -592,6 +613,7 @@ func Run(ctx context.Context, root, listen string) error {
 	registerRuntimeHandlers(mux, runtimeOwner)
 	registerAgentHandlers(mux, agentManager)
 	registerEnvironmentHandlers(mux, environmentManager)
+	registerGatewayHandlers(mux, gatewayOwner)
 
 	httpServer := &http.Server{Handler: mux}
 	serveErr := make(chan error, 1)
@@ -636,7 +658,8 @@ func Run(ctx context.Context, root, listen string) error {
 	defer cancel()
 	shutdownErr := httpServer.Shutdown(shutdownCtx)
 	agentManager.StopAll()
+	gatewayErr := gatewayOwner.CloseObserved(shutdownCtx)
 	runtimeErr := runtimeOwner.StopAll(shutdownCtx)
 	controlErr := service.StopAll(shutdownCtx)
-	return errors.Join(runErr, shutdownErr, runtimeErr, controlErr)
+	return errors.Join(runErr, shutdownErr, gatewayErr, runtimeErr, controlErr)
 }

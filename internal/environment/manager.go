@@ -23,7 +23,7 @@ type DerivedRuntimeBuilder func(string, string, string) (runtimeadapter.Runtime,
 type IDGenerator func() (string, error)
 
 type Manager struct {
-	mu           sync.Mutex
+	mu           sync.RWMutex
 	store        *Store
 	getWorkspace WorkspaceGetter
 	buildRuntime RuntimeBuilder
@@ -234,6 +234,115 @@ func (m *Manager) Inspect(ctx context.Context, id string) (InspectResult, error)
 		return InspectResult{}, err
 	}
 	return m.inspectReady(ctx, env, baseRuntime, derived, worktree), nil
+}
+
+func (m *Manager) InvokeRead(ctx context.Context, id, operation string, input map[string]any) (any, error) {
+	id = strings.TrimSpace(id)
+	operation = strings.TrimSpace(operation)
+	if id == "" {
+		return nil, &Error{Code: ErrInvalidInput, Message: "environment_id is required"}
+	}
+	requiredCapability, ok := readOperationCapability(operation)
+	if !ok {
+		return nil, &Error{Code: ErrInvalidInput, EnvironmentID: id, Message: fmt.Sprintf("operation %q is not an allowed Environment read operation", operation)}
+	}
+	env, err := m.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	_, derived, _, err := m.validatedRuntimes(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+	if !hasCapability(derived.Capabilities(), requiredCapability) {
+		return nil, &Error{Code: ErrCapabilityMissing, EnvironmentID: env.ID, Message: fmt.Sprintf("environment runtime does not support %s", requiredCapability)}
+	}
+	value, err := derived.Invoke(ctx, operation, input)
+	if err != nil {
+		return nil, &Error{Code: ErrRuntime, EnvironmentID: env.ID, Message: fmt.Sprintf("invoke environment read operation %q", operation), Err: err}
+	}
+	return value, nil
+}
+
+func readOperationCapability(operation string) (string, bool) {
+	switch operation {
+	case runtimeadapter.OpTree:
+		return "files.tree", true
+	case runtimeadapter.OpRead:
+		return "files.read", true
+	case runtimeadapter.OpSearch:
+		return "search.text", true
+	case runtimeadapter.OpGitStatus:
+		return "git.status", true
+	case runtimeadapter.OpGitDiff:
+		return "git.diff", true
+	case runtimeadapter.OpGitBranch:
+		return "git.branch", true
+	default:
+		return "", false
+	}
+}
+
+func (m *Manager) InvokeMutation(ctx context.Context, id, owner, operation string, input map[string]any) (any, error) {
+	id = strings.TrimSpace(id)
+	owner = strings.TrimSpace(owner)
+	operation = strings.TrimSpace(operation)
+	if id == "" || !validWriterOwner(owner) {
+		return nil, &Error{Code: ErrInvalidInput, EnvironmentID: id, Message: "environment_id and valid writer_owner are required"}
+	}
+	requiredCapability, ok := mutationOperationCapability(operation)
+	if !ok {
+		return nil, &Error{Code: ErrInvalidInput, EnvironmentID: id, Message: fmt.Sprintf("operation %q is not an allowed Environment mutation operation", operation)}
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	env, err := m.store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if env.Writer == nil {
+		return nil, &Error{Code: ErrWriterNotOwner, EnvironmentID: env.ID, Message: "environment has no active writer"}
+	}
+	if env.Writer.Owner != owner {
+		return nil, &Error{Code: ErrWriterNotOwner, EnvironmentID: env.ID, Message: fmt.Sprintf("environment writer is held by %q", env.Writer.Owner)}
+	}
+	_, derived, _, err := m.validatedRuntimes(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+	if !hasCapability(derived.Capabilities(), requiredCapability) {
+		return nil, &Error{Code: ErrCapabilityMissing, EnvironmentID: env.ID, Message: fmt.Sprintf("environment runtime does not support %s", requiredCapability)}
+	}
+	value, err := derived.Invoke(ctx, operation, input)
+	if err != nil {
+		return nil, &Error{Code: ErrRuntime, EnvironmentID: env.ID, Message: fmt.Sprintf("invoke environment mutation operation %q", operation), Err: err}
+	}
+
+	now := m.now()
+	env.Writer.LastSeenAt = now
+	env.UpdatedAt = now
+	env.LastActivityAt = now
+	if err := m.store.Put(env); err != nil {
+		return nil, &Error{Code: ErrStore, EnvironmentID: env.ID, Message: "persist environment mutation activity", Err: err}
+	}
+	return value, nil
+}
+
+func mutationOperationCapability(operation string) (string, bool) {
+	switch operation {
+	case runtimeadapter.OpWrite:
+		return "files.write", true
+	case runtimeadapter.OpEdit:
+		return "files.edit", true
+	case runtimeadapter.OpExec:
+		return "shell.exec", true
+	case runtimeadapter.OpVerifierRun, runtimeadapter.OpVerifierRunMany:
+		return "verify.run", true
+	default:
+		return "", false
+	}
 }
 
 func (m *Manager) Destroy(ctx context.Context, id string, force bool) (Environment, error) {

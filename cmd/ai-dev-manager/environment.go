@@ -42,7 +42,7 @@ func runEnvironment(ctx context.Context, configRoot string, service *controlplan
 		if err != nil {
 			return err
 		}
-		if _, err := daemon.Start(ctx, configRoot, ""); err != nil {
+		if _, err := daemon.Start(ctx, configRoot, daemonStartExecutable); err != nil {
 			return err
 		}
 		result, err := daemon.EnvironmentCreate(ctx, configRoot, environment.CreateRequest{

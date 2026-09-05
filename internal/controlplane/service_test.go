@@ -12,6 +12,7 @@ import (
 
 	"ai-dev-manager/internal/adapter/runtimeadapter"
 	"ai-dev-manager/internal/model"
+	"ai-dev-manager/internal/testutil"
 	"ai-dev-manager/internal/workspace"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -136,6 +137,7 @@ func TestServiceRejectsUnsupportedRuntimeSelection(t *testing.T) {
 }
 
 func TestServiceRunsTwoPersistedWorkspaceMCPInstances(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -208,6 +210,7 @@ func TestServiceRunsTwoPersistedWorkspaceMCPInstances(t *testing.T) {
 }
 
 func TestServiceConfiguredMCPActivationHonorsWorkspaceDisable(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

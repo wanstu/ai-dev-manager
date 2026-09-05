@@ -44,7 +44,7 @@ func runAgent(ctx context.Context, configRoot string, service *controlplane.Serv
 		if err != nil {
 			return err
 		}
-		if _, err := daemon.Start(ctx, configRoot, ""); err != nil {
+		if _, err := daemon.Start(ctx, configRoot, daemonStartExecutable); err != nil {
 			return err
 		}
 		status, err := daemon.AgentRunRequest(ctx, configRoot, ws.ID, workflowName, input)

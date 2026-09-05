@@ -13,6 +13,7 @@ import (
 	"ai-dev-manager/internal/host"
 	"ai-dev-manager/internal/model"
 	admruntime "ai-dev-manager/internal/runtime"
+	"ai-dev-manager/internal/testutil"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -122,6 +123,7 @@ func TestActivatorMissingEnvRefReturnsSafeStructuredError(t *testing.T) {
 }
 
 func TestActivatorProbesStreamableHTTP(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "value.txt"), []byte("http-fixture"), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)

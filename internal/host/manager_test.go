@@ -11,11 +11,13 @@ import (
 	"ai-dev-manager/internal/adapter/runtimeadapter"
 	"ai-dev-manager/internal/model"
 	admruntime "ai-dev-manager/internal/runtime"
+	"ai-dev-manager/internal/testutil"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestManagerRunsTwoIsolatedWorkspaceMCPInstances(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -97,6 +99,7 @@ func TestManagerRunsTwoIsolatedWorkspaceMCPInstances(t *testing.T) {
 }
 
 func TestManagerRejectsNonLoopbackAndDuplicateInstanceID(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	adapter := newReadOnlyAdapter(t, "native", "ws", t.TempDir())
 	manager := NewManager()
 	if _, err := manager.StartHTTP("public", adapter, "0.0.0.0:0"); err == nil {
@@ -129,6 +132,7 @@ func TestManagerRejectsNonLoopbackAndDuplicateInstanceID(t *testing.T) {
 }
 
 func TestManagerHostsExternalRuntimeContract(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	adapter := &fakeRuntime{

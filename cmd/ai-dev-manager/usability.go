@@ -63,7 +63,7 @@ func runUp(ctx context.Context, configRoot string, service *controlplane.Service
 	if err != nil {
 		return err
 	}
-	meta, err := daemon.Start(ctx, configRoot, "")
+	meta, err := daemon.Start(ctx, configRoot, daemonStartExecutable)
 	if err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func runCtl(ctx context.Context, configRoot string, args []string, stdout io.Wri
 		if err != nil {
 			return err
 		}
-		meta, err := daemon.Start(ctx, configRoot, "")
+		meta, err := daemon.Start(ctx, configRoot, daemonStartExecutable)
 		if err != nil {
 			return err
 		}

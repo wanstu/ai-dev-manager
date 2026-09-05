@@ -10,12 +10,14 @@ import (
 
 	"ai-dev-manager/internal/controlplane"
 	"ai-dev-manager/internal/model"
+	"ai-dev-manager/internal/testutil"
 	"ai-dev-manager/internal/workspace"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestRuntimeOwnerRunsTwoWorkspacesAndStopsIndependently(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	service, err := controlplane.New(t.TempDir())
@@ -86,6 +88,7 @@ func TestRuntimeOwnerRunsTwoWorkspacesAndStopsIndependently(t *testing.T) {
 }
 
 func TestRuntimeOwnerRetainsConfiguredMCPSession(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	service, err := controlplane.New(t.TempDir())
@@ -136,6 +139,7 @@ func TestRuntimeOwnerRetainsConfiguredMCPSession(t *testing.T) {
 }
 
 func TestRuntimeOwnerDesiredStatePersistsAcrossShutdownAndReconcile(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	configRoot := t.TempDir()
@@ -208,6 +212,7 @@ func TestRuntimeOwnerDesiredStatePersistsAcrossShutdownAndReconcile(t *testing.T
 }
 
 func TestRuntimeOwnerRebindsForDockerAndReconcilesExposure(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	configRoot := t.TempDir()
@@ -261,6 +266,7 @@ func TestRuntimeOwnerRebindsForDockerAndReconcilesExposure(t *testing.T) {
 }
 
 func TestRuntimeOwnerReconcileContinuesAfterBrokenDesiredWorkspace(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	configRoot := t.TempDir()
@@ -299,6 +305,7 @@ func TestRuntimeOwnerReconcileContinuesAfterBrokenDesiredWorkspace(t *testing.T)
 }
 
 func TestRuntimeOwnerRollsBackHostWhenConfiguredMCPActivationFails(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	service, err := controlplane.New(t.TempDir())

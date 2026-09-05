@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"ai-dev-manager/internal/testutil"
 )
 
 func TestMetadataRoundTripAndInstanceSafeRemoval(t *testing.T) {
@@ -104,6 +106,7 @@ func TestRunRejectsCorruptDesiredStateBeforePublishingHealth(t *testing.T) {
 }
 
 func TestRunHealthStopAndCleanup(t *testing.T) {
+	testutil.RequireNetworkAcceptance(t)
 	root := t.TempDir()
 	errCh := make(chan error, 1)
 	go func() {
