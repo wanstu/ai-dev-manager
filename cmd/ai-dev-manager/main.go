@@ -37,7 +37,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	remaining := global.Args()
 	if len(remaining) == 0 {
-		return errors.New("usage: ai-dev-manager [--config-root PATH] [--json] <up|down|ps|ctl|start|status|stop|runtime|workspace|inspect|serve|mcp> ...")
+		return errors.New("usage: ai-dev-manager [--config-root PATH] [--json] <up|down|ps|ctl|agent|start|status|stop|runtime|workspace|inspect|serve|mcp> ...")
 	}
 
 	resolvedRoot, err := daemon.ResolveRoot(*configRoot)
@@ -73,6 +73,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			return errors.New("usage: ai-dev-manager ps")
 		}
 		return runPS(ctx, resolvedRoot, service, stdout, *jsonOutput)
+	case "agent":
+		return runAgent(ctx, resolvedRoot, service, remaining[1:], stdout, stderr, *jsonOutput)
 	case "workspace":
 		return runWorkspace(service, remaining[1:], stdout, stderr, *jsonOutput)
 	case "inspect":
@@ -108,7 +110,10 @@ func runDaemonStatus(ctx context.Context, configRoot string, stdout io.Writer, j
 }
 
 func runDaemonStop(ctx context.Context, configRoot string, stdout io.Writer, jsonOutput bool) error {
-	stopCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// The daemon itself allows up to 3s for graceful HTTP/runtime teardown and
+	// the control request has its own timeout. Leave enough outer budget for
+	// Windows/CI scheduling contention without reporting a false stop failure.
+	stopCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	meta, err := daemon.Stop(stopCtx, configRoot)
 	if err != nil {

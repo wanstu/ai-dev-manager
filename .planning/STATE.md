@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3.1
-milestone_name: Usability Acceptance
+milestone: v0.4
+milestone_name: Agents / GSD Runtime
 status: complete
-last_updated: "2026-09-04T23:55:00+08:00"
-last_activity: 2026-09-04
+last_updated: "2026-09-05T08:58:00+08:00"
+last_activity: 2026-09-05
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -17,11 +17,11 @@ progress:
 
 ## Current Position
 
-Milestone: v0.3.1 — Usability Acceptance
-Phase: 14 — Daily CLI UX
-Plan: 14-01 — up/down/ps/ctl usability vertical slice
+Milestone: v0.4 — Agents / GSD Runtime
+Phase: 18 — Parallel Agents / Worktrees
+Plan: 18-01 — parallel verify worktree lanes
 Status: Completed
-Last activity: 2026-09-04 — v0.3.1 verified with real Docker MCP initialize plus one-shot up/down/ps/ctl lifecycle acceptance
+Last activity: 2026-09-05 — v0.4 complete: daemon-owned Agent Runs, verify workflow, audited GSD execution/advance, and real managed-worktree parallel verification all validated
 
 ## Completed
 
@@ -314,6 +314,54 @@ go build -o ai-dev-manager.exe ./cmd/ai-dev-manager → PASS
 
 v0.3.1 makes the persistent runtime usable through the daily CLI while keeping advanced low-level commands available. Auto-advance stops at this milestone boundary before v0.4 Agents/GSD Runtime.
 
+## v0.4 Progress
+
+### Phase 15 — Agent Run Lifecycle ✅
+
+Validated:
+
+- daemon owns Agent Runs independently of the CLI invocation that created them.
+- stable `run_` identity, Workspace identity, executor identity and running/completed/cancelled/error lifecycle state.
+- loopback Control API provides run/list/status/cancel and is not exposed through Workspace MCP Docker/custom listen.
+- `agent run [path|workspace-id]` reuses the daily Workspace resolution path, auto-registers unknown paths and ensures daemon running.
+- `agent list/status/cancel` are thin Control API clients; cancel is idempotent and Workspace A/B Runs remain isolated.
+- production Phase 15 executor is explicitly `lifecycle`; it blocks until cancellation and does not claim LLM/code execution.
+- Agent Runs are observed state only. daemon shutdown cancels active Runs and restart starts with an empty Run registry rather than resurrecting old execution objects.
+
+Acceptance:
+
+```text
+TestManagerLifecycleCancelAndIsolation → PASS
+TestManagerExecutorCompletionAndError → PASS
+TestManagerRejectsUnknownWorkspaceAndRun → PASS
+TestCLIAgentRunLifecycleAcrossInvocationsAndRestart → PASS
+
+go fmt ./... → PASS
+go test ./... → all packages PASS
+go vet ./... → PASS
+go build -o ai-dev-manager-phase15.exe ./cmd/ai-dev-manager → PASS
+
+real Windows binary, isolated config root:
+agent run .      → run_71500556bf93fa429aebd9cb0f1f9595 running
+agent list       → same run still running after creator CLI exited
+agent status     → same run/workspace/executor
+agent cancel     → cancelled + finished_at
+ctl stop/start   → new daemon identity
+agent list       → [] (old observed run not resurrected)
+```
+
+### Phase 16 — Planner / Executor / Reviewer ✅
+
+Validated deterministic `verify` Planner → Executor → Reviewer orchestration with structured plan/steps/review, review-fail vs infrastructure-error separation, cancellation safety and real cross-process configured verifier execution.
+
+### Phase 17 — GSD Phase Executor ✅
+
+Validated `.planning` provenance resolution, allowlisted Execution Spec operations, real edit + verifier execution, forbidden-operation rejection, and pass-gated deterministic STATE advance with blocked/skip semantics when the next plan is unavailable or ambiguous.
+
+### Phase 18 — Parallel Agents / Worktrees ✅
+
+Validated observed-only derived runtimes rooted at managed Git worktrees, 2+ truly concurrent verify lanes, parent review aggregation, default cleanup / explicit preservation, distinct lane roots and unchanged main checkout HEAD/branch. The daemon clean-restart stop budget was also widened from 5s to 10s after full-suite Windows scheduling exposed a false timeout; the restart + parallel acceptance combination then passed 10 consecutive stress runs.
+
 ## Locked Direction
 
 1. Independent project; do not modify or depend on `codexprov4` implementation details.
@@ -365,4 +413,4 @@ v0.3.1 makes the persistent runtime usable through the daily CLI while keeping a
 
 ## Next Action
 
-v0.3.1 is complete, including real Docker MCP initialize/tool-call acceptance and MCP Hub structuredContent compatibility. Stop at this milestone boundary before v0.4 Agents / GSD Runtime.
+v0.4 is complete. Stop at this milestone boundary before v0.5 Docker / Process / Debug. Review and commit the full v0.4 change set before opening the next milestone.

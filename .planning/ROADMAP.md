@@ -333,14 +333,48 @@
 
 ---
 
-## Later Milestones
+## Milestone v0.4 — Agents / GSD Runtime ✅ Completed 2026-09-05
 
-### v0.4 — Agents / GSD Runtime
-- Agent / subagent registry。
-- GSD phase executor / verifier integration。
-- Planner / Executor / Reviewer workflow。
-- 多 worktree 多会话隔离。
-- Agent run lifecycle/status/cancel 建立在 v0.3 daemon ownership 之上。
+**Goal:** 在 persistent daemon ownership 上建立真实 Agent Run 生命周期，再逐步接入 Planner / Executor / Reviewer、GSD phase execution 与 multi-worktree orchestration。
+
+## Phase 15 — Agent Run Lifecycle ✅ Completed 2026-09-05
+
+**Goal:** daemon 长期拥有 Agent Run；CLI 退出后 Run 仍可 list/status/cancel，并明确 daemon restart 不恢复旧 observed Run。
+
+**Requirements:** ARUN-01..03
+
+**Scope:**
+- daemon-owned Agent Manager 与稳定 `run_` identity。
+- running/completed/cancelled/error 状态机与时间信息。
+- loopback Control API：run/list/status/cancel。
+- `agent run/list/status/cancel` CLI。
+- Phase 15 production `lifecycle` executor，只验证 ownership/cancel，不声称已有 LLM execution。
+
+**Exit criteria:**
+1. `agent run .` 的启动 CLI 退出后，独立 CLI 仍能查询同一个 running Run。
+2. `agent list/status/cancel` 跨进程工作并保持 Workspace identity。
+3. cancel 幂等，两个 Workspace Run 不串状态。
+4. daemon stop/restart 后旧 Run 不被误报 running。
+5. unit/process acceptance + fmt/test/vet/build 全通过。
+
+---
+
+## Phase 16 — Planner / Executor / Reviewer ✅ Completed 2026-09-05
+- 通过 Phase 15 Executor contract 接入第一条真实 `verify` workflow。
+- 明确 plan → execute → verify → review 状态与失败回路。
+- reviewer fail 与 orchestration error 分离；Run status 保留 plan/steps/review 审计轨迹。
+
+## Phase 17 — GSD Phase Executor ✅ Completed 2026-09-05
+- 读取 `.planning/PROJECT.md` / `STATE.md` / `CONTEXT.md` / `PLAN.md`。
+- 通过受控 Execution Spec 执行 Runtime operations、verifier/reviewer。
+- review=pass 后只推进到预先存在且身份明确的下一 Plan；缺失/歧义时 blocked，不猜测。
+
+## Phase 18 — Parallel Agents / Worktrees ✅ Completed 2026-09-05
+- `parallel-verify` parent Run 在 2–8 个 managed Git worktree 上并发执行 verify lanes。
+- derived Runtime 复用 base EffectiveConfig，但 root/identity observed-only 且不写 Workspace Registry。
+- parent review 聚合 lane pass/fail；默认清理 worktree，`--keep-worktrees` 显式保留；不自动 merge/删除 branch。
+
+## Later Milestones
 
 ### v0.5 — Docker / Process / Debug
 - Docker ps / compose / logs / inspect。

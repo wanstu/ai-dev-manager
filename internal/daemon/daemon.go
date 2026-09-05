@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"ai-dev-manager/internal/adapter/runtimeadapter"
+	"ai-dev-manager/internal/agent"
 	"ai-dev-manager/internal/config"
 	"ai-dev-manager/internal/controlplane"
 )
@@ -496,6 +498,42 @@ func Run(ctx context.Context, root, listen string) error {
 		return err
 	}
 	runtimeOwner := NewRuntimeOwner(service)
+	agentManager, err := agent.NewManager(service.Registry().Get, agent.LifecycleExecutor{})
+	if err != nil {
+		return err
+	}
+	verifyExecutor, err := agent.NewVerifyWorkflowExecutor(func(workspaceID string) (runtimeadapter.Runtime, error) {
+		return service.BuildRuntime(workspaceID, nil)
+	})
+	if err != nil {
+		return err
+	}
+	if err := agentManager.RegisterExecutor(verifyExecutor); err != nil {
+		return err
+	}
+	gsdExecutor, err := agent.NewGSDWorkflowExecutor(func(workspaceID string) (runtimeadapter.Runtime, error) {
+		return service.BuildRuntime(workspaceID, nil)
+	})
+	if err != nil {
+		return err
+	}
+	if err := agentManager.RegisterExecutor(gsdExecutor); err != nil {
+		return err
+	}
+	parallelExecutor, err := agent.NewParallelVerifyExecutor(
+		func(workspaceID string) (runtimeadapter.Runtime, error) {
+			return service.BuildRuntime(workspaceID, nil)
+		},
+		func(workspaceID, derivedID, path string) (runtimeadapter.Runtime, error) {
+			return service.BuildDerivedRuntime(workspaceID, derivedID, path)
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if err := agentManager.RegisterExecutor(parallelExecutor); err != nil {
+		return err
+	}
 	if _, err := runtimeOwner.Reconcile(ctx); err != nil {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
@@ -540,6 +578,7 @@ func Run(ctx context.Context, root, listen string) error {
 		_ = json.NewEncoder(w).Encode(stopping)
 	})
 	registerRuntimeHandlers(mux, runtimeOwner)
+	registerAgentHandlers(mux, agentManager)
 
 	httpServer := &http.Server{Handler: mux}
 	serveErr := make(chan error, 1)
@@ -583,6 +622,7 @@ func Run(ctx context.Context, root, listen string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	shutdownErr := httpServer.Shutdown(shutdownCtx)
+	agentManager.StopAll()
 	runtimeErr := runtimeOwner.StopAll(shutdownCtx)
 	controlErr := service.StopAll(shutdownCtx)
 	return errors.Join(runErr, shutdownErr, runtimeErr, controlErr)

@@ -23,9 +23,9 @@
 - DevSpace：借鉴 worktree、runtime、skills、agents、execution contract 等成熟思路。
 - 本项目不 fork CodexPro 或 DevSpace，不把两边代码直接揉在一起；优先借鉴设计，并通过 Adapter / Capability 接口保持兼容空间。
 
-## Current Milestone: v0.3.1 Usability Acceptance
+## Current Milestone: v0.4 Agents / GSD Runtime ✅ Complete
 
-**Goal:** 给 v0.2 已验证的 Control Plane 一个长期本地 owner。CLI、未来 Desktop/codexprov4 与 Agent Runtime 都通过 local Control API 操作同一个 daemon-owned Control Plane；Runtime/MCP 的真实运行生命周期不再等同于某一次 CLI process lifetime。
+**Goal:** 在 v0.3/v0.3.1 已验证的 daemon ownership 之上建立可追踪、可取消、可逐步扩展到 Planner / Executor / Reviewer 与 GSD phase execution 的 Agent Run 生命周期；CLI 继续只是 local Control API 的薄客户端。
 
 ## Requirements
 
@@ -114,6 +114,30 @@
 - [x] **USE-01**: Workspace MCP 默认 loopback-only，但可由用户显式选择 Docker-reachable bind；该 desired bind intent 跨 daemon restart 保留，Control API 不随之暴露。— Phase 13 validated explicit exposed Host path, v1→v2 desired compatibility, `runtime start --docker`, restart reconciliation, Host/Origin allowlist and real `mcphub` Docker MCP initialize
 - [x] **USE-02**: 提供 `up/down/ps/ctl` 日常 CLI，隐藏常规 Workspace ID 与 daemon 启动顺序，同时保留现有底层命令兼容性。— Phase 14 validated one-shot path auto-registration, `up --docker`, path-based `down`, merged `ps`, desired-preserving `ctl restart/stop`, and desired-clearing `ctl shutdown`
 
+### Validated — v0.4 Phase 15
+
+- [x] **ARUN-01**: Agent Run 由 daemon 长期拥有；创建 Run 的 CLI 退出后，Run 仍可由独立 CLI 查询。— Phase 15 process-level + real binary acceptance verified `agent run` returns while later `agent list/status` observes the same running Run
+- [x] **ARUN-02**: Agent Run 提供稳定 `run_` identity、Workspace identity、executor、running/completed/cancelled/error 状态与时间信息，并支持 list/status/cancel。— Phase 15 unit tests cover completed/error/cancel/isolation; CLI acceptance covers list/status/idempotent cancel
+- [x] **ARUN-03**: Run 是 observed state；daemon shutdown 会取消 active Runs，restart 不得把旧 Run 误报为 running，且 Agent Control API 继续只存在于 loopback daemon boundary。— Phase 15 real binary restart changed daemon identity and returned an empty Agent list; handlers share the existing loopback Control API only
+
+### Validated — v0.4 Phase 16
+
+- [x] **FLOW-01**: Agent Run 可显式选择 production workflow executor，同时保留 `lifecycle` 默认兼容。— Phase 16 adds executor registry and `agent run --workflow verify`
+- [x] **FLOW-02**: Planner / Executor / Reviewer 通过结构化 Plan、StepResult、ReviewResult 协作，并把审计轨迹暴露在 Run status。— verify workflow records three-step plan, step outputs and review decision
+- [x] **FLOW-03**: reviewer 业务失败与 orchestration error 分离，capability/runtime 错误和 cancellation 保持明确。— unit tests cover pass/fail, missing capability and cancel race; reviewer fail keeps Run completed
+
+### Validated — v0.4 Phase 17
+
+- [x] **GSD-01**: `gsd` workflow 从 Workspace `.planning/STATE.md` 解析当前 Phase/Plan，并读取 PROJECT/CONTEXT/PLAN provenance。— process-level acceptance records planning source paths in Run status
+- [x] **GSD-02**: PLAN 的 machine Execution Spec 只能调用显式 allowlist Runtime operations，`shell.exec`/unknown operation 在执行前被拒绝。— unit tests verify forbidden operation never reaches executor
+- [x] **GSD-03**: review pass 后 STATE 只推进到仓库里预先存在且身份明确的下一 Plan；review fail、缺失/歧义、无 edit capability 都不伪推进。— same-phase/next-phase/blocked/skipped/capability tests + cross-process STATE advance acceptance
+
+### Validated — v0.4 Phase 18
+
+- [x] **PAR-01**: parent Agent Run 可在 2–8 个 managed Git worktree 上运行真实并发 lane，且 derived Runtime 复用 base EffectiveConfig 但不持久化 Workspace。— concurrency barrier + derived-runtime registry isolation tests passed
+- [x] **PAR-02**: parent review 聚合 lane verifier pass/fail，同时 infrastructure error 与 review fail 分离，并保留 lane plan/steps/review/cleanup audit。— parallel executor unit tests and process-level CLI acceptance passed
+- [x] **PAR-03**: lane roots 相互独立且不切换 main checkout；默认清理 managed worktree，`--keep-worktrees` 显式保留。— real Git acceptance verified two distinct worktree paths, removed both, and preserved main HEAD/branch
+
 ## Out of Scope — v0.3
 
 - **AGENT-01** Agent / Subagent Registry 与 orchestration — 顺延到 v0.4；先建立它所依赖的 persistent ownership boundary。
@@ -198,6 +222,8 @@ Go 的原因：单文件部署友好、并发和进程管理适合本地 runtime
 | v0.3 desired runtime state 只持久化 sorted Workspace ID 集合 | 只保存用户运行意图；daemon identity、endpoint、MCP session 和 observed health 都必须由新进程重新建立 | Accepted |
 | daemon stop 保留 desired state，显式 runtime stop 才移除 desired Workspace | clean restart 应恢复持续运行的 Workspace；用户显式停止则必须跨 restart 保持 stopped | Accepted |
 | crash recovery 通过 health probe + heartbeat lease stale reclaim 建立新 owner | crash 后旧 metadata/endpoint 不可信；reclaim 必须有 bounded wait，且旧 owner heartbeat 不得 touch 新 owner lease | Accepted |
+| Phase 15 Agent Run 是 daemon observed state，不做 desired-state persistence/resume | running goroutine/context/executor 不能跨 daemon process 恢复；后续 GSD 恢复应依赖 `.planning/` checkpoint 而不是伪恢复旧执行对象 | Accepted |
+| Phase 15 production executor 明确命名为 `lifecycle`，只验证 ownership/status/cancel | 在真实 Planner/Executor backend 尚未设计前不伪装 AI 能力；Executor contract 已被 production/tests 真实使用，Phase 16 可在同一边界接入 | Accepted |
 
 ## Evolution Rules
 

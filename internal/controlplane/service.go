@@ -92,6 +92,24 @@ func (s *Service) BuildRuntime(workspaceID string, runtimeOverride *model.Config
 	return buildRuntime(ws, cfg)
 }
 
+// BuildDerivedRuntime reuses a registered Workspace's EffectiveConfig while
+// rooting an observed-only runtime at a caller-validated derived path such as a
+// managed Git worktree. It does not persist a Workspace registry entry.
+func (s *Service) BuildDerivedRuntime(workspaceID, derivedID, path string) (runtimeadapter.Runtime, error) {
+	ws, cfg, err := s.Resolve(workspaceID, nil)
+	if err != nil {
+		return nil, err
+	}
+	derivedID = strings.TrimSpace(derivedID)
+	path = strings.TrimSpace(path)
+	if derivedID == "" || path == "" {
+		return nil, errors.New("derived runtime id and path are required")
+	}
+	ws.ID = derivedID
+	ws.Path = path
+	return buildRuntime(ws, cfg)
+}
+
 func buildRuntime(ws model.Workspace, cfg model.EffectiveConfig) (runtimeadapter.Runtime, error) {
 	runtimeID := selectedRuntimeID(ws.RuntimeID)
 	if runtimeID != NativeRuntimeID {

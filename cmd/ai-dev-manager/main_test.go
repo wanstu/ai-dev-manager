@@ -8,12 +8,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"ai-dev-manager/internal/agent"
+	"ai-dev-manager/internal/controlplane"
 	"ai-dev-manager/internal/daemon"
+	"ai-dev-manager/internal/model"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -823,6 +828,466 @@ func TestCLICtlShutdownClearsDesiredRuntimes(t *testing.T) {
 	}
 	if len(listed.Items) != 1 || listed.Items[0].State != daemon.RuntimeStopped || listed.Items[0].DesiredRunning {
 		t.Fatalf("runtime resurrected after shutdown: %+v", listed)
+	}
+}
+
+func TestCLIAgentRunLifecycleAcrossInvocationsAndRestart(t *testing.T) {
+	configRoot := t.TempDir()
+	workspaceA := t.TempDir()
+	workspaceB := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	var runAOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "run", workspaceA}, &runAOut, io.Discard); err != nil {
+		t.Fatalf("agent run A error = %v", err)
+	}
+	var runA agent.RunStatus
+	if err := json.Unmarshal(runAOut.Bytes(), &runA); err != nil {
+		t.Fatalf("decode agent run A: %v; output=%s", err, runAOut.String())
+	}
+	if runA.State != agent.StateRunning || runA.RunID == "" || runA.WorkspaceID == "" || runA.Executor != "lifecycle" {
+		t.Fatalf("agent run A = %+v", runA)
+	}
+
+	var runBOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "run", workspaceB}, &runBOut, io.Discard); err != nil {
+		t.Fatalf("agent run B error = %v", err)
+	}
+	var runB agent.RunStatus
+	if err := json.Unmarshal(runBOut.Bytes(), &runB); err != nil {
+		t.Fatalf("decode agent run B: %v", err)
+	}
+	if runB.State != agent.StateRunning || runB.RunID == runA.RunID || runB.WorkspaceID == runA.WorkspaceID {
+		t.Fatalf("agent run B = %+v; A=%+v", runB, runA)
+	}
+
+	var listOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "list"}, &listOut, io.Discard); err != nil {
+		t.Fatalf("agent list error = %v", err)
+	}
+	var listed []agent.RunStatus
+	if err := json.Unmarshal(listOut.Bytes(), &listed); err != nil {
+		t.Fatalf("decode agent list: %v; output=%s", err, listOut.String())
+	}
+	if len(listed) != 2 {
+		t.Fatalf("agent list len = %d, want 2: %+v", len(listed), listed)
+	}
+
+	var statusOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "status", runA.RunID}, &statusOut, io.Discard); err != nil {
+		t.Fatalf("agent status A error = %v", err)
+	}
+	var observedA agent.RunStatus
+	if err := json.Unmarshal(statusOut.Bytes(), &observedA); err != nil {
+		t.Fatalf("decode agent status A: %v", err)
+	}
+	if observedA.State != agent.StateRunning || observedA.RunID != runA.RunID || observedA.WorkspaceID != runA.WorkspaceID {
+		t.Fatalf("agent status A = %+v", observedA)
+	}
+
+	var cancelOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "cancel", runA.RunID}, &cancelOut, io.Discard); err != nil {
+		t.Fatalf("agent cancel A error = %v", err)
+	}
+	var cancelledA agent.RunStatus
+	if err := json.Unmarshal(cancelOut.Bytes(), &cancelledA); err != nil {
+		t.Fatalf("decode agent cancel A: %v", err)
+	}
+	if cancelledA.State != agent.StateCancelled || cancelledA.FinishedAt == nil {
+		t.Fatalf("agent cancel A = %+v", cancelledA)
+	}
+
+	var repeatCancelOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "cancel", runA.RunID}, &repeatCancelOut, io.Discard); err != nil {
+		t.Fatalf("repeat agent cancel A error = %v", err)
+	}
+	var repeated agent.RunStatus
+	if err := json.Unmarshal(repeatCancelOut.Bytes(), &repeated); err != nil {
+		t.Fatalf("decode repeat cancel A: %v", err)
+	}
+	if repeated.State != agent.StateCancelled || repeated.RunID != runA.RunID {
+		t.Fatalf("repeat agent cancel A = %+v", repeated)
+	}
+
+	var statusBOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "status", runB.RunID}, &statusBOut, io.Discard); err != nil {
+		t.Fatalf("agent status B error = %v", err)
+	}
+	var observedB agent.RunStatus
+	if err := json.Unmarshal(statusBOut.Bytes(), &observedB); err != nil {
+		t.Fatalf("decode agent status B: %v", err)
+	}
+	if observedB.State != agent.StateRunning {
+		t.Fatalf("agent B changed when A cancelled: %+v", observedB)
+	}
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "stop"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl stop with active agent error = %v", err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "start"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl start after agent stop error = %v", err)
+	}
+
+	var afterRestartOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "list"}, &afterRestartOut, io.Discard); err != nil {
+		t.Fatalf("agent list after restart error = %v", err)
+	}
+	listed = nil
+	if err := json.Unmarshal(afterRestartOut.Bytes(), &listed); err != nil {
+		t.Fatalf("decode agent list after restart: %v; output=%s", err, afterRestartOut.String())
+	}
+	if len(listed) != 0 {
+		t.Fatalf("agent runs resurrected after daemon restart: %+v", listed)
+	}
+}
+
+func TestCLIAgentVerifyWorkflowAcrossInvocations(t *testing.T) {
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "go.mod"), []byte("module example.com/phase16\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "sample.go"), []byte("package sample\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git required for verify workflow acceptance: %v", err)
+	}
+	if output, err := exec.Command(gitPath, "init", workspaceRoot).CombinedOutput(); err != nil {
+		t.Fatalf("git init error = %v output=%s", err, output)
+	}
+	goPath := filepath.Join(goruntime.GOROOT(), "bin", "go")
+	if goruntime.GOOS == "windows" {
+		goPath += ".exe"
+	}
+	if _, err := os.Stat(goPath); err != nil {
+		t.Fatalf("go tool missing at %s: %v", goPath, err)
+	}
+
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled := true
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode: "full",
+			ToolPaths: map[string]string{
+				"git": gitPath,
+				"go":  goPath,
+			},
+		},
+		Verifiers: map[string]model.VerifierDefinition{
+			"test": {ID: "test", Kind: "test", Enabled: &enabled, Executable: "go", Args: []string{"test", "./..."}},
+		},
+	}); err != nil {
+		t.Fatalf("SaveProject() error = %v", err)
+	}
+
+	var runOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "run", "--workflow", "verify", workspaceRoot}, &runOut, io.Discard); err != nil {
+		t.Fatalf("agent run --workflow verify error = %v", err)
+	}
+	var started agent.RunStatus
+	if err := json.Unmarshal(runOut.Bytes(), &started); err != nil {
+		t.Fatalf("decode verify run: %v output=%s", err, runOut.String())
+	}
+	if started.RunID == "" || started.Executor != "verify" || started.State != agent.StateRunning {
+		t.Fatalf("verify run start = %+v", started)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	var observed agent.RunStatus
+	for time.Now().Before(deadline) {
+		var statusOut bytes.Buffer
+		if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "status", started.RunID}, &statusOut, io.Discard); err != nil {
+			t.Fatalf("agent status verify error = %v", err)
+		}
+		if err := json.Unmarshal(statusOut.Bytes(), &observed); err != nil {
+			t.Fatalf("decode verify status: %v output=%s", err, statusOut.String())
+		}
+		if observed.State != agent.StateRunning {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if observed.State != agent.StateCompleted {
+		t.Fatalf("verify workflow state = %+v", observed)
+	}
+	if observed.Workflow != "verify" || observed.Stage != agent.StageCompleted || observed.Plan == nil || len(observed.Plan.Steps) != 3 || len(observed.Steps) != 3 {
+		t.Fatalf("verify workflow audit trail = %+v", observed)
+	}
+	if observed.Review == nil || observed.Review.Decision != agent.ReviewPass {
+		t.Fatalf("verify workflow review = %+v", observed.Review)
+	}
+}
+
+func TestCLIAgentGSDWorkflowAcrossInvocations(t *testing.T) {
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	writeFixture := func(path, content string) {
+		t.Helper()
+		full := filepath.Join(workspaceRoot, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFixture("sample.txt", "before\n")
+	writeFixture("go.mod", "module example.com/gsdfixture\n\ngo 1.25\n")
+	writeFixture("sample.go", "package sample\n\nfunc Add(a, b int) int { return a + b }\n")
+	writeFixture(".planning/PROJECT.md", "# Project\n")
+	writeFixture(".planning/STATE.md", "## Current Position\n\nPhase: 1 — Fixture Phase\nPlan: 01-01 — Fixture Plan\nStatus: In Progress\n")
+	writeFixture(".planning/phases/01-fixture/01-CONTEXT.md", "# Context\n")
+	writeFixture(".planning/phases/01-fixture/01-01-PLAN.md", `# Plan
+
+## Execution Spec
+
+`+"```json"+`
+{
+  "steps": [
+    {
+      "id": "edit-sample",
+      "operation": "files.edit",
+      "purpose": "apply fixture edit",
+      "input": {
+        "path": "sample.txt",
+        "old_text": "before",
+        "new_text": "after",
+        "expected_replacements": 1
+      }
+    }
+  ],
+  "run_verifiers": true
+}
+`+"```"+`
+`)
+	writeFixture(".planning/phases/01-fixture/01-02-PLAN.md", "# Phase 1 Plan 01-02 — Next Fixture Plan\n")
+
+	goPath := filepath.Join(goruntime.GOROOT(), "bin", "go")
+	if goruntime.GOOS == "windows" {
+		goPath += ".exe"
+	}
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled := true
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode:               "standard",
+			AllowedExecutables: []string{"go"},
+			ToolPaths:          map[string]string{"go": goPath},
+		},
+		Verifiers: map[string]model.VerifierDefinition{
+			"test": {ID: "test", Kind: "test", Enabled: &enabled, Executable: "go", Args: []string{"test", "./..."}},
+		},
+	}); err != nil {
+		t.Fatalf("SaveProject() error = %v", err)
+	}
+
+	var runOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "run", "--workflow", "gsd", workspaceRoot}, &runOut, io.Discard); err != nil {
+		t.Fatalf("agent run --workflow gsd error = %v", err)
+	}
+	var started agent.RunStatus
+	if err := json.Unmarshal(runOut.Bytes(), &started); err != nil {
+		t.Fatalf("decode gsd run: %v output=%s", err, runOut.String())
+	}
+	if started.Executor != "gsd" || started.State != agent.StateRunning {
+		t.Fatalf("gsd run start = %+v", started)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	var observed agent.RunStatus
+	for time.Now().Before(deadline) {
+		var statusOut bytes.Buffer
+		if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "status", started.RunID}, &statusOut, io.Discard); err != nil {
+			t.Fatalf("agent status gsd error = %v", err)
+		}
+		if err := json.Unmarshal(statusOut.Bytes(), &observed); err != nil {
+			t.Fatalf("decode gsd status: %v output=%s", err, statusOut.String())
+		}
+		if observed.State != agent.StateRunning {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if observed.State != agent.StateCompleted || observed.Review == nil || observed.Review.Decision != agent.ReviewPass {
+		t.Fatalf("gsd workflow result = %+v", observed)
+	}
+	if observed.Plan == nil || observed.Plan.Planning == nil || observed.Plan.Planning.Phase != 1 || observed.Plan.Planning.PlanID != "01-01" {
+		t.Fatalf("gsd planning provenance = %+v", observed.Plan)
+	}
+	if observed.Advance == nil || observed.Advance.Status != agent.AdvanceAdvanced || observed.Advance.ToPhase != 1 || observed.Advance.ToPlan != "01-02" {
+		t.Fatalf("gsd advance result = %+v", observed.Advance)
+	}
+	edited, err := os.ReadFile(filepath.Join(workspaceRoot, "sample.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(edited) != "after\n" {
+		t.Fatalf("GSD edit result = %q, want after", edited)
+	}
+	stateData, err := os.ReadFile(filepath.Join(workspaceRoot, ".planning", "STATE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateText := string(stateData)
+	if !strings.Contains(stateText, "Plan: 01-02 — Next Fixture Plan") || !strings.Contains(stateText, "Status: In Progress") {
+		t.Fatalf("GSD STATE was not advanced to pre-existing next plan: %s", stateText)
+	}
+}
+
+func TestCLIAgentParallelVerifyWorktreesAcrossInvocations(t *testing.T) {
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git required for parallel worktree acceptance: %v", err)
+	}
+	gitRun := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(gitPath, args...)
+		cmd.Dir = workspaceRoot
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s error = %v output=%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	gitRun("init")
+	gitRun("config", "user.email", "phase18@example.invalid")
+	gitRun("config", "user.name", "Phase 18")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "go.mod"), []byte("module example.com/phase18\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "sample.go"), []byte("package sample\n\nfunc Add(a, b int) int { return a + b }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun("add", "go.mod", "sample.go")
+	gitRun("commit", "-m", "baseline")
+	gitRun("branch", "-M", "main")
+	beforeHead := gitRun("rev-parse", "HEAD")
+	beforeBranch := gitRun("branch", "--show-current")
+
+	goPath := filepath.Join(goruntime.GOROOT(), "bin", "go")
+	if goruntime.GOOS == "windows" {
+		goPath += ".exe"
+	}
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled := true
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode: "full",
+			ToolPaths: map[string]string{
+				"git": gitPath,
+				"go":  goPath,
+			},
+		},
+		Verifiers: map[string]model.VerifierDefinition{
+			"test": {ID: "test", Kind: "test", Enabled: &enabled, Executable: "go", Args: []string{"test", "./..."}},
+		},
+	}); err != nil {
+		t.Fatalf("SaveProject() error = %v", err)
+	}
+
+	var runOut bytes.Buffer
+	args := []string{
+		"--config-root", configRoot, "--json", "agent", "run",
+		"--workflow", "parallel-verify",
+		"--lane", "p18-a:p18-branch-a",
+		"--lane", "p18-b:p18-branch-b",
+		workspaceRoot,
+	}
+	if err := run(context.Background(), args, &runOut, io.Discard); err != nil {
+		t.Fatalf("parallel agent run error = %v", err)
+	}
+	var started agent.RunStatus
+	if err := json.Unmarshal(runOut.Bytes(), &started); err != nil {
+		t.Fatalf("decode parallel run: %v output=%s", err, runOut.String())
+	}
+	if started.Executor != "parallel-verify" || started.State != agent.StateRunning {
+		t.Fatalf("parallel start = %+v", started)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	var observed agent.RunStatus
+	for time.Now().Before(deadline) {
+		var statusOut bytes.Buffer
+		if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "agent", "status", started.RunID}, &statusOut, io.Discard); err != nil {
+			t.Fatalf("parallel status error = %v", err)
+		}
+		if err := json.Unmarshal(statusOut.Bytes(), &observed); err != nil {
+			t.Fatalf("decode parallel status: %v output=%s", err, statusOut.String())
+		}
+		if observed.State != agent.StateRunning {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if observed.State != agent.StateCompleted || observed.Review == nil || observed.Review.Decision != agent.ReviewPass || observed.Parallel == nil {
+		t.Fatalf("parallel result = %+v", observed)
+	}
+	if len(observed.Parallel.Lanes) != 2 {
+		t.Fatalf("parallel lane count = %+v", observed.Parallel)
+	}
+	paths := map[string]bool{}
+	for _, lane := range observed.Parallel.Lanes {
+		if lane.State != agent.ParallelLaneCompleted || lane.Review == nil || lane.Review.Decision != agent.ReviewPass || lane.Cleanup != "removed" {
+			t.Fatalf("parallel lane audit = %+v", lane)
+		}
+		if lane.WorktreePath == "" {
+			t.Fatalf("lane missing worktree path: %+v", lane)
+		}
+		paths[strings.ToLower(filepath.Clean(lane.WorktreePath))] = true
+		if _, err := os.Stat(lane.WorktreePath); !os.IsNotExist(err) {
+			t.Fatalf("lane worktree still exists after cleanup: path=%s err=%v", lane.WorktreePath, err)
+		}
+	}
+	if len(paths) != 2 {
+		t.Fatalf("parallel lanes shared a worktree root: %+v", observed.Parallel.Lanes)
+	}
+	if afterHead := gitRun("rev-parse", "HEAD"); afterHead != beforeHead {
+		t.Fatalf("main HEAD changed: %s -> %s", beforeHead, afterHead)
+	}
+	if afterBranch := gitRun("branch", "--show-current"); afterBranch != beforeBranch {
+		t.Fatalf("main branch changed: %s -> %s", beforeBranch, afterBranch)
+	}
+	worktreeList := gitRun("worktree", "list", "--porcelain")
+	if strings.Count(worktreeList, "worktree ") != 1 {
+		t.Fatalf("managed worktrees not cleaned up:\n%s", worktreeList)
 	}
 }
 

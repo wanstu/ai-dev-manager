@@ -69,14 +69,29 @@ func (r *Native) GitStatus() ([]GitStatusEntry, error) {
 }
 
 func (r *Native) GitDiff() (GitDiff, error) {
-	filesResult, err := r.gitExec("diff", "HEAD", "--name-only", "-z", "--")
+	headResult, err := r.gitExec("rev-parse", "--verify", "HEAD")
+	if err != nil {
+		return GitDiff{}, err
+	}
+	baseArgs := []string{"HEAD"}
+	if headResult.ExitCode != 0 {
+		// On an unborn branch there is no HEAD yet. Diff the index instead of
+		// failing with exit code 128; untracked files remain represented by
+		// GitStatus while staged initial content can still produce a patch.
+		baseArgs = []string{"--cached"}
+	}
+	filesArgs := append([]string{"diff"}, baseArgs...)
+	filesArgs = append(filesArgs, "--name-only", "-z", "--")
+	filesResult, err := r.gitExec(filesArgs...)
 	if err != nil {
 		return GitDiff{}, err
 	}
 	if filesResult.ExitCode != 0 {
 		return GitDiff{}, gitResultError("diff --name-only", filesResult)
 	}
-	patchResult, err := r.gitExec("diff", "HEAD", "--no-ext-diff", "--unified=3", "--")
+	patchArgs := append([]string{"diff"}, baseArgs...)
+	patchArgs = append(patchArgs, "--no-ext-diff", "--unified=3", "--")
+	patchResult, err := r.gitExec(patchArgs...)
 	if err != nil {
 		return GitDiff{}, err
 	}

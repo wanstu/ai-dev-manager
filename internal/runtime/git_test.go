@@ -46,6 +46,36 @@ func TestGitStatusDiffBranchWithRealRepository(t *testing.T) {
 	}
 }
 
+func TestGitDiffSupportsUnbornHead(t *testing.T) {
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git executable not available: %v", err)
+	}
+	gitPath, err = filepath.Abs(gitPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	gitTestRun(t, gitPath, root, "init")
+	if err := os.WriteFile(filepath.Join(root, "source.txt"), []byte("hello unborn\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, root, "add", "source.txt")
+	runtime := mustNativeWithID(t, "ws_git_unborn", root, model.Policy{
+		Mode:               string(ModeStandard),
+		AllowedExecutables: []string{"git"},
+		ToolPaths:          map[string]string{"git": gitPath},
+	}, nil)
+
+	diff, err := runtime.GitDiff()
+	if err != nil {
+		t.Fatalf("GitDiff() on unborn HEAD error = %v", err)
+	}
+	if len(diff.Files) != 1 || diff.Files[0] != "source.txt" || !strings.Contains(diff.Patch, "hello unborn") {
+		t.Fatalf("unexpected unborn diff: files=%+v patch=%q", diff.Files, diff.Patch)
+	}
+}
+
 func TestGitAPIDeniedWhenGitNotAllowed(t *testing.T) {
 	root, _ := initGitRepository(t)
 	runtime := mustNativeWithID(t, "ws_git_denied", root, model.Policy{

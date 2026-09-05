@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"ai-dev-manager/internal/adapter/runtimeadapter"
 	"ai-dev-manager/internal/model"
 	"ai-dev-manager/internal/workspace"
 
@@ -277,6 +278,61 @@ func TestServiceConfiguredMCPActivationHonorsWorkspaceDisable(t *testing.T) {
 	}
 	if err := service.StopConfiguredMCPs(wsB.ID); err != nil {
 		t.Fatalf("StopConfiguredMCPs(B) error = %v", err)
+	}
+}
+
+func TestBuildDerivedRuntimeReusesConfigWithoutPersistingWorkspace(t *testing.T) {
+	service, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseRoot := t.TempDir()
+	derivedRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(baseRoot, "root.txt"), []byte("base"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(derivedRoot, "root.txt"), []byte("derived"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := service.Registry().Add(workspace.Input{Path: baseRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Store().SaveProject(baseRoot, model.ConfigLayer{
+		Scope:  model.ScopeProject,
+		Policy: &model.Policy{Mode: "read-only"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := service.Registry().List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	derived, err := service.BuildDerivedRuntime(ws.ID, "lane:one", derivedRoot)
+	if err != nil {
+		t.Fatalf("BuildDerivedRuntime() error = %v", err)
+	}
+	if derived.WorkspaceID() != "lane:one" || !contains(derived.Capabilities(), runtimeadapter.OpRead) {
+		t.Fatalf("derived runtime identity/capabilities = id:%q caps:%v", derived.WorkspaceID(), derived.Capabilities())
+	}
+	output, err := derived.Invoke(context.Background(), runtimeadapter.OpRead, map[string]any{"path": "root.txt"})
+	if err != nil {
+		t.Fatalf("derived read error = %v", err)
+	}
+	data, err := json.Marshal(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "derived") || strings.Contains(string(data), "base") {
+		t.Fatalf("derived runtime read wrong root: %s", data)
+	}
+	after, err := service.Registry().List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("derived runtime persisted registry entry: before=%d after=%d", len(before), len(after))
 	}
 }
 
