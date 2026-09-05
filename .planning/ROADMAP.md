@@ -374,23 +374,50 @@
 - derived Runtime 复用 base EffectiveConfig，但 root/identity observed-only 且不写 Workspace Registry。
 - parent review 聚合 lane pass/fail；默认清理 worktree，`--keep-worktrees` 显式保留；不自动 merge/删除 branch。
 
+## Milestone v0.5 — Multi-Task Development Environments ✅ Completed 2026-09-05
+
+**Goal:** 解决同一工程同时开发多个需求时 dirty checkout 相互污染的问题。把 Phase 18 已验证的 managed worktree + derived Runtime 从临时 lane 提升为持久的一等 Environment；先让 Environment Core 可靠可用，不内置新的 AI Agent，也不以 UI 驱动架构。
+
+### Phase 19 — Persistent Environment Lifecycle ✅ Completed 2026-09-05
+- 稳定 `env_` identity 与持久 Environment Registry。
+- Environment 绑定 base Workspace、name、base ref/base commit、branch、managed worktree path 与 lifecycle state。
+- 默认从创建时当前 checkout HEAD 建立，允许显式 base branch/tag/commit。
+- 默认 branch `adm/<sanitized-name>`；已有 branch 明确冲突，不偷偷生成新 branch。
+- daemon restart 后重新发现/重建 Environment Runtime context，不持久化内存 Runtime object。
+- CLI / Control API 已形成 create/list/inspect/destroy 最小闭环；真实 Git + daemon restart acceptance 通过。
+
+### Phase 20 — Dirty Change Transfer & Safe Destruction ✅ Completed 2026-09-05
+- main checkout dirty 时默认从 HEAD 创建并明确报告未带入的修改。
+- `include_changes=true` 已验证复制 staged + unstaged + untracked，保留 partially-staged 语义并排除 ignored 文件；binary patch 通过真实 Git acceptance。
+- destroy 已验证对 dirty / unpushed work 默认拒绝，显式 force 才允许潜在数据丢失；pushed+clean 可普通 destroy。
+- Environment 不自动 commit、merge、squash、cherry-pick、push 或删除 branch；跨进程 daemon restart acceptance 通过。
+
+### Phase 21 — Environment State / Writer Guard / Base Facts ✅ Completed 2026-09-05
+- Environment activity/stale 已作为纯状态事实；7 天 inactivity 只提示，不自动清理或释放 writer。
+- 持久 single-writer lease 已验证：同 owner renew、第二 owner conflict、显式 release/force release，并跨 daemon restart 保留。
+- inspect 已报告 base ahead/behind/divergence/base_moved、dirty、upstream、branch/worktree、activity/writer 等事实。
+- 明显 divergence 或 behind>=10 时最多返回一条非指令性确认 hint，不返回强制 rebase/merge 指令。
+- base 不自动同步；rebase/merge/push/commit 仍属于 Agent/用户显式开发决策；真实 Git + cross-process CLI + full gate 全部通过。
+
 ## Later Milestones
 
-### v0.5 — Docker / Process / Debug
-- Docker ps / compose / logs / inspect。
-- Process start/stop/status/logs。
-- 开发服务器启动、日志读取、接口验证闭环。
-- Debug / DAP feasibility。
+### v0.6 — Agent MCP Gateway
+- 外部 Agent 只配置一个 ADM MCP，而不是每个 Environment 配一个 MCP。
+- 通过 `environment_id` 将 files/search/edit/git/verify 等能力安全路由到对应 Runtime。
+- 优先设计 Agent-friendly schema、facts/warnings/hints、可恢复错误与 capability discovery。
+- ChatGPT / Codex / Claude Code / OpenCode / WorkBuddy / CodexPro 都作为外部调用方，而不是 ADM 内置 Agent。
 
-### v0.6 — Compatibility
-- DevSpace adapter 完善。
-- CodexPro / codexprov4 adapter。
-- Codex CLI / Claude Code / OpenCode executor adapters。
+### v0.7 — Development Environment Capabilities
+- 根据真实使用补 Process / dev server / logs / ports / HTTP verification。
+- Docker structured capability 仅在它能改善 Environment 开发体验时加入。
+- 远端 Agent 连接开发机器上的 ADM MCP 属于 MCP exposure/auth 问题，不引入无必要的 SSH Remote Runtime。
+- Debug / DAP 在真实需求证明后再进入。
 
-### v0.7 — UI / Remote Access
-- 独立 Desktop UI 是否需要，在此时再决定。
-- codexprov4 UI integration。
-- HTTPS / tunnel / auth / remote lifecycle。
+### v0.8 — Human Experience / Manager
+- 先改善 CLI，再按真实需求决定 TUI/Desktop UI。
+- `codexpro-plus` 稳定版保持原 CodexPro 进程管理功能；若验证 ADM Manager，使用 fork/独立实验版本。
+- Agent Manager 保留为可选 orchestration capability，不成为前期产品中心。
+- CodexPro / DevSpace / 其他 runtime compatibility 继续通过 Adapter 演进。
 
 ## Requirement Traceability
 
@@ -415,6 +442,9 @@
 | LIFE-01..03 | 10 |
 | LIFE-04..06 | 11 |
 | LIFE-07..08 | 12 |
+| ENV-01..02, ENV-04..05, ENV-09, UX-01 foundation | 19 |
+| ENV-03, ENV-07 | 20 |
+| ENV-06, ENV-08, UX-01 completion | 21 |
 
 ## GSD Development Rules
 

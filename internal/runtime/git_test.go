@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +74,55 @@ func TestGitDiffSupportsUnbornHead(t *testing.T) {
 	}
 	if len(diff.Files) != 1 || diff.Files[0] != "source.txt" || !strings.Contains(diff.Patch, "hello unborn") {
 		t.Fatalf("unexpected unborn diff: files=%+v patch=%q", diff.Files, diff.Patch)
+	}
+}
+
+func TestGitWorktreeCreateAtSupportsExplicitBaseAndSlashBranch(t *testing.T) {
+	root, gitPath := initGitRepository(t)
+	if err := os.WriteFile(filepath.Join(root, "second.txt"), []byte("second\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitTestRun(t, gitPath, root, "add", "second.txt")
+	gitTestRun(t, gitPath, root, "commit", "-m", "second")
+	secondHead := gitTestOutput(t, gitPath, root, "rev-parse", "HEAD")
+	firstHead := gitTestOutput(t, gitPath, root, "rev-parse", "HEAD~1")
+
+	runtime := mustNativeWithID(t, "ws_git_worktree_base", root, model.Policy{
+		Mode:               string(ModeStandard),
+		AllowedExecutables: []string{"git"},
+		ToolPaths:          map[string]string{"git": gitPath},
+	}, nil)
+
+	resolved, err := runtime.GitResolveRef("HEAD~1")
+	if err != nil {
+		t.Fatalf("GitResolveRef() error = %v", err)
+	}
+	if resolved != firstHead {
+		t.Fatalf("resolved = %q, want %q", resolved, firstHead)
+	}
+
+	created, err := runtime.GitWorktreeCreateAt("env-one", "adm/coupon-share", firstHead)
+	if err != nil {
+		t.Fatalf("GitWorktreeCreateAt() error = %v", err)
+	}
+	if created.Head != firstHead {
+		t.Fatalf("created head = %q, want %q (main head %q)", created.Head, firstHead, secondHead)
+	}
+	if got := gitTestOutput(t, gitPath, created.Path, "branch", "--show-current"); got != "adm/coupon-share" {
+		t.Fatalf("created branch = %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(created.Path, "second.txt")); !os.IsNotExist(err) {
+		t.Fatalf("explicit-base worktree unexpectedly contains later file, stat err = %v", err)
+	}
+
+	if _, err := runtime.GitWorktreeCreateAt("env-two", "adm/coupon-share", "HEAD"); !errors.Is(err, ErrGitBranchExists) {
+		t.Fatalf("existing branch error = %v, want ErrGitBranchExists", err)
+	}
+	if _, err := runtime.GitWorktreeCreateAt("env-three", "--bad", "HEAD"); err == nil {
+		t.Fatal("option-like branch unexpectedly accepted")
+	}
+	if _, err := runtime.GitResolveRef("--bad"); err == nil {
+		t.Fatal("option-like ref unexpectedly accepted")
 	}
 }
 

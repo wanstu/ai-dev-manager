@@ -18,6 +18,7 @@ import (
 	"ai-dev-manager/internal/agent"
 	"ai-dev-manager/internal/controlplane"
 	"ai-dev-manager/internal/daemon"
+	"ai-dev-manager/internal/environment"
 	"ai-dev-manager/internal/model"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -1288,6 +1289,423 @@ func TestCLIAgentParallelVerifyWorktreesAcrossInvocations(t *testing.T) {
 	worktreeList := gitRun("worktree", "list", "--porcelain")
 	if strings.Count(worktreeList, "worktree ") != 1 {
 		t.Fatalf("managed worktrees not cleaned up:\n%s", worktreeList)
+	}
+}
+
+func TestCLIEnvironmentLifecycleAcrossDaemonRestart(t *testing.T) {
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git required for environment acceptance: %v", err)
+	}
+	gitRun := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command(gitPath, args...)
+		cmd.Dir = workspaceRoot
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s error = %v output=%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	gitRun("init")
+	gitRun("config", "user.email", "phase19@example.invalid")
+	gitRun("config", "user.name", "Phase 19")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun("add", "source.txt")
+	gitRun("commit", "-m", "one")
+	gitRun("branch", "-M", "dev")
+	firstHead := gitRun("rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "second.txt"), []byte("second\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun("add", "source.txt", "second.txt")
+	gitRun("commit", "-m", "two")
+	secondHead := gitRun("rev-parse", "HEAD")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("dirty-main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode:               "standard",
+			AllowedExecutables: []string{"git"},
+			ToolPaths:          map[string]string{"git": gitPath},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	create := func(name string, extra ...string) environment.InspectResult {
+		t.Helper()
+		args := []string{"--config-root", configRoot, "--json", "env", "create", "--name", name}
+		args = append(args, extra...)
+		args = append(args, workspaceRoot)
+		var out bytes.Buffer
+		if err := run(context.Background(), args, &out, io.Discard); err != nil {
+			t.Fatalf("env create %s error = %v", name, err)
+		}
+		var result environment.InspectResult
+		if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+			t.Fatalf("decode env create %s: %v output=%s", name, err, out.String())
+		}
+		return result
+	}
+
+	a := create("phase19-a")
+	b := create("phase19-b", "--base", firstHead)
+	if a.Environment.ID == "" || b.Environment.ID == "" || a.Environment.ID == b.Environment.ID {
+		t.Fatalf("invalid environment identities: A=%+v B=%+v", a.Environment, b.Environment)
+	}
+	if a.Environment.BaseRef != "dev" || a.Environment.BaseCommit != secondHead {
+		t.Fatalf("default environment base = %+v", a.Environment)
+	}
+	if b.Environment.BaseCommit != firstHead {
+		t.Fatalf("explicit base = %q, want %q", b.Environment.BaseCommit, firstHead)
+	}
+	if len(a.Warnings) == 0 || a.Warnings[0].Code != "changes_not_included" {
+		t.Fatalf("dirty main warning missing: %+v", a.Warnings)
+	}
+	if samePathForTest(a.Environment.WorktreePath, b.Environment.WorktreePath) {
+		t.Fatalf("environments share worktree path: %q", a.Environment.WorktreePath)
+	}
+	if got := strings.TrimSpace(string(mustReadFile(t, filepath.Join(a.Environment.WorktreePath, "source.txt")))); got != "two" {
+		t.Fatalf("dirty main leaked into A: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(b.Environment.WorktreePath, "second.txt")); !os.IsNotExist(err) {
+		t.Fatalf("explicit old base contains second.txt: %v", err)
+	}
+
+	var listOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "list"}, &listOut, io.Discard); err != nil {
+		t.Fatalf("env list error = %v", err)
+	}
+	var listed []environment.Environment
+	if err := json.Unmarshal(listOut.Bytes(), &listed); err != nil || len(listed) != 2 {
+		t.Fatalf("env list = %+v, decode err=%v output=%s", listed, err, listOut.String())
+	}
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "stop"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl stop error = %v", err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "start"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl start error = %v", err)
+	}
+	var inspectOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "inspect", a.Environment.ID}, &inspectOut, io.Discard); err != nil {
+		t.Fatalf("env inspect after restart error = %v", err)
+	}
+	var inspected environment.InspectResult
+	if err := json.Unmarshal(inspectOut.Bytes(), &inspected); err != nil {
+		t.Fatalf("decode env inspect: %v output=%s", err, inspectOut.String())
+	}
+	if inspected.Environment.ID != a.Environment.ID || inspected.Environment.State != environment.StateReady {
+		t.Fatalf("inspect after restart = %+v", inspected.Environment)
+	}
+
+	if err := os.WriteFile(filepath.Join(a.Environment.WorktreePath, "source.txt"), []byte("dirty-a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "env", "destroy", a.Environment.ID}, io.Discard, io.Discard); err == nil {
+		t.Fatal("dirty environment destroy unexpectedly succeeded")
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "env", "destroy", b.Environment.ID}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("clean environment destroy error = %v", err)
+	}
+	if _, err := os.Stat(b.Environment.WorktreePath); !os.IsNotExist(err) {
+		t.Fatalf("destroyed worktree still exists: %v", err)
+	}
+	if got := gitRun("branch", "--list", "adm/phase19-b"); !strings.Contains(got, "adm/phase19-b") {
+		t.Fatalf("destroy deleted branch: %q", got)
+	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func samePathForTest(left, right string) bool {
+	return strings.EqualFold(filepath.Clean(left), filepath.Clean(right))
+}
+
+func TestCLIEnvironmentIncludeChangesAndForceAcrossRestart(t *testing.T) {
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git required for Phase 20 acceptance: %v", err)
+	}
+	gitRun := func(cwd string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command(gitPath, args...)
+		cmd.Dir = cwd
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s error = %v output=%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	gitRun(workspaceRoot, "init")
+	gitRun(workspaceRoot, "config", "user.email", "phase20@example.invalid")
+	gitRun(workspaceRoot, "config", "user.name", "Phase 20")
+	gitRun(workspaceRoot, "config", "core.autocrlf", "false")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".gitignore"), []byte("*.tmp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(workspaceRoot, "add", ".gitignore", "source.txt")
+	gitRun(workspaceRoot, "commit", "-m", "baseline")
+	gitRun(workspaceRoot, "branch", "-M", "dev")
+
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode:               "standard",
+			AllowedExecutables: []string{"git"},
+			ToolPaths:          map[string]string{"git": gitPath},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("staged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(workspaceRoot, "add", "source.txt")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("staged\nunstaged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "note.txt"), []byte("note\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "secret.tmp"), []byte("ignored\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var createOut bytes.Buffer
+	if err := run(context.Background(), []string{
+		"--config-root", configRoot, "--json", "env", "create",
+		"--name", "phase20-transfer", "--include-changes", workspaceRoot,
+	}, &createOut, io.Discard); err != nil {
+		t.Fatalf("env create --include-changes error = %v", err)
+	}
+	var created environment.InspectResult
+	if err := json.Unmarshal(createOut.Bytes(), &created); err != nil {
+		t.Fatalf("decode include-changes create: %v output=%s", err, createOut.String())
+	}
+	if created.Environment.State != environment.StateReady || created.Environment.Metadata["changes_included"] != "true" {
+		t.Fatalf("created environment = %+v", created.Environment)
+	}
+	if staged := gitRun(created.Environment.WorktreePath, "diff", "--cached", "--name-only"); !strings.Contains(staged, "source.txt") {
+		t.Fatalf("staged state not transferred: %q", staged)
+	}
+	if unstaged := gitRun(created.Environment.WorktreePath, "diff", "--name-only"); !strings.Contains(unstaged, "source.txt") {
+		t.Fatalf("unstaged state not transferred: %q", unstaged)
+	}
+	if got := strings.TrimSpace(string(mustReadFile(t, filepath.Join(created.Environment.WorktreePath, "note.txt")))); got != "note" {
+		t.Fatalf("untracked file not transferred: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(created.Environment.WorktreePath, "secret.tmp")); !os.IsNotExist(err) {
+		t.Fatalf("ignored file transferred: %v", err)
+	}
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "stop"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl stop error = %v", err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "start"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl start error = %v", err)
+	}
+	var inspectOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "inspect", created.Environment.ID}, &inspectOut, io.Discard); err != nil {
+		t.Fatalf("env inspect after restart error = %v", err)
+	}
+	var inspected environment.InspectResult
+	if err := json.Unmarshal(inspectOut.Bytes(), &inspected); err != nil || inspected.Environment.State != environment.StateReady {
+		t.Fatalf("inspect after restart = %+v decode=%v", inspected.Environment, err)
+	}
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "env", "destroy", created.Environment.ID}, io.Discard, io.Discard); err == nil {
+		t.Fatal("normal destroy unexpectedly accepted transferred dirty environment")
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "env", "destroy", "--force", created.Environment.ID}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("env destroy --force error = %v", err)
+	}
+	if _, err := os.Stat(created.Environment.WorktreePath); !os.IsNotExist(err) {
+		t.Fatalf("force destroy left worktree: %v", err)
+	}
+	if branch := gitRun(workspaceRoot, "branch", "--list", created.Environment.Branch); !strings.Contains(branch, created.Environment.Branch) {
+		t.Fatalf("force destroy deleted branch: %q", branch)
+	}
+}
+
+func TestCLIEnvironmentWriterAndBaseFactsAcrossRestart(t *testing.T) {
+	configRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, _ = daemon.Stop(ctx, configRoot)
+	})
+
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("git required for Phase 21 acceptance: %v", err)
+	}
+	gitRun := func(cwd string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command(gitPath, args...)
+		cmd.Dir = cwd
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s error = %v output=%s", strings.Join(args, " "), err, output)
+		}
+		return strings.TrimSpace(string(output))
+	}
+	gitRun(workspaceRoot, "init")
+	gitRun(workspaceRoot, "config", "user.email", "phase21@example.invalid")
+	gitRun(workspaceRoot, "config", "user.name", "Phase 21")
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "source.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(workspaceRoot, "add", "source.txt")
+	gitRun(workspaceRoot, "commit", "-m", "baseline")
+	gitRun(workspaceRoot, "branch", "-M", "dev")
+
+	service, err := controlplane.New(configRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Store().SaveProject(workspaceRoot, model.ConfigLayer{
+		Scope: model.ScopeProject,
+		Policy: &model.Policy{
+			Mode:               "standard",
+			AllowedExecutables: []string{"git"},
+			ToolPaths:          map[string]string{"git": gitPath},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var createOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "create", "--name", "phase21-writer", workspaceRoot}, &createOut, io.Discard); err != nil {
+		t.Fatalf("env create error = %v", err)
+	}
+	var created environment.InspectResult
+	if err := json.Unmarshal(createOut.Bytes(), &created); err != nil {
+		t.Fatalf("decode create: %v output=%s", err, createOut.String())
+	}
+	if created.Environment.ID == "" || created.Environment.WorktreePath == "" {
+		t.Fatalf("created environment = %+v", created.Environment)
+	}
+	envHead := gitRun(created.Environment.WorktreePath, "rev-parse", "HEAD")
+
+	var acquireOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "writer", "acquire", "--owner", "owner-a", created.Environment.ID}, &acquireOut, io.Discard); err != nil {
+		t.Fatalf("writer acquire error = %v", err)
+	}
+	var acquired environment.Environment
+	if err := json.Unmarshal(acquireOut.Bytes(), &acquired); err != nil || acquired.Writer == nil || acquired.Writer.Owner != "owner-a" {
+		t.Fatalf("writer acquire = %+v decode=%v output=%s", acquired.Writer, err, acquireOut.String())
+	}
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "stop"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl stop error = %v", err)
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "ctl", "start"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("ctl start error = %v", err)
+	}
+
+	var inspectOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "inspect", created.Environment.ID}, &inspectOut, io.Discard); err != nil {
+		t.Fatalf("inspect after restart error = %v", err)
+	}
+	var inspected environment.InspectResult
+	if err := json.Unmarshal(inspectOut.Bytes(), &inspected); err != nil {
+		t.Fatalf("decode inspect after restart: %v output=%s", err, inspectOut.String())
+	}
+	if inspected.Environment.Writer == nil || inspected.Environment.Writer.Owner != "owner-a" {
+		t.Fatalf("writer did not survive restart: %+v", inspected.Environment.Writer)
+	}
+	if strings.Contains(inspectOut.String(), "required_action") || strings.Contains(inspectOut.String(), "next_step") {
+		t.Fatalf("inspect exposed prescriptive action fields: %s", inspectOut.String())
+	}
+
+	if err := run(context.Background(), []string{"--config-root", configRoot, "env", "writer", "acquire", "--owner", "owner-b", created.Environment.ID}, io.Discard, io.Discard); err == nil {
+		t.Fatal("second writer unexpectedly acquired Environment")
+	}
+	if err := run(context.Background(), []string{"--config-root", configRoot, "env", "writer", "acquire", "--owner", "owner-a", created.Environment.ID}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("same writer renew error = %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "base-new.txt"), []byte("new base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(workspaceRoot, "add", "base-new.txt")
+	gitRun(workspaceRoot, "commit", "-m", "base advances")
+
+	inspectOut.Reset()
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "inspect", created.Environment.ID}, &inspectOut, io.Discard); err != nil {
+		t.Fatalf("inspect after base advance error = %v", err)
+	}
+	if err := json.Unmarshal(inspectOut.Bytes(), &inspected); err != nil {
+		t.Fatalf("decode inspect after base advance: %v", err)
+	}
+	behind := -1
+	for _, fact := range inspected.Facts {
+		if fact.Code == "behind" {
+			if value, ok := fact.Value.(float64); ok {
+				behind = int(value)
+			}
+		}
+	}
+	if behind != 1 {
+		t.Fatalf("behind = %d, want 1; facts=%+v", behind, inspected.Facts)
+	}
+	if got := gitRun(created.Environment.WorktreePath, "rev-parse", "HEAD"); got != envHead {
+		t.Fatalf("inspect auto-synchronized Environment HEAD: %s -> %s", envHead, got)
+	}
+
+	var releaseOut bytes.Buffer
+	if err := run(context.Background(), []string{"--config-root", configRoot, "--json", "env", "writer", "release", "--force", created.Environment.ID}, &releaseOut, io.Discard); err != nil {
+		t.Fatalf("force writer release error = %v", err)
+	}
+	var released environment.Environment
+	if err := json.Unmarshal(releaseOut.Bytes(), &released); err != nil || released.Writer != nil {
+		t.Fatalf("force release result writer=%+v decode=%v output=%s", released.Writer, err, releaseOut.String())
 	}
 }
 

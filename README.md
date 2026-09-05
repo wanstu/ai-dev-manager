@@ -109,6 +109,33 @@ Phase 18 增加真实 managed-worktree 并行验证：
 
 `parallel-verify` 要求 2–8 个唯一 lane。每个 lane 先通过现有 managed Git worktree API 创建隔离 checkout，再用 base Workspace 的 EffectiveConfig 构建 observed-only derived Runtime，并发执行 verify workflow。Parent Run 聚合 lane review；默认执行后删除 worktree，增加 `--keep-worktrees` 可显式保留。不会自动 merge、删除 branch 或切换 main checkout。
 
+v0.5 Phase 19 开始把这套 managed worktree 能力产品化为持久 Environment：
+
+```powershell
+.\ai-dev-manager.exe env create --name coupon-share
+.\ai-dev-manager.exe env create --name hotfix --base master
+.\ai-dev-manager.exe env list
+.\ai-dev-manager.exe env inspect <env-id>
+.\ai-dev-manager.exe env destroy <env-id>
+```
+
+Environment 默认从创建时当前 checkout HEAD 建立独立 `adm/<name>` branch 与 managed worktree；也可以显式指定 branch/tag/commit 作为 base。默认不会把主 checkout 的 dirty 变动偷偷带入，而是返回 `changes_not_included`。Phase 20 已支持显式 `--include-changes`，会保留 staged / unstaged 区别并复制 untracked non-ignored regular files；ignored 文件和 untracked symlink 不会被静默复制进 Environment。普通 destroy 会拒绝 dirty、未推送工作或 active writer，`--force` 才允许显式丢弃 managed worktree，并且两种 destroy 都不会删除 branch。
+
+```powershell
+.\ai-dev-manager.exe env create --name coupon-share --include-changes
+.\ai-dev-manager.exe env destroy --force <env-id>
+```
+
+Phase 21 补齐长期 Environment 的状态与协作边界。`env inspect` 会报告 dirty、upstream、base `ahead/behind/diverged/base_moved`、activity/stale 和 writer facts；base 明显前进或分叉时最多返回轻量确认 hint，不会自动 rebase/merge/push/commit。Environment 默认 single-writer，writer lease 持久化并跨 daemon restart：
+
+```powershell
+.\ai-dev-manager.exe env writer acquire --owner codex-task-1 <env-id>
+.\ai-dev-manager.exe env writer release --owner codex-task-1 <env-id>
+.\ai-dev-manager.exe env writer release --force <env-id>
+```
+
+同 owner 再 acquire 是 renew；不同 owner 会得到冲突。7 天 inactivity 目前只作为 advisory stale 状态，不会自动删除 Environment，也不会自动释放 writer。
+
 Agent Run 当前是 observed state：daemon stop/restart 会结束 active Runs，新 daemon 不会把旧 Run 伪装成仍在运行。
 
 原有 `workspace`、`runtime`、`start/status/stop`、`inspect`、`serve`、`mcp` 等底层命令继续保留，适合脚本、调试和详细控制。

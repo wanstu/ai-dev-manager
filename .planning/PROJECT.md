@@ -2,32 +2,58 @@
 
 ## What This Is
 
-一个独立于 CodexPro / DevSpace 的本地 AI Coding Core。它负责统一管理 Workspace、Runtime、MCP、Skills、Agents、执行能力与验证流程；上层可以是桌面 UI、CLI、ChatGPT MCP、CodexPro v4 或其他客户端，下层可以是 Native Runtime、DevSpace、Codex CLI、Claude Code、OpenCode 或其他外部 Runtime。
+一个面向现有 AI Coding Agent 的 **AI Coding Environment**。`ai-dev-manager` 不内置或替代 ChatGPT、Codex、Claude Code、OpenCode、WorkBuddy、CodexPro 等 Agent，而是通过统一的 Control Plane、Runtime 与 MCP 能力，为它们提供可隔离、可管理、可验证的开发环境。
 
 ## Core Value
 
-**让多个 AI Coding Workspace 在隔离运行的同时，可靠继承共享能力，并允许项目级私有扩展；所有执行都可控、可验证、可追踪。**
+**让同一个工程可以同时承载多个互不污染的开发任务：每个任务拥有独立 Environment / managed worktree / branch / Runtime，外部 Agent 通过统一能力安全工作，main checkout 与其他任务保持隔离。**
+
+产品优先级固定为：
+
+1. 工具本身可靠可用。
+2. 让外部 AI Agent 通过 MCP 用得好。
+3. 再让人通过 CLI / Manager / UI 用得好。
 
 ## Product Positioning
 
-不是另一个“文件读写 MCP Server”，而是：
+不是另一个 Agent，也不是另一个“文件读写 MCP Server”，而是：
 
-> Local AI Development Workspace & Runtime Core
+> AI Coding Environment
 
-它解决的是本地 AI 开发环境的控制面与执行面统一问题。
+ADM 管理 Environment 的事实、能力、安全边界与执行；Agent 管理开发意图、判断和需要用户确认的决策。ADM 可以返回 `facts` / `warnings` / `hints` 形式的轻量建议，但不得把开发建议伪装成必须执行的下一步。
 
 ## Relationship With Existing Projects
 
-- `codexprov4`：继续独立开发和日常使用；本项目不修改、不依赖它。未来可作为本项目的 Desktop / Control Plane 客户端或 Runtime Adapter。
-- CodexPro：借鉴 workspace containment、safe execution、structured file/search/edit、handoff / `.ai-bridge` 等优点。
-- DevSpace：借鉴 worktree、runtime、skills、agents、execution contract 等成熟思路。
-- 本项目不 fork CodexPro 或 DevSpace，不把两边代码直接揉在一起；优先借鉴设计，并通过 Adapter / Capability 接口保持兼容空间。
+- CodexPro：继续作为成熟 Agent 使用；借鉴其 workspace containment、safe execution、structured file/search/edit、handoff / `.ai-bridge` 和 Agent-friendly tool experience。
+- DevSpace：借鉴 managed worktree、runtime、skills、execution contract、environment lifecycle 等成熟思路。
+- `codexpro-plus`：当前是已发布且验证可用的 CodexPro 进程管理工具，原功能不为 ADM 实验修改；未来如需 Manager 集成，优先 fork/独立实验版本，不影响稳定版本。
+- `codexprov4`：继续独立存在；不作为 ADM Core 的依赖。
+- 本项目不 fork CodexPro 或 DevSpace Core；优先吸收设计，并通过 Adapter / Capability / MCP 接口保持兼容空间。
 
-## Current Milestone: v0.4 Agents / GSD Runtime ✅ Complete
+## Current Milestone: v0.5 Multi-Task Development Environments ✅ Complete
 
-**Goal:** 在 v0.3/v0.3.1 已验证的 daemon ownership 之上建立可追踪、可取消、可逐步扩展到 Planner / Executor / Reviewer 与 GSD phase execution 的 Agent Run 生命周期；CLI 继续只是 local Control API 的薄客户端。
+**Goal:** 把 v0.4 已验证的 managed worktree + derived Runtime 从临时 parallel lane 提升为持久的一等 Environment，使同一 Project 能长期并行承载多个隔离开发任务；先完成 Environment Core，再在后续 milestone 建立统一 Agent MCP Gateway 与人类 Manager/UI。
 
 ## Requirements
+
+### Validated — v0.5 Phase 21
+
+- [x] **ENV-06**: inspect 通过结构化 Runtime Git relation 报告当前 base 的 `ahead` / `behind` / `diverged` / `base_moved`，base ref 不可用时只返回 warning；base 不自动同步。明显 divergence 或 behind>=10 时最多返回一条非指令性确认 hint。— Real Git + cross-process CLI acceptance passed.
+- [x] **ENV-08**: Environment 持久化 single-writer lease；同 owner acquire 幂等 renew，第二 owner 返回 `writer_conflict`，普通 release 需 owner 匹配，显式 force release 只清 lease；writer 跨 daemon restart 保留且 stale 不自动释放。— Manager + CLI restart acceptance passed.
+- [x] **UX-01**: Environment inspect 返回 facts/warnings/hints，包含 dirty/upstream/base/activity/writer 状态；测试确认不暴露 `required_action` / `next_step`，也不自动 rebase/merge/push/commit/cleanup。— Phase 21 acceptance passed.
+
+### Validated — v0.5 Phase 20
+
+- [x] **ENV-03**: 默认 create 仍从 committed HEAD/base 建 Environment 并对 dirty source 返回 `changes_not_included`；显式 `--include-changes` 会保留 staged/unstaged index 语义、复制 untracked regular files、排除 ignored files，并拒绝把 untracked symlink 静默解引用成普通文件；binary patch 也通过真实 Git acceptance。— Runtime + Manager + cross-process CLI acceptance passed.
+- [x] **ENV-07**: 普通 destroy 拒绝 dirty、未推送提交和 active writer；有 upstream 且 local ahead=0、clean 且无 writer 的 Environment 可销毁；显式 `--force` 才能覆盖这些 destructive guards，missing worktree 时只清 Registry record，所有路径都继续依赖 managed inventory revalidation，branch 永不自动删除。— Real Git and CLI acceptance passed.
+
+### Validated — v0.5 Phase 19
+
+- [x] **ENV-01**: Environment 是持久一等对象，拥有稳定 `env_` identity，并绑定 base Workspace、name、branch、base ref/base commit、managed worktree path 与生命周期时间；daemon restart 后通过持久 Store + 实际 managed worktree 重新验证并构建 derived Runtime，而不是持久化内存 Runtime。— Real manager + CLI restart acceptance passed.
+- [x] **ENV-02**: Environment 默认从创建时当前 checkout HEAD 创建，且可显式指定 branch/tag/commit base；默认不会把 dev/master 写死。— Real Git tests covered current `dev` and explicit older commit.
+- [x] **ENV-04**: 默认 branch 为 `adm/<sanitized-name>`，正常支持 `/`；已存在 branch 返回明确冲突，不自动生成替代 branch。— Runtime + Environment tests passed.
+- [x] **ENV-05**: Phase 19 Environment lifecycle 不自动 commit/merge/squash/cherry-pick/rebase，destroy 也不删除 branch。— CLI acceptance verified branch remains after clean destroy.
+- [x] **ENV-09**: Environment path 不能仅凭持久记录获得授权；每次 inspect/destroy 都通过 base Runtime 的 managed worktree inventory 重新验证 worktree，再构建 derived Runtime。— Missing/tampered worktree validation tests passed.
 
 ### Validated
 
@@ -161,6 +187,10 @@
 8. **Adapter over fork** — 对 CodexPro / DevSpace / Codex / Claude 等优先做适配，不把核心绑定到任一 upstream。
 9. **GSD planning is part of engineering** — 需求、决策、阶段退出标准写进仓库，不只存在于聊天记录。
 10. **Small vertical slices** — 每个 Phase 都必须形成可以测试的闭环，不按“先把所有抽象写完”开发。
+11. **Environment first** — 同一 Project 的多任务隔离优先通过独立 Environment / managed worktree 解决，不让多个任务共享一个 dirty checkout。
+12. **One MCP later, many Environments** — 面向 Agent 的长期目标是只配置一个 ADM MCP Gateway，由 `environment_id` 路由到对应 Runtime；不要求每个任务手工维护一个 MCP 配置。
+13. **Facts and guardrails, not agent thinking** — ADM 返回事实、warnings/hints 并执行安全策略；是否 rebase/merge/commit/继续旧任务等开发决策属于 Agent/用户。
+14. **Human review before integration** — Environment 完成不等于自动 merge；默认保留 review、commit message 调整和最终合并给人/明确调用者。
 
 ## Initial Technical Direction
 
@@ -224,6 +254,15 @@ Go 的原因：单文件部署友好、并发和进程管理适合本地 runtime
 | crash recovery 通过 health probe + heartbeat lease stale reclaim 建立新 owner | crash 后旧 metadata/endpoint 不可信；reclaim 必须有 bounded wait，且旧 owner heartbeat 不得 touch 新 owner lease | Accepted |
 | Phase 15 Agent Run 是 daemon observed state，不做 desired-state persistence/resume | running goroutine/context/executor 不能跨 daemon process 恢复；后续 GSD 恢复应依赖 `.planning/` checkpoint 而不是伪恢复旧执行对象 | Accepted |
 | Phase 15 production executor 明确命名为 `lifecycle`，只验证 ownership/status/cancel | 在真实 Planner/Executor backend 尚未设计前不伪装 AI 能力；Executor contract 已被 production/tests 真实使用，Phase 16 可在同一边界接入 | Accepted |
+| v0.5 从 Docker/Process/Debug 改为 Multi-Task Development Environments | 当前最强真实痛点是同一工程多任务并行导致 dirty checkout 混杂；先把 Environment/worktree 隔离产品化，再扩展环境工具 | Accepted |
+| ADM 不内置新的 AI Agent 产品 | ChatGPT/Codex/Claude Code/OpenCode/WorkBuddy/CodexPro 已成熟；ADM 的职责是给这些 Agent 提供可靠开发环境 | Accepted |
+| Environment 创建默认取当前 checkout HEAD，允许显式 base | 日常通常从 dev，紧急修复可能从 master；不把某个分支写死在 Core | Accepted |
+| `include_changes=true` 复制 staged/unstaged/untracked，但排除 ignored | 解决真实的“当前改动需要带入隔离任务”场景，同时避免复制 node_modules、cache、secret/local runtime 文件等 ignored 内容 | Accepted |
+| Environment 默认不自动 merge/commit/rebase | 最终 review、commit message 与冲突处理需要人/Agent 显式决策；ADM 只提供事实、能力和安全执行 | Accepted |
+| 一个 Environment 默认一个 writer | 解决任务隔离的主要问题，避免在单一 worktree 内重新引入多 Agent 并发写冲突 | Accepted |
+| stale Environment 不自动删除；dirty/unpushed destroy 默认拒绝 | 自动清理可能丢失工作；只提供状态/警告，潜在数据丢失必须显式 force | Accepted |
+| Agent-facing 长期入口是一个 MCP Gateway，而不是一 Environment 一 MCP 配置 | 用户新增任务只创建 Environment，不应该重新配置 Agent/MCP；由 environment_id 做安全路由 | Accepted |
+| codexpro-plus 稳定版不承载 ADM 实验改造 | 它已作为 CodexPro 进程 Manager 发布并验证；未来 UI/Manager 集成如需要先 fork/独立实验，不影响原功能 | Accepted |
 
 ## Evolution Rules
 

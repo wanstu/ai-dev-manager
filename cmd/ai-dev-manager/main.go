@@ -37,7 +37,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	remaining := global.Args()
 	if len(remaining) == 0 {
-		return errors.New("usage: ai-dev-manager [--config-root PATH] [--json] <up|down|ps|ctl|agent|start|status|stop|runtime|workspace|inspect|serve|mcp> ...")
+		return errors.New("usage: ai-dev-manager [--config-root PATH] [--json] <up|down|ps|ctl|agent|env|start|status|stop|runtime|workspace|inspect|serve|mcp> ...")
 	}
 
 	resolvedRoot, err := daemon.ResolveRoot(*configRoot)
@@ -75,6 +75,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runPS(ctx, resolvedRoot, service, stdout, *jsonOutput)
 	case "agent":
 		return runAgent(ctx, resolvedRoot, service, remaining[1:], stdout, stderr, *jsonOutput)
+	case "env":
+		return runEnvironment(ctx, resolvedRoot, service, remaining[1:], stdout, stderr, *jsonOutput)
 	case "workspace":
 		return runWorkspace(service, remaining[1:], stdout, stderr, *jsonOutput)
 	case "inspect":

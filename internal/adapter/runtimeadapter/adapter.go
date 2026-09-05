@@ -22,9 +22,16 @@ const (
 	OpGitStatus         = "git.status"
 	OpGitDiff           = "git.diff"
 	OpGitBranch         = "git.branch"
+	OpGitBranchExists   = "git.branch_exists"
+	OpGitResolveRef     = "git.resolve_ref"
 	OpGitWorktreeList   = "git.worktree.list"
+	OpGitWorktreeGet    = "git.worktree.get"
 	OpGitWorktreeCreate = "git.worktree.create"
 	OpGitWorktreeRemove = "git.worktree.remove"
+	OpGitChangesExport  = "git.changes.export"
+	OpGitChangesApply   = "git.changes.apply"
+	OpGitPushStatus     = "git.push_status"
+	OpGitRelation       = "git.relation"
 	OpVerifierRun       = "verify.run"
 	OpVerifierRunMany   = "verify.run_many"
 )
@@ -213,32 +220,86 @@ func (a *NativeAdapter) Invoke(_ context.Context, operation string, input map[st
 		return a.runtime.GitDiff()
 	case OpGitBranch:
 		return a.runtime.GitBranch()
-	case OpGitWorktreeList:
-		return a.runtime.GitWorktrees()
-
-	case OpGitWorktreeCreate:
+	case OpGitBranchExists:
 		var args struct {
-			Name   string `json:"name"`
 			Branch string `json:"branch"`
 		}
 		if err := decodeInput(operation, input, &args); err != nil {
 			return nil, err
 		}
-		return a.runtime.GitWorktreeCreate(args.Name, args.Branch)
-
-	case OpGitWorktreeRemove:
+		return a.runtime.GitBranchExists(args.Branch)
+	case OpGitResolveRef:
+		var args struct {
+			Ref string `json:"ref"`
+		}
+		if err := decodeInput(operation, input, &args); err != nil {
+			return nil, err
+		}
+		return a.runtime.GitResolveRef(args.Ref)
+	case OpGitWorktreeList:
+		return a.runtime.GitWorktrees()
+	case OpGitWorktreeGet:
 		var args struct {
 			Name string `json:"name"`
 		}
 		if err := decodeInput(operation, input, &args); err != nil {
 			return nil, err
 		}
-		if err := a.runtime.GitWorktreeRemove(args.Name); err != nil {
+		return a.runtime.GitWorktreeGet(args.Name)
+
+	case OpGitWorktreeCreate:
+		var args struct {
+			Name       string `json:"name"`
+			Branch     string `json:"branch"`
+			StartPoint string `json:"start_point"`
+		}
+		if err := decodeInput(operation, input, &args); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(args.StartPoint) == "" {
+			return a.runtime.GitWorktreeCreate(args.Name, args.Branch)
+		}
+		return a.runtime.GitWorktreeCreateAt(args.Name, args.Branch, args.StartPoint)
+
+	case OpGitWorktreeRemove:
+		var args struct {
+			Name  string `json:"name"`
+			Force bool   `json:"force"`
+		}
+		if err := decodeInput(operation, input, &args); err != nil {
+			return nil, err
+		}
+		if err := a.runtime.GitWorktreeRemoveWithOptions(args.Name, args.Force); err != nil {
 			return nil, err
 		}
 		return struct {
 			Removed bool `json:"removed"`
 		}{Removed: true}, nil
+
+	case OpGitChangesExport:
+		return a.runtime.GitExportChanges()
+	case OpGitChangesApply:
+		var args admruntime.GitChangeSet
+		if err := decodeInput(operation, input, &args); err != nil {
+			return nil, err
+		}
+		if err := a.runtime.GitApplyChanges(args); err != nil {
+			return nil, err
+		}
+		return struct {
+			Applied bool `json:"applied"`
+		}{Applied: true}, nil
+	case OpGitPushStatus:
+		return a.runtime.GitPushStatus()
+	case OpGitRelation:
+		var args struct {
+			Left  string `json:"left"`
+			Right string `json:"right"`
+		}
+		if err := decodeInput(operation, input, &args); err != nil {
+			return nil, err
+		}
+		return a.runtime.GitRelation(args.Left, args.Right)
 
 	case OpVerifierRun:
 		var args struct {

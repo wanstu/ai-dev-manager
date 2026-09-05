@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.4
-milestone_name: Agents / GSD Runtime
+milestone: v0.5
+milestone_name: Multi-Task Development Environments
 status: complete
-last_updated: "2026-09-05T08:58:00+08:00"
+last_updated: "2026-09-05T10:00:00+08:00"
 last_activity: 2026-09-05
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 3
+  completed_plans: 3
   percent: 100
 ---
 
@@ -17,11 +17,11 @@ progress:
 
 ## Current Position
 
-Milestone: v0.4 — Agents / GSD Runtime
-Phase: 18 — Parallel Agents / Worktrees
-Plan: 18-01 — parallel verify worktree lanes
+Milestone: v0.5 — Multi-Task Development Environments
+Phase: 21 — Environment State / Writer Guard / Base Facts
+Plan: 21-01 — environment state, single-writer guard, and base divergence facts
 Status: Completed
-Last activity: 2026-09-05 — v0.4 complete: daemon-owned Agent Runs, verify workflow, audited GSD execution/advance, and real managed-worktree parallel verification all validated
+Last activity: 2026-09-05 — v0.5 complete: persistent isolated Environments, dirty-change transfer, safe destruction, single-writer coordination, and base/activity facts all verified
 
 ## Completed
 
@@ -362,23 +362,36 @@ Validated `.planning` provenance resolution, allowlisted Execution Spec operatio
 
 Validated observed-only derived runtimes rooted at managed Git worktrees, 2+ truly concurrent verify lanes, parent review aggregation, default cleanup / explicit preservation, distinct lane roots and unchanged main checkout HEAD/branch. The daemon clean-restart stop budget was also widened from 5s to 10s after full-suite Windows scheduling exposed a false timeout; the restart + parallel acceptance combination then passed 10 consecutive stress runs.
 
+### Phase 19 — Persistent Environment Lifecycle ✅
+
+Validated persistent `env_` identity/registry, real managed worktree + branch creation from current or explicit base, daemon-restart-safe inspect, missing-worktree diagnostics, isolated derived Runtime roots, and conservative branch-preserving destroy.
+
+### Phase 20 — Dirty Change Transfer & Safe Destruction ✅
+
+Validated `--include-changes` with staged/unstaged preservation, binary patches, untracked non-ignored transfer, failed-materialization diagnosis, upstream/unpushed safety, normal/force destroy semantics, and branch preservation across real Git + cross-process CLI tests.
+
+### Phase 21 — Environment State / Writer Guard / Base Facts ✅
+
+Validated structured ahead/behind/diverged/base-moved facts, dirty/upstream/activity/stale observations, restrained non-prescriptive hints, persistent single-writer lease with conflict/renew/release/force-release behavior, and writer survival across daemon restart. Full v0.5 fmt/test/vet/build gate passed.
+
 ## Locked Direction
 
-1. Independent project; do not modify or depend on `codexprov4` implementation details.
-2. Do not fork CodexPro or DevSpace; future compatibility is adapter-based.
-3. Control Plane and Runtime remain separate boundaries.
-4. Runtime consumes EffectiveConfig; configuration inheritance remains in Control Plane.
-5. Global GSD/Skill installation and project `.planning/` state remain separate.
-6. Runtime Override remains memory-only.
-7. Skill discovery scans explicit roots only.
-8. Native security is enforced below MCP/tool descriptions.
-9. Structured execution remains executable + argv; no implicit raw shell wrapper.
-10. Git worktrees remain managed paths rather than arbitrary filesystem targets.
-11. MCP Host consumes the protocol-neutral Runtime Adapter interface.
-12. One HTTP MCP instance binds one Workspace Runtime.
-13. v0.1 HTTP listen remains loopback-only.
-14. Unknown external capabilities require explicit host-tool mappings before becoming executable MCP tools.
-15. Agent/Subagent orchestration was deferred rather than represented by speculative empty interfaces; after v0.2 review it is now scheduled for v0.4 behind persistent lifecycle ownership.
+1. Product positioning is **AI Coding Environment**, not a new built-in AI Agent.
+2. Primary pain point is multi-task isolation: one Project can own multiple persistent Environment/worktree/branch contexts without dirty changes mixing together.
+3. Tool reliability comes first, Agent MCP experience second, human CLI/Manager/UI experience third.
+4. Control Plane and Runtime remain separate boundaries; Runtime consumes EffectiveConfig.
+5. Environment worktrees remain managed paths rather than arbitrary filesystem targets.
+6. Default Environment base is the creating checkout HEAD; explicit branch/tag/commit base is supported without hard-coding dev/master.
+7. `include_changes=true` means staged + unstaged + untracked, excluding ignored files; tracked `.gitignore` remains normal repository content.
+8. Environment integration is review-first: no automatic commit/merge/squash/cherry-pick/rebase decisions.
+9. stale is informational only; no automatic Environment deletion. dirty/unpushed destructive cleanup requires explicit force.
+10. One Environment defaults to one writer; parallel writing uses separate Environments.
+11. ADM returns facts/warnings/hints and enforces policy, but development decisions belong to Agent/user.
+12. Long-term Agent interface is one ADM MCP Gateway routing by `environment_id`, not one manually configured MCP per Environment.
+13. Existing per-Workspace Runtime MCP remains a lower-level/compatibility capability until the Gateway milestone.
+14. `codexpro-plus` stable product is not modified for ADM experiments; future Manager integration uses a fork/independent experiment first.
+15. CodexPro/DevSpace remain design references and adapter targets; Core does not depend on them.
+16. Native security remains enforced below MCP/tool descriptions; structured execution remains executable + argv.
 
 ## v0.3 Direction
 
@@ -413,4 +426,4 @@ Validated observed-only derived runtimes rooted at managed Git worktrees, 2+ tru
 
 ## Next Action
 
-v0.4 is complete. Stop at this milestone boundary before v0.5 Docker / Process / Debug. Review and commit the full v0.4 change set before opening the next milestone.
+v0.5 is complete. Stop at this milestone boundary before v0.6 Agent MCP Gateway. Review and commit the full v0.5 change set first; the next milestone should expose one ADM MCP that routes Agent operations by `environment_id` rather than creating one MCP configuration per Environment.

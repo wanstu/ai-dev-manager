@@ -21,6 +21,7 @@ import (
 	"ai-dev-manager/internal/agent"
 	"ai-dev-manager/internal/config"
 	"ai-dev-manager/internal/controlplane"
+	"ai-dev-manager/internal/environment"
 )
 
 const (
@@ -534,6 +535,17 @@ func Run(ctx context.Context, root, listen string) error {
 	if err := agentManager.RegisterExecutor(parallelExecutor); err != nil {
 		return err
 	}
+	environmentManager, err := environment.NewManager(
+		environment.NewStore(resolved),
+		service.Registry().Get,
+		func(workspaceID string) (runtimeadapter.Runtime, error) {
+			return service.BuildRuntime(workspaceID, nil)
+		},
+		service.BuildDerivedRuntime,
+	)
+	if err != nil {
+		return err
+	}
 	if _, err := runtimeOwner.Reconcile(ctx); err != nil {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
@@ -579,6 +591,7 @@ func Run(ctx context.Context, root, listen string) error {
 	})
 	registerRuntimeHandlers(mux, runtimeOwner)
 	registerAgentHandlers(mux, agentManager)
+	registerEnvironmentHandlers(mux, environmentManager)
 
 	httpServer := &http.Server{Handler: mux}
 	serveErr := make(chan error, 1)

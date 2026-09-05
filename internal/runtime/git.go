@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,8 @@ type Worktree struct {
 	Branch string
 	Bare   bool
 }
+
+var ErrGitBranchExists = errors.New("git branch already exists")
 
 type GitError struct {
 	Operation string
@@ -120,6 +123,25 @@ func (r *Native) GitBranch() (string, error) {
 	return strings.TrimSpace(result.Stdout), nil
 }
 
+func (r *Native) GitResolveRef(ref string) (string, error) {
+	ref = strings.TrimSpace(ref)
+	if !safeGitRefInput(ref) {
+		return "", &RuntimeError{Kind: ErrInvalidPath, Path: ref}
+	}
+	result, err := r.gitExec("rev-parse", "--verify", ref+"^{commit}")
+	if err != nil {
+		return "", err
+	}
+	if result.ExitCode != 0 {
+		return "", gitResultError("rev-parse --verify", result)
+	}
+	commit := strings.TrimSpace(result.Stdout)
+	if commit == "" {
+		return "", &RuntimeError{Kind: ErrNotFound, Path: ref}
+	}
+	return commit, nil
+}
+
 func (r *Native) GitWorktrees() ([]Worktree, error) {
 	result, err := r.gitExec("worktree", "list", "--porcelain")
 	if err != nil {
@@ -131,9 +153,72 @@ func (r *Native) GitWorktrees() ([]Worktree, error) {
 	return parseWorktrees(result.Stdout), nil
 }
 
-func (r *Native) GitWorktreeCreate(name, branch string) (Worktree, error) {
-	if !safeIdentifier(name) || !safeIdentifier(branch) {
+func (r *Native) GitBranchExists(branch string) (bool, error) {
+	branch = strings.TrimSpace(branch)
+	if !safeGitRefInput(branch) {
+		return false, &RuntimeError{Kind: ErrInvalidPath, Path: branch}
+	}
+	check, err := r.gitExec("check-ref-format", "--branch", branch)
+	if err != nil {
+		return false, err
+	}
+	if check.ExitCode != 0 {
+		return false, &RuntimeError{Kind: ErrInvalidPath, Path: branch}
+	}
+	result, err := r.gitExec("show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	if err != nil {
+		return false, err
+	}
+	switch result.ExitCode {
+	case 0:
+		return true, nil
+	case 1:
+		return false, nil
+	default:
+		return false, gitResultError("show-ref --verify", result)
+	}
+}
+
+func (r *Native) GitWorktreeGet(name string) (Worktree, error) {
+	if !safeIdentifier(name) {
 		return Worktree{}, &RuntimeError{Kind: ErrInvalidPath, Path: name}
+	}
+	managedRoot, err := r.managedWorktreeRoot()
+	if err != nil {
+		return Worktree{}, err
+	}
+	target := filepath.Join(managedRoot, name)
+	worktrees, err := r.GitWorktrees()
+	if err != nil {
+		return Worktree{}, err
+	}
+	for _, worktree := range worktrees {
+		if samePath(worktree.Path, target) {
+			return worktree, nil
+		}
+	}
+	return Worktree{}, &RuntimeError{Kind: ErrNotFound, Path: target}
+}
+
+func (r *Native) GitWorktreeCreate(name, branch string) (Worktree, error) {
+	return r.GitWorktreeCreateAt(name, branch, "HEAD")
+}
+
+func (r *Native) GitWorktreeCreateAt(name, branch, startPoint string) (Worktree, error) {
+	if !safeIdentifier(name) {
+		return Worktree{}, &RuntimeError{Kind: ErrInvalidPath, Path: name}
+	}
+	branch = strings.TrimSpace(branch)
+	exists, err := r.GitBranchExists(branch)
+	if err != nil {
+		return Worktree{}, err
+	}
+	if exists {
+		return Worktree{}, fmt.Errorf("%w: %s", ErrGitBranchExists, branch)
+	}
+	startCommit, err := r.GitResolveRef(startPoint)
+	if err != nil {
+		return Worktree{}, err
 	}
 	managedRoot, err := r.managedWorktreeRoot()
 	if err != nil {
@@ -149,7 +234,7 @@ func (r *Native) GitWorktreeCreate(name, branch string) (Worktree, error) {
 		return Worktree{}, &RuntimeError{Kind: ErrIO, Path: target, Err: err}
 	}
 
-	result, err := r.gitExec("worktree", "add", "-b", branch, target, "HEAD")
+	result, err := r.gitExec("worktree", "add", "-b", branch, target, startCommit)
 	if err != nil {
 		return Worktree{}, err
 	}
@@ -169,6 +254,10 @@ func (r *Native) GitWorktreeCreate(name, branch string) (Worktree, error) {
 }
 
 func (r *Native) GitWorktreeRemove(name string) error {
+	return r.GitWorktreeRemoveWithOptions(name, false)
+}
+
+func (r *Native) GitWorktreeRemoveWithOptions(name string, force bool) error {
 	if !safeIdentifier(name) {
 		return &RuntimeError{Kind: ErrInvalidPath, Path: name}
 	}
@@ -180,21 +269,15 @@ func (r *Native) GitWorktreeRemove(name string) error {
 	if !within(managedRoot, target) || samePath(managedRoot, target) {
 		return &RuntimeError{Kind: ErrPathOutsideWorkspace, Path: target}
 	}
-	worktrees, err := r.GitWorktrees()
-	if err != nil {
+	if _, err := r.GitWorktreeGet(name); err != nil {
 		return err
 	}
-	found := false
-	for _, worktree := range worktrees {
-		if samePath(worktree.Path, target) {
-			found = true
-			break
-		}
+	args := []string{"worktree", "remove"}
+	if force {
+		args = append(args, "--force")
 	}
-	if !found {
-		return &RuntimeError{Kind: ErrNotFound, Path: target}
-	}
-	result, err := r.gitExec("worktree", "remove", target)
+	args = append(args, target)
+	result, err := r.gitExec(args...)
 	if err != nil {
 		return err
 	}
@@ -260,6 +343,19 @@ func safeIdentifier(value string) bool {
 			continue
 		}
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '.' && r != '_' && r != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func safeGitRefInput(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 256 || strings.HasPrefix(value, "-") {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
 			return false
 		}
 	}

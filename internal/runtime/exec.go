@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -16,12 +17,14 @@ const (
 	hardCommandTimeout    = 10 * time.Minute
 	defaultOutputBytes    = 1 << 20
 	hardOutputBytes       = 10 << 20
+	hardInputBytes        = 20 << 20
 )
 
 type Command struct {
 	Executable     string
 	Args           []string
 	Cwd            string
+	Stdin          []byte
 	Timeout        time.Duration
 	MaxOutputBytes int
 }
@@ -78,7 +81,7 @@ func (r *Native) Exec(command Command) (CommandResult, error) {
 	if outputLimit <= 0 {
 		outputLimit = defaultOutputBytes
 	}
-	if outputLimit > hardOutputBytes {
+	if outputLimit > hardOutputBytes || len(command.Stdin) > hardInputBytes {
 		return CommandResult{}, &RuntimeError{Kind: ErrLimitExceeded}
 	}
 
@@ -89,6 +92,9 @@ func (r *Native) Exec(command Command) (CommandResult, error) {
 	stderr := &limitedBuffer{limit: outputLimit}
 	cmd := exec.CommandContext(ctx, resolvedExecutable, command.Args...)
 	cmd.Dir = cwd
+	if len(command.Stdin) > 0 {
+		cmd.Stdin = bytes.NewReader(command.Stdin)
+	}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
