@@ -1,0 +1,87 @@
+{
+  "date": "2026-09-08T01:51:10Z",
+  "target": "Windows local integration",
+  "branch": "master",
+  "authorization": "User explicitly authorized committing the ready Phase 6 work and merging it into master on 2026-09-08; no push was authorized or performed.",
+  "merge": {
+    "from": "0ad54886dbe1100b6d895df751064b4bdc9f795b",
+    "to": "6dd87d6a27cacba33c0e2f890a3768b71941ed43",
+    "feature_branch": "feat/dev-process-logs-ports",
+    "command": "git merge --ff-only 6dd87d6a27cacba33c0e2f890a3768b71941ed43",
+    "passed": true,
+    "mode": "fast-forward",
+    "conflicts": false,
+    "both_worktrees_clean_before_merge": true
+  },
+  "validation": {
+    "source_commit": "6dd87d6a27cacba33c0e2f890a3768b71941ed43",
+    "runtime_source_commit": "75e919dee81bcce2567dcb6db39e2fffbea6fbfd",
+    "gateway": {
+      "command": "go test ./internal/gateway -count=1",
+      "exit_code": 0,
+      "passed": true,
+      "stdout": "ok  \tai-dev-manager-v2/internal/gateway\t15.004s\n",
+      "stderr": "",
+      "duration_seconds": 15.004
+    },
+    "full_tests": {
+      "passed": true,
+      "package_count": 16,
+      "tested_package_count": 11,
+      "compiled_without_tests_count": 5,
+      "executions": [
+        {
+          "command": "go test ./internal/gateway -count=1",
+          "exit_code": 0,
+          "passed": true,
+          "stdout": "ok  \tai-dev-manager-v2/internal/gateway\t15.004s\n",
+          "stderr": ""
+        },
+        {
+          "command": "go test ./cmd/... ./internal/app ./internal/catalog ./internal/desktop ./internal/environment ./internal/management -count=1",
+          "exit_code": 0,
+          "passed": true,
+          "stdout": "ok  \tai-dev-manager-v2/cmd/ai-dev-manager\t0.528s\nok  \tai-dev-manager-v2/cmd/ai-dev-manager-desktop\t0.079s\nok  \tai-dev-manager-v2/internal/app\t3.027s\nok  \tai-dev-manager-v2/internal/catalog\t0.080s\nok  \tai-dev-manager-v2/internal/desktop\t0.197s\nok  \tai-dev-manager-v2/internal/environment\t0.189s\nok  \tai-dev-manager-v2/internal/management\t0.151s\n",
+          "stderr": ""
+        },
+        {
+          "command": "go test ./internal/runtime ./internal/skill ./internal/verifier ./internal/identity ./internal/memory ./internal/model ./internal/store ./internal/workspace -count=1",
+          "exit_code": 0,
+          "passed": true,
+          "stdout": "ok  \tai-dev-manager-v2/internal/runtime\t0.561s\nok  \tai-dev-manager-v2/internal/skill\t0.053s\nok  \tai-dev-manager-v2/internal/verifier\t0.050s\n?   \tai-dev-manager-v2/internal/identity\t[no test files]\n?   \tai-dev-manager-v2/internal/memory\t[no test files]\n?   \tai-dev-manager-v2/internal/model\t[no test files]\n?   \tai-dev-manager-v2/internal/store\t[no test files]\n?   \tai-dev-manager-v2/internal/workspace\t[no test files]\n",
+          "stderr": ""
+        }
+      ]
+    },
+    "go_vet": {
+      "command": "go vet ./...",
+      "exit_code": 0,
+      "passed": true,
+      "stdout": "",
+      "stderr": ""
+    },
+    "git_diff_check": {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "passed": true,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  "prior_evidence": {
+    "integration_review": "06-INTEGRATION-REVIEW.md",
+    "pre_integration_regression": "evidence/regression.json",
+    "independent_dogfood": "evidence/independent-dogfood.json",
+    "note": "The repeated restart acceptance and separate external dogfood remain prior evidence. The full Gateway suite was rerun after merge."
+  },
+  "boundary": {
+    "phase_6_integrated": true,
+    "completed_phases": 6,
+    "phase_7_started": false,
+    "phase_complete_command_run": false,
+    "phase_uat_passed_command_run": false,
+    "pushed": false,
+    "origin_master_ref": "7a7e0e100c540cc11e176fc806d8d75b5bf7bce9",
+    "shared_gateway_41137_upgraded": false
+  }
+}

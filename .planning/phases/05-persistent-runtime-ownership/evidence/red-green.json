@@ -1,0 +1,13 @@
+{
+  "owner_identity_red": {
+    "test": "TestRuntimeOwnerRestartRebuildsPersistedDesiredState",
+    "exit_code": 1,
+    "failure": "restart reused owner id within one process",
+    "resolution": "owner identity now includes a monotonic per-process sequence in addition to PID and timestamp"
+  },
+  "owner_identity_green": {
+    "test": "TestRuntimeOwnerRestartRebuildsPersistedDesiredState",
+    "exit_code": 0
+  },
+  "note": "PowerShell dogfood-script variable/JSON-shape mistakes were harness errors and are not product regressions."
+}

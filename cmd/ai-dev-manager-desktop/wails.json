@@ -1,0 +1,8 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "adm-desktop",
+  "outputfilename": "adm-desktop",
+  "frontend:dir": "frontend",
+  "frontend:build": "go run ../../../tools/prepare-desktop-assets",
+  "wailsjsdir": "frontend/wailsjs"
+}

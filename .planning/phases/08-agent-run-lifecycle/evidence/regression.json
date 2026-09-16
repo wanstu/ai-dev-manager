@@ -1,0 +1,71 @@
+{
+  "phase": "08-agent-run-lifecycle",
+  "implementation_commit": "a74b318f883e65a2ff8eb62fc043271bb66c2277",
+  "date": "2026-09-08",
+  "target": "Windows local development host",
+  "result": "passed",
+  "commands": [
+    {
+      "command": "go test ./internal/gateway -run TestAgentRun -count=1",
+      "result": "passed",
+      "duration": "4.072s",
+      "notes": "covers cross-client lifecycle, terminal success/failure/timeout/canceled states, bounded output, authority rejection, owner/drop cleanup and writer renewal"
+    },
+    {
+      "command": "go test -race ./internal/gateway -run ^TestAgentRun -count=1",
+      "result": "passed",
+      "duration": "9.746s",
+      "notes": "focused owner-local Run concurrency/race gate"
+    },
+    {
+      "command": "go test ./internal/gateway -run ^TestAgentRunLifecycleAcrossRealGatewayRestart$ -count=3",
+      "result": "passed",
+      "duration": "2.966s",
+      "notes": "real Streamable HTTP Gateway subprocess/restart acceptance repeated three times"
+    },
+    {
+      "command": "go test ./internal/gateway -count=1",
+      "result": "passed",
+      "duration": "43.320s",
+      "notes": "full Gateway regression including existing MCP, process, verifier and worktree behavior"
+    },
+    {
+      "command": "go test ./...",
+      "result": "passed",
+      "notes": "final aggregate pass after bounded package grouping warmed caches; all test-bearing packages passed and no-test packages compiled"
+    },
+    {
+      "command": "go vet ./...",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed",
+      "notes": "line-ending warnings only; no whitespace errors"
+    }
+  ],
+  "historical_incomplete_execution": {
+    "command": "go test ./...",
+    "result": "tool_timeout_incomplete",
+    "notes": "an earlier aggregate invocation was cut off by the project tool timeout with no test failure output; Gateway plus all remaining package groups subsequently passed, followed by a successful aggregate go test ./..."
+  },
+  "acceptance": {
+    "stable_run_identity": "passed",
+    "later_client_list_status_cancel": "passed",
+    "success_failure_timeout_canceled_states": "passed",
+    "bounded_output": "passed",
+    "writer_and_runtime_authority": "passed",
+    "owner_environment_drop_cleanup": "passed",
+    "gateway_shutdown_cleanup": "passed",
+    "restart_no_resurrection": "passed",
+    "no_run_state_persistence": "passed",
+    "ordinary_file_process_optional_git_regression": "passed"
+  },
+  "scope": {
+    "planner_executor_reviewer": "not introduced",
+    "gsd_execution": "not introduced",
+    "parallel_run_orchestration": "not introduced",
+    "push": "not performed",
+    "master_merge": "not performed"
+  }
+}

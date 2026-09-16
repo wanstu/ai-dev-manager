@@ -1,0 +1,40 @@
+{
+  "timestamp_utc": "2026-09-07T10:04:54Z",
+  "base_commit": "b36ef6ae1ed43de48065f42fbeecd79607a26602",
+  "branch": "feat/persistent-runtime-ownership",
+  "gateway_listen": "127.0.0.1:43761",
+  "fixture_listen": "127.0.0.1:43762",
+  "private_adm_home": ".tmp/phase5-dogfood/home",
+  "workspace_id": "ws_9a3361532b8cbad3",
+  "environment_id": "env_7cc45f1dc68a0de6",
+  "mcp_id": "mcp_6b9d6245bf79a365",
+  "first_gateway": {
+    "owner_id": "owner_33248_18d3019897036610_1",
+    "pid": 33248,
+    "first_client_probe": "passed",
+    "second_client_probe": "passed"
+  },
+  "second_gateway_after_restart": {
+    "owner_id": "owner_44588_18d30198b6014014_1",
+    "pid": 44588,
+    "probe": "passed",
+    "owner_changed": true
+  },
+  "desired_vs_observed": {
+    "owner_or_session_state_found_in_state_json": false,
+    "desired_environment_mcp_selection_survived_restart": true
+  },
+  "dead_upstream": {
+    "observed_status": "error",
+    "error_kind": "connection_refused",
+    "owned_mcp_sessions_after_status": 0,
+    "gateway_owner_id": "owner_31428_18d301b5a02050b0_1"
+  },
+  "shutdown": {
+    "owner_id_present_before_stop": true,
+    "cli_exit_code": 0,
+    "endpoint_running_after_stop": false,
+    "path": "owner-bound HTTP graceful shutdown"
+  },
+  "shared_gateway_41137_touched": false
+}

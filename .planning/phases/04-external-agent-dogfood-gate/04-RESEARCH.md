@@ -1,0 +1,11 @@
+# Phase 4 local research
+- Read AGENTS, STATE, PROJECT, ROADMAP, PRODUCT_CONTRACT before implementation.
+- internal/gateway/server.go registers environment_skill_list/read and environment_verifier_list/run; verifier run delegates to Service.RunVerifier and existing Runtime policy.
+- internal/verifier/service.go Result has verifier_id, kind, status, exit_code, duration_ms, timed_out and optional summary/stdout/stderr. Tool text wraps it as {"result": ...}.
+- cmd/ai-dev-manager/main.go configures verifiers via environment verifier add; --arg is repeatable. Definitions do not grant executable authority.
+- internal/store/store.go uses ADM_V2_HOME/state.json when explicitly configured. Use a fresh .tmp/phase4-runtime state; never edit state.json directly.
+- gateway start --listen ... -d and gateway stop --listen ... provide the existing process lifecycle. A private port/state avoids interrupting other tasks.
+- Live tools/list on 41137 has Skill/verifier but no environment_mcp_status. Rebuild source baseline for the private acceptance Gateway.
+- Old non-Git project directory is absent. New standalone adm-verifier-report consumes actual verifier output; it has no ADM internal imports.
+- Source/call-site search and diff/tests replace unavailable GitNexus; no GitNexus pass is claimed.
+- Real gsd-next and smart-entry.md were read through ADM; deterministic smart-entry returned Phase 4 needs a plan. Manual planning follows explicit user authorization; no LLM dispatcher runs.

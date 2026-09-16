@@ -1,0 +1,6 @@
+{
+  "result": {
+    "exit_code": 0,
+    "stdout": "ADM V2 HTTP Gateway 已停止（PID 31120）。\n2026-09-07T07:45:15.0714596Z\r\n7a7e0e100c540cc11e176fc806d8d75b5bf7bce9\n"
+  }
+}

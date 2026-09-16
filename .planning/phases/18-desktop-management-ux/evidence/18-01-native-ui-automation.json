@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-11",
+  "artifact": "dist/adm-desktop-phase18-01-windows-amd64.exe",
+  "sha256": "81E297856EECAA6317FF5A5C0BF3084AFA755FB42FCB7F44F22E2086236F229C",
+  "window_title": "adm-desktop — 1.0 RC",
+  "native_surface": "Wails production artifact / WebView2 accessibility tree",
+  "result": "PASS",
+  "checks": {
+    "overview_loaded": true,
+    "ten_routes_invoked": true,
+    "diagnostics_shortcut_routes_to_environments": true,
+    "route_heading_focus": true,
+    "connection_control_persistent": true,
+    "environment_control_persistent": true,
+    "overview_metric_shortcuts_present": true,
+    "workspace_modal_open_close": true,
+    "workspace_modal_initial_focus": "workspacePath",
+    "workspace_modal_focus_return": true,
+    "memory_explicit_load_control_reachable": true,
+    "runtime_refresh_control_reachable": true,
+    "native_min_window": "820x560",
+    "critical_controls_within_min_window": true
+  },
+  "route_evidence": [
+    {"route":"overview","focused_heading":"管理概览"},
+    {"route":"workspaces","expected_control":"workspaceList","focused_heading":"Workspaces"},
+    {"route":"environments","expected_control":"environmentList","focused_heading":"Environments"},
+    {"route":"runtime","expected_control":"runtimeRefreshButton","focused_heading":"Verifier / Process / Run"},
+    {"route":"mcp","expected_control":"mcpFilter","focused_heading":"MCP 管理"},
+    {"route":"skills","expected_control":"skillFilter","focused_heading":"Skill 管理"},
+    {"route":"memory","expected_control":"loadGlobalMemory","focused_heading":"Global Memory"},
+    {"route":"gateway","expected_control":"gatewayRefreshButton","focused_heading":"ADM Service"},
+    {"route":"exec-allowlist","expected_control":"execList","focused_heading":"Exec allowlist"},
+    {"route":"settings","expected_control":"launchAtLogin","focused_heading":"设置"}
+  ],
+  "screenshots": [
+    "evidence/18-01-native-overview.png",
+    "evidence/18-01-native-workspace-dialog.png",
+    "evidence/18-01-native-settings-820x560.png"
+  ],
+  "notes": [
+    "No Global/Environment Memory value was read for native evidence; explicit-value behavior was already proven with fake-bridge production-browser tests.",
+    "Browser back/forward behavior remains covered by the production-asset Chromium smoke. Windows SendKeys Alt+Left was not used as acceptance evidence because WebView2 did not treat the synthetic OS keystroke as browser history navigation.",
+    "The pre-existing gateway-child process was not stopped or modified."
+  ]
+}

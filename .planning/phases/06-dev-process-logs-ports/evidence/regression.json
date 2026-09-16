@@ -1,0 +1,193 @@
+{
+  "date": "2026-09-08",
+  "target": "Windows local dogfood",
+  "provenance": {
+    "latest_go_gate": "Executed during Phase 6 integration review on the source committed as 75e919dee81bcce2567dcb6db39e2fffbea6fbfd.",
+    "independent_dogfood": "Existing 2026-09-07 external dogfood retained; not repeated. Real Gateway restart acceptance rerun with structured port assertions.",
+    "plan_structure": "Prior 2026-09-08 deterministic plan check retained; 06-01-PLAN.md unchanged during review."
+  },
+  "plan_structure": {
+    "valid": true,
+    "task_count": 3,
+    "errors": 0,
+    "warnings": 0,
+    "checked_date": "2026-09-08",
+    "note": "NODE_OPTIONS was cleared only inside the deterministic gsd-tools PowerShell process because host Node rejects --use-system-ca; global environment unchanged."
+  },
+  "gateway_tests": {
+    "command": "go test ./internal/gateway -count=1",
+    "passed": true,
+    "exit_code": 0,
+    "stdout": "ok  \tai-dev-manager-v2/internal/gateway\t17.872s\n",
+    "stderr": "",
+    "duration_seconds": 17.872
+  },
+  "real_gateway_acceptance_count_5": {
+    "command": "go test ./internal/gateway -run ^TestDevProcessLifecycleAcrossRealGatewayRestart$ -count=5",
+    "passed": true,
+    "exit_code": 0,
+    "stdout": "ok  \tai-dev-manager-v2/internal/gateway\t5.745s\n",
+    "stderr": "",
+    "duration_seconds": 5.745
+  },
+  "writer_lease_focused_test": {
+    "test": "TestProcessStartRenewsWriterLeaseBeforeChildLifetime",
+    "passed": true,
+    "authority_review": "process_start calls RequireWriter before child preparation/start; RequireWriter immediately renews LastSeenAt and ExpiresAt = now + TTL.",
+    "review_execution": "Included in focused_tests and gateway_tests."
+  },
+  "full_tests": {
+    "strategy": "All packages covered by the separate Gateway command and two bounded package groups.",
+    "passed": true,
+    "package_count": 16,
+    "tested_package_count": 11,
+    "compiled_without_tests_count": 5,
+    "packages": [
+      {
+        "path": "cmd/ai-dev-manager",
+        "result": "passed"
+      },
+      {
+        "path": "cmd/ai-dev-manager-desktop",
+        "result": "passed"
+      },
+      {
+        "path": "internal/app",
+        "result": "passed"
+      },
+      {
+        "path": "internal/catalog",
+        "result": "passed"
+      },
+      {
+        "path": "internal/desktop",
+        "result": "passed"
+      },
+      {
+        "path": "internal/environment",
+        "result": "passed"
+      },
+      {
+        "path": "internal/gateway",
+        "result": "passed"
+      },
+      {
+        "path": "internal/identity",
+        "result": "compiled; no test files"
+      },
+      {
+        "path": "internal/management",
+        "result": "passed"
+      },
+      {
+        "path": "internal/memory",
+        "result": "compiled; no test files"
+      },
+      {
+        "path": "internal/model",
+        "result": "compiled; no test files"
+      },
+      {
+        "path": "internal/runtime",
+        "result": "passed"
+      },
+      {
+        "path": "internal/skill",
+        "result": "passed"
+      },
+      {
+        "path": "internal/store",
+        "result": "compiled; no test files"
+      },
+      {
+        "path": "internal/verifier",
+        "result": "passed"
+      },
+      {
+        "path": "internal/workspace",
+        "result": "compiled; no test files"
+      }
+    ],
+    "executions": [
+      {
+        "command": "go test ./internal/gateway -count=1",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "ok  \tai-dev-manager-v2/internal/gateway\t17.872s\n",
+        "stderr": ""
+      },
+      {
+        "command": "go test ./cmd/... ./internal/app ./internal/catalog ./internal/desktop ./internal/environment ./internal/management -count=1",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "ok  \tai-dev-manager-v2/cmd/ai-dev-manager\t0.574s\nok  \tai-dev-manager-v2/cmd/ai-dev-manager-desktop\t0.069s\nok  \tai-dev-manager-v2/internal/app\t3.254s\nok  \tai-dev-manager-v2/internal/catalog\t0.066s\nok  \tai-dev-manager-v2/internal/desktop\t0.208s\nok  \tai-dev-manager-v2/internal/environment\t0.167s\nok  \tai-dev-manager-v2/internal/management\t0.160s\n",
+        "stderr": ""
+      },
+      {
+        "command": "go test ./internal/runtime ./internal/skill ./internal/verifier ./internal/identity ./internal/memory ./internal/model ./internal/store ./internal/workspace -count=1",
+        "passed": true,
+        "exit_code": 0,
+        "stdout": "ok  \tai-dev-manager-v2/internal/runtime\t0.501s\nok  \tai-dev-manager-v2/internal/skill\t0.055s\nok  \tai-dev-manager-v2/internal/verifier\t0.039s\n?   \tai-dev-manager-v2/internal/identity\t[no test files]\n?   \tai-dev-manager-v2/internal/memory\t[no test files]\n?   \tai-dev-manager-v2/internal/model\t[no test files]\n?   \tai-dev-manager-v2/internal/store\t[no test files]\n?   \tai-dev-manager-v2/internal/workspace\t[no test files]\n",
+        "stderr": ""
+      }
+    ]
+  },
+  "incomplete_aggregate_attempts": [
+    {
+      "command": "go test ./... -count=1",
+      "attempts": 2,
+      "outcome": "connector single-call timeout",
+      "test_failure_reported": false,
+      "completed_aggregate_pass": false
+    },
+    {
+      "command": "go test ./... -p=1",
+      "attempts": 1,
+      "outcome": "connector HTTP 502",
+      "test_failure_reported": false,
+      "completed_aggregate_pass": false
+    }
+  ],
+  "go_vet": {
+    "command": "go vet ./...",
+    "passed": true,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "git_diff_check": {
+    "command": "git diff --check",
+    "passed": true,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "warning: in the working copy of 'internal/gateway/runtime_process.go', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'internal/gateway/runtime_process_test.go', LF will be replaced by CRLF the next time Git touches it\n"
+  },
+  "source_commit": "75e919dee81bcce2567dcb6db39e2fffbea6fbfd",
+  "focused_tests": {
+    "command": "go test ./internal/gateway -run ^(TestTailLogBufferKeepsBoundedTail|TestRuntimeOwnerDevProcessLifecycleAcrossAgentSessions|TestProcessStartRenewsWriterLeaseBeforeChildLifetime)$ -count=1",
+    "passed": true,
+    "exit_code": 0,
+    "stdout": "ok  \tai-dev-manager-v2/internal/gateway\t0.993s\n",
+    "stderr": "",
+    "duration_seconds": 0.993
+  },
+  "review_log_regression": {
+    "test": "TestTailLogBufferKeepsBoundedTail",
+    "red_exit_code": 1,
+    "red_stdout": "--- FAIL: TestTailLogBufferKeepsBoundedTail (0.00s)\n    --- FAIL: TestTailLogBufferKeepsBoundedTail/exact_limit (0.00s)\n        runtime_process_test.go:226: tail=\"12345678\" truncated=true; want tail=\"12345678\" truncated=false\n    --- FAIL: TestTailLogBufferKeepsBoundedTail/exact_limit_then_empty (0.00s)\n        runtime_process_test.go:226: tail=\"12345678\" truncated=true; want tail=\"12345678\" truncated=false\nFAIL\nFAIL\tai-dev-manager-v2/internal/gateway\t0.025s\nFAIL\n",
+    "green": true,
+    "case_count": 8,
+    "fix": "Mark truncated only when bytes are discarded; preserve the flag after actual truncation."
+  },
+  "review_port_assertion": {
+    "method": "Decode result.id, result.state and result.listening_ports rather than searching the full JSON text.",
+    "windows_acceptance_passed": true,
+    "non_windows_expectation": "Running identity with no port facts; lifecycle checks remain active.",
+    "non_windows_native_run_performed": false
+  },
+  "previous_handoff_gate": {
+    "gateway_seconds": 14.213,
+    "restart_five_seconds": 4.91,
+    "source": "Completed pre-review handoff gate; superseded by the review executions above."
+  }
+}

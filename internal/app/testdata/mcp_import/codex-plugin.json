@@ -1,0 +1,13 @@
+{
+  "codex-local": {
+    "command": "python",
+    "args": ["-m", "fixture_server"],
+    "env": {"REGION": "${CODEX_REGION}"},
+    "cwd": "./plugin"
+  },
+  "codex-remote": {
+    "type": "http",
+    "url": "https://codex.example/mcp",
+    "headers": {"X-Region": "${CODEX_REMOTE_REGION}"}
+  }
+}

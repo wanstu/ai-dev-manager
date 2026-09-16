@@ -1,0 +1,24 @@
+{
+  // OpenCode V2 MCP source
+  "mcp": {
+    "servers": {
+      "local-tools": {
+        "type": "local",
+        "command": ["go", "run", "./cmd/helper"],
+        "environment": {
+          "OPENAI_API_KEY": "[REDACTED_SECRET]",
+          "REGION": "{env:ADM_REGION}"
+        },
+        "cwd": "./ignored",
+        "disabled": true,
+      },
+      "remote-tools": {
+        "type": "remote",
+        "url": "https://example.test/mcp",
+        "headers": {
+          "Authorization": "Bearer [REDACTED_SECRET]"
+        }
+      }
+    }
+  }
+}

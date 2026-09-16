@@ -1,0 +1,67 @@
+{
+  "phase": 10,
+  "name": "orchestration-boundary-cleanup",
+  "date": "2026-09-08",
+  "implementation_commit": "36202489c13111cba2621b6d5a373707b7fde3f2",
+  "base_head": "d52af4fea793094ae24f68473e15cda669b7b742",
+  "branch": "rebaseline/core-mcp-skill-runtime",
+  "workspace_root": "D:\\projects\\ai-dev-manager-v2-wt-rebaseline-core",
+  "result": "pass",
+  "source_audit": {
+    "run_workflow_start": "absent from production internal source; present only in negative server_test.go coverage",
+    "StartWorkflowRun": "absent",
+    "workflowRun": "absent",
+    "workflowStep": "absent",
+    "gsd_phase_": "absent",
+    "planning_state_interpreter": "absent; .planning/STATE.md only appears as literal Skill test content"
+  },
+  "commands": [
+    {
+      "command": "go test ./internal/gateway -run ^(TestAgentRunLifecycleAcrossAgentSessions|TestAgentRunTerminalStatesAndAuthority|TestAgentRunDropEnvironmentCancelsAndForgets|TestAgentRunOwnerCloseCancelsActiveRun|TestAgentRunStartRenewsWriterLease)$ -count=1",
+      "exit_code": 0,
+      "result": "pass",
+      "output": "ok ai-dev-manager-v2/internal/gateway 2.462s"
+    },
+    {
+      "command": "go test ./internal/gateway -run ^TestAgentRunLifecycleAcrossRealGatewayRestart$ -count=1",
+      "exit_code": 0,
+      "result": "pass",
+      "output": "ok ai-dev-manager-v2/internal/gateway 1.576s"
+    },
+    {
+      "command": "go test ./internal/gateway -run ^(TestGatewayDevelopsPlainDirectoryWithoutGit|TestMCPHealthLifecycleEndToEnd|TestGatewayUsesOnlyEnabledConfiguredExternalMCPAndSkillRuntime|TestVerifierRealHTTPAcceptanceNonGitRepositoryCopy|TestDevProcessLifecycleAcrossRealGatewayRestart|TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe)$ -count=1",
+      "exit_code": 0,
+      "result": "pass",
+      "output": "ok ai-dev-manager-v2/internal/gateway 56.215s"
+    },
+    {
+      "command": "go test ./internal/gateway -run ^TestGatewayDevelopsPlainDirectoryWithoutGit$ -count=1",
+      "exit_code": 0,
+      "result": "pass",
+      "output": "ok ai-dev-manager-v2/internal/gateway 0.106s",
+      "note": "run after adding real MCP negative call coverage for retired run_workflow_start"
+    },
+    {
+      "command": "go test ./...",
+      "exit_code": 0,
+      "result": "pass",
+      "output": "all packages passed/compiled; final gateway package 31.278s"
+    },
+    {
+      "command": "go vet ./...",
+      "exit_code": 0,
+      "result": "pass"
+    },
+    {
+      "command": "git diff --check d52af4...HEAD",
+      "exit_code": 0,
+      "result": "pass"
+    }
+  ],
+  "connector_note": "A previous session saw pjadm connection closure before Go produced a result. This session recovered and all required Go commands returned real exit-code-0 results; the earlier connector closure is neither a test failure nor acceptance evidence.",
+  "scope": {
+    "master_modified": false,
+    "gsd_phase_executor_branch_touched": false,
+    "phase_11_implementation_started": false
+  }
+}

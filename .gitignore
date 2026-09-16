@@ -1,0 +1,7 @@
+.tmp/
+.idea/
+*.exe
+*.exe~
+cmd/ai-dev-manager-desktop/frontend/wailsjs/
+cmd/ai-dev-manager-desktop/build/
+dist/

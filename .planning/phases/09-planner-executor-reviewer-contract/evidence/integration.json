@@ -1,0 +1,35 @@
+{
+  "phase": 9,
+  "name": "planner-executor-reviewer-contract",
+  "integrated_at": "2026-09-08T06:21:14Z",
+  "source_branch": "feat/planner-executor-reviewer-contract",
+  "source_head": "dda5c9e",
+  "master_before": "4520baf",
+  "master_after_fast_forward": "dda5c9e",
+  "reviewed_source": "50fe9ae",
+  "review_fixes": [
+    "a627df9 revalidate runtime authority per step",
+    "50fe9ae recheck writer before each step"
+  ],
+  "post_integration": {
+    "gateway_test": {
+      "command": "go test ./internal/gateway -count=1",
+      "status": "passed",
+      "duration_seconds": 43.476
+    },
+    "full_test": {
+      "command": "go test ./...",
+      "status": "passed",
+      "gateway_duration_seconds": 45.902
+    },
+    "vet": {
+      "command": "go vet ./...",
+      "status": "passed"
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  },
+  "push_performed": false
+}

@@ -1,0 +1,6 @@
+{
+  "result": {
+    "exit_code": 0,
+    "stdout": "{\n  \"complete\": true,\n  \"phase\": \"04\",\n  \"plan_count\": 1,\n  \"summary_count\": 1,\n  \"incomplete_plans\": [],\n  \"orphan_summaries\": [],\n  \"errors\": [],\n  \"warnings\": []\n}{\n  \"valid\": true,\n  \"errors\": [],\n  \"warnings\": [],\n  \"task_count\": 3,\n  \"tasks\": [\n    {\n      \"name\": \"1. Establish current R1 Gateway and target context\",\n      \"type\": \"auto\",\n      \"hasFiles\": true,\n      \"hasAction\": true,\n      \"hasVerify\": true,\n      \"hasDone\": true\n    },\n    {\n      \"name\": \"2. Implement and consume verifier report CLI\",\n      \"type\": \"auto\",\n      \"hasFiles\": true,\n      \"hasAction\": true,\n      \"hasVerify\": true,\n      \"hasDone\": true\n    },\n    {\n      \"name\": \"3. Restart, regress and record R1 gate\",\n      \"type\": \"auto\",\n      \"hasFiles\": true,\n      \"hasAction\": true,\n      \"hasVerify\": true,\n      \"hasDone\": true\n    }\n  ],\n  \"frontmatter_fields\": [\n    \"phase\",\n    \"plan\",\n    \"type\",\n    \"wave\",\n    \"depends_on\",\n    \"files_modified\",\n    \"autonomous\",\n    \"requirements\",\n    \"must_haves\"\n  ]\n}"
+  }
+}

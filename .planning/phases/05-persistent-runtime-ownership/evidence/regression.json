@@ -1,0 +1,22 @@
+{
+  "timestamp_utc": "2026-09-07T10:04:54Z",
+  "focused_owner_tests": {"exit_code": 0},
+  "gateway_cli_packages": {
+    "command": "go test ./internal/app ./internal/gateway ./cmd/ai-dev-manager -count=1",
+    "exit_code": 0,
+    "internal_gateway_seconds": 16.962
+  },
+  "full_tests": {
+    "command": "go test ./... -count=1",
+    "exit_code": 0,
+    "internal_gateway_seconds": 14.921
+  },
+  "vet": {"command": "go vet ./...", "exit_code": 0},
+  "diff_check": {"command": "git diff --check", "exit_code": 0},
+  "restart_stability": {
+    "command": "go test ./internal/gateway -run TestRuntimeOwnerRealHTTPRestartReconciliation -count=5",
+    "exit_code": 0,
+    "seconds": 2.177
+  },
+  "phase6_api_diff_review": "NO_PHASE6_API_ADDITIONS"
+}

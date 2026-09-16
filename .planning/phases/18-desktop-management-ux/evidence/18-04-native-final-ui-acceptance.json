@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-12",
+  "case": "D10 exact native artifact and existing shell",
+  "source_head_before_evidence_commit": "201c1b9",
+  "artifact": "cmd/ai-dev-manager-desktop/build/bin/adm-desktop-phase18-final-windows-amd64.exe",
+  "artifact_note": "dist/adm-desktop-phase18-final-windows-amd64.exe was locked by the existing gateway-child process serving the current ADM session, so the Wails-built build/bin artifact with the same output name and matching current-code hash was used for visible native acceptance. The dist polish artifact has the same SHA-256.",
+  "sha256": "4D3ACB64B781447A49543D4C68AC0989884C01763ABB237B7F91123FFA74DEB8",
+  "size_bytes": 17362432,
+  "window": {
+    "process_id": 13540,
+    "process_path": "D:/projects/ai-dev-manager-v2/cmd/ai-dev-manager-desktop/build/bin/adm-desktop-phase18-final-windows-amd64.exe",
+    "title": "adm-desktop — 1.0 RC",
+    "width": 1120,
+    "height": 760
+  },
+  "result": "PASS_WITH_ARTIFACT_PATH_NOTE",
+  "checks": {
+    "final_wails_artifact_window_opened": true,
+    "process_path_matches_current_build_bin_final_artifact": true,
+    "window_title_matches_desktop_rc": true,
+    "gateway_route_clicked_and_screenshot_saved": true,
+    "standalone_diagnostics_route_clicked_and_screenshot_saved": true,
+    "settings_route_clicked_and_screenshot_saved": true,
+    "visible_window_not_a_raw_go_build": true,
+    "existing_gateway_child_not_stopped": true
+  },
+  "screenshots": [
+    {"path":"evidence/18-04-native-final-start.png","sha256":"206D37C58B9043310191E7C7A49BE1005A9209548FB94D24DCD2DB5E03BFF6EC","bytes":1359249},
+    {"path":"evidence/18-04-native-final-gateway.png","sha256":"47284EFF23CEB846A727A3458E1245BA51948F2DA14365ABDE3B4494FEDA01FA","bytes":1259386},
+    {"path":"evidence/18-04-native-final-diagnostics.png","sha256":"4ED74537F804DC46CA36BA18D614F9B34E812F10165657359C84B2D6290AD0BD","bytes":71021},
+    {"path":"evidence/18-04-native-final-settings.png","sha256":"C0255298A0D7AD6B488710FCBC7095AA630F7DDC49671C092BBADC834C946AA4","bytes":55015}
+  ],
+  "supporting_automated_evidence": {
+    "production_browser_smoke": "PASS 131 checks x 3 after context/diagnostics polish",
+    "helper_regression": "PASS 20/20",
+    "focused_go": "PASS ./cmd/ai-dev-manager-desktop ./internal/desktop ./internal/management",
+    "polish_build_run": "run_401fb4c5bf51b1d3",
+    "polish_artifact": "dist/adm-desktop-phase18-polish-windows-amd64.exe",
+    "polish_sha256": "4D3ACB64B781447A49543D4C68AC0989884C01763ABB237B7F91123FFA74DEB8"
+  },
+  "notes": [
+    "This native pass intentionally did not stop the gateway-child process serving the active ADM session.",
+    "UI Automation could confirm the Wails/WebView2 window and process path, but the WebView DOM was not exposed through the accessibility tree; route/layout details remain backed by the production browser smoke and saved native screenshots.",
+    "The visible native smoke used harmless route clicks and screenshots only; it did not read Memory values or mutate production catalogs."
+  ]
+}

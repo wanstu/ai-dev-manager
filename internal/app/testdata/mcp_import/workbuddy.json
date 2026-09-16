@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "wb-local": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["server.js"],
+      "env": {"REGION": "${WB_REGION}"},
+      "runtime": "node",
+      "x-workbuddy": {"displayName": "WB"}
+    },
+    "wb-remote": {
+      "type": "streamableHttp",
+      "url": "https://workbuddy.example/mcp",
+      "headers": {"X-Region": "{env:WB_REMOTE_REGION}"}
+    }
+  }
+}

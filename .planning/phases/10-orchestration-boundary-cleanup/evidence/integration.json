@@ -1,0 +1,66 @@
+{
+  "phase": "10-orchestration-boundary-cleanup",
+  "date": "2026-09-08",
+  "result": "passed",
+  "base_master": "eca6cc615c070518467e498468efcf3e08a8377e",
+  "reviewed_head": "624cb5d327c8cb7a8ab92bd861fc6b7cc733ce51",
+  "implementation_commit": "36202489c13111cba2621b6d5a373707b7fde3f2",
+  "integration_state": "fast-forward-ready",
+  "checks": [
+    {
+      "command": "pj.show_changes",
+      "result": "pass",
+      "detail": "working tree clean before integration review"
+    },
+    {
+      "command": "git.exe rev-list --left-right --count master...HEAD",
+      "result": "pass",
+      "stdout": "0\t7",
+      "detail": "master has no unique commits; reviewed branch is seven commits ahead"
+    },
+    {
+      "command": "git.exe diff --check d52af4...HEAD",
+      "result": "pass",
+      "exit_code": 0
+    },
+    {
+      "command": "git.exe diff --check master...HEAD",
+      "result": "pass",
+      "exit_code": 0
+    },
+    {
+      "command": "go.exe test ./internal/gateway -run '^(TestGatewayDevelopsPlainDirectoryWithoutGit|TestAgentRunLifecycleAcrossRealGatewayRestart)$' -count=3",
+      "result": "pass",
+      "exit_code": 0,
+      "stdout": "ok  ai-dev-manager-v2/internal/gateway  2.477s"
+    },
+    {
+      "command": "go.exe test ./...",
+      "result": "pass",
+      "exit_code": 0,
+      "detail": "all repository packages passed or compiled; gateway 30.311s"
+    },
+    {
+      "command": "go.exe vet ./...",
+      "result": "pass",
+      "exit_code": 0
+    },
+    {
+      "command": "pj.search internal /(run_workflow_start|StartWorkflowRun|gsd_phase_|workflowRun|workflowStep)/",
+      "result": "pass",
+      "detail": "only two negative run_workflow_start references remain in internal/gateway/server_test.go"
+    },
+    {
+      "command": "git.exe merge-base --is-ancestor feat/gsd-phase-executor HEAD",
+      "result": "pass",
+      "exit_code": 1,
+      "detail": "exit 1 is expected and proves the abandoned branch is not an ancestor of HEAD"
+    }
+  ],
+  "findings": [],
+  "notes": [
+    "POSIX git under pj bash cannot resolve this Windows worktree .git indirection; Windows git.exe was used successfully for Git review commands.",
+    "No push performed.",
+    "Phase 11 implementation not started during this review."
+  ]
+}

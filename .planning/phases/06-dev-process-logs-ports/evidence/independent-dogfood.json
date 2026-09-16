@@ -1,0 +1,47 @@
+{
+  "date": "2026-09-07",
+  "target": "Windows local dogfood",
+  "shared_gateway_41137_touched": false,
+  "private_adm_home": ".tmp/phase6-dogfood/run/home",
+  "gateway": {
+    "listen": "127.0.0.1:36728",
+    "first_owner_id": "owner_22220_18d30be9a67cbd0c_1",
+    "first_pid": 22220,
+    "restart_owner_id": "owner_5396_18d30c103bbe92d4_1",
+    "restart_pid": 5396
+  },
+  "workspace_id": "ws_9ddd578ae0cba1d3",
+  "environment_id": "env_32b565c8340e0c36",
+  "writer_owner": "phase6-dogfood-writer",
+  "first_process": {
+    "id": "proc_d5c103ee5ee32e51",
+    "pid": 42712,
+    "listening_port": 37503,
+    "launch_probe_exited_while_server_remained_running": true,
+    "second_probe_status_running": true,
+    "stdout": "phase6-dogfood-stdout port=37503\n",
+    "stderr": "phase6-dogfood-stderr ready\n",
+    "direct_http_response": "phase6-dogfood-ok",
+    "explicit_stop_state": "exited",
+    "port_released_after_stop": true
+  },
+  "second_process": {
+    "id": "proc_eea861f94fb328c9",
+    "pid": 26376,
+    "listening_port": 37529,
+    "stopped_via_process_stop": false,
+    "cleaned_by_gateway_graceful_shutdown": true,
+    "port_released_after_gateway_stop": true
+  },
+  "restart": {
+    "owner_changed": true,
+    "process_list_after_restart": [],
+    "prior_processes_resurrected": false
+  },
+  "persistence": {
+    "contains_first_proc_id": false,
+    "contains_second_proc_id": false,
+    "contains_owned_dev_processes": false,
+    "contains_listening_ports": false
+  }
+}

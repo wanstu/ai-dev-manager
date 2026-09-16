@@ -1,0 +1,6 @@
+{
+  "result": {
+    "exit_code": 0,
+    "stdout": "{\"post_restart\":{\"result\":{\"verifier_id\":\"vf_9ed81ff5dad3c3b1\",\"kind\":\"test\",\"status\":\"passed\",\"exit_code\":0,\"duration_ms\":359,\"timed_out\":false,\"summary\":\"verifier passed\",\"stdout\":\"ok  \\tadm-verifier-report\\t(cached)\\n\"}},\"environment_id\":\"env_2007ef34ddaed91a\",\"memory\":{\"result\":{\"key\":\"phase4-task\",\"value\":\"Build verifier report; only complete explicit pass is accepted; no LLM agents.\"}},\"verifiers\":{\"result\":[{\"verifier_id\":\"vf_9ed81ff5dad3c3b1\",\"kind\":\"test\",\"enabled\":true,\"executable\":\"go\",\"args\":[\"test\",\"./...\"],\"timeout_seconds\":120,\"name\":\"report-tests\"},{\"verifier_id\":\"vf_34f373c7e083b7d0\",\"kind\":\"lint\",\"enabled\":true,\"executable\":\"go\",\"args\":[\"vet\",\"./...\"],\"timeout_seconds\":120,\"name\":\"report-vet\"}]}}\r\n"
+  }
+}

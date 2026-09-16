@@ -1,0 +1,22 @@
+{
+  "projects": {
+    "D:/projects/alpha": {
+      "mcpServers": {
+        "claude-local": {
+          "type": "stdio",
+          "command": "node",
+          "args": ["alpha.js"],
+          "env": {"REGION": "${CLAUDE_REGION:-us-east}"}
+        }
+      }
+    },
+    "D:/projects/beta": {
+      "mcpServers": {
+        "claude-remote": {
+          "type": "streamable-http",
+          "url": "https://claude.example/mcp"
+        }
+      }
+    }
+  }
+}

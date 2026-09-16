@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Dev Manager V2</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="topbar-brand">
+        <img class="app-brand-mark" src="./assets/ai-dev-manager-window.png" alt="" aria-hidden="true">
+        <div>
+          <p class="eyebrow">LOCAL DEVELOPMENT CONTROL PLANE</p>
+          <h1>AI Dev Manager</h1>
+          <p class="subtitle">Desktop management</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <label class="header-connection gateway-profile-field"><span>管理连接</span><select id="connectionSelect" aria-label="选择 ADM 连接"><option value="">正在读取连接…</option></select></label>
+        <span id="gatewayState" class="state-badge">—</span>
+        <button id="refreshButton" type="button">刷新</button>
+      </div>
+    </header>
+
+    <section id="statusPanel" class="status-panel" aria-live="polite" hidden></section>
+
+    <div class="management-layout">
+      <nav class="management-sidebar" aria-label="管理导航">
+        <div class="nav-group"><span class="nav-group-label">总览</span><a class="nav-link" href="#/overview" data-route-link="overview">概览</a></div>
+        <div class="nav-group"><span class="nav-group-label">开发</span><a class="nav-link" href="#/workspaces" data-route-link="workspaces">Workspaces</a><a class="nav-link" href="#/environments" data-route-link="environments">Environments</a><a class="nav-link" href="#/runtime" data-route-link="runtime">Runtime</a></div>
+        <div class="nav-group"><span class="nav-group-label">能力</span><a class="nav-link" href="#/mcp" data-route-link="mcp">MCP</a><a class="nav-link" href="#/skills" data-route-link="skills">Skills</a><a class="nav-link" href="#/memory" data-route-link="memory">Memory</a></div>
+        <div class="nav-group"><span class="nav-group-label">系统</span><a class="nav-link" href="#/gateway" data-route-link="gateway">ADM 连接</a><a class="nav-link" href="#/exec-allowlist" data-route-link="exec-allowlist">执行许可</a><a class="nav-link" href="#/diagnostics" data-route-link="diagnostics">环境诊断</a><a class="nav-link" href="#/settings" data-route-link="settings">设置</a></div>
+      </nav>
+      <div class="management-content" id="managementContent">
+    <section id="managementContextPanel" class="panel management-context persistent-context">
+      <div>
+        <p class="eyebrow">MANAGEMENT CONTEXT</p>
+        <h2>当前 Environment</h2>
+        <p>全局定义与当前 Environment 的启用状态分开管理。切换这里不会修改任何选择。</p>
+      </div>
+      <div class="management-context-controls">
+        <label class="context-select"><span>Workspace</span><select id="managementWorkspace"><option value="">未选择 Workspace</option></select></label>
+        <label class="context-select"><span>Environment</span><select id="managementEnvironment"><option value="">未选择 Environment</option></select></label>
+        <div class="context-actions">
+          <button id="createEnvironmentButton" type="button" class="secondary-button" data-dialog-open="environmentDialog">新建 Environment</button>
+          <button id="editEnvironmentButton" type="button" class="secondary-button" disabled>编辑名称</button>
+        </div>
+      </div>
+      <div id="managementEnvironmentHint" class="context-hint">选择 Environment 后可查看 MCP 健康与 Skill 可用性。</div>
+    </section>
+
+    <section class="gateway-panel panel management-page" data-management-page="gateway" hidden>
+      <div class="panel-heading"><div><p class="eyebrow">ADM CONNECTION</p><h2 data-page-heading>ADM Service</h2><p>连接配置、Runtime endpoints 和本地 Service 生命周期分开显示；Desktop 不保存新的 Core 状态。</p></div></div>
+      <div class="system-control-grid">
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>Saved connection profile</h3><span>唯一的 active profile 选择仍在顶部 header</span></div>
+          <div class="connection-toolbar"><button id="addConnection" class="secondary-button" type="button">添加连接</button><button id="editConnection" class="secondary-button" type="button">编辑</button><button id="deleteConnection" class="secondary-button" type="button">删除</button></div>
+          <label class="gateway-profile-field"><span>Base URL</span><input id="gatewayBaseURL" type="url" readonly spellcheck="false"></label>
+        </section>
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>Runtime endpoints</h3><span>只显示当前连接返回的 endpoint facts</span></div>
+          <div class="gateway-info compact-gateway-info">
+            <div class="gateway-meta endpoint-stack">
+              <span><strong>Health</strong> <code id="gatewayHealthURL">http://127.0.0.1:43137/healthz</code></span>
+              <span><strong>Agent MCP</strong> <code id="gatewayURL">http://127.0.0.1:43137/mcp</code></span>
+              <span><strong>Admin MCP</strong> <code id="gatewayAdminURL">http://127.0.0.1:43137/admin/mcp</code></span>
+              <span id="gatewayProcess">PID — · Version —</span>
+              <span id="gatewayDetail">连接成功后，Desktop 管理数据只通过 Admin MCP 读取。</span>
+            </div>
+          </div>
+        </section>
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>Local service lifecycle</h3><span>仅限本机连接</span></div>
+          <div class="subpanel-body">
+          <div class="gateway-actions">
+            <button id="gatewayRefreshButton" class="secondary-button" type="button">检查连接</button>
+            <button id="gatewayStartButton" type="button">启动本地 ADM</button>
+            <button id="gatewayStopButton" class="danger-button" type="button">停止本地 ADM</button>
+          </div>
+          <p class="subpanel-note">启动和停止服务仅适用于本机连接。连接失败时会显示错误，保留当前连接设置。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="management-page overview-page" data-management-page="overview">
+      <div class="page-heading"><div><p class="eyebrow">OVERVIEW</p><h2 data-page-heading>管理概览</h2><p>查看已加载的 ADM 管理资源，并进入对应管理页面。</p></div></div>
+      <div class="overview-data-state" aria-live="polite">
+        <span id="dashboardDataState" class="state-badge" data-state="unloaded">未加载</span>
+        <strong id="dashboardLastSuccess">尚无成功快照</strong>
+        <span id="dashboardDataDetail">选择并连接 ADM 后读取管理数据。</span>
+      </div>
+      <div class="metrics" aria-label="ADM 状态统计">
+        <a class="metric metric-link" href="#/workspaces" data-route-link="workspaces"><span>Workspaces</span><strong id="workspaceCount">—</strong></a>
+        <a class="metric metric-link" href="#/environments" data-route-link="environments"><span>Environments</span><strong id="environmentCount">—</strong></a>
+        <a class="metric metric-link" href="#/exec-allowlist" data-route-link="exec-allowlist"><span>Exec allowlist</span><strong id="execCount">—</strong></a>
+        <a class="metric metric-link" href="#/mcp" data-route-link="mcp"><span>MCP definitions</span><strong id="mcpCount">—</strong></a>
+        <a class="metric metric-link" href="#/skills" data-route-link="skills"><span>Skills</span><strong id="skillCount">—</strong></a>
+        <a class="metric metric-link" href="#/memory" data-route-link="memory"><span>Global Memory</span><strong id="memoryCount">—</strong></a>
+      </div>
+    </section>
+
+
+
+    <div class="route-page-stack">
+      <article id="mcpManager" class="panel core-manager management-page" data-management-page="mcp" hidden>
+        <div class="panel-heading manager-heading">
+          <div><p class="eyebrow">CORE CAPABILITY</p><h2 data-page-heading>MCP 管理</h2><p>管理全局 MCP 定义、默认启用、当前 Environment 选择与显式健康探测。</p></div>
+          <span id="mcpBadge" class="badge">0</span>
+        </div>
+        <div class="summary-strip">
+          <span>全局 <strong id="mcpTotalCount">0</strong></span>
+          <span>默认启用 <strong id="mcpDefaultCount">0</strong></span>
+          <span>当前环境 <strong id="mcpEnvironmentCount">0</strong></span>
+          <span>需处理 <strong id="mcpIssueCount">0</strong></span>
+        </div>
+        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="mcpEditorFlow">添加 MCP 定义</button></div>
+        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="mcpImportDialog">导入 MCP JSON / JSONC</button></div>
+        <div class="skill-bulk-toolbar" id="mcpBulkToolbar">
+          <div class="skill-bulk-actions">
+            <button id="mcpSelectVisibleButton" type="button" class="secondary-button small-button">选择当前结果</button>
+            <button id="mcpClearSelectionButton" type="button" class="secondary-button small-button">清除选择</button>
+            <span class="visible-count">已选择 <strong id="mcpSelectedCount">0</strong></span>
+            <button id="mcpAssignEnvironmentsButton" type="button" class="secondary-button small-button" disabled>批量分配到环境…</button>
+            <button id="mcpClearMissingButton" type="button" class="secondary-button small-button" disabled>清除不存在引用</button>
+          </div>
+          <div class="skill-bulk-actions">
+            <button id="mcpSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果设为新环境默认</button>
+            <button id="mcpUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果取消新环境默认</button>
+          </div>
+          <div class="skill-bulk-actions">
+            <button id="mcpEnableVisibleButton" type="button" class="secondary-button small-button" disabled>当前结果在 Environment 显式启用</button>
+            <button id="mcpDisableVisibleButton" type="button" class="secondary-button small-button" disabled>当前结果取消 Environment 显式启用</button>
+          </div>
+          <p id="mcpBulkHint" class="skill-bulk-hint">先选择 MCP / Skill，再用“批量分配到环境”选择多个 Environment；旧的当前结果操作仍只作用于当前筛选和当前 Environment。</p>
+        </div>
+        <div class="list-heading"><strong>全局 MCP 定义</strong><span>删除是全局操作；当前 Environment 开关只修改选择。</span></div>
+        <div class="list-toolbar">
+          <label class="filter-field"><span>搜索</span><input id="mcpFilter" type="search" placeholder="名称 / ID / endpoint / executable；正则用 /pattern/i"></label>
+          <label class="filter-field compact-filter"><span>显示</span><select id="mcpStateFilter"><option value="all">全部</option><option value="selected">当前环境已启用</option><option value="unselected">当前环境未启用</option><option value="issues">需处理</option><option value="unobserved">尚未探测</option></select></label>
+          <span class="visible-count">显示 <strong id="mcpVisibleCount">0</strong> / <strong id="mcpListTotalCount">0</strong></span>
+        </div>
+        <div class="status-legend"><span><strong>配置</strong>：静态可激活性，不联网。</span><span><strong>全局探测</strong>：检查 MCP 连接，与 Environment 启用状态无关；刷新页面不会自动探测。</span></div>
+        <div id="mcpList" class="resource-list filtered-resource-list empty">暂无 MCP 定义</div>
+      </article>
+
+      <article id="skillManager" class="panel core-manager management-page" data-management-page="skills" hidden>
+        <div class="panel-heading manager-heading">
+          <div><p class="eyebrow">CORE CAPABILITY</p><h2 data-page-heading>Skill 管理</h2><p>管理显式 Skill source、刷新发现结果、默认启用与当前 Environment 可用性。</p></div>
+          <span id="skillBadge" class="badge">0</span>
+        </div>
+        <div class="summary-strip">
+          <span>Sources <strong id="skillSourceCount">0</strong></span>
+          <span>Skills <strong id="skillTotalCount">0</strong></span>
+          <span>当前环境 <strong id="skillEnvironmentCount">0</strong></span>
+          <span>需处理 <strong id="skillIssueCount">0</strong></span>
+        </div>
+        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="skillSourceDialog">添加 Skill source</button></div>
+        <div id="skillSubviewTabs" class="runtime-subview-tabs" role="tablist" aria-label="Skill management views">
+          <button type="button" class="secondary-button small-button" data-skill-subview="skills" role="tab" aria-selected="true">Skills <span id="skillSubviewSkillCount">0</span></button>
+          <button type="button" class="secondary-button small-button" data-skill-subview="sources" role="tab" aria-selected="false">Sources <span id="skillSubviewSourceCount">0</span></button>
+        </div>
+        <div class="runtime-subview-host skill-subview-host">
+          <section id="skillsPanel" class="runtime-subview-panel skill-subview-panel" data-skill-subview-panel="skills">
+            <div class="list-heading split-heading"><strong>Skills</strong><span>Source、artifact、当前 Environment 选择和全局可用性分开显示；不会读取 SKILL.md。</span></div>
+            <div class="skill-bulk-toolbar">
+              <div class="skill-bulk-actions">
+                <button id="skillProbeAllButton" type="button" class="secondary-button small-button">批量检查可用性</button>
+                <button id="skillSelectVisibleButton" type="button" class="secondary-button small-button">选择当前结果</button>
+                <button id="skillClearSelectionButton" type="button" class="secondary-button small-button">清除选择</button>
+                <button id="skillSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果设为新环境默认</button>
+                <button id="skillUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果取消新环境默认</button>
+              </div>
+              <div class="skill-bulk-actions">
+                <button id="skillEnableVisibleButton" type="button" class="secondary-button small-button" disabled>当前结果在 Environment 显式启用</button>
+                <button id="skillDisableVisibleButton" type="button" class="secondary-button small-button" disabled>当前结果取消 Environment 显式启用</button>
+              </div>
+              <div class="skill-bulk-actions">
+                <span class="visible-count">已选择 <strong id="skillSelectedCount">0</strong></span>
+                <button id="skillAssignEnvironmentsButton" type="button" class="secondary-button small-button" disabled>批量分配到环境…</button>
+                <button id="skillClearMissingButton" type="button" class="secondary-button small-button" disabled>清除不存在引用</button>
+              </div>
+              <div class="skill-bulk-actions skill-bulk-danger-actions">
+                <button id="skillDeleteSelectedButton" type="button" class="danger-button small-button" disabled>批量删除</button>
+                <button id="skillClearUnavailableButton" type="button" class="danger-button small-button" disabled>一键清除不可用</button>
+              </div>
+              <p id="skillBulkHint" class="skill-bulk-hint">批量检查会检查全局 Skill catalog 的 source root、artifact 与 support roots；不依赖当前 Environment。</p>
+            </div>
+            <div class="list-toolbar">
+              <label class="filter-field"><span>搜索</span><input id="skillFilter" type="search" placeholder="名称 / ID / artifact 路径；正则用 /pattern/i"></label>
+              <label class="filter-field compact-filter"><span>Source</span><select id="skillSourceFilter"><option value="">全部 Source</option></select></label>
+              <label class="filter-field compact-filter"><span>显示</span><select id="skillStateFilter"><option value="all">全部</option><option value="selected">当前环境已启用</option><option value="unselected">当前环境未启用</option><option value="issues">需处理</option><option value="source">Source-managed</option><option value="legacy">Legacy</option></select></label>
+              <span class="visible-count">显示 <strong id="skillVisibleCount">0</strong> / <strong id="skillListTotalCount">0</strong></span>
+            </div>
+            <div id="skillList" class="resource-list filtered-resource-list empty">暂无已发现 Skill</div>
+          </section>
+          <section id="skillSourcesPanel" class="runtime-subview-panel skill-subview-panel" data-skill-subview-panel="sources" hidden>
+            <div class="list-heading"><strong>Skill Sources</strong><span>Source 配置是全局定义；编辑不会自动刷新或扫描。</span></div>
+            <div class="list-toolbar">
+              <label class="filter-field"><span>搜索 Source</span><input id="skillSourceFilterInput" type="search" placeholder="root / source ID / support root；正则用 /pattern/i"></label>
+              <span class="visible-count">显示 <strong id="skillSourceVisibleCount">0</strong> / <strong id="skillSourceListTotalCount">0</strong></span>
+            </div>
+            <div id="skillSourceList" class="resource-list filtered-resource-list empty">暂无 Skill source</div>
+          </section>
+        </div>
+      </article>
+    </div>
+
+    <div class="route-page-stack">
+      <article class="panel management-page" data-management-page="workspaces" hidden>
+        <div class="panel-heading"><div><h2 data-page-heading>Workspaces</h2><p>登记允许 ADM 使用的本地目录。</p></div><span id="workspaceBadge" class="badge">0</span></div>
+        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="workspaceDialog">添加 Workspace</button></div>
+        <div class="list-toolbar project-list-toolbar">
+          <label class="filter-field"><span>搜索</span><input id="workspaceFilter" type="search" placeholder="名称 / ID / 完整路径"></label>
+          <span class="visible-count">显示 <strong id="workspaceVisibleCount">0</strong> / <strong id="workspaceListTotalCount">0</strong></span>
+        </div>
+        <div id="workspaceList" class="list filtered-project-list empty">暂无 Workspace</div>
+      </article>
+      <article class="panel management-page" data-management-page="environments" hidden>
+        <div class="panel-heading"><div><h2 data-page-heading>Environments</h2><p>创建持久开发上下文；Git 不是前置条件。</p></div><span id="environmentBadge" class="badge">0</span></div>
+        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="environmentDialog">创建 Environment</button><button id="environmentWorkspaceRecommendationsButton" type="button" class="secondary-button">检查推荐归属</button></div>
+        <div class="list-toolbar project-list-toolbar">
+          <label class="filter-field"><span>搜索</span><input id="environmentFilter" type="search" placeholder="名称 / ID / Root / Workspace"></label>
+          <label class="filter-field compact-filter"><span>Workspace</span><select id="environmentWorkspaceFilter"><option value="">全部 Workspace</option></select></label>
+          <span class="visible-count">显示 <strong id="environmentVisibleCount">0</strong> / <strong id="environmentListTotalCount">0</strong></span>
+          <p id="environmentFilterHint" class="project-filter-hint" hidden></p>
+        </div>
+        <div id="environmentList" class="list filtered-project-list empty">暂无 Environment</div>
+      </article>
+      <article id="environmentDiagnosticsPage" class="panel management-page" data-management-page="diagnostics" hidden>
+        <div class="panel-heading"><div><p class="eyebrow">ENVIRONMENT DIAGNOSTICS</p><h2 data-page-heading>环境诊断</h2><p>只展示当前 Management Environment 的已有 InspectEnvironment 诊断事实；不执行探测、Verifier、Memory 读取或全量扫描。</p></div><button id="diagnosticsRefreshButton" type="button" class="secondary-button small-button">刷新诊断</button></div>
+        <div id="diagnosticsPageHint" class="status-legend">请选择上方 Management Environment 后查看诊断。</div>
+        <div id="diagnosticsPageContent" class="detail-content diagnostics-content empty">请选择 Management Environment 后查看诊断。</div>
+      </article>
+    </div>
+
+    <div id="environmentDetailBackdrop" class="detail-backdrop" hidden></div>
+    <section id="environmentDetailPanel" class="panel detail-panel" role="dialog" aria-modal="true" hidden>
+      <div class="panel-heading"><div><p class="eyebrow">ENVIRONMENT DETAIL</p><h2 id="environmentDetailTitle">Environment</h2></div><button id="closeEnvironmentDetail" class="secondary-button" type="button">关闭</button></div>
+      <div id="environmentDetailSubviewTabs" class="runtime-subview-tabs detail-subview-tabs" role="tablist" aria-label="Environment detail subviews">
+        <button type="button" role="tab" aria-selected="true" data-environment-detail-subview="summary">Summary</button>
+        <button type="button" role="tab" aria-selected="false" data-environment-detail-subview="diagnostics">Diagnostics</button>
+      </div>
+      <div id="environmentDetail" class="detail-content" data-environment-detail-panel="summary"></div>
+      <section id="environmentTreeDigestSection" class="subpanel environment-tree-digest" data-environment-detail-panel="summary">
+        <div class="subpanel-heading"><div><h3>Directory summary</h3><span>显式读取有界目录 metadata；打开详情不会自动扫描。</span></div><button id="environmentTreeDigestButton" type="button" class="secondary-button small-button">读取目录摘要</button></div>
+        <div id="environmentTreeDigestResult" class="discovery-result empty">尚未读取目录摘要。</div>
+      </section>
+      <div id="environmentDiagnostics" class="detail-content diagnostics-content" data-environment-detail-panel="diagnostics" hidden></div>
+      <div id="environmentDetailRoutes" class="detail-route-actions" aria-label="Environment management shortcuts">
+        <span>继续管理当前 Environment：</span>
+        <button type="button" class="secondary-button small-button" data-detail-route="mcp">MCP</button>
+        <button type="button" class="secondary-button small-button" data-detail-route="skills">Skills</button>
+        <button type="button" class="secondary-button small-button" data-detail-route="memory">Memory</button>
+      </div>
+      <div class="detail-management-grid">
+        <section class="subpanel"><div class="subpanel-heading"><h3>MCP selections</h3><span>只修改当前 Environment</span></div><div id="environmentMCPSelections" class="selection-list empty">暂无 MCP 定义</div></section>
+        <section class="subpanel"><div class="subpanel-heading"><h3>Skill selections</h3><span>只修改当前 Environment</span></div><div id="environmentSkillSelections" class="selection-list empty">暂无 Skill</div></section>
+        <section class="subpanel"><div class="subpanel-heading"><h3>Environment-private Memory</h3><span>在 Memory 页面显式管理</span></div><p class="detail-note">关闭详情不会再清空或重定向 Memory 操作。使用上方 Memory 快捷入口管理当前 Environment 的 private Memory。</p></section>
+      </div>
+    </section>
+
+    <div class="route-page-stack">
+            <article class="panel management-page" data-management-page="exec-allowlist" hidden>
+        <div class="panel-heading"><div><p class="eyebrow">RUNTIME AUTHORITY</p><h2 data-page-heading>执行许可</h2><p>Agent 只能执行 allowlist 中的 executable；被 Runtime 拦截的 executable 会记录在下方，便于事后判断是否放行。</p></div><span id="execBadge" class="badge">0</span></div>
+        <div class="summary-strip">
+          <span>已允许 <strong id="execAllowedCount">0</strong></span>
+          <span>被拒绝次数 <strong id="execBlockedCount">0</strong></span>
+          <span>记录内容 <strong>仅 executable</strong></span>
+        </div>
+        <div class="system-control-grid single-column-grid exec-authority-grid">
+          <section class="subpanel">
+            <div class="subpanel-heading"><div><h3>Allowed executables</h3><span>允许后立即可用于 exec / verifier / process / run；不会自动执行命令。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execDialog">允许 executable</button></div>
+            <div id="execList" class="managed-list empty">暂无 allowed executable</div>
+          </section>
+          <section class="subpanel">
+            <div class="subpanel-heading"><div><h3>Blocked executable observations</h3><span>按拒绝次数排序；不记录 args、stdout/stderr 或命令内容。</span></div><button id="execClearAllBlockedButton" type="button" class="secondary-button small-button" disabled>清理全部</button></div>
+            <div id="execBlockedList" class="managed-list empty">暂无被拦截 executable</div>
+          </section>
+        </div>
+      </article>
+<article class="panel management-page" data-management-page="memory" hidden>
+        <div class="panel-heading"><div><h2 data-page-heading>Memory</h2><p>Global 与当前 Environment-private 作用域分开管理；这里只是人工管理视图，不自动注入 Agent。</p></div></div>
+        <div class="detail-management-grid memory-scope-grid">
+          <section class="subpanel memory-panel">
+            <div class="subpanel-heading"><div><h3>Global Memory</h3><span>跨 Environment 的共享持久上下文；打开 Memory 页后自动加载给人查看。</span></div><button id="loadGlobalMemory" class="secondary-button small-button" type="button">重新加载</button></div>
+            <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="globalMemoryDialog">写入 Global Memory</button></div>
+            <div id="globalMemoryList" class="memory-list empty">尚未加载 Global Memory</div>
+          </section>
+          <section class="subpanel memory-panel">
+            <div class="subpanel-heading"><div><h3>Environment-private Memory</h3><span id="environmentMemoryScopeHint">请选择 Management Environment 后显式加载。</span></div><button id="loadEnvironmentMemory" class="secondary-button small-button" type="button" disabled>加载当前 Environment Memory</button></div>
+            <div class="editor-toolbar"><button id="writeEnvironmentMemoryButton" type="button" class="secondary-button" data-dialog-open="environmentMemoryDialog" disabled>写入 Environment Memory</button></div>
+            <div id="environmentMemoryList" class="memory-list empty">请选择 Management Environment 后加载 private Memory</div>
+          </section>
+        </div>
+      </article>
+    </div>
+
+    <section class="panel runtime-panel management-page" data-management-page="runtime" hidden>
+      <div class="panel-heading manager-heading">
+        <div><p class="eyebrow">OWNER-LOCAL RUNTIME</p><h2 data-page-heading>Verifier / Process / Run</h2><p id="runtimeHint">选择 Management Environment 后可查看当前 Gateway owner 的运行状态。</p></div>
+        <button id="runtimeRefreshButton" type="button" class="secondary-button small-button">刷新 Runtime</button>
+      </div>
+      <div id="runtimeSubviewTabs" class="runtime-subview-tabs" role="tablist" aria-label="Runtime subviews">
+        <button type="button" role="tab" aria-selected="true" data-runtime-subview="verifiers">Verifiers <span id="runtimeVerifierCount">0</span></button>
+        <button type="button" role="tab" aria-selected="false" data-runtime-subview="processes">Processes <span id="runtimeProcessCount">0</span></button>
+        <button type="button" role="tab" aria-selected="false" data-runtime-subview="runs">Runs <span id="runtimeRunCount">0</span></button>
+      </div>
+      <div class="runtime-subview-host">
+        <section class="subpanel runtime-subview-panel" data-runtime-subview-panel="verifiers"><div class="subpanel-heading"><h3>Verifiers</h3><span>显式运行，不自动抢 Writer</span></div><div id="verifierList" class="resource-list empty">请选择 Environment</div></section>
+        <section class="subpanel runtime-subview-panel" data-runtime-subview-panel="processes" hidden><div class="subpanel-heading"><h3>Processes</h3><span>owner-local 状态与日志</span></div><div id="processList" class="resource-list empty">请选择 Environment</div></section>
+        <section class="subpanel runtime-subview-panel" data-runtime-subview-panel="runs" hidden><div class="subpanel-heading"><h3>Runs</h3><span>generic single-command lifecycle</span></div><div id="runList" class="resource-list empty">请选择 Environment</div></section>
+      </div>
+      <div class="subpanel runtime-output-panel"><div class="subpanel-heading"><h3>Runtime output</h3><span id="runtimeOutputMeta">有界 current-owner observation · 尚未选择资源</span></div><pre id="runtimeOutput" class="runtime-output">尚无输出</pre></div>
+    </section>
+
+    <section class="panel settings-page management-page" data-management-page="settings" hidden>
+      <div class="panel-heading"><div><p class="eyebrow">DESKTOP SETTINGS</p><h2 data-page-heading>设置</h2><p>Desktop 壳层设置；不改变 ADM Core、Environment、Agent Runtime 或连接授权。</p></div></div>
+      <div class="settings-content system-control-grid single-column-grid">
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>Managed worktrees</h3><span>Core / Gateway shared configuration</span></div>
+          <div class="subpanel-body">
+            <form id="worktreeSettingsForm" class="manager-form">
+              <label class="wide-field"><span>Worktree storage root</span><input id="worktreeRoot" type="text" placeholder="ADM default worktrees directory"></label>
+              <label><span>Branch prefix</span><input id="worktreeBranchPrefix" type="text" placeholder="adm/"></label>
+              <div class="form-actions wide-field"><button id="worktreeSettingsSaveButton" type="submit">保存 Worktree 设置</button></div>
+            </form>
+            <p id="worktreeSettingsHint" class="subpanel-note">配置目录会自动登记为受保护的 system Workspace；存在 managed worktree 时不会移动根目录。</p>
+          </div>
+        </section>
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>Host environment</h3><span>不显示环境变量值</span></div>
+          <div class="subpanel-body">
+            <div id="hostEnvironmentSummary" class="subpanel-note">尚未加载环境变量快照状态。</div>
+            <div class="gateway-actions"><button id="hostEnvironmentRefreshButton" type="button" class="secondary-button">刷新环境变量</button></div>
+            <p class="subpanel-note">Windows 会重新读取机器/用户环境变量源。刷新会丢弃现有 MCP session；后续 MCP 激活、Run、Process、Verifier 使用新快照，已经运行的 OS 进程不会被修改。</p>
+          </div>
+        </section>
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>Desktop shell preferences</h3><span>仅限 Desktop 外壳行为</span></div>
+          <div class="subpanel-body">
+          <label class="desktop-toggle" title="关闭主窗口后 Desktop 会继续驻留系统托盘">
+            <input id="launchAtLogin" type="checkbox">
+            <span><strong>开机启动</strong><small id="desktopShellHint">关闭窗口后继续驻留托盘</small></span>
+          </label>
+          <p class="subpanel-note">此处管理桌面应用偏好。项目环境和能力配置请前往对应管理页面。</p>
+          </div>
+        </section>
+      </div>
+    </section>
+      </div>
+    </div>
+  </main>
+<dialog id="mcpEditorFlow" class="editor-dialog" aria-labelledby="mcpEditorSummary"><header class="dialog-heading"><h2 id="mcpEditorSummary">添加 MCP 定义</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p>
+          <form id="mcpForm" class="manager-form">
+            <div id="mcpEditorHint" class="editor-hint wide-field" hidden>保存修改会保留 MCP ID 与现有 Environment 选择；更新后旧的运行探测结果会失效。</div>
+            <label><span>名称</span><input id="mcpName" type="text" placeholder="例如 local-tools" required></label>
+            <label><span>Transport</span><select id="mcpTransport"><option value="streamable-http">Streamable HTTP</option><option value="stdio">stdio</option></select></label>
+            <label id="mcpEndpointField" class="wide-field"><span>Endpoint</span><input id="mcpEndpoint" type="url" placeholder="http://127.0.0.1:9000/mcp"></label>
+            <label id="mcpExecutableField" class="wide-field" hidden><span>Executable</span><input id="mcpExecutable" type="text" placeholder="node / npx / executable path"></label>
+            <label id="mcpArgsField" class="wide-field" hidden><span>Arguments（每行一个）</span><textarea id="mcpArgs" placeholder="server.js\n--stdio"></textarea></label>
+            <label id="mcpAuthField"><span>HTTP Auth</span><select id="mcpAuthMode"><option value="none">None</option><option value="headers">Secret-backed headers</option></select></label>
+            <label id="mcpRefsField" class="wide-field" hidden><span>Header reference mappings（每行 Header=${ENV_NAME}）</span><textarea id="mcpReferencePairs" placeholder="Authorization=Bearer ${ADM_MCP_TOKEN}"></textarea><small>只在 HTTP Auth = Secret-backed headers 时有效；这里只保存环境变量引用，不持久化 literal secret。</small></label>
+            <label id="mcpEnvRefsField" class="wide-field" hidden><span>Environment reference mappings（每行 KEY=${ENV_NAME}）</span><textarea id="mcpEnvReferencePairs" placeholder="DATABASE_URL=${DATABASE_URL}"></textarea><small>只在 stdio Transport 时有效；值保持为环境变量引用，由 ADM 服务进程环境解析。</small></label>
+            <label class="check-field"><input id="mcpHealthEnabled" type="checkbox" checked><span>启用协议健康检查</span></label>
+            <label class="check-field"><input id="mcpAutoReconnect" type="checkbox"><span>自动重连</span></label>
+            <label id="mcpProbeTimeoutField"><span>Probe timeout (s)</span><input id="mcpProbeTimeout" type="number" min="1" value="5"></label>
+            <label id="mcpCheckIntervalField"><span>Check interval (s)</span><input id="mcpCheckInterval" type="number" min="1" value="30"></label>
+            <label id="mcpReconnectIntervalField" hidden><span>Reconnect interval (s)</span><input id="mcpReconnectInterval" type="number" min="1" value="30" disabled></label>
+            <label class="check-field"><input id="mcpDefault" type="checkbox"><span>新 Environment 默认启用</span></label>
+            <div class="form-actions wide-field"><button id="mcpEditCancelButton" class="secondary-button" type="button" hidden>取消编辑</button><button id="mcpSubmitButton" type="submit">添加全局 MCP</button></div>
+          </form>
+        </dialog>
+<dialog id="mcpImportDialog" class="editor-dialog" aria-labelledby="mcpImportDialogTitle"><header class="dialog-heading"><h2 id="mcpImportDialogTitle">导入 MCP JSON / JSONC</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p>
+          <form id="mcpImportForm" class="manager-form import-form">
+            <label><span>格式</span><select id="mcpImportFormat"><option value="auto">自动识别</option><option value="generic-mcpservers">Generic mcpServers</option><option value="opencode">OpenCode</option><option value="workbuddy">WorkBuddy / CodeBuddy</option><option value="codex-plugin">Codex plugin</option><option value="claude-code">Claude Code</option><option value="mcphub">MCPHub</option></select></label>
+            <label><span>名称冲突</span><select id="mcpImportConflict"><option value="error">报错，不覆盖</option><option value="update_by_name">按名称更新</option></select></label>
+            <label class="check-field"><input id="mcpImportDefault" type="checkbox"><span>导入项在新 Environment 默认启用</span></label>
+            <label class="wide-field"><span>JSON / JSONC 内容</span><textarea id="mcpImportContent" class="code-input" placeholder="粘贴 MCP 配置；先预览，再应用" required></textarea></label>
+            <div class="form-actions wide-field"><button id="mcpImportPreviewButton" class="secondary-button" type="submit">预览导入</button><button id="mcpImportApplyButton" type="button" disabled>应用预览结果</button></div>
+          </form>
+          <div id="mcpImportPreview" class="preview-panel empty">尚未预览。导入不会修改 Environment 选择。</div>
+        </dialog>
+<dialog id="skillSourceDialog" class="editor-dialog" aria-labelledby="skillSourceDialogTitle"><header class="dialog-heading"><h2 id="skillSourceDialogTitle">添加 Skill source</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p>
+          <form id="skillSourceForm" class="manager-form">
+            <input id="skillSourceID" type="hidden">
+            <label class="wide-field"><span>Source root</span><input id="skillSourceRoot" type="text" placeholder="C:\Users\you\.config\opencode\skills" required></label>
+            <label class="wide-field"><span>Support roots（每行一个，可选）</span><textarea id="skillSupportRoots" placeholder="C:\Users\you\.config\opencode\gsd-core"></textarea></label>
+            <label class="check-field wide-field"><input id="skillSourceDefault" type="checkbox"><span>此 source 发现的 Skill 在新 Environment 默认启用</span></label>
+            <div class="form-actions wide-field"><button id="skillSourceSubmitButton" type="submit">添加并刷新 Source</button></div>
+          </form>
+        </dialog>
+<dialog id="capabilityAssignmentDialog" class="editor-dialog bulk-assignment-dialog" aria-labelledby="capabilityAssignmentTitle"><header class="dialog-heading"><div><p class="eyebrow">BULK ENVIRONMENT ASSIGNMENT</p><h2 id="capabilityAssignmentTitle">批量分配 MCP / Skill</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p>
+          <p id="capabilityAssignmentSummary" class="editor-hint">先在 MCP / Skills 页面选择资源，再选择目标 Environment。</p>
+          <div class="skill-bulk-actions">
+            <button id="capabilityAssignmentSelectAllButton" type="button" class="secondary-button small-button">选择全部 Environment</button>
+            <button id="capabilityAssignmentClearButton" type="button" class="secondary-button small-button">清除 Environment 选择</button>
+          </div>
+          <div id="capabilityAssignmentEnvironmentList" class="selection-list bulk-environment-list empty">暂无 Environment</div>
+          <div class="form-actions bulk-assignment-actions">
+            <button id="capabilityAssignmentEnableButton" type="button" disabled>在所选 Environment 开启</button>
+            <button id="capabilityAssignmentDisableButton" type="button" class="secondary-button" disabled>在所选 Environment 关闭</button>
+          </div>
+          <div id="capabilityAssignmentResult" class="preview-panel empty">尚未执行批量分配。</div>
+        </dialog>
+<dialog id="workspaceDialog" class="editor-dialog" aria-labelledby="workspaceDialogTitle"><header class="dialog-heading"><h2 id="workspaceDialogTitle">添加 Workspace</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="workspaceForm" class="inline-form">
+          <label><span>目录</span><input id="workspacePath" name="path" type="text" placeholder="D:\projects\example" required></label>
+          <label><span>名称（可选）</span><input id="workspaceName" name="name" type="text" placeholder="example"></label>
+          <button type="submit">添加 Workspace</button>
+        </form></dialog>
+<dialog id="workspaceDiscoveryDialog" class="editor-dialog discovery-dialog" aria-labelledby="workspaceDiscoveryTitle"><header class="dialog-heading"><div><p class="eyebrow">EXPLICIT DISCOVERY</p><h2 id="workspaceDiscoveryTitle">Discover projects</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p>
+          <form id="workspaceDiscoveryForm" class="manager-form discovery-options-form">
+            <label class="wide-field"><span>Scan path（Workspace-relative，可选）</span><input id="workspaceDiscoveryPath" type="text" placeholder="默认 Workspace root"></label>
+            <label class="wide-field"><span>Candidate query（literal，可选）</span><input id="workspaceDiscoveryQuery" type="search" placeholder="候选名称或相对路径"></label>
+            <label><span>Max depth</span><input id="workspaceDiscoveryMaxDepth" type="number" min="0" max="8" placeholder="Core default"></label>
+            <label><span>Max entries</span><input id="workspaceDiscoveryMaxEntries" type="number" min="0" max="10000" placeholder="Core default"></label>
+            <label><span>Max candidates</span><input id="workspaceDiscoveryMaxCandidates" type="number" min="0" max="200" placeholder="Core default"></label>
+            <label><span>Max digest entries</span><input id="workspaceDiscoveryMaxDigestEntries" type="number" min="0" max="500" placeholder="Core default"></label>
+            <label><span>Max output bytes</span><input id="workspaceDiscoveryMaxOutputBytes" type="number" min="0" max="262144" placeholder="Core default"></label>
+            <div class="form-actions wide-field"><button id="workspaceDiscoveryScanButton" type="submit">扫描</button></div>
+          </form>
+          <div class="list-toolbar discovery-filter-toolbar"><label class="filter-field"><span>Filter loaded candidates</span><input id="workspaceDiscoveryFilter" type="search" placeholder="只筛选当前结果，不重新扫描"></label></div>
+          <div id="workspaceDiscoverySummary" class="status-legend">尚未扫描。打开此窗口不会读取目录。</div>
+          <div id="workspaceDiscoveryResult" class="discovery-result empty">点击“扫描”显式开始 discovery。</div>
+        </dialog>
+<dialog id="environmentDialog" class="editor-dialog" aria-labelledby="environmentDialogTitle"><header class="dialog-heading"><h2 id="environmentDialogTitle">创建 Environment</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="environmentForm" class="inline-form">
+          <label><span>Workspace</span><select id="environmentWorkspace" required><option value="">先添加 Workspace</option></select></label>
+          <label><span>名称</span><input id="environmentName" type="text" placeholder="main" required></label>
+          <label><span>Root（可选）</span><input id="environmentRoot" type="text" placeholder="默认使用 Workspace root"></label>
+          <button type="submit">创建 Environment</button>
+        </form></dialog>
+<dialog id="environmentWorkspaceDialog" class="editor-dialog" aria-labelledby="environmentWorkspaceDialogTitle"><header class="dialog-heading"><div><p class="eyebrow">ENVIRONMENT WORKSPACE</p><h2 id="environmentWorkspaceDialogTitle">调整 Workspace 归属</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="environmentWorkspaceForm" class="manager-form"><p id="environmentWorkspaceSummary" class="editor-hint wide-field">正在读取可选 Workspace…</p><label class="wide-field"><span>目标 Workspace</span><select id="environmentWorkspaceTarget" required></select></label><p id="environmentWorkspaceReason" class="editor-hint wide-field"></p><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button id="environmentWorkspaceSaveButton" type="submit">保存归属</button></div></form></dialog>
+<dialog id="environmentWorkspaceRecommendationsDialog" class="editor-dialog" aria-labelledby="environmentWorkspaceRecommendationsTitle"><header class="dialog-heading"><div><p class="eyebrow">WORKSPACE RECOMMENDATIONS</p><h2 id="environmentWorkspaceRecommendationsTitle">推荐 Workspace 归属</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><div class="manager-form"><p id="environmentWorkspaceRecommendationsSummary" class="editor-hint wide-field">尚未检查。</p><div id="environmentWorkspaceRecommendationsList" class="list wide-field empty">尚未检查推荐归属。</div><p id="environmentWorkspaceRecommendationsResult" class="editor-hint wide-field"></p><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>关闭</button><button id="environmentWorkspaceRecommendationsApplyButton" type="button">应用全部建议</button></div></div></dialog>
+<dialog id="execDialog" class="editor-dialog" aria-labelledby="execDialogTitle"><header class="dialog-heading"><h2 id="execDialogTitle">允许 executable</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="execForm" class="single-line-form"><input id="execExecutable" type="text" placeholder="go / git / absolute path" required><button type="submit">允许 executable</button></form></dialog>
+<dialog id="globalMemoryDialog" class="editor-dialog" aria-labelledby="globalMemoryDialogTitle"><header class="dialog-heading"><h2 id="globalMemoryDialogTitle">写入 Global Memory</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="globalMemoryForm" class="memory-form"><input id="globalMemoryKey" type="text" placeholder="key" required><input id="globalMemoryValue" type="text" placeholder="value（可以为空）"><button type="submit">写入</button></form></dialog>
+<dialog id="environmentMemoryDialog" class="editor-dialog" aria-labelledby="environmentMemoryDialogTitle"><header class="dialog-heading"><h2 id="environmentMemoryDialogTitle">写入 Environment Memory</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="environmentMemoryForm" class="memory-form"><input id="environmentMemoryKey" type="text" placeholder="key" required><input id="environmentMemoryValue" type="text" placeholder="value（可以为空）"><button type="submit">写入</button></form></dialog>
+<dialog id="connectionDialog" class="editor-dialog" aria-labelledby="connectionDialogTitle"><header class="dialog-heading"><h2 id="connectionDialogTitle">添加连接</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="connectionForm" class="manager-form"><input id="connectionID" type="hidden"><label class="wide-field"><span>连接名称</span><input id="connectionName" type="text" required maxlength="120" placeholder="例如 开发环境"></label><label class="wide-field"><span>ADM Base URL</span><input id="connectionURL" type="url" required placeholder="http://127.0.0.1:8001"></label><label class="check-field wide-field"><input id="connectionStartOnDesktopLaunch" type="checkbox"><span>启动 Desktop 时自动启动此本地 ADM Service</span></label><p class="editor-hint wide-field">仅支持本机 loopback ADM URL。保存后可从主界面切换连接；配置保存在 ~/.config/adm/desktop-connections.json。</p><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button type="submit">保存连接</button></div></form></dialog>
+<dialog id="renameDialog" class="editor-dialog" aria-labelledby="renameDialogTitle"><header class="dialog-heading"><h2 id="renameDialogTitle">重命名</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="renameForm" class="manager-form"><label class="wide-field"><span>名称</span><input id="renameName" type="text" required></label><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button type="submit">保存修改</button></div></form></dialog>
+  <script src="./dialogs.js" defer></script>
+  <script src="./connections.js" defer></script>
+  <script src="./navigation.js" defer></script>
+  <script src="./dashboard.js" defer></script>
+  <script src="./project-pages.js" defer></script>
+  <script src="./runtime-view.js" defer></script>
+  <script src="./skill-bulk.js" defer></script>
+  <script src="./environment-bulk.js" defer></script>
+  <script src="./mcp-export.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

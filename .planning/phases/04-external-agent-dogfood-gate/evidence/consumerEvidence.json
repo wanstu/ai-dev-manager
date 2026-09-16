@@ -1,0 +1,6 @@
+{
+  "result": {
+    "exit_code": 0,
+    "stdout": "[{\"input\":\"red.json\",\"result\":{\"exit_code\":1,\"stdout\":\"vf_9ed81ff5dad3c3b1 failed exit=1 timed_out=false\\n\"}},{\"input\":\"green.json\",\"result\":{\"exit_code\":0,\"stdout\":\"vf_9ed81ff5dad3c3b1 passed exit=0 timed_out=false\\n\"}}]\r\nenvironment memory key \"phase4-task\" not found\r\n{\"result\":{\"key\":\"phase4-task\",\"value\":\"Build verifier report; only complete explicit pass is accepted; no LLM agents.\"}}\r\n"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "phase": "07-optional-git-worktree-isolation",
+  "date": "2026-09-08",
+  "integration": {
+    "target": "local master",
+    "from": "9ae56ad3a48e18302c9d147fd9b0dfdaa99f0964",
+    "to": "43d413f",
+    "strategy": "fast-forward",
+    "conflicts": false,
+    "push_performed": false
+  },
+  "review_gate": {
+    "git_diff_check_master_to_feature": "pass",
+    "isolation_repeat": {
+      "command": "go test ./internal/isolation -count=3",
+      "result": "pass",
+      "duration": "25.950s"
+    },
+    "gateway_repeat": {
+      "command": "go test ./internal/gateway -run TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe -count=3",
+      "result": "pass",
+      "duration": "5.280s",
+      "transport": "real Streamable HTTP"
+    }
+  },
+  "post_integration": {
+    "go_test_all": {
+      "command": "go test ./...",
+      "result": "pass",
+      "gateway_duration": "38.216s",
+      "isolation_duration": "11.528s"
+    },
+    "go_vet_all": "pass",
+    "git_diff_check": "pass"
+  },
+  "decision": "Phase 7 integrated locally; R2 complete locally; Phase 8 authorized to start on a separate feature worktree; no push."
+}

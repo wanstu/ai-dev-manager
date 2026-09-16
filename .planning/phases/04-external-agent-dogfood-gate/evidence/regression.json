@@ -1,0 +1,47 @@
+{
+  "initial_full": {
+    "result": {
+      "exit_code": 1,
+      "stdout": "ok  \tai-dev-manager-v2/cmd/ai-dev-manager\t1.017s\nok  \tai-dev-manager-v2/cmd/ai-dev-manager-desktop\t0.150s\nok  \tai-dev-manager-v2/internal/app\t3.688s\nok  \tai-dev-manager-v2/internal/catalog\t0.154s\nok  \tai-dev-manager-v2/internal/desktop\t0.375s\nok  \tai-dev-manager-v2/internal/environment\t0.412s\n--- FAIL: TestVerifierRealHTTPAcceptanceNonGitRepositoryCopy (25.94s)\n    testing.go:1464: TempDir RemoveAll cleanup: unlinkat C:\\Users\\wanstu\\AppData\\Local\\Temp\\TestVerifierRealHTTPAcceptanceNonGitRepositoryCopy334930031\\001\\repo-copy\\verifier_timeout_fixture: The process cannot access the file because it is being used by another process.\nFAIL\nFAIL\tai-dev-manager-v2/internal/gateway\t27.774s\n?   \tai-dev-manager-v2/internal/identity\t[no test files]\nok  \tai-dev-manager-v2/internal/management\t0.260s\n?   \tai-dev-manager-v2/internal/memory\t[no test files]\n?   \tai-dev-manager-v2/internal/model\t[no test files]\nok  \tai-dev-manager-v2/internal/runtime\t0.048s\nok  \tai-dev-manager-v2/internal/skill\t0.194s\n?   \tai-dev-manager-v2/internal/store\t[no test files]\nok  \tai-dev-manager-v2/internal/verifier\t0.092s\n?   \tai-dev-manager-v2/internal/workspace\t[no test files]\nFAIL\n"
+    }
+  },
+  "focused_retry": {
+    "result": {
+      "exit_code": 1,
+      "stdout": "--- FAIL: TestVerifierRealHTTPAcceptanceNonGitRepositoryCopy (15.15s)\n    testing.go:1464: TempDir RemoveAll cleanup: unlinkat C:\\Users\\wanstu\\AppData\\Local\\Temp\\TestVerifierRealHTTPAcceptanceNonGitRepositoryCopy340629321\\001\\repo-copy\\verifier_timeout_fixture: The process cannot access the file because it is being used by another process.\nFAIL\nFAIL\tai-dev-manager-v2/internal/gateway\t15.193s\nFAIL\n"
+    }
+  },
+  "cancellation_red": {
+    "result": {
+      "exit_code": 1,
+      "stdout": "--- FAIL: TestWindowsCommandCancellationStopsChild (3.08s)\n    cancellation_windows_test.go:44: child survived parent cancellation: wait=258 err=<nil>\nFAIL\nFAIL\tai-dev-manager-v2/internal/runtime\t3.105s\nFAIL\n"
+    }
+  },
+  "cancellation_green": {
+    "result": {
+      "exit_code": 0,
+      "stdout": "ok  \tai-dev-manager-v2/internal/runtime\t0.453s\n"
+    }
+  },
+  "final_full": {
+    "result": {
+      "exit_code": 0,
+      "stdout": "ok  \tai-dev-manager-v2/cmd/ai-dev-manager\t0.476s\nok  \tai-dev-manager-v2/cmd/ai-dev-manager-desktop\t0.054s\nok  \tai-dev-manager-v2/internal/app\t3.740s\nok  \tai-dev-manager-v2/internal/catalog\t(cached)\nok  \tai-dev-manager-v2/internal/desktop\t0.158s\nok  \tai-dev-manager-v2/internal/environment\t(cached)\nok  \tai-dev-manager-v2/internal/gateway\t12.172s\n?   \tai-dev-manager-v2/internal/identity\t[no test files]\nok  \tai-dev-manager-v2/internal/management\t0.107s\n?   \tai-dev-manager-v2/internal/memory\t[no test files]\n?   \tai-dev-manager-v2/internal/model\t[no test files]\nok  \tai-dev-manager-v2/internal/runtime\t0.523s\nok  \tai-dev-manager-v2/internal/skill\t(cached)\n?   \tai-dev-manager-v2/internal/store\t[no test files]\nok  \tai-dev-manager-v2/internal/verifier\t0.043s\n?   \tai-dev-manager-v2/internal/workspace\t[no test files]\n"
+    }
+  },
+  "vet": {
+    "exit_code": 0
+  },
+  "final_gateway": {
+    "result": {
+      "verifier_id": "vf_9ed81ff5dad3c3b1",
+      "kind": "test",
+      "status": "passed",
+      "exit_code": 0,
+      "duration_ms": 312,
+      "timed_out": false,
+      "summary": "verifier passed",
+      "stdout": "ok  \tadm-verifier-report\t(cached)\n"
+    }
+  }
+}

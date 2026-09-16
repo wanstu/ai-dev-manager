@@ -1,0 +1,18 @@
+{
+  "servers": {
+    "hub-local": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["hub.js"],
+      "env": {"REGION": "${HUB_REGION}"},
+      "enabled": false,
+      "version": "1"
+    },
+    "hub-remote": {
+      "type": "http",
+      "url": "https://hub.example/mcp",
+      "description": "fixture",
+      "timeout": 15
+    }
+  }
+}

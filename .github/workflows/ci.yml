@@ -1,0 +1,208 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-test-vet-build:
+    name: Windows test, vet, and adm-desktop smoke build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Show Go version
+        run: go version
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build Windows Desktop artifact
+        id: windows_desktop
+        shell: pwsh
+        run: |
+          $tagSuffix = ''
+          $buildVersion = 'dev'
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $tagSuffix = "-$env:GITHUB_REF_NAME"
+            $buildVersion = $env:GITHUB_REF_NAME
+          }
+          $desktopName = "adm-desktop$tagSuffix-windows-amd64.exe"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          ./scripts/build-desktop.ps1 -clean -trimpath -o $desktopName -OutputDir dist -Version $buildVersion
+          "desktop_name=$desktopName" >> $env:GITHUB_OUTPUT
+          "desktop_artifact=adm-desktop$tagSuffix-windows-amd64" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Windows Desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.windows_desktop.outputs.desktop_artifact }}
+          path: dist/${{ steps.windows_desktop.outputs.desktop_name }}
+          if-no-files-found: error
+          retention-days: 14
+
+  macos-desktop-build:
+    name: macOS Desktop universal build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test Unix runtime integration
+        run: go test -count=1 ./internal/runtime
+
+      - name: Build macOS universal Desktop artifact
+        id: macos_desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $buildVersion = 'dev'
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $buildVersion = $env:GITHUB_REF_NAME
+          }
+          ./scripts/build-macos-desktop.ps1 -Version $buildVersion -OutputDir dist -Platform darwin/universal
+          $desktopName = "adm-desktop-$buildVersion-darwin-universal.zip"
+          "desktop_name=$desktopName" >> $env:GITHUB_OUTPUT
+          "desktop_artifact=adm-desktop-$buildVersion-darwin-universal" >> $env:GITHUB_OUTPUT
+
+      - name: Upload macOS Desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.macos_desktop.outputs.desktop_artifact }}
+          path: dist/${{ steps.macos_desktop.outputs.desktop_name }}
+          if-no-files-found: error
+          retention-days: 14
+
+  cli-cross-build:
+    name: CLI artifact (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    needs: windows-test-vet-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-amd64
+            os: ubuntu-latest
+            ext: ''
+          - name: darwin-amd64
+            os: macos-latest
+            ext: ''
+          - name: windows-amd64
+            os: windows-latest
+            ext: '.exe'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test Unix runtime integration
+        if: matrix.name != 'windows-amd64'
+        run: go test -count=1 ./internal/runtime
+
+      - name: Build CLI artifact
+        id: cli_artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tagSuffix = ''
+          $buildVersion = 'dev'
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $tagSuffix = "-$env:GITHUB_REF_NAME"
+            $buildVersion = $env:GITHUB_REF_NAME
+          }
+          $output = "adm$tagSuffix-${{ matrix.name }}${{ matrix.ext }}"
+          $artifact = "adm$tagSuffix-${{ matrix.name }}"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $ldflags = "-X ai-dev-manager-v2/internal/version.Version=$buildVersion"
+          go build -trimpath -ldflags $ldflags -o "dist/$output" ./cmd/ai-dev-manager
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "output=$output" >> $env:GITHUB_OUTPUT
+          "artifact=$artifact" >> $env:GITHUB_OUTPUT
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.cli_artifact.outputs.artifact }}
+          path: dist/${{ steps.cli_artifact.outputs.output }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - windows-test-vet-build
+      - macos-desktop-build
+      - cli-cross-build
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-Location dist
+          $checksumFile = "SHA256SUMS-$env:GITHUB_REF_NAME.txt"
+          if (Test-Path $checksumFile) { Remove-Item -Force $checksumFile }
+          Get-ChildItem -File | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)" | Add-Content -Path $checksumFile
+          }
+          Get-Content $checksumFile
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ADM ${{ github.ref_name }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

@@ -1,0 +1,74 @@
+{
+  "phase": "07-optional-git-worktree-isolation",
+  "date": "2026-09-08",
+  "platform": "windows",
+  "git_version": "2.55.0.windows.3",
+  "implementation_commit": "4b113756518e065acd47153ee5764d82af97b887",
+  "status": "passed-locally",
+  "checks": [
+    {
+      "name": "real-git-isolation-acceptance",
+      "command": "go test ./internal/isolation -run Test(NonGitEnvironmentRemainsValidWhenWorktreeIsolationUnavailableForWorkspace|CreateTwoManagedWorktreesKeepsSourceCheckoutUnchanged|DestroyRefusesDirtyByDefaultAndForceRetainsBranch|DestroyRefusesUnpublishedCommitAndRetainsCommittedWork|CleanDestroyNeedsWriterAndRetainsBranch|ValidationDetectsManagedBranchTamper)$ -count=1",
+      "result": "pass",
+      "output": "ok  ai-dev-manager-v2/internal/isolation  7.820s"
+    },
+    {
+      "name": "runtime-revalidation-acceptance",
+      "command": "go test ./internal/app -run Test(ManagedWorktreeTamperBlocksRoutedMutationBeforeFileChange|OutOfWorkspaceEnvironmentWithoutManagedRecordIsRejectedByRuntime)$ -count=1",
+      "result": "pass",
+      "output": "ok  ai-dev-manager-v2/internal/app  1.179s"
+    },
+    {
+      "name": "streamable-http-worktree-acceptance",
+      "command": "go test ./internal/gateway -run ^TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe$ -count=1",
+      "result": "pass",
+      "output": "ok  ai-dev-manager-v2/internal/gateway  1.505s",
+      "notes": "Uses a real httptest HTTP server with MCP StreamableClientTransport against /mcp; creates/lists/destroys a real local Git worktree through Gateway tools."
+    },
+    {
+      "name": "non-git-gateway-regression",
+      "command": "go test ./internal/gateway -run ^TestGatewayDevelopsPlainDirectoryWithoutGit$ -count=1",
+      "result": "pass",
+      "output": "ok  ai-dev-manager-v2/internal/gateway  0.123s"
+    },
+    {
+      "name": "focused-package-regression",
+      "command": "go test ./internal/isolation ./internal/environment ./internal/app ./internal/gateway",
+      "result": "pass",
+      "output": [
+        "ok  ai-dev-manager-v2/internal/isolation  8.948s",
+        "ok  ai-dev-manager-v2/internal/environment  0.162s",
+        "ok  ai-dev-manager-v2/internal/app  4.238s",
+        "ok  ai-dev-manager-v2/internal/gateway  36.438s"
+      ]
+    },
+    {
+      "name": "full-go-regression",
+      "command": "go test ./...",
+      "result": "pass",
+      "notes": "All test-bearing packages passed; identity, memory, model, store and workspace compiled with no test files."
+    },
+    {
+      "name": "go-vet",
+      "command": "go vet ./...",
+      "result": "pass"
+    },
+    {
+      "name": "diff-check",
+      "command": "git diff --check",
+      "result": "pass",
+      "notes": "Only Git line-ending conversion warnings were emitted; no whitespace errors."
+    }
+  ],
+  "acceptance_truths": {
+    "non_git_environment_remains_valid": true,
+    "two_managed_roots_are_isolated": true,
+    "source_checkout_unchanged": true,
+    "managed_root_is_adm_owned": true,
+    "tamper_blocks_routed_mutation": true,
+    "dirty_destroy_refused_without_force": true,
+    "unpublished_commit_destroy_refused_without_force": true,
+    "force_destroy_retains_branch": true,
+    "real_streamable_http_gateway_path_passed": true
+  }
+}
