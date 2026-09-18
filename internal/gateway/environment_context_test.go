@@ -44,7 +44,7 @@ func TestGatewayEnvironmentContextAgentAdminParityInstructionsAndAuthority(t *te
 
 	for name, session := range map[string]*mcp.ClientSession{"agent": agent, "admin": admin} {
 		init := session.InitializeResult()
-		if init == nil || !strings.Contains(init.Instructions, "environment_context_bundle") || !strings.Contains(init.Instructions, "stable Workspace and Environment IDs") || !strings.Contains(init.Instructions, "no implicit current project") {
+		if init == nil || !strings.Contains(init.Instructions, "environment_injection_plan") || !strings.Contains(init.Instructions, "environment_context_bundle") || !strings.Contains(init.Instructions, "injectable=false") || !strings.Contains(init.Instructions, "stable Workspace and Environment IDs") || !strings.Contains(init.Instructions, "no implicit current project") {
 			t.Fatalf("%s initialize instructions=%+v", name, init)
 		}
 		if strings.Contains(init.Instructions, env.ID) || strings.Contains(init.Instructions, ws.ID) || strings.Contains(init.Instructions, root) {
@@ -54,8 +54,18 @@ func TestGatewayEnvironmentContextAgentAdminParityInstructionsAndAuthority(t *te
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !contains(toolNames(tools.Tools), "environment_context_bundle") {
-			t.Fatalf("%s surface missing environment_context_bundle", name)
+		names := toolNames(tools.Tools)
+		if !contains(names, "environment_context_bundle") || !contains(names, "environment_injection_plan") {
+			t.Fatalf("%s surface missing context/injection tools: %v", name, names)
+		}
+		plan := callGatewayTool(t, ctx, session, "environment_injection_plan", map[string]any{"environment_id": env.ID})
+		planText := toolText(t, plan)
+		if plan.IsError || !strings.Contains(planText, env.ID) || !strings.Contains(planText, `"selected_mcps":0`) || !strings.Contains(planText, `"selected_skills":0`) {
+			t.Fatalf("%s injection plan result=%s", name, planText)
+		}
+		unknownPlan := callGatewayTool(t, ctx, session, "environment_injection_plan", map[string]any{"environment_id": "env_missing"})
+		if !unknownPlan.IsError {
+			t.Fatalf("%s accepted unknown Environment for injection plan: %s", name, toolText(t, unknownPlan))
 		}
 		result := callGatewayTool(t, ctx, session, "environment_context_bundle", map[string]any{"environment_id": env.ID})
 		text := toolText(t, result)

@@ -8,7 +8,24 @@ import (
 	"ai-dev-manager-v2/internal/model"
 )
 
-const gatewayAgentInstructions = "ADM routes development authority by stable Workspace and Environment IDs; there is no implicit current project. After choosing an Environment, call environment_context_bundle when a compact bounded root/tree/capability/MCP/Skill/verifier/run snapshot is useful. Optional capability failures are local facts and do not block ordinary file development. Mutations still require the matching Environment writer lease. The context bundle does not execute tasks or grant new authority."
+const gatewayAgentInstructions = "ADM routes development authority by stable Workspace and Environment IDs; there is no implicit current project. After choosing an Environment, use environment_injection_plan to understand selected MCP/Skill sources, passive injectability, and the next explicit action; use environment_context_bundle when a bounded root/tree/capability snapshot is also useful. Do not treat selected as usable when injectable=false. Optional capability failures are local facts and do not block ordinary file development. Mutations still require the matching Environment writer lease. These read-only summaries do not execute tasks or grant new authority."
+
+func (o *runtimeOwner) InjectionPlan(ctx context.Context, environmentID string) (model.EnvironmentInjectionPlan, error) {
+	plan, err := o.service.EnvironmentInjectionPlan(ctx, environmentID)
+	if err != nil {
+		return model.EnvironmentInjectionPlan{}, err
+	}
+	passive, err := o.service.EnvironmentCapabilityReportPassive(ctx, environmentID)
+	if err != nil {
+		return model.EnvironmentInjectionPlan{}, err
+	}
+	report := o.enrichCapabilityReport(environmentID, passive)
+	app.ApplyEnvironmentInjectionCapabilityReport(&plan, report)
+	if !report.GeneratedAt.IsZero() {
+		plan.GeneratedAt = report.GeneratedAt
+	}
+	return plan, nil
+}
 
 func (o *runtimeOwner) ContextBundle(ctx context.Context, environmentID string, request model.EnvironmentContextRequest) (model.EnvironmentContextBundle, error) {
 	bundle, err := o.service.EnvironmentContextBundle(ctx, environmentID, request)
@@ -31,6 +48,12 @@ func (o *runtimeOwner) ContextBundle(ctx context.Context, environmentID string, 
 		if fact, ok := facts["mcp/"+item.ID]; ok {
 			item.State = fact.State
 			item.ReasonCode = fact.ReasonCode
+			item.Injectable = fact.State == model.CapabilityStateAvailable
+			if item.Injectable {
+				item.NextAction = "environment_mcp_tools"
+			} else {
+				item.NextAction = "environment_mcp_inspect"
+			}
 		}
 		observation, observed := o.observation(runtimeOwnerKey{environmentID: environmentID, mcpID: item.ID})
 		if !observed {

@@ -76,15 +76,16 @@ agent-myclient-session-42
 ```text
 1. gateway_info
 2. workspace_list / environment_list（如果调用方尚不知道 ID）
-3. environment_context_bundle(environment_id)
-4. 需要更细时 environment_inspect / environment_capability_report
-5. tree / read / search
+3. environment_injection_plan(environment_id)
+4. environment_context_bundle(environment_id)
+5. 需要更细时 environment_inspect / environment_capability_report
+6. tree / read / search
 6. 只有需要 mutation 时 environment_writer_acquire
 7. write / edit / exec / verifier / process / run
 8. environment_writer_release
 ```
 
-`environment_context_bundle` 是推荐的 onboarding 工具，因为它一次给出 bounded root/tree/capability/MCP/Skill/verifier guidance，而且不会主动执行东西。
+`environment_injection_plan` 先回答“哪些 MCP/Skill 被选中、来源是什么、当前能否注入、下一步调用什么”；`environment_context_bundle` 再提供 bounded root/tree/capability/MCP/Skill/verifier guidance。两者都不会主动连接 MCP、读取完整 Skill 正文或扩大权限。
 
 ## 4. Gateway 基础信息
 
@@ -212,6 +213,27 @@ Writer：不需要。
 - call MCP business tool；
 - run verifier；
 - acquire Writer。
+
+### `environment_injection_plan`
+
+输入：
+
+```json
+{
+  "environment_id": "env_xxx"
+}
+```
+
+返回当前 Environment 对 Agent 的 canonical passive MCP / Skill 注入计划。只包含最终 selected 的 MCP / Skill，并明确返回：
+
+- `selected`：当前确实被选择；
+- `selection_sources`：`environment` / `workspace`；
+- `default_include_in_environment`：当前 catalog default flag，仅作事实展示；
+- `injectable`：当前 passive 检查下是否允许进入下一步；
+- `state / reason_code / message`：不可注入时的原因；
+- `next_action`：下一步应调用 `environment_mcp_tools`、`environment_skill_read`，还是先 inspect。
+
+生成 plan 不会主动连接 MCP、读取 Skill 正文、获取 Writer，也不会修改 selection。Agent 不应把 `selected=true` 直接解释为“当前可用”，应以 `injectable` 为准。
 
 ### `environment_context_bundle`
 

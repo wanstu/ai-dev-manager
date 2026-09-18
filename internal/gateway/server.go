@@ -824,7 +824,24 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, report, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_context_bundle", Description: "Return one explicit bounded read-only Environment context snapshot: root/tree, capabilities, enabled MCP/Skill/verifier summaries, and factual operation guidance. It does not probe/connect MCPs, execute Git/verifiers/Runs/processes, read Memory values, or grant new authority."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_injection_plan", Description: "Return the canonical passive MCP/Skill injection plan for one explicit Environment: selection provenance, default catalog flag, injectability, reason, and the next explicit Agent action. It does not connect MCPs, read Skill contents, acquire a writer, or expand authority."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, model.EnvironmentInjectionPlan, error) {
+			var (
+				plan model.EnvironmentInjectionPlan
+				err  error
+			)
+			if owner != nil {
+				plan, err = owner.InjectionPlan(ctx, in.EnvironmentID)
+			} else {
+				plan, err = service.EnvironmentInjectionPlan(ctx, in.EnvironmentID)
+			}
+			if err != nil {
+				return nil, model.EnvironmentInjectionPlan{}, err
+			}
+			return nil, plan, nil
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_context_bundle", Description: "Return one explicit bounded read-only Environment context snapshot: root/tree, capabilities, selected MCP/Skill injection summaries, verifier summaries, and factual operation guidance. MCP/Skill fields reuse the canonical injection-plan semantics. It does not probe/connect MCPs, execute Git/verifiers/Runs/processes, read Memory values, or grant new authority."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentContextInput) (*mcp.CallToolResult, model.EnvironmentContextBundle, error) {
 			request := model.EnvironmentContextRequest{Path: in.Path, MaxDepth: in.MaxDepth, MaxEntries: in.MaxEntries, MaxDigestEntries: in.MaxDigestEntries, MaxOutputBytes: in.MaxOutputBytes}
 			var (
@@ -1126,7 +1143,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(observation, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_tools", Description: "List tools from one external MCP that is enabled and healthy for the selected Environment."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_tools", Description: "List tools from one external MCP selected for the Environment after injection checks pass. Use environment_injection_plan first when deciding whether the MCP is currently injectable."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPRuntimeInput) (*mcp.CallToolResult, any, error) {
 			if owner != nil {
 				tools, err := owner.ListTools(ctx, in.EnvironmentID, in.MCPID)
@@ -1274,7 +1291,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(inventory, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_skill_read", Description: "Read an enabled Skill's SKILL.md or a file contained by its explicitly configured artifact/support roots."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_skill_read", Description: "Read a selected and available Skill's SKILL.md or a file contained by its explicitly configured artifact/support roots. Use environment_injection_plan first when deciding whether the Skill is currently injectable."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentSkillReadInput) (*mcp.CallToolResult, any, error) {
 			content, err := service.ReadEnvironmentSkill(in.EnvironmentID, in.SkillID, in.Path, in.MaxBytes)
 			return toolResult(content, err)

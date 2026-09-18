@@ -30,6 +30,7 @@ type cliSkillAvailabilityBackend interface {
 }
 
 type cliEnvironmentAgentBackend interface {
+	EnvironmentInjectionPlan(string) (model.EnvironmentInjectionPlan, error)
 	EnvironmentContext(string, model.EnvironmentContextRequest) (model.EnvironmentContextBundle, error)
 	EnvironmentTemporaryCreate(model.TemporaryEnvironmentCreateRequest) (model.TemporaryEnvironmentCreateResult, error)
 	EnvironmentTemporaryStatus(string) (model.TemporaryEnvironmentStatus, error)

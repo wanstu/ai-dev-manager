@@ -375,7 +375,7 @@ stdio MCP 使用本机 child executable，因此：
 
 ### 12.7 Tool call
 
-Agent `environment_mcp_tools` / `environment_mcp_call` 只有在：
+Agent 应先通过 `environment_injection_plan` 判断 MCP 是否 `injectable=true`。`environment_mcp_tools` / `environment_mcp_call` 只有在：
 
 - Environment 选择允许；
 - activation healthy；

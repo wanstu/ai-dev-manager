@@ -168,6 +168,16 @@ adm environment capability-report --environment-id ENV_ID
 
 返回 canonical `CapabilityReport`。正常 CLI 通过 Admin MCP/Gateway 路径，因此可包含已有 runtime owner observation，但不会主动 probe/connect/execute。
 
+## `environment injection-plan`
+
+```text
+adm environment injection-plan --environment-id ENV_ID
+```
+
+返回 canonical passive MCP / Skill injection plan。它只包含当前 Environment 最终 selected 的能力，并返回 `selection_sources`、`default_include_in_environment`、`injectable`、`state/reason_code` 与 `next_action`。
+
+该命令不会连接 MCP、读取 Skill 正文、获取 Writer 或修改 selection。Workspace inheritance 会明确标记为 `workspace`，因此 Agent 可以区分“Environment 显式启用”和“Workspace 继承”。
+
 ## `environment context`
 
 ```text

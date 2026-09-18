@@ -60,11 +60,7 @@ func (s *Service) EnvironmentContextBundle(ctx context.Context, environmentID st
 	if err != nil {
 		return model.EnvironmentContextBundle{}, err
 	}
-	mcpCatalog, err := s.MCPs.List()
-	if err != nil {
-		return model.EnvironmentContextBundle{}, err
-	}
-	skillAvailability, err := s.EnvironmentSkillAvailabilities(environmentID)
+	injectionPlan, err := s.buildEnvironmentInjectionPlan(env, ws, capabilityReport)
 	if err != nil {
 		return model.EnvironmentContextBundle{}, err
 	}
@@ -116,55 +112,40 @@ func (s *Service) EnvironmentContextBundle(ctx context.Context, environmentID st
 
 	facts := environmentContextCapabilityFacts(capabilityReport)
 
-	mcpByID := make(map[string]model.MCPDefinition, len(mcpCatalog))
-	for _, entry := range mcpCatalog {
-		mcpByID[entry.ID] = entry
-	}
-	mcpIDs := append([]string{}, env.EnabledMCPIDs...)
-	sort.Slice(mcpIDs, func(i, j int) bool { return stableLess(mcpIDs[i], mcpIDs[j]) })
-	for _, id := range mcpIDs {
-		item := model.EnvironmentContextMCP{
-			ID:                    id,
-			State:                 model.CapabilityStateUnavailable,
-			ReasonCode:            "unresolved_mcp",
-			ObservationState:      "not_observed",
-			ToolInventoryObserved: false,
-			ToolNames:             []string{},
-		}
-		if entry, ok := mcpByID[id]; ok {
-			item.Name = entry.Name
-		}
-		if fact, ok := facts["mcp/"+id]; ok {
-			item.State = fact.State
-			item.ReasonCode = fact.ReasonCode
-		}
-		bundle.MCPs = append(bundle.MCPs, item)
-	}
-	sort.Slice(bundle.MCPs, func(i, j int) bool {
-		left := bundle.MCPs[i].Name + "/" + bundle.MCPs[i].ID
-		right := bundle.MCPs[j].Name + "/" + bundle.MCPs[j].ID
-		return stableLess(left, right)
-	})
-
-	for _, availability := range skillAvailability.Skills {
-		if !availability.Enabled {
-			continue
-		}
-		bundle.Skills = append(bundle.Skills, model.EnvironmentContextSkill{
-			ID:                      availability.SkillID,
-			Name:                    availability.Name,
-			State:                   availability.State,
-			Reason:                  contextSkillReason(availability.State),
-			RelativeArtifactPath:    availability.RelativeArtifactPath,
-			SupportRootCount:        len(availability.SupportRoots),
-			MissingSupportRootCount: len(availability.MissingSupportRoots),
+	for _, planned := range injectionPlan.MCPs {
+		bundle.MCPs = append(bundle.MCPs, model.EnvironmentContextMCP{
+			ID:                          planned.ID,
+			Name:                        planned.Name,
+			SelectionSources:            append([]string{}, planned.SelectionSources...),
+			DefaultIncludeInEnvironment: planned.DefaultIncludeInEnvironment,
+			Selected:                    planned.Selected,
+			Injectable:                  planned.Injectable,
+			NextAction:                  planned.NextAction,
+			State:                       planned.State,
+			ReasonCode:                  planned.ReasonCode,
+			ObservationState:            "not_observed",
+			ToolInventoryObserved:       false,
+			ToolNames:                   []string{},
 		})
 	}
-	sort.Slice(bundle.Skills, func(i, j int) bool {
-		left := bundle.Skills[i].Name + "/" + bundle.Skills[i].ID
-		right := bundle.Skills[j].Name + "/" + bundle.Skills[j].ID
-		return stableLess(left, right)
-	})
+
+	for _, planned := range injectionPlan.Skills {
+		bundle.Skills = append(bundle.Skills, model.EnvironmentContextSkill{
+			ID:                          planned.ID,
+			Name:                        planned.Name,
+			SelectionSources:            append([]string{}, planned.SelectionSources...),
+			DefaultIncludeInEnvironment: planned.DefaultIncludeInEnvironment,
+			Selected:                    planned.Selected,
+			Injectable:                  planned.Injectable,
+			NextAction:                  planned.NextAction,
+			State:                       string(planned.State),
+			ReasonCode:                  planned.ReasonCode,
+			Reason:                      planned.Message,
+			RelativeArtifactPath:        planned.RelativeArtifactPath,
+			SupportRootCount:            planned.SupportRootCount,
+			MissingSupportRootCount:     planned.MissingSupportRootCount,
+		})
+	}
 
 	verifiers := append([]model.VerifierDefinition{}, env.Verifiers...)
 	sort.Slice(verifiers, func(i, j int) bool {

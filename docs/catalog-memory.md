@@ -86,6 +86,24 @@ adm environment mcp disable --environment-id ENV_ID --mcp-id MCP_ID
 
 禁用会撤销该 Environment 的 MCP runtime access。
 
+### Injection plan：selection 与实际可用性分离
+
+Environment / Workspace selection 只表示“希望向 Agent 暴露这项能力”，不代表当前一定可直接使用。统一使用：
+
+```powershell
+adm environment injection-plan --environment-id ENV_ID
+```
+
+读取当前 selected MCP / Skill 的注入计划。
+
+- `selection_sources=environment`：Environment 显式 selection；
+- `selection_sources=workspace`：来自 Workspace inheritance；
+- 两者可同时存在；
+- `injectable=false` 表示仍然 selected，但当前配置/文件/authority 条件不满足；
+- `next_action` 告诉 Agent 应先 inspect，还是可以进入 MCP tool inventory / Skill read。
+
+`default_include_in_environment` 仍然只表示 catalog 对**未来新 Environment**的默认 seed。已有 Environment 中的历史 selection 不会因为当前 default flag 改变而被重新解释。
+
 ## 5. Desired config 与 Runtime observation 分离
 
 Persistent definition 不是 health。

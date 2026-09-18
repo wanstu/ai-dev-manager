@@ -235,7 +235,7 @@ func TestPhase23CLIEnvironmentAgentHelpKeepsExplicitSafetyBoundaries(t *testing.
 			t.Fatal(err)
 		}
 	})
-	for _, required := range []string{"environment context --environment-id", "environment temporary -h", "Admin MCP", "owner-local"} {
+	for _, required := range []string{"environment injection-plan --environment-id", "environment context --environment-id", "environment temporary -h", "Admin MCP", "owner-local"} {
 		if !strings.Contains(environmentHelp, required) {
 			t.Fatalf("environment help missing %q:\n%s", required, environmentHelp)
 		}

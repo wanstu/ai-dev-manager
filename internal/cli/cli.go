@@ -444,6 +444,27 @@ func runEnvironment(service cliManagementBackend, args []string) error {
 			return err
 		}
 		return writeJSON(report)
+	case "injection-plan", "inject":
+		fs := newFlagSet("environment injection-plan", func() {
+			fmt.Fprintln(os.Stdout, "用法：adm environment injection-plan --environment-id ENV_ID")
+			fmt.Fprintln(os.Stdout, "\n输出 canonical passive MCP/Skill injection plan：选择来源、是否可注入、阻塞原因和下一步显式 Agent action。不会连接 MCP、读取 Skill 正文、获取 Writer 或扩大权限。")
+		})
+		environmentID := fs.String("environment-id", "", "Environment ID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return flagError(err)
+		}
+		if fs.NArg() != 0 || strings.TrimSpace(*environmentID) == "" {
+			return fmt.Errorf("缺少 --environment-id；运行 adm environment injection-plan -h 查看帮助")
+		}
+		backend, ok := service.(cliEnvironmentAgentBackend)
+		if !ok {
+			return fmt.Errorf("environment injection plan requires the connected Admin MCP backend")
+		}
+		plan, err := backend.EnvironmentInjectionPlan(strings.TrimSpace(*environmentID))
+		if err != nil {
+			return err
+		}
+		return writeJSON(plan)
 	case "context":
 		fs := newFlagSet("environment context", func() {
 			fmt.Fprintln(os.Stdout, "用法：adm environment context --environment-id ENV_ID [--path REL] [--max-depth N --max-entries N --max-digest-entries N --max-output-bytes N]")
@@ -2217,6 +2238,9 @@ func printEnvironmentHelp() {
 
   adm environment capability-report --environment-id ENV_ID
       输出 canonical CapabilityReport；正常 CLI 通过 Admin MCP 使用 Gateway 路径，可包含已有 owner-local 观察但不会主动 probe/执行。
+
+  adm environment injection-plan --environment-id ENV_ID
+      输出 MCP/Skill canonical passive injection plan：selection source、injectable、阻塞原因和 next_action；不会连接 MCP 或读取 Skill 正文。
 
   adm environment context --environment-id ENV_ID [--path REL] [--max-depth N --max-entries N --max-digest-entries N --max-output-bytes N]
       输出 Phase-20 canonical bounded context bundle；不隐式选 Environment，不读取 Memory 值/完整 Skill 内容，不主动 probe/执行。

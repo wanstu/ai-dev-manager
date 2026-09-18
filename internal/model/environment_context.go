@@ -58,24 +58,35 @@ type EnvironmentContextCapability struct {
 }
 
 type EnvironmentContextMCP struct {
-	ID                    string          `json:"id"`
-	Name                  string          `json:"name,omitempty"`
-	State                 CapabilityState `json:"state"`
-	ReasonCode            string          `json:"reason_code,omitempty"`
-	ObservationState      string          `json:"observation_state"`
-	ToolInventoryObserved bool            `json:"tool_inventory_observed"`
-	ToolNames             []string        `json:"tool_names"`
-	ObservedAt            *time.Time      `json:"observed_at,omitempty"`
+	ID                          string          `json:"id"`
+	Name                        string          `json:"name,omitempty"`
+	SelectionSources            []string        `json:"selection_sources"`
+	DefaultIncludeInEnvironment bool            `json:"default_include_in_environment"`
+	Selected                    bool            `json:"selected"`
+	Injectable                  bool            `json:"injectable"`
+	NextAction                  string          `json:"next_action"`
+	State                       CapabilityState `json:"state"`
+	ReasonCode                  string          `json:"reason_code,omitempty"`
+	ObservationState            string          `json:"observation_state"`
+	ToolInventoryObserved       bool            `json:"tool_inventory_observed"`
+	ToolNames                   []string        `json:"tool_names"`
+	ObservedAt                  *time.Time      `json:"observed_at,omitempty"`
 }
 
 type EnvironmentContextSkill struct {
-	ID                      string `json:"id"`
-	Name                    string `json:"name,omitempty"`
-	State                   string `json:"state"`
-	Reason                  string `json:"reason,omitempty"`
-	RelativeArtifactPath    string `json:"relative_artifact_path,omitempty"`
-	SupportRootCount        int    `json:"support_root_count"`
-	MissingSupportRootCount int    `json:"missing_support_root_count"`
+	ID                          string   `json:"id"`
+	Name                        string   `json:"name,omitempty"`
+	SelectionSources            []string `json:"selection_sources"`
+	DefaultIncludeInEnvironment bool     `json:"default_include_in_environment"`
+	Selected                    bool     `json:"selected"`
+	Injectable                  bool     `json:"injectable"`
+	NextAction                  string   `json:"next_action"`
+	State                       string   `json:"state"`
+	ReasonCode                  string   `json:"reason_code,omitempty"`
+	Reason                      string   `json:"reason,omitempty"`
+	RelativeArtifactPath        string   `json:"relative_artifact_path,omitempty"`
+	SupportRootCount            int      `json:"support_root_count"`
+	MissingSupportRootCount     int      `json:"missing_support_root_count"`
 }
 
 type EnvironmentContextVerifier struct {

@@ -422,6 +422,10 @@ func (c *Client) EnvironmentRemoveResult(id string) (model.Environment, error) {
 	return result.Removed, err
 }
 
+func (c *Client) EnvironmentInjectionPlan(id string) (model.EnvironmentInjectionPlan, error) {
+	return callAdmin[model.EnvironmentInjectionPlan](c, context.Background(), "environment_injection_plan", map[string]any{"environment_id": id})
+}
+
 func (c *Client) EnvironmentContext(id string, request model.EnvironmentContextRequest) (model.EnvironmentContextBundle, error) {
 	return callAdmin[model.EnvironmentContextBundle](c, context.Background(), "environment_context_bundle", map[string]any{
 		"environment_id":     id,

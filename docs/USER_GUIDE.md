@@ -275,9 +275,10 @@ Agent 面提供：
 一个典型 Agent 流程：
 
 ```text
-1. environment_context_bundle(env_id)
-2. tree/read/search
-3. environment_writer_acquire(env_id, owner)
+1. environment_injection_plan(env_id)
+2. environment_context_bundle(env_id)
+3. tree/read/search
+4. environment_writer_acquire(env_id, owner)
 4. write/edit/delete
 5. exec 或 verifier
 6. inspect result
@@ -754,7 +755,26 @@ Run 同样是 owner-local observation；Gateway restart 后不会 resume/resurre
 
 有 Gateway runtime owner 时，报告可以加入**已有** owner-local observation，但生成报告本身不会主动 reconnect/probe MCP、调用业务 tool 或运行 verifier。
 
-### 15.2 Context bundle
+### 15.2 MCP / Skill injection plan
+
+```powershell
+& $adm environment injection-plan --environment-id ENV_ID
+```
+
+Injection plan 是 Environment 对 Agent 暴露 MCP / Skill 的 canonical passive 决策结果。它只返回**已经选中的**能力，并明确区分：
+
+- `selected`：该能力确实被 Environment 或 Workspace 选择；
+- `selection_sources`：`environment`、`workspace`，或两者同时存在；
+- `default_include_in_environment`：当前 catalog default flag，仅作为事实，不伪装成历史 selection 来源；
+- `injectable`：当前 passive capability 检查是否允许进入下一步 runtime/read；
+- `state / reason_code / message`：不可注入时的结构化原因；
+- `next_action`：Agent 下一步应调用的显式工具。
+
+MCP 的 ready 项通常返回 `environment_mcp_tools`，Skill 的 ready 项通常返回 `environment_skill_read`；blocked 项分别指向 inspect 工具。
+
+**selection 不等于 injection。** 例如 Workspace 继承了一个 MCP，但 secret reference 未解析，则它仍然是 selected，同时 `injectable=false`。生成 injection plan 不会主动连接 MCP、读取 Skill 正文、获取 Writer 或扩大权限。
+
+### 15.3 Context bundle
 
 ```powershell
 & $adm environment context --environment-id ENV_ID
