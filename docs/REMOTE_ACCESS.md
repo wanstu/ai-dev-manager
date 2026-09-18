@@ -329,9 +329,16 @@ $env:ADM_V2_AGENT_API_KEY = "你的 Agent Key"
 
 ## 11. 远程 ADM CLI 怎么连接
 
-ADM CLI 使用的是 `/admin/mcp`，所以只需要 **Admin Key**。
+ADM CLI 使用的是 `/admin/mcp`，所以只需要 **Admin Key**。这里使用的是**客户端 Admin Key**，值必须与远端 ADM 服务端 Remote access 中已经配置的 Admin Key 完全一致。
 
-客户端 PowerShell：
+ADM CLI 会读取 `~/.config/adm/.env` 和可执行文件同目录 `.env`；优先级是 **进程环境 > 应用目录 `.env` > 用户级 `.env`**。因此可以先写用户级配置：
+
+```dotenv
+ADM_V2_URL=http://101.37.171.174:43137
+ADM_V2_ADMIN_API_KEY=服务端配置的AdminKey
+```
+
+也可以直接使用客户端 PowerShell：
 
 ```powershell
 $env:ADM_V2_URL = "http://101.37.171.174:43137"
@@ -362,13 +369,19 @@ http://101.37.171.174:43137/admin/mcp
 X-ADM-API-Key: <Admin Key>
 ```
 
-CLI **不会使用 Agent Key** 连接管理面。
+服务端同时接受标准 Bearer 形式：
+
+```text
+Authorization: Bearer <Admin Key>
+```
+
+二选一即可。CLI **不会使用 Agent Key** 连接管理面。
 
 ---
 
 ## 12. Desktop 怎么连接远程 ADM
 
-Desktop 也是管理面，因此连接 profile 只保存 **Admin API Key**。
+Desktop 也是管理面，因此连接 profile 只保存 **Admin API Key**。它与 Remote access 页面里的“服务端 Admin Key”是同一份凭据的客户端副本，但存储语义不同：服务端只持久化 Key hash；Desktop connection profile 需要保存客户端原始 Key 才能继续发起认证请求，UI 不会回显原值。
 
 连接配置：
 
@@ -387,6 +400,14 @@ Desktop 连接的是：
 ```
 
 所以 Agent Key 不需要写进 Desktop connection profile。
+
+Desktop connection profile 保存在：
+
+```text
+~/.config/adm/desktop-connections.json
+```
+
+连接编辑弹窗会显示 Admin Key **已保存 / 未配置** 状态，但不会把原始 Key 回填到输入框。留空保存时保留原 Key，输入新值则替换。
 
 在 Desktop 的“Remote access”设置区，可以分别管理：
 
@@ -574,3 +595,4 @@ $env:ADM_V2_AGENT_API_KEY = "..."
 - Admin Key 权限高于 Agent Key，应单独保存。
 - 不要把 Admin Key 提供给普通 Agent。
 - 两把 Key 都不要直接提交到 Git。
+- `~/.config/adm/.env` 和 `~/.config/adm/desktop-connections.json` 可能包含客户端 Admin Key 原文；Linux/macOS 上应保持仅当前用户可读（例如 `chmod 600`）。服务端 Remote access 状态本身只保存 Key hash。

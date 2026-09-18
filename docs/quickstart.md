@@ -61,6 +61,16 @@ $env:ADM_V2_URL = 'http://127.0.0.1:8001'
 & $adm workspace list
 ```
 
+也可以把常用连接写入 `~/.config/adm/.env`：
+
+```dotenv
+ADM_V2_URL=http://127.0.0.1:8001
+# 远程管理连接时再配置：
+# ADM_V2_ADMIN_API_KEY=你的AdminKey
+```
+
+CLI/Desktop 还会读取可执行文件同目录 `.env`，优先级为：**进程环境 > 应用目录 `.env` > `~/.config/adm/.env`**。
+
 正常管理连接失败不会 fallback 到本地 writable state。
 
 ## 3. 登记 Workspace

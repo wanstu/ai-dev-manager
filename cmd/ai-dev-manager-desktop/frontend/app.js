@@ -14,7 +14,7 @@ const elements = {
   gatewayRefreshButton: document.getElementById('gatewayRefreshButton'),
   gatewayStartButton: document.getElementById('gatewayStartButton'),
   gatewayStopButton: document.getElementById('gatewayStopButton'),
-  gatewayAllowedHosts: document.getElementById('gatewayAllowedHosts'), gatewayAccessSaveHosts: document.getElementById('gatewayAccessSaveHosts'), gatewayAdminAPIKey: document.getElementById('gatewayAdminAPIKey'), gatewayAccessSetAdminKey: document.getElementById('gatewayAccessSetAdminKey'), gatewayAccessClearAdminKey: document.getElementById('gatewayAccessClearAdminKey'), gatewayAgentAPIKey: document.getElementById('gatewayAgentAPIKey'), gatewayAccessSetAgentKey: document.getElementById('gatewayAccessSetAgentKey'), gatewayAccessClearAgentKey: document.getElementById('gatewayAccessClearAgentKey'), gatewayAccessSummary: document.getElementById('gatewayAccessSummary'),
+  gatewayAllowedHosts: document.getElementById('gatewayAllowedHosts'), gatewayHostState: document.getElementById('gatewayHostState'), gatewayAccessSaveHosts: document.getElementById('gatewayAccessSaveHosts'), gatewayAdminAPIKey: document.getElementById('gatewayAdminAPIKey'), gatewayAdminKeyState: document.getElementById('gatewayAdminKeyState'), gatewayAdminKeyHint: document.getElementById('gatewayAdminKeyHint'), gatewayAccessSetAdminKey: document.getElementById('gatewayAccessSetAdminKey'), gatewayAccessClearAdminKey: document.getElementById('gatewayAccessClearAdminKey'), gatewayAgentAPIKey: document.getElementById('gatewayAgentAPIKey'), gatewayAgentKeyState: document.getElementById('gatewayAgentKeyState'), gatewayAgentKeyHint: document.getElementById('gatewayAgentKeyHint'), gatewayAccessSetAgentKey: document.getElementById('gatewayAccessSetAgentKey'), gatewayAccessClearAgentKey: document.getElementById('gatewayAccessClearAgentKey'), gatewayAccessSummary: document.getElementById('gatewayAccessSummary'),
   workspaceCount: document.getElementById('workspaceCount'), environmentCount: document.getElementById('environmentCount'),
   execCount: document.getElementById('execCount'), mcpCount: document.getElementById('mcpCount'), skillCount: document.getElementById('skillCount'), memoryCount: document.getElementById('memoryCount'),
   workspaceBadge: document.getElementById('workspaceBadge'), environmentBadge: document.getElementById('environmentBadge'), execBadge: document.getElementById('execBadge'),
@@ -450,11 +450,33 @@ async function updateLaunchAtLogin() {
 function renderGatewayAccessStatus(status) {
   gatewayAccessStatus = status || null;
   const hosts = safeArray(status?.allowed_hosts);
+  const adminConfigured = Boolean(status?.admin_api_key_configured);
+  const agentConfigured = Boolean(status?.agent_api_key_configured);
   elements.gatewayAllowedHosts.value = hosts.join('\n');
-  const hostSummary = hosts.includes('*') ? '不限制 (*)' : (hosts.length ? hosts.length + ' 个' : '未配置');
-  elements.gatewayAccessSummary.textContent = `远程 Host ${hostSummary} · Admin Key ${status?.admin_api_key_configured ? '已配置' : '未配置'} · Agent Key ${status?.agent_api_key_configured ? '已配置' : '未配置'}`;
-  elements.gatewayAccessClearAdminKey.disabled = !Boolean(status?.admin_api_key_configured);
-  elements.gatewayAccessClearAgentKey.disabled = !Boolean(status?.agent_api_key_configured);
+  const hostSummary = hosts.includes('*') ? '不限制 (*)' : (hosts.length ? hosts.length + ' 个 Host' : '未配置');
+  const setBadge = (element, configured, configuredText, emptyText) => {
+    if (!element) return;
+    element.dataset.state = configured ? 'configured' : 'unconfigured';
+    element.textContent = configured ? configuredText : emptyText;
+  };
+  setBadge(elements.gatewayHostState, hosts.length > 0, hostSummary, '未启用远程 Host');
+  setBadge(elements.gatewayAdminKeyState, adminConfigured, '已配置', '未配置');
+  setBadge(elements.gatewayAgentKeyState, agentConfigured, '已配置', '未配置');
+  elements.gatewayAccessSummary.textContent = adminConfigured && agentConfigured
+    ? `服务端双 Key 已就绪；远程 Host：${hostSummary}。保存 Host 白名单后，客户端仍必须携带对应 Key。`
+    : '远程访问尚未就绪：先配置 Admin Key 和 Agent Key，再保存 Host 白名单。';
+  elements.gatewayAdminAPIKey.placeholder = adminConfigured ? '已配置；不会回显。输入新 Key 可轮换' : '至少 16 字符；保存后不回显';
+  elements.gatewayAgentAPIKey.placeholder = agentConfigured ? '已配置；不会回显。输入新 Key 可轮换' : '至少 16 字符；保存后不回显';
+  elements.gatewayAdminKeyHint.textContent = adminConfigured
+    ? '服务端 Admin Key 已配置。Desktop/CLI 连接远端 ADM 时必须使用同一把 Admin Key；原值不会回显。'
+    : '用于 /admin/mcp。远端 Desktop/CLI 管理连接必须配置与这里完全相同的 Admin Key。';
+  elements.gatewayAgentKeyHint.textContent = agentConfigured
+    ? '服务端 Agent Key 已配置。Agent 访问 /mcp 时必须携带同一把 Agent Key；原值不会回显。'
+    : '用于 /mcp。请把这把 Key 配置到 Agent/MCP 客户端的 Authorization Bearer 或 X-ADM-API-Key 请求头。';
+  elements.gatewayAccessSetAdminKey.textContent = adminConfigured ? '轮换 Admin Key' : '设置 Admin Key';
+  elements.gatewayAccessSetAgentKey.textContent = agentConfigured ? '轮换 Agent Key' : '设置 Agent Key';
+  elements.gatewayAccessClearAdminKey.disabled = !adminConfigured;
+  elements.gatewayAccessClearAgentKey.disabled = !agentConfigured;
 }
 async function refreshLoggingStatus() {
   try {
@@ -479,8 +501,16 @@ async function refreshGatewayAccessStatus() {
     return '';
   } catch (error) {
     gatewayAccessStatus = null;
-    elements.gatewayAccessSummary.textContent = '远程访问配置读取失败：' + errorText(error);
-    return 'Gateway access: ' + errorText(error);
+    const detail = errorText(error);
+    elements.gatewayAccessSummary.textContent = '远程访问配置读取失败：' + detail;
+    for (const badge of [elements.gatewayHostState, elements.gatewayAdminKeyState, elements.gatewayAgentKeyState]) {
+      if (!badge) continue;
+      badge.dataset.state = 'error';
+      badge.textContent = '读取失败';
+    }
+    if (elements.gatewayAdminKeyHint) elements.gatewayAdminKeyHint.textContent = '无法确认服务端 Admin Key 状态：' + detail;
+    if (elements.gatewayAgentKeyHint) elements.gatewayAgentKeyHint.textContent = '无法确认服务端 Agent Key 状态：' + detail;
+    return 'Gateway access: ' + detail;
   }
 }
 function renderExecAuthorizationStatus(status) {

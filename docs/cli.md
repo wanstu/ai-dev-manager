@@ -29,7 +29,16 @@ $env:ADM_V2_URL = 'http://127.0.0.1:8001'
 adm workspace list
 ```
 
-CLI 还会读取 executable 同目录 `.env`；已经存在的进程环境变量优先。
+CLI 会同时读取用户级 `~/.config/adm/.env` 和 executable 同目录 `.env`。优先级固定为：**已有进程环境变量 > executable 同目录 `.env` > `~/.config/adm/.env`**。因此可以把常用远程连接写在用户级 `.env`，再用某个便携版/安装实例同目录的 `.env` 做局部覆盖。
+
+例如 `~/.config/adm/.env`：
+
+```dotenv
+ADM_V2_URL=http://101.37.171.174:43137
+ADM_V2_ADMIN_API_KEY=你的客户端AdminKey
+```
+
+这里的 `ADM_V2_ADMIN_API_KEY` 是 **CLI 作为客户端连接 `/admin/mcp` 时使用的 Key**；它必须与远端 ADM 服务端 Remote access 中配置的 Admin Key 一致。
 
 管理目标不可达时不会 fallback 到本地 writable `state.json`。
 

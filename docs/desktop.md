@@ -107,7 +107,7 @@ Desktop 支持保存多个 ADM connection profile：
 ~/.config/adm/desktop-connections.json
 ```
 
-一个 profile 主要定义 ADM Base URL 和相关本地启动偏好。
+一个 profile 主要定义 ADM Base URL、客户端 Admin API Key 和相关本地启动偏好。编辑弹窗不会回显已保存的 Admin Key，但会明确显示“已保存/未配置”状态；留空保存会保留旧 Key，输入新值会替换。这里保存的是**客户端连接凭据**，必须与服务端 Remote access 中配置的 Admin Key 一致。
 
 常见 URL：
 
@@ -117,6 +117,14 @@ http://127.0.0.1:8001
 ```
 
 切换 profile 时 Desktop 会清理旧 scope UI 数据，并使用 connection generation/stale-response guard，避免旧连接的慢请求回来后覆盖新连接页面。
+
+Desktop 与 CLI 还共享用户级环境配置：
+
+```text
+~/.config/adm/.env
+```
+
+同时会读取各自可执行文件同目录的 `.env`。优先级为：**已有进程环境变量 > 应用目录 `.env` > `~/.config/adm/.env`**。`desktop-connections.json` 保存 Desktop profile；`.env` 适合保存 CLI/进程级连接变量，两者用途不同。
 
 ## 4. Dashboard / Connection 状态
 

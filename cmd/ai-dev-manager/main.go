@@ -16,7 +16,7 @@ func main() {
 }
 
 func run(args []string) error {
-	if err := dotenv.LoadFromExecutableDir(); err != nil {
+	if err := dotenv.LoadDefaultFiles(); err != nil {
 		return err
 	}
 	return cli.Run(args)

@@ -81,11 +81,11 @@ $env:ADM_V2_URL = 'http://127.0.0.1:8001'
 & $adm workspace list
 ```
 
-CLI 启动时还会读取**当前可执行文件同目录**的 `.env`；已经存在的进程环境变量优先。
+CLI 与 Desktop 都会读取 `~/.config/adm/.env`，也会读取**当前可执行文件同目录**的 `.env`。优先级为：**已有进程环境变量 > 应用目录 `.env` > `~/.config/adm/.env`**。用户级文件适合保存常用连接，应用目录文件适合便携版或单个安装实例覆盖。
 
-远程 ADM 使用双 API Key：Desktop/CLI 管理面 `/admin/mcp` 使用 `ADM_V2_ADMIN_API_KEY`，Agent 面 `/mcp` 使用独立的 Agent Key。远程监听还需要 Host/IP 白名单；白名单 `*` 表示不限制 Host，但不会关闭双 Key 鉴权。完整配置见 [REMOTE_ACCESS.md](REMOTE_ACCESS.md)。
+远程 ADM 使用双 API Key：服务端 Remote access 分别设置 Admin Key 与 Agent Key；Desktop/CLI 作为客户端访问 `/admin/mcp` 时使用同一把 Admin Key（CLI 可通过 `ADM_V2_ADMIN_API_KEY` 提供），Agent 访问 `/mcp` 时使用 Agent Key。两种面都支持 `Authorization: Bearer <Key>` 或 `X-ADM-API-Key: <Key>`。远程监听还需要 Host/IP 白名单；白名单 `*` 表示不限制 Host，但不会关闭双 Key 鉴权。完整配置见 [REMOTE_ACCESS.md](REMOTE_ACCESS.md)。
 
-> 当前 HTTP Gateway 只允许 loopback 监听。非 loopback 的 Remote Admin MCP 尚未定义完整认证/TLS/Host 安全语义，不应当把 `/admin/mcp` 直接暴露到局域网或公网。
+> 非 loopback 监听必须先配置 Host allowlist、Admin Key 和 Agent Key。`/admin/mcp` 与 `/mcp` 使用不同 Key，不能互换；如果经公网暴露，仍建议由 HTTPS 反向代理提供 TLS。
 
 ## 4. Workspace：ADM 的目录授权边界
 

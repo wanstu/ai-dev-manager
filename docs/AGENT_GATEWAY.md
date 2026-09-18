@@ -15,7 +15,7 @@ Admin MCP:  http://127.0.0.1:43137/admin/mcp
 Health:     http://127.0.0.1:43137/healthz
 ```
 
-ADM HTTP Gateway v1.1 只允许 loopback listen，并检查 Host boundary。不要把 Admin MCP 直接当成未认证远程管理 API。
+ADM HTTP Gateway 默认监听 loopback。显式使用非 loopback listen 时，服务端必须先配置 Host allowlist、Admin API Key 与 Agent API Key；`/admin/mcp` 和 `/mcp` 使用不同 Key。公网场景仍应通过 HTTPS 反向代理、VPN/防火墙等限制暴露面。
 
 也可以使用：
 
@@ -1030,7 +1030,7 @@ Agent 不应该假设：
 - Memory 自动注入 context；
 - expired temporary Environment 可以直接删除；
 - Gateway restart 后旧 process/run/vfrun 还存在；
-- Admin MCP 是可公网暴露的认证 API；
+- Admin MCP 只要有 API Key 就可以不经 TLS/网络边界直接暴露公网；
 - ADM 会替 Agent 做 task planning/GSD/Git integration decisions。
 
 ## 24. 一个完整 Agent 开发示例

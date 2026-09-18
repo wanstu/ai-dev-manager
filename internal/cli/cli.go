@@ -2139,7 +2139,7 @@ func printUsage() {
   默认 ADM Base URL: http://127.0.0.1:43137
   adm --adm-url URL workspace list
   ADM_V2_URL=URL adm workspace list
-  启动时会读取当前可执行文件同级目录的 .env；已有进程环境变量优先。
+  启动时会读取 ~/.config/adm/.env 和当前可执行文件同级 .env；优先级：进程环境 > 应用目录 .env > 用户级 .env。
   --adm-url / ADM_V2_URL 只选择管理目标；连接失败不会回退到本地 state.json。
 
 主要命令：

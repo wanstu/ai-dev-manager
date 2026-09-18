@@ -474,3 +474,114 @@ body.has-editor-dialog { overflow: hidden; }
   #mcpList .resource-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   #mcpList .resource-actions { justify-content: flex-start; max-width: none; }
 }
+
+
+/* Remote access + connection credential UX */
+.remote-access-panel .subpanel-body { gap: 16px; }
+.remote-access-intro {
+  display: grid;
+  gap: 6px;
+  padding: 13px 14px;
+  border: 1px solid #dbe3ee;
+  border-radius: 11px;
+  background: #f8fafc;
+}
+.remote-access-intro > strong { color: #0f172a; font-size: 13px; }
+.credential-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.credential-card {
+  min-width: 0;
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid #e5eaf1;
+  border-radius: 12px;
+  background: #fff;
+}
+.credential-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.credential-heading > div { min-width: 0; display: grid; gap: 3px; }
+.credential-heading strong { color: #0f172a; font-size: 13px; }
+.credential-heading small { color: #64748b; font-size: 11px; line-height: 1.4; }
+.remote-access-panel .gateway-profile-field { padding: 0; grid-template-columns: 64px minmax(0, 1fr); }
+.remote-access-panel .gateway-profile-field textarea,
+.remote-access-panel .gateway-profile-field input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid #cfd7e3;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  outline: none;
+}
+.remote-access-panel .gateway-profile-field textarea:focus,
+.remote-access-panel .gateway-profile-field input:focus {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, .06);
+}
+.remote-access-panel .gateway-actions { padding: 0; }
+.field-help { margin: 0; color: #64748b; font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.auth-usage-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #cfd8e6;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f8fafc 100%);
+}
+.auth-usage-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.auth-usage-heading strong { color: #0f172a; font-size: 13px; }
+.auth-usage-heading span { color: #64748b; font-size: 11px; }
+.auth-usage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.auth-usage-grid > div {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid #e5eaf1;
+  border-radius: 9px;
+  background: #fff;
+}
+.auth-usage-grid strong { color: #334155; font-size: 11px; }
+.auth-usage-grid code {
+  display: block;
+  padding: 8px 9px;
+  border-radius: 7px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.auth-usage-grid small { color: #64748b; font-size: 10px; line-height: 1.5; }
+.field-label-line { display: flex !important; align-items: center; justify-content: space-between; gap: 10px; }
+.connection-auth-guide {
+  display: grid;
+  gap: 6px;
+  padding: 12px 13px;
+  border: 1px solid #dbe3ee;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.connection-auth-guide strong { color: #0f172a; font-size: 12px; }
+.connection-auth-guide p { margin: 0; }
+.connection-auth-guide code { color: #334155; font-size: 10px; overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  .credential-grid, .auth-usage-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .remote-access-panel .gateway-profile-field { grid-template-columns: 1fr; }
+  .credential-heading, .auth-usage-heading { align-items: flex-start; flex-direction: column; }
+}
+
+.config-source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.config-source-card { min-width: 0; display: grid; gap: 6px; padding: 12px 13px; border: 1px solid #e5eaf1; border-radius: 10px; background: #fff; }
+.config-source-card strong { color: #0f172a; font-size: 12px; }
+.config-source-card code { color: #334155; font-size: 10px; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
+.config-source-card span { color: #64748b; font-size: 11px; line-height: 1.5; }
+@media (max-width: 900px) { .config-source-grid { grid-template-columns: 1fr; } }

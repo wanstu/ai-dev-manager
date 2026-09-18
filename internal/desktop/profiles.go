@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"ai-dev-manager-v2/internal/configpath"
 	"strings"
 	"sync"
 
@@ -36,11 +38,7 @@ func (a *Adapter) connectionProfilesPath() (string, error) {
 	if a.profilesPath != "" {
 		return a.profilesPath, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "adm", "desktop-connections.json"), nil
+	return configpath.File("desktop-connections.json")
 }
 
 func validateConnectionProfile(p ConnectionProfile) (ConnectionProfile, error) {

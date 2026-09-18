@@ -70,6 +70,47 @@ func TestParseRejectsMalformedLines(t *testing.T) {
 	}
 }
 
+func TestLoadLayeredFilesUsesProcessThenExecutableThenUserPrecedence(t *testing.T) {
+	userPath := filepath.Join(t.TempDir(), "user.env")
+	executablePath := filepath.Join(t.TempDir(), "app.env")
+	if err := os.WriteFile(userPath, []byte("ADM_LAYER_SHARED=user\nADM_LAYER_USER=user-only\nADM_LAYER_PROCESS=user-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executablePath, []byte("ADM_LAYER_SHARED=app\nADM_LAYER_APP=app-only\nADM_LAYER_PROCESS=app-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"ADM_LAYER_SHARED", "ADM_LAYER_USER", "ADM_LAYER_APP"} {
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Unsetenv(key)
+	}
+	t.Setenv("ADM_LAYER_PROCESS", "process")
+
+	if err := loadLayeredFiles(userPath, executablePath); err != nil {
+		t.Fatal(err)
+	}
+	if got := os.Getenv("ADM_LAYER_SHARED"); got != "app" {
+		t.Fatalf("shared = %q, want app", got)
+	}
+	if got := os.Getenv("ADM_LAYER_USER"); got != "user-only" {
+		t.Fatalf("user = %q, want user-only", got)
+	}
+	if got := os.Getenv("ADM_LAYER_APP"); got != "app-only" {
+		t.Fatalf("app = %q, want app-only", got)
+	}
+	if got := os.Getenv("ADM_LAYER_PROCESS"); got != "process" {
+		t.Fatalf("process = %q, want process", got)
+	}
+}
+
+func TestLoadLayeredFilesMissingFilesAreNoop(t *testing.T) {
+	root := t.TempDir()
+	if err := loadLayeredFiles(filepath.Join(root, "missing-user"), filepath.Join(root, "missing-app")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func assertValue(t *testing.T, values map[string]string, key, want string) {
 	t.Helper()
 	if got := values[key]; got != want {

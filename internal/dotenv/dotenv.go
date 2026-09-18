@@ -8,19 +8,90 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+
+	"ai-dev-manager-v2/internal/configpath"
 )
 
 const FileName = ".env"
 
-// LoadFromExecutableDir loads .env from the directory containing the current
-// executable. Missing .env is not an error. Existing process environment values
-// win over file values so explicit shell/service configuration stays authoritative.
+// LoadDefaultFiles loads ADM dotenv configuration with this precedence:
+//
+// explicit process environment > executable-directory .env > ~/.config/adm/.env
+//
+// Missing files are ignored. The executable-directory file may override values
+// from the user configuration file, but neither file overrides variables that
+// were already present in the process environment.
+func LoadDefaultFiles() error {
+	userPath, err := configpath.File(FileName)
+	if err != nil {
+		return fmt.Errorf("resolve ADM config path for .env: %w", err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve executable path for .env: %w", err)
+	}
+	return loadLayeredFiles(userPath, filepath.Join(filepath.Dir(executable), FileName))
+}
+
+// LoadFromExecutableDir is retained for callers that explicitly want only the
+// executable-directory .env.
 func LoadFromExecutableDir() error {
 	executable, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("resolve executable path for .env: %w", err)
 	}
 	return LoadFile(filepath.Join(filepath.Dir(executable), FileName), false)
+}
+
+func loadLayeredFiles(userPath, executablePath string) error {
+	explicit := currentEnvironmentKeys()
+	merged := map[string]string{}
+
+	load := func(path string) error {
+		if strings.TrimSpace(path) == "" {
+			return nil
+		}
+		values, err := ParseFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		for key, value := range values {
+			merged[key] = value
+		}
+		return nil
+	}
+
+	if err := load(userPath); err != nil {
+		return err
+	}
+	if filepath.Clean(executablePath) != filepath.Clean(userPath) {
+		if err := load(executablePath); err != nil {
+			return err
+		}
+	}
+	for key, value := range merged {
+		if explicit[key] {
+			continue
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("set %s from ADM .env: %w", key, err)
+		}
+	}
+	return nil
+}
+
+func currentEnvironmentKeys() map[string]bool {
+	result := map[string]bool{}
+	for _, item := range os.Environ() {
+		key, _, ok := strings.Cut(item, "=")
+		if ok {
+			result[key] = true
+		}
+	}
+	return result
 }
 
 // LoadFile reads dotenv-style KEY=VALUE pairs and applies them to the current

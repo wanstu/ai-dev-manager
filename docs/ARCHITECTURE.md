@@ -143,7 +143,7 @@ Admin surface 是 Agent surface 的管理 superset。CLI/Desktop 用它管理：
 
 这样可以避免“一个拿到 Agent 开发工具的客户端就天然拥有机器级配置管理权”。
 
-当前 HTTP Gateway 只监听 loopback，Admin surface 仍应被视为 privileged management interface。
+HTTP Gateway 默认监听 loopback；显式启用非 loopback 监听时，必须同时配置 Host allowlist、Admin API Key 与 Agent API Key。Admin surface 始终应被视为 privileged management interface。
 
 ## 5. CLI 为什么依赖 Gateway
 
@@ -686,6 +686,8 @@ Desktop 本身不拥有第二套业务状态。
 ```
 
 真正 Workspace/Environment/catalog/Memory 数据仍来自当前 `/admin/mcp`。
+
+CLI 与 Desktop 共享用户级 dotenv 配置 `~/.config/adm/.env`，并可由各自 executable 同目录 `.env` 覆盖。进程显式环境变量仍拥有最高优先级。这些 `.env` 属于客户端/进程配置，不取代 Core persistent state。
 
 ### 24.1 Connection generation / stale result guard
 

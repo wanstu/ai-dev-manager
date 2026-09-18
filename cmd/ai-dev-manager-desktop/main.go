@@ -29,7 +29,7 @@ var embeddedFrontend embed.FS
 var trayIcon []byte
 
 func main() {
-	if err := dotenv.LoadFromExecutableDir(); err != nil {
+	if err := dotenv.LoadDefaultFiles(); err != nil {
 		fmt.Fprintln(os.Stderr, "desktop error:", err)
 		os.Exit(1)
 	}

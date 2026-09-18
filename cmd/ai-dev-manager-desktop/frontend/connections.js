@@ -91,8 +91,16 @@ function editConnectionProfile(profile) {
  document.getElementById('connectionID').value = profile?.id || '';
  document.getElementById('connectionName').value = profile?.name || '';
  document.getElementById('connectionURL').value = profile?.base_url || '';
- document.getElementById('connectionAPIKey').value = '';
- document.getElementById('connectionAPIKeyHint').textContent = profile?.api_key_configured ? '已保存 Admin Key；留空会保留原密钥，输入新值会替换。' : '远端 Desktop/CLI 管理连接必须配置 Admin Key。Agent Key 仅供 /mcp 使用，不保存在 Desktop 管理连接里。密钥保存后不会回显。';
+ const apiKeyInput = document.getElementById('connectionAPIKey');
+ const apiKeyState = document.getElementById('connectionAPIKeyState');
+ const apiKeyConfigured = Boolean(profile?.api_key_configured);
+ apiKeyInput.value = '';
+ apiKeyInput.placeholder = apiKeyConfigured ? '已配置；留空保留，输入新 Key 可替换' : '远端管理连接必填 Admin Key';
+ apiKeyState.dataset.state = apiKeyConfigured ? 'configured' : 'unconfigured';
+ apiKeyState.textContent = apiKeyConfigured ? '已保存' : '未配置';
+ document.getElementById('connectionAPIKeyHint').textContent = apiKeyConfigured
+  ? '客户端 Admin Key 已保存；不会回显。留空会保留原密钥，输入新值会替换。它必须与服务端 Remote access 的 Admin Key 一致。'
+  : '远端 Desktop/CLI 管理连接必须配置 Admin Key，并且必须与服务端 Remote access 的 Admin Key 一致。Agent Key 仅供 /mcp 使用。';
  document.getElementById('connectionStartOnDesktopLaunch').checked = Boolean(profile?.start_service_on_desktop_launch);
  document.getElementById('connectionDialogTitle').textContent = profile ? '编辑连接' : '添加连接';
  openEditorDialog('connectionDialog');
