@@ -174,7 +174,7 @@ h3 { margin-bottom: 0; font-size: 14px; }
 .context-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .context-select { display: grid; gap: 6px; color: #4b5563; font-size: 12px; }
 .context-select select,
-.manager-form input[type="text"], .manager-form input[type="url"], .manager-form input[type="number"], .manager-form select, .manager-form textarea {
+.manager-form input[type="text"], .manager-form input[type="url"], .manager-form input[type="password"], .manager-form input[type="number"], .manager-form select, .manager-form textarea {
   min-width: 0; width: 100%; padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; outline: none;
 }
 .context-select select:focus,
@@ -191,7 +191,7 @@ h3 { margin-bottom: 0; font-size: 14px; }
 .manager-form > label { align-content: start; }
 .manager-form .check-field { min-height: 36px; padding: 6px 0; }
 .manager-form input[type="checkbox"] { width: 15px; height: 15px; accent-color: #111827; }
-.manager-form input[type="text"], .manager-form input[type="url"], .manager-form input[type="number"], .manager-form select { min-height: 38px; }
+.manager-form input[type="text"], .manager-form input[type="url"], .manager-form input[type="password"], .manager-form input[type="number"], .manager-form select { min-height: 38px; }
 .manager-form textarea { line-height: 1.45; }
 .manager-form label { min-width: 0; display: grid; gap: 5px; color: #4b5563; font-size: 12px; }
 .manager-form > label[hidden] { display: none !important; }
