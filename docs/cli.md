@@ -763,6 +763,14 @@ adm [--adm-url URL] gateway status [--listen HOST:PORT]
 
 `status` 可以检查自定义端口或远端 health；远端仅是查看，不获得 stop 权限。
 
+## `gateway logs status`
+
+```text
+adm gateway logs status
+```
+
+显示 ADM 持久日志目录、当前单文件轮转阈值、每个日志级别的 rotated-file 保留数量。该命令不读取或输出日志正文，也不会返回 secret/token 等字段。
+
 ## `gateway stop`
 
 ```text

@@ -51,7 +51,7 @@ func main() {
 
 func desktopLaunchOptions(args []string) (bool, error) {
 	flags := flag.NewFlagSet("desktop", flag.ContinueOnError)
-	autostart := flags.Bool("autostart", false, "start hidden after Windows login")
+	autostart := flags.Bool("autostart", false, "start after user login; hide automatically when the platform tray is safe for window recovery")
 	if err := flags.Parse(args); err != nil {
 		return false, err
 	}
@@ -97,8 +97,8 @@ func runDesktop(startHidden bool) error {
 		Height:            760,
 		MinWidth:          820,
 		MinHeight:         560,
-		StartHidden:       startHidden && traySupported,
-		HideWindowOnClose: traySupported,
+		StartHidden:       startHidden && traySupported && trayWindowHidingSupported(),
+		HideWindowOnClose: traySupported && trayWindowHidingSupported(),
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

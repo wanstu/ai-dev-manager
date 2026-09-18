@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin || linux
 
 package main
 
@@ -29,7 +29,7 @@ func TestActiveConnectionProfile(t *testing.T) {
 }
 
 func TestTrayExitMenuHasTwoExplicitLifecycleChoices(t *testing.T) {
-	source, err := os.ReadFile("tray_manager_windows.go")
+	source, err := os.ReadFile("tray_manager_supported.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestTrayExitMenuHasTwoExplicitLifecycleChoices(t *testing.T) {
 }
 
 func TestStopAndExitUsesOnlySafeLocalADMPath(t *testing.T) {
-	source, err := os.ReadFile("tray_manager_windows.go")
+	source, err := os.ReadFile("tray_manager_supported.go")
 	if err != nil {
 		t.Fatal(err)
 	}

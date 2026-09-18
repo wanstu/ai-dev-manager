@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows || darwin || linux
 
 package main
 
@@ -14,6 +14,11 @@ import (
 )
 
 const traySupported = true
+
+// Linux tray availability depends on the active desktop's StatusNotifier host.
+// Keep the tray enabled there, but do not make the main window unreachable by
+// automatically hiding it until runtime tray-host detection is available.
+func trayWindowHidingSupported() bool { return runtime.GOOS != "linux" }
 
 const (
 	trayQuitKeepBackgroundLabel = "退出（保留后台）"
@@ -79,10 +84,10 @@ func (t *trayManager) Shutdown(context.Context) {
 }
 
 func (t *trayManager) run() {
-	// gogpu/systray creates a hidden Win32 window and then pumps that
-	// window's message queue. Both operations must stay on the same OS
-	// thread; otherwise the tray icon can be visible while left/right click
-	// messages are never dispatched.
+	// Keep the systray platform loop on one locked OS thread. gogpu/systray
+	// owns the native tray/message-loop integration on Windows, macOS, and
+	// Linux; keeping creation and Run on one thread also preserves the
+	// Windows message-loop requirement.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 

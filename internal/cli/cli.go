@@ -19,6 +19,7 @@ import (
 	"ai-dev-manager-v2/internal/catalog"
 	"ai-dev-manager-v2/internal/gateway"
 	"ai-dev-manager-v2/internal/model"
+	"ai-dev-manager-v2/internal/pathutil"
 	"ai-dev-manager-v2/internal/store"
 	productversion "ai-dev-manager-v2/internal/version"
 )
@@ -1709,6 +1710,8 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 		return startHTTPGateway(service, targetListen)
 	case "access":
 		return runGatewayAccess(service, args[1:])
+	case "logs":
+		return runGatewayLogs(service, args[1:])
 	case "stdio":
 		if len(args) != 1 {
 			return fmt.Errorf("gateway stdio 不接受参数；运行 adm gateway -h 查看帮助")
@@ -2024,20 +2027,16 @@ func stopHTTPGateway(listen string) error {
 }
 
 func sameADMExecutable(targetPath, currentPath string) bool {
-	if !strings.EqualFold(filepath.Clean(filepath.Dir(targetPath)), filepath.Clean(filepath.Dir(currentPath))) {
+	if !pathutil.Same(filepath.Dir(targetPath), filepath.Dir(currentPath)) {
 		return false
 	}
-	targetName := strings.ToLower(filepath.Base(targetPath))
-	currentName := strings.ToLower(filepath.Base(currentPath))
-	legacyName := "ai-dev-manager-v2.exe"
-	legacyPrefix := "ai-dev-manager-v2."
-	if targetName == "adm.exe" {
-		return currentName == "adm.exe" || strings.HasPrefix(currentName, "adm.") || currentName == legacyName || strings.HasPrefix(currentName, legacyPrefix)
-	}
-	if targetName == legacyName {
-		return currentName == legacyName || strings.HasPrefix(currentName, legacyPrefix) || currentName == "adm.exe" || strings.HasPrefix(currentName, "adm.")
-	}
-	return false
+	return isADMExecutableName(targetPath) && isADMExecutableName(currentPath)
+}
+
+func isADMExecutableName(path string) bool {
+	name := strings.ToLower(filepath.Base(path))
+	name = strings.TrimSuffix(name, ".exe")
+	return name == "adm" || strings.HasPrefix(name, "adm-") || strings.HasPrefix(name, "adm.") || name == "ai-dev-manager-v2" || strings.HasPrefix(name, "ai-dev-manager-v2.")
 }
 
 func terminateGatewayProcess(pid int, listen, _ string) error {
@@ -2159,7 +2158,7 @@ Gateway 常用命令：
   gateway status     查看当前 ADM Base URL，或用 --listen 显式检查一个本机监听地址
   gateway stop       停止当前本机 ADM Base URL 对应的 Gateway；远端 URL 不会被停止
   gateway restart    重启当前本机 ADM Base URL 对应的 Gateway
-  gateway access     配置远程 Host/IP 白名单、Admin API Key 与 Agent API Key\n  gateway stdio      仅供 MCP 客户端使用；不要在普通终端里手动运行
+  gateway access     配置远程 Host/IP 白名单、Admin API Key 与 Agent API Key\n  gateway logs       查看持久日志目录与轮转/保留策略\n  gateway stdio      仅供 MCP 客户端使用；不要在普通终端里手动运行
 
 查看子命令帮助：
   adm workspace -h
@@ -2465,6 +2464,7 @@ func printGatewayHelp() {
 
 人工使用的 HTTP Gateway：
   adm [--adm-url URL] gateway start [--listen HOST:PORT] [-d|--detach]
+  adm gateway logs status
       在当前终端前台启动。终端会被占用，按 Ctrl+C 停止。
       加 -d 或 --detach 后脱离当前终端运行，健康检查通过后命令立即返回。
 

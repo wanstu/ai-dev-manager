@@ -453,7 +453,7 @@ func isAdminOnlyTool(name string) bool {
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
 		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired",
 		"exec_allow", "exec_allow_remove", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
-		"gateway_access_status", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_clear",
+		"logging_status", "gateway_access_status", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_clear",
 		"mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
 		"environment_mcp_set",
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
@@ -504,6 +504,10 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, snapshot, err
 		})
 
+	addScopedTool(server, surface, &mcp.Tool{Name: "logging_status", Description: "Return persistent ADM runtime log directory and fixed rotation/retention limits. No log contents or secrets are returned."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			return toolResult(service.LoggingStatus(), nil)
+		})
 	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_access_status", Description: "Return configured remote Host allowlist and whether separate Admin MCP and Agent MCP API keys are configured; key values are never returned."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.GatewayAccessStatus()

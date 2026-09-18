@@ -4,9 +4,12 @@ package pathutil
 
 import (
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/windows"
 )
+
+func equalPath(a, b string) bool { return strings.EqualFold(a, b) }
 
 func normalizeExistingPath(path string) string {
 	clean := filepath.Clean(path)

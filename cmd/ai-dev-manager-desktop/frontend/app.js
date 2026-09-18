@@ -1,7 +1,7 @@
 const elements = {
   refreshButton: document.getElementById('refreshButton'),
   launchAtLogin: document.getElementById('launchAtLogin'), desktopShellHint: document.getElementById('desktopShellHint'),
-  worktreeSettingsForm: document.getElementById('worktreeSettingsForm'), worktreeRoot: document.getElementById('worktreeRoot'), worktreeBranchPrefix: document.getElementById('worktreeBranchPrefix'), worktreeSettingsSaveButton: document.getElementById('worktreeSettingsSaveButton'), worktreeSettingsHint: document.getElementById('worktreeSettingsHint'), hostEnvironmentSummary: document.getElementById('hostEnvironmentSummary'), hostEnvironmentRefreshButton: document.getElementById('hostEnvironmentRefreshButton'),
+  worktreeSettingsForm: document.getElementById('worktreeSettingsForm'), worktreeRoot: document.getElementById('worktreeRoot'), worktreeBranchPrefix: document.getElementById('worktreeBranchPrefix'), worktreeSettingsSaveButton: document.getElementById('worktreeSettingsSaveButton'), worktreeSettingsHint: document.getElementById('worktreeSettingsHint'), hostEnvironmentSummary: document.getElementById('hostEnvironmentSummary'), hostEnvironmentRefreshButton: document.getElementById('hostEnvironmentRefreshButton'), loggingStatusSummary: document.getElementById('loggingStatusSummary'),
   statusPanel: document.getElementById('statusPanel'),
   dashboardDataState: document.getElementById('dashboardDataState'), dashboardLastSuccess: document.getElementById('dashboardLastSuccess'), dashboardDataDetail: document.getElementById('dashboardDataDetail'),
   gatewayState: document.getElementById('gatewayState'),
@@ -20,7 +20,7 @@ const elements = {
   workspaceBadge: document.getElementById('workspaceBadge'), environmentBadge: document.getElementById('environmentBadge'), execBadge: document.getElementById('execBadge'),
   mcpBadge: document.getElementById('mcpBadge'), skillBadge: document.getElementById('skillBadge'),
   managementContextPanel: document.getElementById('managementContextPanel'), managementWorkspace: document.getElementById('managementWorkspace'), managementEnvironment: document.getElementById('managementEnvironment'), managementEnvironmentHint: document.getElementById('managementEnvironmentHint'), createEnvironmentButton: document.getElementById('createEnvironmentButton'), editEnvironmentButton: document.getElementById('editEnvironmentButton'),
-  runtimeRefreshButton: document.getElementById('runtimeRefreshButton'), runtimeHint: document.getElementById('runtimeHint'), runtimeSubviewTabs: document.getElementById('runtimeSubviewTabs'), runtimeVerifierCount: document.getElementById('runtimeVerifierCount'), runtimeProcessCount: document.getElementById('runtimeProcessCount'), runtimeRunCount: document.getElementById('runtimeRunCount'), verifierList: document.getElementById('verifierList'), processList: document.getElementById('processList'), runList: document.getElementById('runList'), runtimeOutputMeta: document.getElementById('runtimeOutputMeta'), runtimeOutput: document.getElementById('runtimeOutput'),
+  runtimeRefreshButton: document.getElementById('runtimeRefreshButton'), runtimeHint: document.getElementById('runtimeHint'), runtimeWriterOwnerInput: document.getElementById('runtimeWriterOwnerInput'), runtimeWriterAcquireButton: document.getElementById('runtimeWriterAcquireButton'), runtimeWriterReleaseButton: document.getElementById('runtimeWriterReleaseButton'), runtimeWriterHint: document.getElementById('runtimeWriterHint'), runtimeSubviewTabs: document.getElementById('runtimeSubviewTabs'), runtimeVerifierCount: document.getElementById('runtimeVerifierCount'), runtimeProcessCount: document.getElementById('runtimeProcessCount'), runtimeRunCount: document.getElementById('runtimeRunCount'), verifierList: document.getElementById('verifierList'), processList: document.getElementById('processList'), runList: document.getElementById('runList'), runtimeOutputMeta: document.getElementById('runtimeOutputMeta'), runtimeOutput: document.getElementById('runtimeOutput'),
   mcpTotalCount: document.getElementById('mcpTotalCount'), mcpDefaultCount: document.getElementById('mcpDefaultCount'), mcpEnvironmentCount: document.getElementById('mcpEnvironmentCount'), mcpIssueCount: document.getElementById('mcpIssueCount'),
   mcpForm: document.getElementById('mcpForm'), mcpName: document.getElementById('mcpName'), mcpTransport: document.getElementById('mcpTransport'), mcpEndpointField: document.getElementById('mcpEndpointField'), mcpEndpoint: document.getElementById('mcpEndpoint'),
   mcpExecutableField: document.getElementById('mcpExecutableField'), mcpExecutable: document.getElementById('mcpExecutable'), mcpArgsField: document.getElementById('mcpArgsField'), mcpArgs: document.getElementById('mcpArgs'),
@@ -74,6 +74,7 @@ let runtimeListStates = {verifiers: 'unloaded', processes: 'unloaded', runs: 'un
 let runtimeListErrors = {verifiers: '', processes: '', runs: ''};
 let runtimeOutputBinding = null;
 let runtimePendingActionKey = '';
+let runtimeWriterCredential = {environmentID: '', owner: ''};
 let pendingMCPImport = null;
 let mcpImportBusy = false;
 let editingMCPID = '';
@@ -418,7 +419,7 @@ async function loadDesktopPreferences(showMessage = false) {
     const supported = Boolean(preferences?.launch_at_login_supported);
     elements.launchAtLogin.disabled = !supported;
     elements.launchAtLogin.checked = supported && Boolean(preferences?.launch_at_login);
-    elements.desktopShellHint.textContent = supported ? '关闭窗口后继续驻留托盘' : '当前平台不支持开机启动';
+    elements.desktopShellHint.textContent = supported ? '可随用户登录自动启动 Desktop' : '当前平台不支持开机启动';
     if (showMessage) setStatus('Desktop 设置已刷新', 'success');
     return preferences;
   } catch (error) {
@@ -454,6 +455,23 @@ function renderGatewayAccessStatus(status) {
   elements.gatewayAccessSummary.textContent = `远程 Host ${hostSummary} · Admin Key ${status?.admin_api_key_configured ? '已配置' : '未配置'} · Agent Key ${status?.agent_api_key_configured ? '已配置' : '未配置'}`;
   elements.gatewayAccessClearAdminKey.disabled = !Boolean(status?.admin_api_key_configured);
   elements.gatewayAccessClearAgentKey.disabled = !Boolean(status?.agent_api_key_configured);
+}
+async function refreshLoggingStatus() {
+  try {
+    const status = await desktopAdapter().GetLoggingStatus();
+    const bytes = safeNumber(status?.max_bytes);
+    const sizeText = bytes ? (bytes / (1024 * 1024)).toFixed(bytes % (1024 * 1024) === 0 ? 0 : 1) + ' MiB' : '—';
+    elements.loggingStatusSummary.replaceChildren(
+      detailRow('Directory', status?.directory || '—'),
+      detailRow('Levels', 'debug / info / warn / error'),
+      detailRow('Rotate', 'UTC day change or ' + sizeText + ' per active level file'),
+      detailRow('Retention', safeNumber(status?.max_files_per_level) + ' rotated files / level')
+    );
+    return '';
+  } catch (error) {
+    if (elements.loggingStatusSummary) elements.loggingStatusSummary.replaceChildren(detailRow('Status', '读取失败：' + errorText(error)));
+    return 'Logging: ' + errorText(error);
+  }
 }
 async function refreshGatewayAccessStatus() {
   try {
@@ -607,7 +625,18 @@ function updateManagementHint() {
       : '未选择 Workspace：只管理全局定义和默认值，不显示 Workspace / Environment 选择状态。';
   elements.managementEnvironmentHint.textContent = managementContextError ? `${base} 部分状态不可用：${managementContextError}` : base;
 }
-function runtimeWriterOwner() { return currentEnvironment()?.writer?.owner || ''; }
+function runtimeWriterOwner() {
+  const environmentID = currentEnvironment()?.environment_id || '';
+  return environmentID && runtimeWriterCredential.environmentID === environmentID ? runtimeWriterCredential.owner : '';
+}
+function clearRuntimeWriterCredential() {
+  runtimeWriterCredential = {environmentID: '', owner: ''};
+  if (elements.runtimeWriterOwnerInput) elements.runtimeWriterOwnerInput.value = '';
+}
+function generatedDesktopWriterOwner() {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  return 'desktop-' + (uuid || (Date.now() + '-' + Math.random().toString(16).slice(2)));
+}
 function runtimeItem(titleText, idText, state, detailText, actions = []) {
   const item = document.createElement('article'); item.className = 'runtime-item';
   const head = document.createElement('div'); head.className = 'runtime-item-head';
@@ -673,15 +702,21 @@ function renderRuntimeListState(kind, emptyText, renderItems) {
 function renderRuntime() {
   syncRuntimeSubviewUI();
   const environment = currentEnvironment(), writerOwner = runtimeWriterOwner(), pending = Boolean(runtimePendingActionKey);
+  const activeWriter = Boolean(environment?.writer), writerAuthorized = activeWriter && Boolean(writerOwner);
   elements.runtimeHint.textContent = !environment
     ? '选择 Management Environment 后可查看当前 Gateway owner 的运行状态。'
-    : writerOwner
-      ? `当前 Environment Writer: ${writerOwner}。Writer 只是观测到的现有 authority；停止/取消/运行不会自动抢 lease。`
-      : '当前 Environment 没有 active writer；可以查看 owner-local 状态与日志，但运行/停止/取消操作不可用。';
+    : activeWriter
+      ? '当前 Environment 有 active Writer。服务端不会暴露 owner；只有当前 Desktop 会话已显式持有正确 owner 时，运行/停止/取消操作才可用。'
+      : '当前 Environment 没有 active Writer；可查看 owner-local 状态与日志，也可以显式获取一个 Writer。';
+  if (elements.runtimeWriterOwnerInput && runtimeWriterCredential.environmentID === environment?.environment_id && document.activeElement !== elements.runtimeWriterOwnerInput) elements.runtimeWriterOwnerInput.value = runtimeWriterCredential.owner || '';
+  elements.runtimeWriterOwnerInput.disabled = !environment || pending;
+  elements.runtimeWriterAcquireButton.disabled = !environment || pending;
+  elements.runtimeWriterReleaseButton.disabled = !environment || pending || !writerAuthorized;
+  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存一个 Writer Owner；它只存在于内存，不写入 profile/state，也不会从服务端回显。' : activeWriter ? '检测到 active Writer，但 owner 被隐藏。要使用该 Writer，必须由人类显式输入正确 owner；错误 owner 不会获得 authority。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
 
   renderRuntimeListState('verifiers', '没有配置 verifier', (verifiers, container) => {
     for (const verifier of verifiers) {
-      const run = createActionButton('运行', 'run-verifier', verifier.verifier_id); run.disabled = pending || !writerOwner || verifier.enabled === false;
+      const run = createActionButton('运行', 'run-verifier', verifier.verifier_id); run.disabled = pending || !writerAuthorized || verifier.enabled === false;
       const args = safeArray(verifier.args).join(' '); const detail = `${verifier.kind || 'custom'} · ${verifier.executable || ''}${args ? ` ${args}` : ''}${verifier.cwd ? ` · cwd ${verifier.cwd}` : ''}`;
       container.append(runtimeItem(verifier.name || verifier.verifier_id, verifier.verifier_id, verifier.enabled === false ? 'disabled' : 'configured', detail, [run]));
     }
@@ -689,7 +724,7 @@ function renderRuntime() {
   renderRuntimeListState('processes', '当前 Gateway owner 没有 process', (processes, container) => {
     for (const process of processes) {
       const logs = createActionButton('日志', 'process-logs', process.id); logs.disabled = pending; const actions = [logs];
-      if (process.state === 'running') { const stop = createActionButton('停止', 'stop-process', process.id, 'danger'); stop.disabled = pending || !writerOwner; actions.push(stop); }
+      if (process.state === 'running') { const stop = createActionButton('停止', 'stop-process', process.id, 'danger'); stop.disabled = pending || !writerAuthorized; actions.push(stop); }
       const ports = safeArray(process.listening_ports); const detail = `PID ${process.pid || '—'}${ports.length ? ` · ports ${ports.join(', ')}` : ''}${process.exit_code !== undefined && process.exit_code !== null ? ` · exit ${process.exit_code}` : ''}${process.error_kind ? ` · ${process.error_kind}` : ''}`;
       container.append(runtimeItem(process.id, process.id, process.state, detail, actions));
     }
@@ -698,7 +733,7 @@ function renderRuntime() {
   renderRuntimeListState('runs', '当前 Gateway owner 没有 generic run', (runs, container) => {
     for (const run of runs) {
       const output = createActionButton('输出', 'run-output', run.id); output.disabled = pending; const actions = [output];
-      if (run.state === 'running') { const cancel = createActionButton('取消', 'cancel-run', run.id, 'danger'); cancel.disabled = pending || !writerOwner; actions.push(cancel); }
+      if (run.state === 'running') { const cancel = createActionButton('取消', 'cancel-run', run.id, 'danger'); cancel.disabled = pending || !writerAuthorized; actions.push(cancel); }
       const detail = `${run.executable || ''}${safeArray(run.args).length ? ` ${safeArray(run.args).join(' ')}` : ''}${run.cwd ? ` · cwd ${run.cwd}` : ''}${run.exit_code !== undefined && run.exit_code !== null ? ` · exit ${run.exit_code}` : ''}${run.error_kind ? ` · ${run.error_kind}` : ''}`;
       container.append(runtimeItem(run.id, run.id, run.state, detail, actions));
     }
@@ -969,7 +1004,7 @@ function renderEnvironments(environments) {
     const title = document.createElement('strong'); title.textContent = environment.name || environment.environment_id; const contextMarker = stateBadge('当前管理环境', 'selected'); contextMarker.classList.add('context-marker'); contextMarker.hidden = !currentContext; const retentionView = environmentRetentionView(environment); titleLine.append(title, contextMarker, stateBadge(retentionView.label, retentionView.tone));
     const id = document.createElement('code'); id.textContent = environment.environment_id || ''; const root = document.createElement('span'); root.className = 'project-path'; root.textContent = environment.root || '';
     const workspaceName = model.workspaceNames[environment.workspace_id] || environment.workspace_id || '—';
-    const meta = document.createElement('small'); meta.textContent = `Workspace ${workspaceName}${environment.workspace_id ? ` (${environment.workspace_id})` : ''} · ${environment.state || 'unknown'} · MCP ${safeArray(environment.enabled_mcp_ids).length} · Skills ${safeArray(environment.enabled_skill_ids).length} · Private Memory ${safeNumber(environment.private_memory_count)} · ${environment.writer?.owner ? `Writer ${environment.writer.owner}` : 'No writer'}`; content.append(titleLine, id, root, meta); renderTemporaryLifecycleNote(content, environment);
+    const meta = document.createElement('small'); meta.textContent = `Workspace ${workspaceName}${environment.workspace_id ? ` (${environment.workspace_id})` : ''} · ${environment.state || 'unknown'} · MCP ${safeArray(environment.enabled_mcp_ids).length} · Skills ${safeArray(environment.enabled_skill_ids).length} · Private Memory ${safeNumber(environment.private_memory_count)} · ${environment.writer ? `Writer active${environment.writer.expires_at ? ` until ${new Date(environment.writer.expires_at).toLocaleTimeString()}` : ''}` : 'No writer'}`; content.append(titleLine, id, root, meta); renderTemporaryLifecycleNote(content, environment);
     const actions = document.createElement('div'); actions.className = 'item-actions'; actions.append(createActionButton('详情', 'inspect-environment', environment.environment_id), createActionButton('诊断', 'diagnose-environment', environment.environment_id));
     if (retentionView.persistence === 'temporary') {
       actions.append(createActionButton('刷新生命周期', 'refresh-temporary-environment', environment.environment_id), createActionButton('Promote durable', 'promote-temporary-environment', environment.environment_id), createActionButton('清理预览', 'preview-temporary-environment-cleanup', environment.environment_id));
@@ -1548,7 +1583,7 @@ function clearManagementData(message = 'ADM 未连接。连接 Admin MCP 后加�
   skillSources = []; skillSourcesState = 'unloaded'; skillSourcesError = ''; managementContextError = ''; managementSkillAvailabilityError = '';
   selectedMCPIDs = new Set(); selectedSkillIDs = new Set(); selectedAssignmentEnvironmentIDs = new Set(); capabilityAssignmentBusy = false; explicitSkillAvailabilityProbe = null; skillBulkBusy = false; mcpBulkBusy = false; editingSkillSourceID = ''; skillSubview = 'skills'; syncSkillSubviewUI();
   managementInspection = null; managementCapabilityFacts = new Map(); skillAvailabilityByID = new Map(); environmentSkillAvailabilityByID = new Map(); mcpHealthByKey = new Map(); temporaryLifecycleByEnvironmentID = new Map(); temporaryCleanupPreviewIDs = new Set(); mcpProbeRequests.clear();
-  runtimeSubview = 'verifiers'; runtimeSubviewGeneration++; runtimePendingActionKey = ''; resetRuntimeCollections('unloaded'); clearRuntimeOutput('管理上下文已清除'); syncRuntimeSubviewUI();
+  runtimeSubview = 'verifiers'; runtimeSubviewGeneration++; runtimePendingActionKey = ''; clearRuntimeWriterCredential(); resetRuntimeCollections('unloaded'); clearRuntimeOutput('管理上下文已清除'); syncRuntimeSubviewUI();
   renderDashboardState('unloaded', message); renderManagementUnavailable(message);
   globalMemoryLoaded = false; globalMemoryLoading = false; resetEnvironmentMemoryScope(message); if (!elements.environmentDetailPanel.hidden) closeEnvironmentDetail();
 }
@@ -1904,7 +1939,7 @@ async function refreshSnapshot(successMessage = '') {
     catch (error) { skillSources = []; skillSourcesState = 'error'; skillSourcesError = errorText(error); sourceError = `Skill sources: ${skillSourcesError}`; }
     if (requestGeneration !== connectionGeneration) return false;
     renderSkillManager(safeArray(currentSnapshot?.skills));
-    const [gatewayAccessError, execAuthorizationError] = await Promise.all([refreshGatewayAccessStatus(), refreshExecAuthorizationStatus()]);
+    const [loggingError, gatewayAccessError, execAuthorizationError] = await Promise.all([refreshLoggingStatus(), refreshGatewayAccessStatus(), refreshExecAuthorizationStatus()]);
     if (requestGeneration !== connectionGeneration) return false;
 
     const contextResult = await refreshManagementContext(captureEnvironmentScope());
@@ -1914,7 +1949,7 @@ async function refreshSnapshot(successMessage = '') {
       try { await refreshSelectedEnvironmentDetail(); }
       catch (error) { detailError = `Environment detail: ${errorText(error)}`; }
     }
-    const auxiliaryErrors = [sourceError, gatewayAccessError, execAuthorizationError, ...safeArray(contextResult?.errors), detailError].filter(Boolean);
+    const auxiliaryErrors = [sourceError, loggingError, gatewayAccessError, execAuthorizationError, ...safeArray(contextResult?.errors), detailError].filter(Boolean);
     if (auxiliaryErrors.length) setStatus(`基础快照已刷新；部分状态不可用：${auxiliaryErrors.join(' · ')}`, 'error');
     else setStatus(successMessage || `已刷新 · ${new Date().toLocaleTimeString()}`, 'success');
     return true;
@@ -2107,7 +2142,7 @@ elements.capabilityAssignmentDisableButton.addEventListener('click', () => runCa
 elements.managementWorkspace.addEventListener('change', async () => {
   const nextWorkspaceID = elements.managementWorkspace.value;
   if (!elements.environmentDetailPanel.hidden) closeEnvironmentDetail();
-  environmentGeneration++; managementWorkspaceID = nextWorkspaceID; managementEnvironmentID = ''; managementContextError = ''; managementSkillAvailabilityError = ''; managementInspection = null; managementCapabilityFacts = new Map(); environmentSkillAvailabilityByID = new Map(); runtimePendingActionKey = '';
+  environmentGeneration++; managementWorkspaceID = nextWorkspaceID; managementEnvironmentID = ''; managementContextError = ''; managementSkillAvailabilityError = ''; managementInspection = null; managementCapabilityFacts = new Map(); environmentSkillAvailabilityByID = new Map(); runtimePendingActionKey = ''; clearRuntimeWriterCredential();
   renderManagementEnvironmentOptions(safeArray(currentSnapshot?.workspaces), safeArray(currentSnapshot?.environments));
   resetEnvironmentMemoryScope(managementEnvironmentID ? '尚未加载当前 Environment Memory' : '请选择 Management Environment 后加载 private Memory'); resetRuntimeCollections(managementEnvironmentID ? 'loading' : 'unloaded'); clearRuntimeOutput('Workspace 已切换'); updateSkillBulkControls(); updateEnvironmentContextMarkers(); renderRuntime();
   const scope = captureEnvironmentScope();
@@ -2116,7 +2151,7 @@ elements.managementWorkspace.addEventListener('change', async () => {
 });
 elements.managementEnvironment.addEventListener('change', async () => {
   const nextEnvironmentID = elements.managementEnvironment.value; if (!elements.environmentDetailPanel.hidden) closeEnvironmentDetail();
-  environmentGeneration++; managementEnvironmentID = nextEnvironmentID; managementContextError = ''; managementSkillAvailabilityError = ''; managementInspection = null; managementCapabilityFacts = new Map(); environmentSkillAvailabilityByID = new Map(); runtimePendingActionKey = ''; resetEnvironmentMemoryScope(nextEnvironmentID ? '尚未加载当前 Environment Memory' : '请选择 Management Environment 后加载 private Memory'); resetRuntimeCollections(nextEnvironmentID ? 'loading' : 'unloaded'); clearRuntimeOutput('Environment 已切换'); updateManagementHint(); updateSkillBulkControls(); updateEnvironmentContextMarkers(); renderRuntime();
+  environmentGeneration++; managementEnvironmentID = nextEnvironmentID; managementContextError = ''; managementSkillAvailabilityError = ''; managementInspection = null; managementCapabilityFacts = new Map(); environmentSkillAvailabilityByID = new Map(); runtimePendingActionKey = ''; clearRuntimeWriterCredential(); resetEnvironmentMemoryScope(nextEnvironmentID ? '尚未加载当前 Environment Memory' : '请选择 Management Environment 后加载 private Memory'); resetRuntimeCollections(nextEnvironmentID ? 'loading' : 'unloaded'); clearRuntimeOutput('Environment 已切换'); updateManagementHint(); updateSkillBulkControls(); updateEnvironmentContextMarkers(); renderRuntime();
   const scope = captureEnvironmentScope();
   setStatus('正在加载 Environment MCP/Skill/Runtime 状态…', 'loading');
   try { const result = await refreshManagementContext(scope); if (result?.stale) return; setStatus(result?.errors?.length ? `Environment 已切换；部分状态不可用：${result.errors.join(' · ')}` : 'Environment 管理上下文已切换', result?.errors?.length ? 'error' : 'success'); }
@@ -2133,6 +2168,26 @@ elements.runtimeSubviewTabs.addEventListener('click', (event) => {
   if (next === runtimeSubview) return;
   runtimeSubview = next; runtimeSubviewGeneration++; clearRuntimeOutput('已切换 Runtime 视图'); renderRuntime();
 });
+elements.runtimeWriterAcquireButton.addEventListener('click', async () => {
+  const environment = currentEnvironment(); if (!environment) return setStatus('请先选择 Management Environment。', 'error');
+  let owner = String(elements.runtimeWriterOwnerInput.value || '').trim();
+  if (!owner && environment.writer) return setStatus('当前已有 active Writer，owner 已隐藏；必须由人类显式输入正确 owner 才能续租。', 'error');
+  if (!owner) { owner = generatedDesktopWriterOwner(); elements.runtimeWriterOwnerInput.value = owner; }
+  const environmentID = environment.environment_id;
+  await runMutation('获取 / 续租 Writer', async () => {
+    await desktopAdapter().AcquireRuntimeWriter(environmentID, owner);
+    runtimeWriterCredential = {environmentID, owner};
+  });
+});
+elements.runtimeWriterReleaseButton.addEventListener('click', async () => {
+  const environment = currentEnvironment(), owner = runtimeWriterOwner();
+  if (!environment || !owner) return setStatus('当前 Desktop 会话没有可释放的 Writer Owner。', 'error');
+  const environmentID = environment.environment_id;
+  await runMutation('释放 Writer', async () => {
+    await desktopAdapter().ReleaseRuntimeWriter(environmentID, owner);
+    clearRuntimeWriterCredential();
+  });
+});
 elements.runtimeRefreshButton.addEventListener('click', () => refreshRuntimeContext(true).catch((error) => setStatus(`Runtime 刷新失败：${error?.message || String(error)}`, 'error')));
 elements.diagnosticsRefreshButton.addEventListener('click', async () => {
   const environment = currentEnvironment();
@@ -2148,7 +2203,7 @@ elements.diagnosticsRefreshButton.addEventListener('click', async () => {
 elements.verifierList.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-action="run-verifier"]'); if (!button) return;
   const scope = captureEnvironmentScope(), environmentID = scope.environmentID, verifierID = button.dataset.id, owner = runtimeWriterOwner(), viewGeneration = runtimeSubviewGeneration;
-  if (!environmentID) return; if (!owner) return setStatus('当前 Environment 没有 active writer，不能运行 verifier。', 'error');
+  if (!environmentID) return; if (!owner || !currentEnvironment()?.writer) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能运行 verifier。', 'error');
   const result = await runRuntimeAction('运行 verifier', `verifier:${verifierID}`, scope, () => desktopAdapter().RunVerifier(environmentID, owner, verifierID));
   if (result && environmentScopeIsCurrent(scope) && runtimeSubview === 'verifiers' && runtimeSubviewGeneration === viewGeneration) {
     showRuntimeOutput('verifiers', verifierID, `Verifier ${verifierID} · ${result.status || 'unknown'}`, result.stdout || '', result.stderr || '', `${result.summary || ''}${result.exit_code !== undefined ? ` · exit ${result.exit_code}` : ''}`);
@@ -2170,7 +2225,7 @@ elements.processList.addEventListener('click', async (event) => {
     return;
   }
   if (button.dataset.action === 'stop-process') {
-    const owner = runtimeWriterOwner(); if (!owner) return setStatus('当前 Environment 没有 active writer，不能停止 process。', 'error');
+    const owner = runtimeWriterOwner(); if (!owner || !currentEnvironment()?.writer) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能停止 process。', 'error');
     await runRuntimeAction('停止 process', `stop-process:${processID}`, scope, () => desktopAdapter().StopProcess(environmentID, owner, processID));
   }
 });
@@ -2183,7 +2238,7 @@ elements.runList.addEventListener('click', async (event) => {
     showRuntimeOutput('runs', run.id, `Run ${run.id} · ${run.state || 'unknown'}`, run.stdout || '', run.stderr || '', `${run.message || ''}${run.exit_code !== undefined && run.exit_code !== null ? ` · exit ${run.exit_code}` : ''}`, truncation); return;
   }
   if (button.dataset.action === 'cancel-run') {
-    const owner = runtimeWriterOwner(); if (!owner) return setStatus('当前 Environment 没有 active writer，不能取消 run。', 'error');
+    const owner = runtimeWriterOwner(); if (!owner || !currentEnvironment()?.writer) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能取消 run。', 'error');
     await runRuntimeAction('取消 run', `cancel-run:${runID}`, scope, () => desktopAdapter().CancelRun(environmentID, owner, runID));
   }
 });

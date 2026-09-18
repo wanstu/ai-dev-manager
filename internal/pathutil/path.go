@@ -23,7 +23,7 @@ func ForCompare(path string) string {
 }
 
 func Same(a, b string) bool {
-	return strings.EqualFold(ForCompare(a), ForCompare(b))
+	return equalPath(ForCompare(a), ForCompare(b))
 }
 
 func Within(base, target string) bool {

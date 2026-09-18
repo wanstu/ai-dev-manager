@@ -1,10 +1,35 @@
 package desktop
 
 import (
+	"fmt"
+	"strings"
+
 	"ai-dev-manager-v2/internal/adminmcp"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/verifier"
 )
+
+func (a *Adapter) AcquireRuntimeWriter(environmentID, owner string) (model.Environment, error) {
+	if err := a.readyRuntime(); err != nil {
+		return model.Environment{}, err
+	}
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return model.Environment{}, fmt.Errorf("writer owner is required")
+	}
+	return a.runtime.WriterAcquire(environmentID, owner)
+}
+
+func (a *Adapter) ReleaseRuntimeWriter(environmentID, owner string) (model.Environment, error) {
+	if err := a.readyRuntime(); err != nil {
+		return model.Environment{}, err
+	}
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return model.Environment{}, fmt.Errorf("writer owner is required")
+	}
+	return a.runtime.WriterRelease(environmentID, owner, false)
+}
 
 func (a *Adapter) ListVerifiers(environmentID string) ([]model.VerifierDefinition, error) {
 	if err := a.readyRuntime(); err != nil {

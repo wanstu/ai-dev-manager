@@ -105,6 +105,62 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  linux-desktop-build:
+    name: Linux Desktop amd64 build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Linux Desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Test Linux runtime and Desktop backend
+        run: go test -count=1 ./internal/runtime ./internal/desktop
+
+      - name: Build Linux Desktop artifact
+        id: linux_desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $buildVersion = 'dev'
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $buildVersion = $env:GITHUB_REF_NAME
+          }
+          ./scripts/build-linux-desktop.ps1 -Version $buildVersion -OutputDir dist -Platform linux/amd64 -WebKitTag webkit2_41
+          $desktopName = "adm-desktop-$buildVersion-linux-amd64"
+          "desktop_name=$desktopName" >> $env:GITHUB_OUTPUT
+          "desktop_artifact=adm-desktop-$buildVersion-linux-amd64" >> $env:GITHUB_OUTPUT
+
+      - name: Package Linux Desktop
+        shell: bash
+        run: |
+          build_version="dev"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            build_version="$GITHUB_REF_NAME"
+          fi
+          bash ./scripts/package-linux.sh "$build_version" "dist/adm-desktop-$build_version-linux-amd64" dist amd64
+
+      - name: Upload Linux Desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.linux_desktop.outputs.desktop_artifact }}
+          path: |
+            dist/${{ steps.linux_desktop.outputs.desktop_name }}
+            dist/adm-*-linux-amd64.deb
+            dist/adm-*-linux-amd64.tar.gz
+            dist/adm-*-linux-amd64.sha256
+          if-no-files-found: error
+          retention-days: 14
+
   cli-cross-build:
     name: CLI artifact (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -114,13 +170,34 @@ jobs:
       matrix:
         include:
           - name: linux-amd64
+            goos: linux
+            goarch: amd64
             os: ubuntu-latest
             ext: ''
+          - name: linux-arm64
+            os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            ext: ''
           - name: darwin-amd64
+            goos: darwin
+            goarch: amd64
             os: macos-latest
             ext: ''
+          - name: darwin-arm64
+            os: macos-latest
+            goos: darwin
+            goarch: arm64
+            ext: ''
           - name: windows-amd64
+            goos: windows
+            goarch: amd64
             os: windows-latest
+            ext: '.exe'
+          - name: windows-arm64
+            os: windows-latest
+            goos: windows
+            goarch: arm64
             ext: '.exe'
     steps:
       - name: Checkout
@@ -133,7 +210,7 @@ jobs:
           cache: true
 
       - name: Test Unix runtime integration
-        if: matrix.name != 'windows-amd64'
+        if: matrix.goos != 'windows'
         run: go test -count=1 ./internal/runtime
 
       - name: Build CLI artifact
@@ -151,6 +228,9 @@ jobs:
           $artifact = "adm$tagSuffix-${{ matrix.name }}"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $ldflags = "-X ai-dev-manager-v2/internal/version.Version=$buildVersion"
+          $env:GOOS = '${{ matrix.goos }}'
+          $env:GOARCH = '${{ matrix.goarch }}'
+          $env:CGO_ENABLED = '0'
           go build -trimpath -ldflags $ldflags -o "dist/$output" ./cmd/ai-dev-manager
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "output=$output" >> $env:GITHUB_OUTPUT
@@ -170,6 +250,7 @@ jobs:
     needs:
       - windows-test-vet-build
       - macos-desktop-build
+      - linux-desktop-build
       - cli-cross-build
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

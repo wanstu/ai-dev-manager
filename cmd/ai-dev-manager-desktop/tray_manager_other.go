@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin && !linux
 
 package main
 
@@ -12,6 +12,8 @@ import (
 )
 
 const traySupported = false
+
+func trayWindowHidingSupported() bool { return false }
 
 type trayManager struct {
 	mu  sync.RWMutex

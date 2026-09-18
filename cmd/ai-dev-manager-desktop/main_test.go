@@ -54,13 +54,13 @@ func TestProductionDesktopUsesTrayLifecycleAndSingleInstance(t *testing.T) {
 			t.Fatalf("production Desktop missing lifecycle marker %q", required)
 		}
 	}
-	traySource, err := os.ReadFile("tray_manager_windows.go")
+	traySource, err := os.ReadFile("tray_manager_supported.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, required := range []string{"github.com/gogpu/systray", "runtime.LockOSThread", "systray.New", "AddCheckbox", "显示主窗口", "隐藏主窗口", "开机启动", "退出", "OnClick", "OnDoubleClick", "OnRightClick", "tray.Run"} {
 		if !strings.Contains(string(traySource), required) {
-			t.Fatalf("Windows tray manager missing %q", required)
+			t.Fatalf("cross-platform tray manager missing %q", required)
 		}
 	}
 }
@@ -216,9 +216,9 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 		"workspaceCount", "environmentCount", "execCount", "mcpCount", "skillCount", "memoryCount", "refreshButton", "launchAtLogin", "desktopShellHint", "app-brand-mark", "ai-dev-manager-window.png", "navigation.js", "dashboard.js", "project-pages.js", "runtime-view.js", "skill-bulk.js", "dashboardDataState", "dashboardLastSuccess", "management-sidebar", "data-management-page=\"overview\"", "data-route-link=\"settings\"",
 		"gatewayState", "gatewayBaseURL", "gatewayHealthURL", "gatewayURL", "gatewayAdminURL", "gatewayRefreshButton", "gatewayStartButton", "gatewayStopButton",
 		"workspaceForm", "workspaceFilter", "workspaceVisibleCount", "workspaceListTotalCount", "connectionStartOnDesktopLaunch", "environmentForm", "environmentFilter", "environmentWorkspaceFilter", "environmentVisibleCount", "environmentListTotalCount", "environmentFilterHint", "environmentDetailPanel", "environmentDetailRoutes", "aria-modal",
-		"execAllowedCount", "execBlockedCount", "execBlockedList", "execClearAllBlockedButton", "Blocked executable observations", "execForm", "managementEnvironment", "mcpEditorFlow", "mcpEditorSummary", "mcpEditorHint", "mcpForm", "mcpTransport", "mcpEndpoint", "mcpExecutable", "mcpReconnectInterval", "mcpEditCancelButton", "mcpSubmitButton", "mcpImportForm", "mcpImportApplyButton", "generic-mcpservers", "mcpFilter", "mcpStateFilter", "mcpVisibleCount", "mcpSetVisibleDefaultButton", "mcpUnsetVisibleDefaultButton", "mcpEnableVisibleButton", "mcpDisableVisibleButton", "mcpBulkHint", "status-legend", "skillSourceForm", "skillSourceID", "skillSourceRoot", "skillSupportRoots", "skillSourceSubmitButton", "skillSubviewTabs", "skillSubviewSkillCount", "skillSubviewSourceCount", "skillsPanel", "skillSourcesPanel", "skillSourceList", "skillList", "skillFilter", "skillSourceFilter", "skillStateFilter", "skillSourceFilterInput", "skillSourceVisibleCount", "skillSourceListTotalCount", "skillVisibleCount", "skillProbeAllButton", "skillSelectVisibleButton", "skillSetVisibleDefaultButton", "skillUnsetVisibleDefaultButton", "skillEnableVisibleButton", "skillDisableVisibleButton", "skillSelectedCount", "skillDeleteSelectedButton", "skillClearUnavailableButton", "skillBulkHint", `value="unselected"`, `正则用 /pattern/i`, "loadGlobalMemory", "globalMemoryForm", "writeEnvironmentMemoryButton", "environmentMemoryScopeHint", "不自动注入 Agent",
+		"execAllowedCount", "execBlockedCount", "execBlockedList", "execClearAllBlockedButton", "Authorization observations", "execForm", "managementEnvironment", "mcpEditorFlow", "mcpEditorSummary", "mcpEditorHint", "mcpForm", "mcpTransport", "mcpEndpoint", "mcpExecutable", "mcpReconnectInterval", "mcpEditCancelButton", "mcpSubmitButton", "mcpImportForm", "mcpImportApplyButton", "generic-mcpservers", "mcpFilter", "mcpStateFilter", "mcpVisibleCount", "mcpSetVisibleDefaultButton", "mcpUnsetVisibleDefaultButton", "mcpEnableVisibleButton", "mcpDisableVisibleButton", "mcpBulkHint", "status-legend", "skillSourceForm", "skillSourceID", "skillSourceRoot", "skillSupportRoots", "skillSourceSubmitButton", "skillSubviewTabs", "skillSubviewSkillCount", "skillSubviewSourceCount", "skillsPanel", "skillSourcesPanel", "skillSourceList", "skillList", "skillFilter", "skillSourceFilter", "skillStateFilter", "skillSourceFilterInput", "skillSourceVisibleCount", "skillSourceListTotalCount", "skillVisibleCount", "skillProbeAllButton", "skillSelectVisibleButton", "skillSetVisibleDefaultButton", "skillUnsetVisibleDefaultButton", "skillEnableVisibleButton", "skillDisableVisibleButton", "skillSelectedCount", "skillDeleteSelectedButton", "skillClearUnavailableButton", "skillBulkHint", `value="unselected"`, `正则用 /pattern/i`, "loadGlobalMemory", "globalMemoryForm", "writeEnvironmentMemoryButton", "environmentMemoryScopeHint", "不自动注入 Agent",
 		"environmentMCPSelections", "environmentSkillSelections", "environmentDetailSubviewTabs", "environmentDiagnostics", "environmentDiagnosticsPage", "diagnosticsPageHint", "diagnosticsPageContent", "diagnostics", "loadEnvironmentMemory", "environmentMemoryForm",
-		"runtimeRefreshButton", "runtimeHint", "runtimeSubviewTabs", "runtimeVerifierCount", "runtimeProcessCount", "runtimeRunCount", "verifierList", "processList", "runList", "runtimeOutputMeta", "runtimeOutput",
+		"runtimeRefreshButton", "runtimeHint", "runtimeWriterOwnerInput", "runtimeWriterAcquireButton", "runtimeWriterReleaseButton", "runtimeWriterHint", "runtimeSubviewTabs", "runtimeVerifierCount", "runtimeProcessCount", "runtimeRunCount", "verifierList", "processList", "runList", "runtimeOutputMeta", "runtimeOutput", "loggingStatusSummary",
 	} {
 		if !strings.Contains(string(index), required) {
 			t.Fatalf("desktop index missing %q", required)
@@ -240,11 +240,11 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 		"SetEnvironmentMCP", "SetEnvironmentSkill",
 		"ListGlobalMemory", "WriteGlobalMemory", "DeleteGlobalMemory",
 		"currentEnvironmentMemoryScope", "environmentMemoryScopeIsCurrent", "resetEnvironmentMemoryScope", "renderEnvironmentMemoryScope", "ListEnvironmentMemory", "WriteEnvironmentMemory", "DeleteEnvironmentMemory",
-		"ListVerifiers", "RunVerifier", "ListProcesses", "GetProcessLogs", "StopProcess", "ListRuns", "CancelRun", "refreshRuntimeContext",
+		"AcquireRuntimeWriter", "ReleaseRuntimeWriter", "ListVerifiers", "RunVerifier", "ListProcesses", "GetProcessLogs", "StopProcess", "ListRuns", "CancelRun", "refreshRuntimeContext", "GetLoggingStatus", "refreshLoggingStatus",
 		"正在显式读取 Global Memory", "正在显式读取 Environment-private Memory",
 		"environmentDetailBackdrop", "statusPanel.hidden = false", "statusPanel.hidden = true", "Lifecycle retention", "preview-temporary-environment-cleanup", "execute-temporary-environment-cleanup", "没有 force 路径",
 		"只移除 ADM Workspace 记录，不删除目录", "只移除 ADM Environment 记录，不删除 root 或项目文件",
-		"这是全局删除，不是只从当前 Environment 禁用", "删除全局 Skill source", "预览不会修改 catalog 或 Environment", "renderDiagnosticsPage", "renderEnvironmentDiagnostics", "Existing InspectEnvironment payload only", "never probes MCPs", "environmentContextRoutes",
+		"这是全局删除，不是只从当前 Environment 禁用", "删除全局 Skill source", "预览不会修改 catalog 或 Environment", "renderDiagnosticsPage", "renderEnvironmentDiagnostics", "这里解释当前已返回的 capability facts", "不会自动执行命令、MCP 探测、Verifier 或读取 Memory", "environmentContextRoutes",
 	} {
 		if !strings.Contains(string(javascript), required) {
 			t.Fatalf("desktop app.js missing %q", required)

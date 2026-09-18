@@ -8,23 +8,70 @@ Desktop 通过所选 ADM Base URL 的 `/admin/mcp` 读取和修改同一套 Work
 
 ## 1. 启动与发布产物
 
-v1.1 Windows Release：
+Desktop release artifacts 按平台提供：
 
 ```text
 adm-desktop-v1.2.0-windows-amd64.exe
+adm-desktop-v1.2.0-darwin-universal.zip
+adm-desktop-v1.2.0-linux-amd64
+adm-v1.2.0-linux-amd64.deb
+adm-v1.2.0-linux-amd64.tar.gz
+adm-v1.2.0-linux-amd64.sha256
 ```
 
-源码构建必须通过 Wails：
+源码构建必须通过 Wails。Windows：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1 -clean -trimpath
 ```
 
-默认输出：
+Windows 默认输出：
 
 ```text
 dist\adm-desktop-windows-amd64.exe
 ```
+
+macOS：
+
+```powershell
+pwsh ./scripts/build-macos-desktop.ps1 -Version dev -OutputDir dist -Platform darwin/universal
+```
+
+Linux（Ubuntu / Debian，WebKitGTK 4.1）：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential libgtk-3-dev libwebkit2gtk-4.1-dev
+pwsh ./scripts/build-linux-desktop.ps1 -Version dev -OutputDir dist -Platform linux/amd64 -WebKitTag webkit2_41
+```
+
+Linux Desktop 构建完成后可生成安装包：
+
+```bash
+bash ./scripts/package-linux.sh dev dist/adm-desktop-dev-linux-amd64 dist amd64
+```
+
+输出 `.deb`、`.tar.gz` 和对应 `.sha256`。GitHub CI 会自动执行这一步。
+
+Debian 13 虚拟机优先使用 `.deb`：
+
+```bash
+sudo apt install ./adm-dev-linux-amd64.deb
+adm --help
+adm-desktop
+```
+
+便携 tar 包：
+
+```bash
+sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-0
+tar -xzf adm-dev-linux-amd64.tar.gz
+cd adm-dev-linux-amd64
+./bin/adm --help
+./bin/adm-desktop
+```
+
+macOS/Linux CI 产物同样写入 `dist`。
 
 不要使用：
 
@@ -236,7 +283,7 @@ Desktop 不会通过远端 URL 停止服务器，也不会为了“修复连接�
 
 Start 只有在 `/healthz` ready 后才报告成功。
 
-## 14. 托盘与关闭行为（Windows）
+## 14. 平台壳层与开机启动
 
 Windows：
 
@@ -246,12 +293,28 @@ Windows：
 - tray `退出` 才真正终止 Desktop；
 - `--autostart` 启动时默认隐藏。
 
-Autostart 使用 HKCU Run：
+Windows Autostart 使用 HKCU Run：
 
 ```text
 value name: adm-desktop
 command: <current desktop exe> --autostart
 ```
+
+macOS：
+
+- autostart 使用 `~/Library/LaunchAgents/com.wanstu.adm-desktop.plist`；
+- LaunchAgent 以当前 Desktop executable + `--autostart` 启动；
+- tray 使用与 Windows 相同的 `gogpu/systray` 管理逻辑，可显示/隐藏窗口、切换 autostart，并提供两种显式退出动作；
+- `--autostart` 启动时默认隐藏到 tray。
+
+Linux：
+
+- autostart 使用 XDG `autostart/adm-desktop.desktop`（优先 `$XDG_CONFIG_HOME`，否则 `~/.config`）；
+- Desktop entry 以当前 executable + `--autostart` 启动；
+- tray 使用 `gogpu/systray` 的 StatusNotifierItem / D-Bus 实现；
+- 为避免某些桌面环境没有可用 StatusNotifier host 时把窗口隐藏后无法恢复，Linux 当前不会强制 `HideWindowOnClose`，`--autostart` 也保持主窗口可见；tray 可用时仍可通过图标菜单显示/隐藏窗口。
+
+开机启动设置只修改当前用户的 Desktop 启动项，不改变 ADM Core、Gateway authority 或连接 profile。
 
 ## 15. “启动 ADM 服务” Profile 选项
 

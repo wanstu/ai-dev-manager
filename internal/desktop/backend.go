@@ -7,6 +7,7 @@ import (
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
 	"ai-dev-manager-v2/internal/hostenv"
+	"ai-dev-manager-v2/internal/logging"
 	"ai-dev-manager-v2/internal/management"
 	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
@@ -39,6 +40,7 @@ type managementBackend interface {
 	ExecDenyClearAll() error
 	ExecAuthorizationStatus() (app.ExecAuthorizationStatus, error)
 	ExecFullAuthorizationSet(bool) (app.ExecAuthorizationStatus, error)
+	LoggingStatus() (logging.Status, error)
 	GatewayAccessStatus() (app.GatewayAccessStatus, error)
 	GatewayAllowedHostsSet([]string) (app.GatewayAccessStatus, error)
 	GatewayAdminAPIKeySet(string) (app.GatewayAccessStatus, error)
@@ -85,6 +87,8 @@ type temporaryEnvironmentBackend interface {
 }
 
 type runtimeBackend interface {
+	WriterAcquire(string, string) (model.Environment, error)
+	WriterRelease(string, string, bool) (model.Environment, error)
 	VerifierList(string) ([]model.VerifierDefinition, error)
 	VerifierRun(string, string, string, int) (verifier.Result, error)
 	ProcessList(string) ([]adminmcp.ProcessStatus, error)

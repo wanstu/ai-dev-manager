@@ -7,6 +7,7 @@ import (
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
 	"ai-dev-manager-v2/internal/hostenv"
+	"ai-dev-manager-v2/internal/logging"
 	"ai-dev-manager-v2/internal/management"
 	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
@@ -208,6 +209,13 @@ func (a *Adapter) SetExecFullAuthorization(enabled bool) (app.ExecAuthorizationS
 		return app.ExecAuthorizationStatus{}, err
 	}
 	return a.management.ExecFullAuthorizationSet(enabled)
+}
+
+func (a *Adapter) GetLoggingStatus() (logging.Status, error) {
+	if err := a.ready(); err != nil {
+		return logging.Status{}, err
+	}
+	return a.management.LoggingStatus()
 }
 
 func (a *Adapter) GetGatewayAccessStatus() (app.GatewayAccessStatus, error) {

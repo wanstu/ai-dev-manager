@@ -43,10 +43,12 @@ HTTP Gateway 同时提供：
 
 GitHub Release 提供：
 
-- `adm-v1.2.0-windows-amd64.exe`
-- `adm-v1.2.0-linux-amd64`
-- `adm-v1.2.0-darwin-amd64`
+- `adm-v1.2.0-windows-amd64.exe` / `adm-v1.2.0-windows-arm64.exe`
+- `adm-v1.2.0-linux-amd64` / `adm-v1.2.0-linux-arm64`
+- `adm-v1.2.0-darwin-amd64` / `adm-v1.2.0-darwin-arm64`
 - `adm-desktop-v1.2.0-windows-amd64.exe`
+- `adm-desktop-v1.2.0-darwin-universal.zip`
+- `adm-desktop-v1.2.0-linux-amd64`
 - `SHA256SUMS-v1.2.0.txt`
 
 Windows PowerShell 示例：
@@ -918,7 +920,7 @@ Desktop 可以保存多个 ADM connection profile。切换连接时会清空旧 
 
 只有 loopback HTTP root URL 可以由 Desktop 执行本地 Gateway start/stop。连接失败时 Desktop 不会直接回退读写 `state.json`。
 
-Windows 托盘行为、autostart 和构建说明见 [desktop.md](desktop.md)。
+Windows / macOS / Linux 的托盘、autostart 和平台构建说明见 [desktop.md](desktop.md)。
 
 ## 19. 哪些状态会持久化，哪些不会
 

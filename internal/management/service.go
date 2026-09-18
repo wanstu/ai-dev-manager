@@ -7,6 +7,7 @@ import (
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
 	"ai-dev-manager-v2/internal/hostenv"
+	"ai-dev-manager-v2/internal/logging"
 	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
 )
@@ -164,6 +165,10 @@ func (s *Service) ExecAuthorizationStatus() (app.ExecAuthorizationStatus, error)
 
 func (s *Service) ExecFullAuthorizationSet(enabled bool) (app.ExecAuthorizationStatus, error) {
 	return s.app.SetExecFullAuthorization(enabled)
+}
+
+func (s *Service) LoggingStatus() (logging.Status, error) {
+	return s.app.LoggingStatus(), nil
 }
 
 func (s *Service) GatewayAccessStatus() (app.GatewayAccessStatus, error) {
