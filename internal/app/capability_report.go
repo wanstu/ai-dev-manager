@@ -549,7 +549,7 @@ func writerEvidence(env model.Environment) model.CapabilityEvidence {
 	details := map[string]string{"lease_state": "absent"}
 	if env.Writer != nil {
 		details["lease_state"] = "active"
-		details["owner"] = env.Writer.Owner
+
 		details["acquired_at"] = env.Writer.AcquiredAt.UTC().Format(time.RFC3339Nano)
 		details["last_seen_at"] = env.Writer.LastSeenAt.UTC().Format(time.RFC3339Nano)
 		details["expires_at"] = env.Writer.ExpiresAt.UTC().Format(time.RFC3339Nano)

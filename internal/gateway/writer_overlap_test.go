@@ -72,8 +72,8 @@ func TestGatewayWriterAcquireRejectsOverlappingRootsAndAllowsSiblings(t *testing
 	}
 	if result := acquire(groupEnv.ID, "child-owner"); !result.IsError {
 		t.Fatal("descendant environment unexpectedly acquired writer while ancestor root was owned")
-	} else if text := toolText(t, result); !strings.Contains(text, "overlaps active writer") {
-		t.Fatalf("overlap denial should explain the conflicting scope: %s", text)
+	} else if text := toolText(t, result); !strings.Contains(text, "overlaps an active writer lease") {
+		t.Fatalf("overlap denial should explain the conflicting scope without revealing an owner: %s", text)
 	}
 	release(parentEnv.ID, "parent-owner")
 

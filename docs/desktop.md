@@ -4,7 +4,7 @@
 
 Desktop 通过所选 ADM Base URL 的 `/admin/mcp` 读取和修改同一套 Workspace、Environment、exec allowlist、MCP、Skill、Memory、retention 等数据。连接失败不会直接读写本地 `state.json`。
 
-完整产品用法见 [USER_GUIDE.md](USER_GUIDE.md)，内部机制见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+完整产品用法见 [USER_GUIDE.md](USER_GUIDE.md)，远程连接与 Admin/Agent 双 API Key 见 [REMOTE_ACCESS.md](REMOTE_ACCESS.md)，内部机制见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 1. 启动与发布产物
 

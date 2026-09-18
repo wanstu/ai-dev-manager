@@ -51,6 +51,7 @@ type ownedDevProcess struct {
 	id            string
 	environmentID string
 	writerOwner   string
+	executable    string
 	cmd           *exec.Cmd
 	cancel        context.CancelFunc
 	done          chan struct{}
@@ -87,6 +88,7 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 		return devProcessStatus{}, err
 	}
 	processCtx, cancel := context.WithCancel(o.processContext())
+	o.service.RecordFullAuthorizationBypass(rt, environmentID, executable, "process_start")
 	cmd, err := rt.PrepareCommand(processCtx, executable, args, cwd)
 	if err != nil {
 		if appIsExecutableNotAllowedError(o.service, err) {
@@ -99,6 +101,7 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 	stderr := newTailLogBuffer(maxLogBytes)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	o.service.Log("info", "process.start", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "process"})
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return devProcessStatus{}, err
@@ -107,6 +110,7 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 		id:            processID,
 		environmentID: environmentID,
 		writerOwner:   writerOwner,
+		executable:    executable,
 		cmd:           cmd,
 		cancel:        cancel,
 		done:          make(chan struct{}),
@@ -178,7 +182,7 @@ func (o *runtimeOwner) StopDevProcess(environmentID, writerOwner, processID stri
 		return devProcessStatus{}, err
 	}
 	if process.writerOwner != writerOwner {
-		return devProcessStatus{}, fmt.Errorf("process %q belongs to writer %q", processID, process.writerOwner)
+		return devProcessStatus{}, fmt.Errorf("process %q belongs to another writer", processID)
 	}
 	process.cancel()
 	if err := waitOwnedProcess(process, devProcessStopTimeout); err != nil {
@@ -256,6 +260,7 @@ func (o *runtimeOwner) waitDevProcess(process *ownedDevProcess) {
 		process.errorKind = kind
 	}
 	process.mu.Unlock()
+	o.service.Log("info", "process.completed", map[string]string{"environment_id": process.environmentID, "executable": process.executable, "surface": "process", "exit_code": fmt.Sprint(exitCode), "error_kind": kind})
 	process.cancel()
 	close(process.done)
 }

@@ -20,6 +20,12 @@ type WorktreeSettings struct {
 	WorkspaceID  string `json:"workspace_id,omitempty"`
 }
 
+type GatewayAccessSettings struct {
+	AllowedHosts    []string `json:"allowed_hosts,omitempty"`
+	AdminAPIKeyHash string   `json:"admin_api_key_hash,omitempty"`
+	AgentAPIKeyHash string   `json:"agent_api_key_hash,omitempty"`
+}
+
 type EnvironmentWorkspaceOptions struct {
 	EnvironmentID          string      `json:"environment_id"`
 	CurrentWorkspaceID     string      `json:"current_workspace_id"`
@@ -39,7 +45,7 @@ type EnvironmentWorkspaceRecommendation struct {
 }
 
 type WriterLease struct {
-	Owner      string    `json:"owner"`
+	Owner      string    `json:"owner,omitempty"`
 	AcquiredAt time.Time `json:"acquired_at"`
 	LastSeenAt time.Time `json:"last_seen_at"`
 	ExpiresAt  time.Time `json:"expires_at"`
@@ -150,15 +156,17 @@ type ExecDenial struct {
 }
 
 type State struct {
-	Version            int               `json:"version"`
-	Workspaces         []Workspace       `json:"workspaces"`
-	Environments       []Environment     `json:"environments"`
-	ManagedWorktrees   []ManagedWorktree `json:"managed_worktrees,omitempty"`
-	WorktreeSettings   WorktreeSettings  `json:"worktree_settings"`
-	AllowedExecutables []string          `json:"allowed_executables,omitempty"`
-	ExecDenials        []ExecDenial      `json:"exec_denials,omitempty"`
-	MCPs               []MCPDefinition   `json:"mcps,omitempty"`
-	SkillSources       []SkillSource     `json:"skill_sources,omitempty"`
-	Skills             []CatalogEntry    `json:"skills,omitempty"`
-	GlobalMemory       map[string]string `json:"global_memory,omitempty"`
+	Version               int                   `json:"version"`
+	Workspaces            []Workspace           `json:"workspaces"`
+	Environments          []Environment         `json:"environments"`
+	ManagedWorktrees      []ManagedWorktree     `json:"managed_worktrees,omitempty"`
+	WorktreeSettings      WorktreeSettings      `json:"worktree_settings"`
+	GatewayAccess         GatewayAccessSettings `json:"gateway_access"`
+	AllowedExecutables    []string              `json:"allowed_executables,omitempty"`
+	ExecFullAuthorization bool                  `json:"exec_full_authorization,omitempty"`
+	ExecDenials           []ExecDenial          `json:"exec_denials,omitempty"`
+	MCPs                  []MCPDefinition       `json:"mcps,omitempty"`
+	SkillSources          []SkillSource         `json:"skill_sources,omitempty"`
+	Skills                []CatalogEntry        `json:"skills,omitempty"`
+	GlobalMemory          map[string]string     `json:"global_memory,omitempty"`
 }

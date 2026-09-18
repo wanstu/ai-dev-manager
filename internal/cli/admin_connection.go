@@ -10,6 +10,7 @@ import (
 )
 
 const admBaseURLEnv = "ADM_V2_URL"
+const admAdminAPIKeyEnv = "ADM_V2_ADMIN_API_KEY"
 
 func defaultADMBaseURL() string {
 	baseURL, err := gateway.HTTPBaseURL(gateway.DefaultHTTPListen)
@@ -68,7 +69,7 @@ func newCLIAdminClient(baseURL string) (*adminmcp.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return adminmcp.New(target.AdminMCPURL), nil
+	return adminmcp.NewWithAPIKey(target.AdminMCPURL, strings.TrimSpace(os.Getenv(admAdminAPIKeyEnv))), nil
 }
 
 func normalizeCLIADMBaseURL(raw string) (string, error) {

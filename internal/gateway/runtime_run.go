@@ -86,6 +86,7 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 		normalizedTimeoutMS = 30000
 	}
 	runCtx, cancel := context.WithTimeout(o.processContext(), time.Duration(normalizedTimeoutMS)*time.Millisecond)
+	o.service.RecordFullAuthorizationBypass(rt, environmentID, executable, "run_start")
 	cmd, err := rt.PrepareCommand(runCtx, executable, args, cwd)
 	if err != nil {
 		if appIsExecutableNotAllowedError(o.service, err) {
@@ -94,6 +95,7 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 		cancel()
 		return agentRunStatus{}, err
 	}
+	o.service.Log("info", "run.start", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "run"})
 	runID, err := identity.New("run")
 	if err != nil {
 		cancel()
@@ -164,7 +166,7 @@ func (o *runtimeOwner) CancelAgentRun(environmentID, writerOwner, runID string) 
 		return agentRunStatus{}, err
 	}
 	if run.writerOwner != writerOwner {
-		return agentRunStatus{}, fmt.Errorf("run %q belongs to writer %q", runID, run.writerOwner)
+		return agentRunStatus{}, fmt.Errorf("run %q belongs to another writer", runID)
 	}
 	o.requestAgentRunCancel(run, "", "")
 	if err := waitOwnedAgentRun(run, agentRunStopTimeout); err != nil {
@@ -235,7 +237,11 @@ func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 		run.message = "stderr was truncated to max_output_bytes"
 	}
 	run.completedAt = &now
+	finalState := run.state
+	finalErrorKind := run.errorKind
+	finalExitCode := run.result.ExitCode
 	run.mu.Unlock()
+	o.service.Log("info", "run.completed", map[string]string{"environment_id": run.environmentID, "executable": run.executable, "surface": "run", "state": string(finalState), "exit_code": fmt.Sprint(finalExitCode), "error_kind": finalErrorKind})
 
 	run.cancel()
 	close(run.done)

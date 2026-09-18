@@ -163,6 +163,39 @@ func (o *runtimeOwner) enrichManagedWorktreeRetention(ctx context.Context, item 
 	}
 }
 
+func (o *runtimeOwner) ExpiredTemporaryEnvironmentsCleanup(ctx context.Context, execute bool) (model.ResourceRetentionCleanupResult, error) {
+	report, err := o.ResourceRetentionReport(ctx)
+	if err != nil {
+		return model.ResourceRetentionCleanupResult{}, err
+	}
+	now := time.Now().UTC()
+	filtered := model.ResourceRetentionReport{GeneratedAt: report.GeneratedAt, Resources: []model.ResourceRetentionItem{}}
+	for _, item := range report.Resources {
+		if item.Kind != model.RetentionResourceEnvironment || item.Retention.Persistence != model.PersistenceTemporary || item.Retention.ExpiresAt == nil {
+			continue
+		}
+		if now.Before(item.Retention.ExpiresAt.UTC()) {
+			continue
+		}
+		filtered.Resources = append(filtered.Resources, item)
+	}
+	request := model.ResourceRetentionCleanupRequest{Execute: execute}
+	if !execute {
+		return o.service.ResourceRetentionCleanupFromReport(filtered, request)
+	}
+	result, err := o.service.ResourceRetentionCleanupFromRuntimeReport(ctx, filtered, request)
+	if err != nil {
+		return model.ResourceRetentionCleanupResult{}, err
+	}
+	o.cleanupManagedWorktreeRetention(ctx, filtered, &result)
+	for _, mutation := range result.Removed {
+		if mutation.Kind == model.RetentionResourceEnvironment {
+			o.DropEnvironment(mutation.ID)
+		}
+	}
+	return result, nil
+}
+
 func (o *runtimeOwner) ResourceRetentionCleanup(ctx context.Context, request model.ResourceRetentionCleanupRequest) (model.ResourceRetentionCleanupResult, error) {
 	report, err := o.ResourceRetentionReport(ctx)
 	if err != nil {

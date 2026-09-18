@@ -396,7 +396,7 @@ func (s *Service) Remove(id string) (model.Environment, error) {
 			return fmt.Errorf("environment %s cannot be removed while state is %q", target.ID, target.State)
 		}
 		if target.Writer != nil && !s.writerExpired(target.Writer, now) {
-			return fmt.Errorf("environment %s cannot be removed while writer %q is active", target.ID, target.Writer.Owner)
+			return fmt.Errorf("environment %s cannot be removed while an active writer lease exists", target.ID)
 		}
 		target.Writer = nil
 		removed = target
@@ -528,7 +528,7 @@ func (s *Service) ReleaseWriter(id, owner string, force bool) (model.Environment
 			return nil
 		}
 		if !force && target.Writer.Owner != strings.TrimSpace(owner) {
-			return fmt.Errorf("writer is held by %q", target.Writer.Owner)
+			return fmt.Errorf("writer lease is held by another owner")
 		}
 		target.Writer = nil
 		target.UpdatedAt = now
@@ -740,7 +740,7 @@ func (s *Service) activeWriterOverlap(state *model.State, targetIndex int, now t
 }
 
 func writerConflictError(env *model.Environment) error {
-	return fmt.Errorf("physical root overlaps active writer %q through environment %s (%s)", env.Writer.Owner, env.ID, env.Root)
+	return fmt.Errorf("physical root overlaps an active writer lease through environment %s (%s)", env.ID, env.Root)
 }
 
 func writerRootsOverlap(a, b string) bool {

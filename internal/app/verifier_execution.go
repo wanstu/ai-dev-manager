@@ -46,6 +46,7 @@ func (s *Service) PrepareVerifierExecution(ctx context.Context, environmentID, o
 	if err != nil {
 		return PreparedVerifierExecution{}, err
 	}
+	s.recordFullAuthorizationBypass(rt, environmentID, definition.Executable, "verifier")
 	if _, err := rt.PrepareCommand(ctx, definition.Executable, definition.Args, definition.Cwd); err != nil {
 		if isExecutableNotAllowedError(err) {
 			s.recordExecDenial(environmentID, definition.Executable, "verifier", err.Error())

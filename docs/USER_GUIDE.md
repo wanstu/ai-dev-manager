@@ -81,6 +81,8 @@ $env:ADM_V2_URL = 'http://127.0.0.1:8001'
 
 CLI 启动时还会读取**当前可执行文件同目录**的 `.env`；已经存在的进程环境变量优先。
 
+远程 ADM 使用双 API Key：Desktop/CLI 管理面 `/admin/mcp` 使用 `ADM_V2_ADMIN_API_KEY`，Agent 面 `/mcp` 使用独立的 Agent Key。远程监听还需要 Host/IP 白名单；白名单 `*` 表示不限制 Host，但不会关闭双 Key 鉴权。完整配置见 [REMOTE_ACCESS.md](REMOTE_ACCESS.md)。
+
 > 当前 HTTP Gateway 只允许 loopback 监听。非 loopback 的 Remote Admin MCP 尚未定义完整认证/TLS/Host 安全语义，不应当把 `/admin/mcp` 直接暴露到局域网或公网。
 
 ## 4. Workspace：ADM 的目录授权边界

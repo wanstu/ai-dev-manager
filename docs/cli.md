@@ -730,6 +730,29 @@ adm gateway start --detach
 
 命令在 `/healthz` ready 后才返回。
 
+### 远程监听与双 API Key
+
+远程监听前必须同时配置 Host/IP 白名单、Admin API Key 和 Agent API Key：
+
+```powershell
+$env:ADM_V2_ADMIN_API_KEY = 'your-admin-key'
+$env:ADM_V2_AGENT_API_KEY = 'your-agent-key'
+adm gateway access set-admin-key
+adm gateway access set-agent-key
+adm gateway access set-hosts --hosts '101.37.171.174,adm.example.com'
+adm gateway start --listen 0.0.0.0:43137 -d
+```
+
+`/admin/mcp` 只接受 Admin Key；`/mcp` 只接受 Agent Key，两把 Key 不能互换。
+
+白名单支持 `*`：
+
+```powershell
+adm gateway access set-hosts --hosts '*'
+```
+
+`*` 表示不限制 Host/IP，但双 Key 鉴权仍然强制；`0.0.0.0` 不是白名单通配符，它只表示监听所有网卡时常用的 listen 地址。完整说明见 [REMOTE_ACCESS.md](REMOTE_ACCESS.md)。
+
 ## `gateway status`
 
 ```text

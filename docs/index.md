@@ -13,6 +13,7 @@
 ## 人类管理
 
 - [Desktop 管理端](desktop.md) — Wails Desktop、连接 profiles、本地 Gateway 控制、托盘和 autostart。
+- [远程访问与双 API Key](REMOTE_ACCESS.md) — Host/IP 白名单、`*` 通配、Admin/Agent 双 Key、远程 CLI、Desktop、Agent MCP 与 Nginx 配置。
 - [MCP、Skill 与 Memory 专题](catalog-memory.md) — catalog/source/selection/scope 的集中说明。
 - [产品语义合同](PRODUCT_CONTRACT.md) — ADM 的产品 invariant、authority、安全边界和 acceptance contract。
 - [当前实现状态](STATUS.md) — 历史阶段状态/已知限制；日常使用优先看本页上方 v1.1 文档。

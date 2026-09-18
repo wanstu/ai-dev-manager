@@ -37,6 +37,14 @@ type managementBackend interface {
 	ExecDenyList() ([]model.ExecDenial, error)
 	ExecDenyClear(string) ([]model.ExecDenial, error)
 	ExecDenyClearAll() error
+	ExecAuthorizationStatus() (app.ExecAuthorizationStatus, error)
+	ExecFullAuthorizationSet(bool) (app.ExecAuthorizationStatus, error)
+	GatewayAccessStatus() (app.GatewayAccessStatus, error)
+	GatewayAllowedHostsSet([]string) (app.GatewayAccessStatus, error)
+	GatewayAdminAPIKeySet(string) (app.GatewayAccessStatus, error)
+	GatewayAdminAPIKeyClear() (app.GatewayAccessStatus, error)
+	GatewayAgentAPIKeySet(string) (app.GatewayAccessStatus, error)
+	GatewayAgentAPIKeyClear() (app.GatewayAccessStatus, error)
 	MCPAddConfig(string, catalog.MCPConfig) (model.MCPDefinition, error)
 	MCPUpdateConfig(string, string, catalog.MCPConfig) (model.MCPDefinition, error)
 	MCPImportPreview(app.MCPImportInput) (app.MCPImportPreview, error)
@@ -73,6 +81,7 @@ type temporaryEnvironmentBackend interface {
 	EnvironmentTemporaryStatus(string) (model.TemporaryEnvironmentStatus, error)
 	EnvironmentTemporaryPromote(string, string) (model.TemporaryEnvironmentStatus, error)
 	EnvironmentTemporaryCleanup(string, string, bool) (model.ResourceRetentionCleanupResult, error)
+	EnvironmentTemporaryCleanupExpired(bool) (model.ResourceRetentionCleanupResult, error)
 }
 
 type runtimeBackend interface {

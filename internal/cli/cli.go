@@ -914,6 +914,9 @@ func runWriter(service cliManagementBackend, args []string) error {
 }
 
 func runExec(service cliManagementBackend, args []string) error {
+	if len(args) > 0 && args[0] == "authorization" {
+		return runExecAuthorization(service, args[1:])
+	}
 	if wantsHelp(args) {
 		printExecHelp()
 		return nil
@@ -1633,7 +1636,7 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 			fmt.Fprintln(os.Stdout, "\n未显式提供 --listen 时，从当前 ADM Base URL 派生本机回环监听地址。")
 			fmt.Fprintln(os.Stdout, "在当前终端前台启动 HTTP MCP Gateway；按 Ctrl+C 停止。加 -d 或 --detach 可后台运行。")
 		})
-		listen := fs.String("listen", "", "本机回环监听地址；显式值优先于 --adm-url/ADM_V2_URL")
+		listen := fs.String("listen", "", "Gateway 监听地址；远程监听必须先配置 gateway access Host 白名单、Admin API Key 和 Agent API Key")
 		var detach bool
 		fs.BoolVar(&detach, "detach", false, "脱离当前终端运行，并在健康检查通过后返回")
 		fs.BoolVar(&detach, "d", false, "--detach 的简写")
@@ -1704,6 +1707,8 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 			return err
 		}
 		return startHTTPGateway(service, targetListen)
+	case "access":
+		return runGatewayAccess(service, args[1:])
 	case "stdio":
 		if len(args) != 1 {
 			return fmt.Errorf("gateway stdio 不接受参数；运行 adm gateway -h 查看帮助")
@@ -2009,7 +2014,7 @@ func stopHTTPGateway(listen string) error {
 		return fmt.Errorf("Gateway %s 没有提供可用 PID，无法自动停止", baseURL)
 	}
 	if health.OwnerID != "" {
-		if _, err := gateway.StopHTTP(listen); err != nil {
+		if _, err := gateway.StopHTTPWithAPIKey(listen, strings.TrimSpace(os.Getenv(admAdminAPIKeyEnv))); err != nil {
 			return err
 		}
 		fmt.Printf("ADM V2 HTTP Gateway 已停止（PID %d）。\n", health.PID)
@@ -2154,7 +2159,7 @@ Gateway 常用命令：
   gateway status     查看当前 ADM Base URL，或用 --listen 显式检查一个本机监听地址
   gateway stop       停止当前本机 ADM Base URL 对应的 Gateway；远端 URL 不会被停止
   gateway restart    重启当前本机 ADM Base URL 对应的 Gateway
-  gateway stdio      仅供 MCP 客户端使用；不要在普通终端里手动运行
+  gateway access     配置远程 Host/IP 白名单、Admin API Key 与 Agent API Key\n  gateway stdio      仅供 MCP 客户端使用；不要在普通终端里手动运行
 
 查看子命令帮助：
   adm workspace -h
@@ -2455,7 +2460,7 @@ func printGatewayHelp() {
 连接目标：
   默认 ADM Base URL 是 http://127.0.0.1:43137。
   可用 --adm-url URL 或 ADM_V2_URL 覆盖；--adm-url 可写在 gateway 命令前或后。
-  start/stop/restart 只允许本机 loopback HTTP URL；status 可以检查自定义端口或远端 health。
+  start/restart 默认使用本机 loopback；配置 gateway access Host 白名单、Admin API Key 和 Agent API Key 后可显式 --listen 远程地址。stop 仍只安全停止本机进程；status 可检查自定义端口或远端 health。
   显式 --listen HOST:PORT 时，它优先于 ADM Base URL。
 
 人工使用的 HTTP Gateway：

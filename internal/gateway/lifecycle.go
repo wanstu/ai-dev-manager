@@ -228,6 +228,10 @@ func WaitHTTPReady(listen string, timeout time.Duration) (HTTPStatus, error) {
 }
 
 func StopHTTP(listen string) (HTTPStatus, error) {
+	return StopHTTPWithAPIKey(listen, "")
+}
+
+func StopHTTPWithAPIKey(listen, apiKey string) (HTTPStatus, error) {
 	status, err := InspectHTTP(listen)
 	if err != nil {
 		return HTTPStatus{}, err
@@ -242,7 +246,7 @@ func StopHTTP(listen string) (HTTPStatus, error) {
 		return status, fmt.Errorf("Gateway %s did not provide a usable PID", status.BaseURL)
 	}
 	if status.OwnerID != "" {
-		if err := requestHTTPShutdown(status); err != nil {
+		if err := requestHTTPShutdown(status, apiKey); err != nil {
 			return status, err
 		}
 		return InspectHTTP(listen)
@@ -253,12 +257,15 @@ func StopHTTP(listen string) (HTTPStatus, error) {
 	return InspectHTTP(listen)
 }
 
-func requestHTTPShutdown(status HTTPStatus) error {
+func requestHTTPShutdown(status HTTPStatus, apiKey string) error {
 	request, err := http.NewRequest(http.MethodPost, status.BaseURL+"/shutdown", nil)
 	if err != nil {
 		return err
 	}
 	request.Header.Set(runtimeOwnerHeader, status.OwnerID)
+	if value := strings.TrimSpace(apiKey); value != "" {
+		request.Header.Set(gatewayAPIKeyHeader, value)
+	}
 	client := &http.Client{Timeout: 1200 * time.Millisecond}
 	response, err := client.Do(request)
 	if err != nil {

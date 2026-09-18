@@ -27,15 +27,19 @@ func (s *Service) MCPProbe(ctx context.Context, mcpID string) (MCPHealthStatus, 
 		return mcpHealthErrorStatus(mcpID, "probe_directory_unavailable"), nil
 	}
 	defer os.RemoveAll(root)
-	allowed, err := s.AllowedExecutables()
+	state, err := s.Store.Load()
+	if err != nil {
+		return MCPHealthStatus{}, err
+	}
+	allowed := append([]string(nil), state.AllowedExecutables...)
 	if err != nil {
 		return MCPHealthStatus{}, err
 	}
 	var rt *runtime.Runtime
 	if s.HostEnvironment != nil {
-		rt, err = runtime.NewWithEnvironment(root, allowed, s.HostEnvironment.Environ())
+		rt, err = runtime.NewWithPolicy(root, allowed, s.HostEnvironment.Environ(), state.ExecFullAuthorization)
 	} else {
-		rt, err = runtime.New(root, allowed)
+		rt, err = runtime.NewWithAuthorization(root, allowed, state.ExecFullAuthorization)
 	}
 	if err != nil {
 		return mcpHealthErrorStatus(mcpID, "probe_directory_unavailable"), nil
@@ -49,6 +53,7 @@ func (s *Service) MCPProbe(ctx context.Context, mcpID string) (MCPHealthStatus, 
 		return mcpHealthErrorStatus(mcpID, "executable_unavailable"), nil
 	}
 	return s.probeMCPActivation(ctx, mcpID, func(ctx context.Context) (mcp.Transport, error) {
+		s.recordFullAuthorizationBypass(rt, "", activation.Executable, "mcp_global_probe")
 		cmd, err := rt.Command(ctx, activation.Executable, activation.Args, activation.Env)
 		if err != nil {
 			return nil, err

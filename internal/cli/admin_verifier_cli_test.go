@@ -34,12 +34,15 @@ func TestCLIAdminMCPManagesVerifierAndWriter(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+	if _, err := service.Environments.RequireWriter(environment.ID, "cli-admin-test"); err != nil {
+		t.Fatalf("writer lease was not acquired through Admin MCP: %v", err)
+	}
 	summary, err := service.EnvironmentSummary(environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary.Writer == nil || summary.Writer.Owner != "cli-admin-test" {
-		t.Fatalf("writer lease was not acquired through Admin MCP: %+v", summary.Writer)
+	if summary.Writer == nil || summary.Writer.Owner != "" {
+		t.Fatalf("management summary should expose an active lease without its owner: %+v", summary.Writer)
 	}
 
 	captureStdout(t, func() {

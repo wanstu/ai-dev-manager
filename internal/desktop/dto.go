@@ -49,6 +49,7 @@ type SkillSourceInput struct {
 
 type ADMConnectionInput struct {
 	BaseURL string `json:"base_url"`
+	APIKey  string `json:"api_key,omitempty"`
 }
 
 type ADMConnectionStatus struct {

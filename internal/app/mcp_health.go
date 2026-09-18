@@ -186,6 +186,29 @@ func (s *Service) resolveCatalogMCPActivation(mcpID string) (*MCPActivation, MCP
 	return activation, MCPHealthStatus{MCPID: mcpID, State: MCPHealthConfigured}, nil
 }
 
+func (s *Service) ResolveGlobalMCPActivation(mcpID string) (*MCPActivation, MCPHealthStatus, error) {
+	return s.resolveCatalogMCPActivation(mcpID)
+}
+
+func (s *Service) GlobalMCPCommand(ctx context.Context, activation *MCPActivation) (*exec.Cmd, error) {
+	if activation == nil || activation.Transport != catalog.MCPTransportStdio {
+		return nil, fmt.Errorf("stdio MCP activation is required")
+	}
+	rt, err := s.GlobalRuntime()
+	if err != nil {
+		return nil, err
+	}
+	s.recordFullAuthorizationBypass(rt, "", activation.Executable, "global_mcp")
+	cmd, err := rt.Command(ctx, activation.Executable, activation.Args, activation.Env)
+	if err != nil {
+		if isExecutableNotAllowedError(err) {
+			s.recordExecDenial("", activation.Executable, "global_mcp", err.Error())
+		}
+		return nil, err
+	}
+	return cmd, nil
+}
+
 // ProbeMCPHealth performs one bounded on-demand probe for management callers.
 // The long-lived Gateway uses the same activation resolution but owns sessions
 // in its runtime owner instead of persisting or reusing this transient probe.
@@ -349,6 +372,8 @@ func (s *Service) mcpTransport(ctx context.Context, environmentID string, activa
 		if err != nil {
 			return nil, err
 		}
+		s.recordFullAuthorizationBypass(rt, environmentID, activation.Executable, "mcp_probe")
+		s.recordFullAuthorizationBypass(rt, environmentID, activation.Executable, "mcp_stdio")
 		cmd, err := rt.Command(ctx, activation.Executable, activation.Args, activation.Env)
 		if err != nil {
 			if isExecutableNotAllowedError(err) {
@@ -372,6 +397,7 @@ func (s *Service) MCPCommand(ctx context.Context, environmentID string, activati
 	if err != nil {
 		return nil, err
 	}
+	s.recordFullAuthorizationBypass(rt, environmentID, activation.Executable, "mcp_stdio")
 	cmd, err := rt.Command(ctx, activation.Executable, activation.Args, activation.Env)
 	if err != nil {
 		if isExecutableNotAllowedError(err) {

@@ -72,6 +72,8 @@ type cliManagementBackend interface {
 	ExecAllow(string) ([]string, error)
 	ExecRemove(string) ([]string, error)
 	ExecList() ([]string, error)
+	ExecAuthorizationStatus() (app.ExecAuthorizationStatus, error)
+	ExecFullAuthorizationSet(bool) (app.ExecAuthorizationStatus, error)
 
 	MCPAddConfig(string, catalog.MCPConfig) (model.MCPDefinition, error)
 	MCPList() ([]model.MCPDefinition, error)

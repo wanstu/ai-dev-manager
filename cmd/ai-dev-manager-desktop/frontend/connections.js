@@ -91,6 +91,8 @@ function editConnectionProfile(profile) {
  document.getElementById('connectionID').value = profile?.id || '';
  document.getElementById('connectionName').value = profile?.name || '';
  document.getElementById('connectionURL').value = profile?.base_url || '';
+ document.getElementById('connectionAPIKey').value = '';
+ document.getElementById('connectionAPIKeyHint').textContent = profile?.api_key_configured ? '已保存 Admin Key；留空会保留原密钥，输入新值会替换。' : '远端 Desktop/CLI 管理连接必须配置 Admin Key。Agent Key 仅供 /mcp 使用，不保存在 Desktop 管理连接里。密钥保存后不会回显。';
  document.getElementById('connectionStartOnDesktopLaunch').checked = Boolean(profile?.start_service_on_desktop_launch);
  document.getElementById('connectionDialogTitle').textContent = profile ? '编辑连接' : '添加连接';
  openEditorDialog('connectionDialog');
@@ -123,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
    id: document.getElementById('connectionID').value,
    name: document.getElementById('connectionName').value,
    base_url: document.getElementById('connectionURL').value,
+   api_key: document.getElementById('connectionAPIKey').value,
    start_service_on_desktop_launch: document.getElementById('connectionStartOnDesktopLaunch').checked,
   };
   try {

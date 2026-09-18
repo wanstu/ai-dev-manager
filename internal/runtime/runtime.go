@@ -32,9 +32,10 @@ const (
 )
 
 type Runtime struct {
-	root               string
-	allowedExecutables []string
-	baseEnvironment    []string
+	root                     string
+	allowedExecutables       []string
+	baseEnvironment          []string
+	allowUnlistedExecutables bool
 }
 
 type FileInfo struct {
@@ -75,18 +76,27 @@ type GitStatusEntry struct {
 }
 
 func New(root string, allowedExecutables []string) (*Runtime, error) {
-	return NewWithEnvironment(root, allowedExecutables, os.Environ())
+	return NewWithAuthorization(root, allowedExecutables, false)
+}
+
+func NewWithAuthorization(root string, allowedExecutables []string, allowUnlistedExecutables bool) (*Runtime, error) {
+	return NewWithPolicy(root, allowedExecutables, os.Environ(), allowUnlistedExecutables)
 }
 
 func NewWithEnvironment(root string, allowedExecutables, environment []string) (*Runtime, error) {
+	return NewWithPolicy(root, allowedExecutables, environment, false)
+}
+
+func NewWithPolicy(root string, allowedExecutables, environment []string, allowUnlistedExecutables bool) (*Runtime, error) {
 	resolved, err := canonicalDir(root)
 	if err != nil {
 		return nil, err
 	}
 	return &Runtime{
-		root:               resolved,
-		allowedExecutables: append([]string(nil), allowedExecutables...),
-		baseEnvironment:    append([]string(nil), environment...),
+		root:                     resolved,
+		allowedExecutables:       append([]string(nil), allowedExecutables...),
+		baseEnvironment:          append([]string(nil), environment...),
+		allowUnlistedExecutables: allowUnlistedExecutables,
 	}, nil
 }
 
@@ -467,10 +477,38 @@ func (r *Runtime) gitOutput(ctx context.Context, args ...string) (string, error)
 	return string(out), nil
 }
 
+func (r *Runtime) IsExplicitlyAllowed(executable string) bool {
+	executable = strings.TrimSpace(executable)
+	if executable == "" || isCommandProxyExecutable(executable) {
+		return false
+	}
+	for _, allowed := range r.allowedExecutables {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "" {
+			continue
+		}
+		if filepath.IsAbs(allowed) {
+			if filepath.IsAbs(executable) && samePath(allowed, executable) {
+				return true
+			}
+			continue
+		}
+		if strings.EqualFold(allowed, executable) {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Runtime) FullAuthorizationEnabled() bool { return r.allowUnlistedExecutables }
+
 func (r *Runtime) allowedExecutable(executable string) (string, error) {
 	executable = strings.TrimSpace(executable)
 	if executable == "" {
 		return "", fmt.Errorf("executable is required")
+	}
+	if isCommandProxyExecutable(executable) && !r.allowUnlistedExecutables {
+		return "", fmt.Errorf("executable %q is not allowed in strict mode because it can dispatch arbitrary commands", executable)
 	}
 	for _, allowed := range r.allowedExecutables {
 		allowed = strings.TrimSpace(allowed)
@@ -491,7 +529,25 @@ func (r *Runtime) allowedExecutable(executable string) (string, error) {
 			return resolved, nil
 		}
 	}
+	if r.allowUnlistedExecutables {
+		resolved, err := exec.LookPath(executable)
+		if err != nil {
+			return "", fmt.Errorf("executable %q is unavailable: %w", executable, err)
+		}
+		return resolved, nil
+	}
 	return "", fmt.Errorf("executable %q is not allowed", executable)
+}
+
+func isCommandProxyExecutable(executable string) bool {
+	name := strings.ToLower(filepath.Base(strings.TrimSpace(executable)))
+	name = strings.TrimSuffix(name, ".exe")
+	switch name {
+	case "powershell", "pwsh", "cmd", "bash", "sh", "zsh", "fish", "wsl":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *Runtime) existing(path string) (string, error) {

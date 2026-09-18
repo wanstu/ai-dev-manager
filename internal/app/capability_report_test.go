@@ -151,8 +151,8 @@ func TestCapabilityReportSurvivesOptionalFailuresAndDoesNotLeakSentinels(t *test
 
 	assertFact(t, report, runtime.CapabilityRead, model.CapabilityStateAvailable, "", false)
 	writeFact := assertFact(t, report, runtime.CapabilityWrite, model.CapabilityStateAvailable, "", true)
-	if !writerEvidenceHasOwner(writeFact, "writer-a") {
-		t.Fatalf("write fact lacks current writer evidence: %+v", writeFact)
+	if !writerEvidenceIsActiveAndPrivate(writeFact) {
+		t.Fatalf("write fact lacks private active-writer evidence: %+v", writeFact)
 	}
 	assertFact(t, report, runtime.CapabilityGitStatus, model.CapabilityStateUnavailable, "git_unsupported", false)
 	assertFact(t, report, "mcp/"+secureMCP.ID, model.CapabilityStateAvailable, "", false)
@@ -293,11 +293,16 @@ func assertMissingFact(t *testing.T, report model.CapabilityReport, key string) 
 	}
 }
 
-func writerEvidenceHasOwner(fact model.CapabilityFact, owner string) bool {
+func writerEvidenceIsActiveAndPrivate(fact model.CapabilityFact) bool {
 	for _, evidence := range fact.Evidence {
-		if evidence.Kind == "writer_lease" && evidence.Details["owner"] == owner {
-			return true
+		if evidence.Kind != "writer_lease" {
+			continue
 		}
+		if evidence.Details["lease_state"] != "active" {
+			return false
+		}
+		_, leaksOwner := evidence.Details["owner"]
+		return !leaksOwner && evidence.Details["expires_at"] != ""
 	}
 	return false
 }

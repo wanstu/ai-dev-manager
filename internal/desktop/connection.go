@@ -42,7 +42,7 @@ func (a *Adapter) ConnectADM(input ADMConnectionInput) (ADMConnectionStatus, err
 		return ADMConnectionStatus{}, err
 	}
 	if status.State == gateway.HTTPStateRunning {
-		client := adminmcp.New(status.AdminMCPURL)
+		client := adminmcp.NewWithAPIKey(status.AdminMCPURL, a.connectionAPIKey(status.BaseURL, input.APIKey))
 		a.management = client
 		a.runtime = client
 	} else {
@@ -66,7 +66,7 @@ func (a *Adapter) StartLocalADM(input ADMConnectionInput) (ADMConnectionStatus, 
 	}
 	switch status.State {
 	case gateway.HTTPStateRunning:
-		client := adminmcp.New(status.AdminMCPURL)
+		client := adminmcp.NewWithAPIKey(status.AdminMCPURL, a.connectionAPIKey(status.BaseURL, input.APIKey))
 		a.management = client
 		a.runtime = client
 		return status, nil
@@ -88,7 +88,7 @@ func (a *Adapter) StartLocalADM(input ADMConnectionInput) (ADMConnectionStatus, 
 	}
 	_ = process.Release()
 	connected := desktopConnectionStatus(ready)
-	client := adminmcp.New(connected.AdminMCPURL)
+	client := adminmcp.NewWithAPIKey(connected.AdminMCPURL, a.connectionAPIKey(connected.BaseURL, input.APIKey))
 	a.management = client
 	a.runtime = client
 	return connected, nil
@@ -106,7 +106,7 @@ func (a *Adapter) StopLocalADM(input ADMConnectionInput) (ADMConnectionStatus, e
 	if err != nil {
 		return status, err
 	}
-	stopped, err := gateway.StopHTTP(listen)
+	stopped, err := gateway.StopHTTPWithAPIKey(listen, a.connectionAPIKey(status.BaseURL, input.APIKey))
 	if err != nil {
 		return status, err
 	}
@@ -151,7 +151,7 @@ func (a *Adapter) StopGateway() (gateway.HTTPStatus, error) {
 	if err := a.ready(); err != nil {
 		return gateway.HTTPStatus{}, err
 	}
-	return gateway.StopHTTP(gateway.DefaultHTTPListen)
+	return gateway.StopHTTPWithAPIKey(gateway.DefaultHTTPListen, a.connectionAPIKey(defaultADMBaseURL(), ""))
 }
 
 func defaultADMBaseURL() string {

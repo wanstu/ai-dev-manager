@@ -19,6 +19,8 @@ type ConnectionProfile struct {
 	Name                        string `json:"name"`
 	BaseURL                     string `json:"base_url"`
 	StartServiceOnDesktopLaunch bool   `json:"start_service_on_desktop_launch,omitempty"`
+	APIKey                      string `json:"api_key,omitempty"`
+	APIKeyConfigured            bool   `json:"api_key_configured,omitempty"`
 }
 type ConnectionProfiles struct {
 	Profiles []ConnectionProfile `json:"profiles"`
@@ -43,6 +45,7 @@ func (a *Adapter) connectionProfilesPath() (string, error) {
 
 func validateConnectionProfile(p ConnectionProfile) (ConnectionProfile, error) {
 	p.Name = strings.TrimSpace(p.Name)
+	p.APIKey = strings.TrimSpace(p.APIKey)
 	if p.Name == "" {
 		return p, errors.New("connection name is required")
 	}
@@ -57,10 +60,30 @@ func validateConnectionProfile(p ConnectionProfile) (ConnectionProfile, error) {
 	return p, nil
 }
 
+func connectionProfilesView(state ConnectionProfiles) ConnectionProfiles {
+	view := state
+	view.Profiles = append([]ConnectionProfile(nil), state.Profiles...)
+	for i := range view.Profiles {
+		view.Profiles[i].APIKeyConfigured = strings.TrimSpace(view.Profiles[i].APIKey) != ""
+		view.Profiles[i].APIKey = ""
+	}
+	return view
+}
+
+func validateConnectionProfileAccess(profile ConnectionProfile) error {
+	if gateway.LocalHTTPLifecycleEligible(profile.BaseURL) {
+		return nil
+	}
+	if strings.TrimSpace(profile.APIKey) == "" {
+		return errors.New("remote ADM management connection requires an Admin API key")
+	}
+	return nil
+}
+
 func readConnectionProfiles(path string) (ConnectionProfiles, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return ConnectionProfiles{Profiles: []ConnectionProfile{{ID: "local", Name: "鏈湴 ADM", BaseURL: defaultADMBaseURL()}}, ActiveID: "local"}, nil
+		return ConnectionProfiles{Profiles: []ConnectionProfile{{ID: "local", Name: "本地 ADM", BaseURL: defaultADMBaseURL()}}, ActiveID: "local"}, nil
 	}
 	if err != nil {
 		return ConnectionProfiles{}, err
@@ -118,6 +141,28 @@ func writeConnectionProfiles(path string, state ConnectionProfiles) error {
 	return os.Rename(name, path)
 }
 
+func (a *Adapter) connectionAPIKey(baseURL, explicit string) string {
+	if value := strings.TrimSpace(explicit); value != "" {
+		return value
+	}
+	connectionProfilesMu.Lock()
+	defer connectionProfilesMu.Unlock()
+	path, err := a.connectionProfilesPath()
+	if err != nil {
+		return ""
+	}
+	state, err := readConnectionProfiles(path)
+	if err != nil {
+		return ""
+	}
+	for _, profile := range state.Profiles {
+		if profile.ID == state.ActiveID && strings.EqualFold(strings.TrimSpace(profile.BaseURL), strings.TrimSpace(baseURL)) {
+			return strings.TrimSpace(profile.APIKey)
+		}
+	}
+	return ""
+}
+
 func (a *Adapter) GetConnectionProfiles() (ConnectionProfiles, error) {
 	connectionProfilesMu.Lock()
 	defer connectionProfilesMu.Unlock()
@@ -125,7 +170,8 @@ func (a *Adapter) GetConnectionProfiles() (ConnectionProfiles, error) {
 	if err != nil {
 		return ConnectionProfiles{}, err
 	}
-	return readConnectionProfiles(path)
+	state, err := readConnectionProfiles(path)
+	return connectionProfilesView(state), err
 }
 func (a *Adapter) SaveConnectionProfile(profile ConnectionProfile) (ConnectionProfiles, error) {
 	connectionProfilesMu.Lock()
@@ -143,6 +189,9 @@ func (a *Adapter) SaveConnectionProfile(profile ConnectionProfile) (ConnectionPr
 		return state, err
 	}
 	if profile.ID == "" {
+		if err := validateConnectionProfileAccess(profile); err != nil {
+			return connectionProfilesView(state), err
+		}
 		var id [16]byte
 		if _, err := rand.Read(id[:]); err != nil {
 			return state, err
@@ -156,6 +205,12 @@ func (a *Adapter) SaveConnectionProfile(profile ConnectionProfile) (ConnectionPr
 		found := false
 		for i := range state.Profiles {
 			if state.Profiles[i].ID == profile.ID {
+				if strings.TrimSpace(profile.APIKey) == "" {
+					profile.APIKey = state.Profiles[i].APIKey
+				}
+				if err := validateConnectionProfileAccess(profile); err != nil {
+					return connectionProfilesView(state), err
+				}
 				state.Profiles[i] = profile
 				found = true
 				break
@@ -165,7 +220,8 @@ func (a *Adapter) SaveConnectionProfile(profile ConnectionProfile) (ConnectionPr
 			return state, errors.New("connection does not exist")
 		}
 	}
-	return state, writeConnectionProfiles(path, state)
+	err = writeConnectionProfiles(path, state)
+	return connectionProfilesView(state), err
 }
 func (a *Adapter) SelectConnectionProfile(id string) (ConnectionProfiles, error) {
 	connectionProfilesMu.Lock()
@@ -181,7 +237,8 @@ func (a *Adapter) SelectConnectionProfile(id string) (ConnectionProfiles, error)
 	for _, p := range state.Profiles {
 		if p.ID == id {
 			state.ActiveID = id
-			return state, writeConnectionProfiles(path, state)
+			err = writeConnectionProfiles(path, state)
+			return connectionProfilesView(state), err
 		}
 	}
 	return state, errors.New("connection does not exist")
@@ -211,7 +268,8 @@ func (a *Adapter) DeleteConnectionProfile(id string) (ConnectionProfiles, error)
 	if state.ActiveID == id {
 		state.ActiveID = ""
 	}
-	return state, writeConnectionProfiles(path, state)
+	err = writeConnectionProfiles(path, state)
+	return connectionProfilesView(state), err
 }
 func (a *Adapter) DisconnectADM() {
 	if a != nil {

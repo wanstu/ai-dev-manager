@@ -61,6 +61,16 @@ func (s *Service) RecordExecDenial(environmentID, executable, surface, reason st
 	surface = strings.TrimSpace(surface)
 	reason = strings.TrimSpace(reason)
 	now := time.Now().UTC()
+	level := "warn"
+	if strings.Contains(reason, "full_authorization_bypass") {
+		level = "info"
+	}
+	s.Log(level, "exec.authorization_observation", map[string]string{
+		"environment_id": environmentID,
+		"executable":     executable,
+		"surface":        surface,
+		"reason":         reason,
+	})
 	return s.Store.Update(func(state *model.State) error {
 		for i := range state.ExecDenials {
 			if strings.EqualFold(state.ExecDenials[i].Executable, executable) {

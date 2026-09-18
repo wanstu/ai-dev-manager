@@ -31,7 +31,7 @@
         <div class="nav-group"><span class="nav-group-label">总览</span><a class="nav-link" href="#/overview" data-route-link="overview">概览</a></div>
         <div class="nav-group"><span class="nav-group-label">开发</span><a class="nav-link" href="#/workspaces" data-route-link="workspaces">Workspaces</a><a class="nav-link" href="#/environments" data-route-link="environments">Environments</a><a class="nav-link" href="#/runtime" data-route-link="runtime">Runtime</a></div>
         <div class="nav-group"><span class="nav-group-label">能力</span><a class="nav-link" href="#/mcp" data-route-link="mcp">MCP</a><a class="nav-link" href="#/skills" data-route-link="skills">Skills</a><a class="nav-link" href="#/memory" data-route-link="memory">Memory</a></div>
-        <div class="nav-group"><span class="nav-group-label">系统</span><a class="nav-link" href="#/gateway" data-route-link="gateway">ADM 连接</a><a class="nav-link" href="#/exec-allowlist" data-route-link="exec-allowlist">执行许可</a><a class="nav-link" href="#/diagnostics" data-route-link="diagnostics">环境诊断</a><a class="nav-link" href="#/settings" data-route-link="settings">设置</a></div>
+        <div class="nav-group"><span class="nav-group-label">系统</span><a class="nav-link" href="#/gateway" data-route-link="gateway">ADM 连接</a><a class="nav-link" href="#/exec-allowlist" data-route-link="exec-allowlist">执行许可</a><a class="nav-link" href="#/diagnostics" data-route-link="diagnostics">环境诊断</a><a class="nav-link" href="#/settings" data-route-link="settings">设置</a><a class="nav-link" href="#/about" data-route-link="about">关于</a></div>
       </nav>
       <div class="management-content" id="managementContent">
     <section id="managementContextPanel" class="panel management-context persistent-context">
@@ -80,6 +80,19 @@
             <button id="gatewayStopButton" class="danger-button" type="button">停止本地 ADM</button>
           </div>
           <p class="subpanel-note">启动和停止服务仅适用于本机连接。连接失败时会显示错误，保留当前连接设置。</p>
+          </div>
+        </section>
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>Remote access</h3><span>Host allowlist + Admin Key + Agent Key</span></div>
+          <div class="subpanel-body">
+            <label class="gateway-profile-field"><span>允许的 IP / 域名</span><textarea id="gatewayAllowedHosts" rows="3" placeholder="101.37.171.174&#10;adm.example.com&#10;*"></textarea></label>
+            <p id="gatewayAccessSummary" class="subpanel-note">连接后读取远程访问配置。</p>
+            <div class="gateway-actions"><button id="gatewayAccessSaveHosts" type="button" class="secondary-button">保存白名单</button></div>
+            <label class="gateway-profile-field"><span>Admin API Key（/admin/mcp）</span><input id="gatewayAdminAPIKey" type="password" autocomplete="new-password" placeholder="至少 16 字符；保存后不回显"></label>
+            <div class="gateway-actions"><button id="gatewayAccessSetAdminKey" type="button">设置 Admin Key</button><button id="gatewayAccessClearAdminKey" type="button" class="danger-button">清除 Admin Key</button></div>
+            <label class="gateway-profile-field"><span>Agent API Key（/mcp）</span><input id="gatewayAgentAPIKey" type="password" autocomplete="new-password" placeholder="至少 16 字符；保存后不回显"></label>
+            <div class="gateway-actions"><button id="gatewayAccessSetAgentKey" type="button">设置 Agent Key</button><button id="gatewayAccessClearAgentKey" type="button" class="danger-button">清除 Agent Key</button></div>
+            <p class="subpanel-note">白名单支持 <code>*</code>，表示不限制 Host/IP，但 Admin Key 与 Agent Key 鉴权仍然强制；两把 Key 不能互换。<code>0.0.0.0</code> 只是监听地址/普通 IP，不表示“不限制”。启用远程访问前应先配置两把 Key，再保存 Host 白名单。</p>
           </div>
         </section>
       </div>
@@ -220,7 +233,7 @@
       </article>
       <article class="panel management-page" data-management-page="environments" hidden>
         <div class="panel-heading"><div><h2 data-page-heading>Environments</h2><p>创建持久开发上下文；Git 不是前置条件。</p></div><span id="environmentBadge" class="badge">0</span></div>
-        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="environmentDialog">创建 Environment</button><button id="environmentWorkspaceRecommendationsButton" type="button" class="secondary-button">检查推荐归属</button></div>
+        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="environmentDialog">创建 Environment</button><button id="environmentWorkspaceRecommendationsButton" type="button" class="secondary-button">检查推荐归属</button><button id="cleanupExpiredTemporaryEnvironmentsButton" type="button" class="danger-button">清理过期临时 Environment</button></div>
         <div class="list-toolbar project-list-toolbar">
           <label class="filter-field"><span>搜索</span><input id="environmentFilter" type="search" placeholder="名称 / ID / Root / Workspace"></label>
           <label class="filter-field compact-filter"><span>Workspace</span><select id="environmentWorkspaceFilter"><option value="">全部 Workspace</option></select></label>
@@ -266,18 +279,27 @@
             <article class="panel management-page" data-management-page="exec-allowlist" hidden>
         <div class="panel-heading"><div><p class="eyebrow">RUNTIME AUTHORITY</p><h2 data-page-heading>执行许可</h2><p>Agent 只能执行 allowlist 中的 executable；被 Runtime 拦截的 executable 会记录在下方，便于事后判断是否放行。</p></div><span id="execBadge" class="badge">0</span></div>
         <div class="summary-strip">
+          <span>模式 <strong id="execAuthorizationModeLabel">Strict</strong></span>
           <span>已允许 <strong id="execAllowedCount">0</strong></span>
-          <span>被拒绝次数 <strong id="execBlockedCount">0</strong></span>
+          <span>授权观察次数 <strong id="execBlockedCount">0</strong></span>
           <span>记录内容 <strong>仅 executable</strong></span>
         </div>
         <div class="system-control-grid single-column-grid exec-authority-grid">
+          <section class="subpanel">
+            <div class="subpanel-heading"><div><h3>Command authorization mode</h3><span>默认 Strict</span></div></div>
+            <div class="subpanel-body">
+              <label class="gateway-profile-field"><span>执行模式</span><select id="execAuthorizationMode"><option value="strict">Strict · 仅显式 allowlist</option><option value="full">Full · 允许未列入 allowlist，但继续审计</option></select></label>
+              <div class="gateway-actions"><button id="execAuthorizationSave" type="button">保存执行模式</button></div>
+              <p class="subpanel-note">Strict 模式会阻止 PowerShell / pwsh / cmd / bash / sh 等通用命令解释器作为 allowlist 绕过入口。Full 模式显式放开，但未在 allowlist 的 executable 仍记录为 full_authorization_bypass。</p>
+            </div>
+          </section>
           <section class="subpanel">
             <div class="subpanel-heading"><div><h3>Allowed executables</h3><span>允许后立即可用于 exec / verifier / process / run；不会自动执行命令。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execDialog">允许 executable</button></div>
             <div id="execList" class="managed-list empty">暂无 allowed executable</div>
           </section>
           <section class="subpanel">
-            <div class="subpanel-heading"><div><h3>Blocked executable observations</h3><span>按拒绝次数排序；不记录 args、stdout/stderr 或命令内容。</span></div><button id="execClearAllBlockedButton" type="button" class="secondary-button small-button" disabled>清理全部</button></div>
-            <div id="execBlockedList" class="managed-list empty">暂无被拦截 executable</div>
+            <div class="subpanel-heading"><div><h3>Authorization observations</h3><span>包含 Strict 拒绝和 Full 模式旁路；不记录 args、stdout/stderr 或命令内容。</span></div><button id="execClearAllBlockedButton" type="button" class="secondary-button small-button" disabled>清理全部</button></div>
+            <div id="execBlockedList" class="managed-list empty">暂无执行授权观察</div>
           </section>
         </div>
       </article>
@@ -347,6 +369,23 @@
           </label>
           <p class="subpanel-note">此处管理桌面应用偏好。项目环境和能力配置请前往对应管理页面。</p>
           </div>
+        </section>
+      </div>
+    </section>
+    <section class="panel management-page" data-management-page="about" hidden>
+      <div class="panel-heading"><div><p class="eyebrow">ABOUT</p><h2 data-page-heading>关于 AI Dev Manager</h2><p>本机开发控制面与 Desktop 运行信息。</p></div></div>
+      <div class="system-control-grid single-column-grid">
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>应用信息</h3><span>Desktop binary</span></div>
+          <div id="aboutInfo" class="detail-content">
+            <div class="detail-row"><strong>Product</strong><span>AI Dev Manager</span></div>
+            <div class="detail-row"><strong>Version</strong><span id="aboutVersion">—</span></div>
+            <div class="detail-row"><strong>Runtime</strong><span id="aboutRuntime">—</span></div>
+          </div>
+        </section>
+        <section class="subpanel">
+          <div class="subpanel-heading"><h3>产品边界</h3><span>Control plane</span></div>
+          <p class="subpanel-note">ADM 管理 Workspace、Environment、执行权限、MCP、Skill、Memory、Git/worktree、Verifier 与 Runtime 生命周期；不替代 Planner / Executor / Reviewer。</p>
         </section>
       </div>
     </section>
@@ -436,7 +475,7 @@
 <dialog id="execDialog" class="editor-dialog" aria-labelledby="execDialogTitle"><header class="dialog-heading"><h2 id="execDialogTitle">允许 executable</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="execForm" class="single-line-form"><input id="execExecutable" type="text" placeholder="go / git / absolute path" required><button type="submit">允许 executable</button></form></dialog>
 <dialog id="globalMemoryDialog" class="editor-dialog" aria-labelledby="globalMemoryDialogTitle"><header class="dialog-heading"><h2 id="globalMemoryDialogTitle">写入 Global Memory</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="globalMemoryForm" class="memory-form"><input id="globalMemoryKey" type="text" placeholder="key" required><input id="globalMemoryValue" type="text" placeholder="value（可以为空）"><button type="submit">写入</button></form></dialog>
 <dialog id="environmentMemoryDialog" class="editor-dialog" aria-labelledby="environmentMemoryDialogTitle"><header class="dialog-heading"><h2 id="environmentMemoryDialogTitle">写入 Environment Memory</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="environmentMemoryForm" class="memory-form"><input id="environmentMemoryKey" type="text" placeholder="key" required><input id="environmentMemoryValue" type="text" placeholder="value（可以为空）"><button type="submit">写入</button></form></dialog>
-<dialog id="connectionDialog" class="editor-dialog" aria-labelledby="connectionDialogTitle"><header class="dialog-heading"><h2 id="connectionDialogTitle">添加连接</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="connectionForm" class="manager-form"><input id="connectionID" type="hidden"><label class="wide-field"><span>连接名称</span><input id="connectionName" type="text" required maxlength="120" placeholder="例如 开发环境"></label><label class="wide-field"><span>ADM Base URL</span><input id="connectionURL" type="url" required placeholder="http://127.0.0.1:8001"></label><label class="check-field wide-field"><input id="connectionStartOnDesktopLaunch" type="checkbox"><span>启动 Desktop 时自动启动此本地 ADM Service</span></label><p class="editor-hint wide-field">仅支持本机 loopback ADM URL。保存后可从主界面切换连接；配置保存在 ~/.config/adm/desktop-connections.json。</p><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button type="submit">保存连接</button></div></form></dialog>
+<dialog id="connectionDialog" class="editor-dialog" aria-labelledby="connectionDialogTitle"><header class="dialog-heading"><h2 id="connectionDialogTitle">添加连接</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="connectionForm" class="manager-form"><input id="connectionID" type="hidden"><label class="wide-field"><span>连接名称</span><input id="connectionName" type="text" required maxlength="120" placeholder="例如 开发环境"></label><label class="wide-field"><span>ADM Base URL</span><input id="connectionURL" type="url" required placeholder="http://127.0.0.1:8001"></label><label class="wide-field"><span>Admin API Key</span><input id="connectionAPIKey" type="password" autocomplete="new-password" placeholder="远端管理连接必填；编辑时留空保留原密钥"></label><p id="connectionAPIKeyHint" class="editor-hint wide-field">密钥不会在重新打开编辑窗口时回显。</p><label class="check-field wide-field"><input id="connectionStartOnDesktopLaunch" type="checkbox"><span>启动 Desktop 时自动启动此本地 ADM Service</span></label><p class="editor-hint wide-field">仅支持本机 loopback ADM URL。保存后可从主界面切换连接；配置保存在 ~/.config/adm/desktop-connections.json。</p><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button type="submit">保存连接</button></div></form></dialog>
 <dialog id="renameDialog" class="editor-dialog" aria-labelledby="renameDialogTitle"><header class="dialog-heading"><h2 id="renameDialogTitle">重命名</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="renameForm" class="manager-form"><label class="wide-field"><span>名称</span><input id="renameName" type="text" required></label><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button type="submit">保存修改</button></div></form></dialog>
   <script src="./dialogs.js" defer></script>
   <script src="./connections.js" defer></script>

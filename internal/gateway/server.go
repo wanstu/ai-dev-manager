@@ -131,6 +131,10 @@ type TemporaryEnvironmentOwnerInput struct {
 	OwnerID       string `json:"owner_id" jsonschema:"matching temporary lifecycle owner provenance"`
 }
 
+type TemporaryEnvironmentCleanupExpiredInput struct {
+	Execute bool `json:"execute,omitempty"`
+}
+
 type TemporaryEnvironmentCleanupInput struct {
 	EnvironmentID string `json:"environment_id"`
 	OwnerID       string `json:"owner_id" jsonschema:"matching temporary lifecycle owner required for execute"`
@@ -447,8 +451,9 @@ func isAdminOnlyTool(name string) bool {
 	switch name {
 	case "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
-		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove",
-		"exec_allow", "exec_allow_remove", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all",
+		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired",
+		"exec_allow", "exec_allow_remove", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
+		"gateway_access_status", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_clear",
 		"mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
 		"environment_mcp_set",
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
@@ -491,10 +496,53 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(info, nil)
 		})
 
+	registerGlobalTools(server, surface, service)
+
 	addScopedTool(server, surface, &mcp.Tool{Name: "management_snapshot", Description: "Return a safe Desktop/CLI management overview without exposing Global or Environment-private Memory values."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, management.Snapshot, error) {
 			snapshot, err := management.New(service).Snapshot()
 			return nil, snapshot, err
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_access_status", Description: "Return configured remote Host allowlist and whether separate Admin MCP and Agent MCP API keys are configured; key values are never returned."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.GatewayAccessStatus()
+			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_allowed_hosts_set", Description: "Replace the remote ADM Host/IP allowlist. Entries are DNS names or IP addresses without scheme or port; '*' allows any Host/IP while API-key authentication remains mandatory."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAllowedHostsInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.SetGatewayAllowedHosts(in.Hosts)
+			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_set", Description: "Set the API key accepted only by /admin/mcp. The key is stored only as a SHA-256 hash and is never returned."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAPIKeyInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.SetGatewayAdminAPIKey(in.APIKey)
+			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_clear", Description: "Clear the /admin/mcp API key. Remote Gateway listening remains refused until both Admin and Agent keys are configured."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.ClearGatewayAdminAPIKey()
+			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_agent_api_key_set", Description: "Set the API key accepted only by /mcp. The key is stored only as a SHA-256 hash and is never returned."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAPIKeyInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.SetGatewayAgentAPIKey(in.APIKey)
+			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_agent_api_key_clear", Description: "Clear the /mcp API key. Remote Gateway listening remains refused until both Admin and Agent keys are configured."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.ClearGatewayAgentAPIKey()
+			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "exec_authorization_status", Description: "Return whether command execution is in strict allowlist mode or explicit full-authorization mode."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.ExecAuthorizationStatus()
+			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "exec_full_authorization_set", Description: "Enable or disable full command authorization. When enabled, unlisted executables may run but are still recorded as authorization-bypass observations."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ExecFullAuthorizationInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.SetExecFullAuthorization(in.Enabled)
+			return toolResult(status, err)
 		})
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "worktree_settings_get", Description: "Return managed worktree storage root, branch prefix, and the system-managed Workspace ID. No project files are read."},
@@ -715,6 +763,15 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_cleanup_expired", Description: "Preview or execute cleanup of all expired temporary Environments only. Runtime blockers and managed-worktree dirty/unpublished safety checks remain enforced."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCleanupExpiredInput) (*mcp.CallToolResult, any, error) {
+			if owner == nil {
+				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			value, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, in.Execute)
+			return toolResult(value, err)
+		})
+
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_create", Description: "Create an optional managed Git worktree Environment under the ADM-owned worktree root. Supply exactly one source: a Git-top-level Workspace or an existing Git Environment whose root is the Git top-level. ADM fetches refs and never pulls or rewrites the source checkout."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentWorktreeCreateInput) (*mcp.CallToolResult, any, error) {
 			workspaceID := strings.TrimSpace(in.WorkspaceID)
@@ -862,6 +919,9 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_writer_release", Description: "Release an Environment writer lease."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterReleaseInput) (*mcp.CallToolResult, any, error) {
+			if in.Force && surface != serverSurfaceAdmin {
+				return toolResult(nil, fmt.Errorf("force writer release is only available on the administrative surface"))
+			}
 			env, err := service.Environments.ReleaseWriter(in.EnvironmentID, in.Owner, in.Force)
 			return toolResult(env, err)
 		})
@@ -1525,21 +1585,22 @@ func newHTTPHandler(service *app.Service, owner *runtimeOwner) http.Handler {
 func newHTTPHandlerWithShutdown(service *app.Service, owner *runtimeOwner, shutdown func()) http.Handler {
 	agentServer := newServer(service, owner)
 	adminServer := newServerForSurface(service, owner, serverSurfaceAdmin)
-	newSurfaceHandler := func(server *mcp.Server) http.Handler {
+	newSurfaceHandler := func(server *mcp.Server, surface serverSurface) http.Handler {
 		base := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 			return server
 		}, &mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true})
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !allowedGatewayHost(r.Host) {
-				http.Error(w, "Forbidden: invalid Host header", http.StatusForbidden)
+			if !gatewayRequestAllowed(service, r, surface) {
+				service.Log("warn", "gateway.access_denied", map[string]string{"host": r.Host, "path": r.URL.Path, "remote_addr": r.RemoteAddr})
+				http.Error(w, "Forbidden: gateway access denied", http.StatusForbidden)
 				return
 			}
 			base.ServeHTTP(w, r)
 		})
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", newSurfaceHandler(agentServer))
-	mux.Handle("/admin/mcp", newSurfaceHandler(adminServer))
+	mux.Handle("/mcp", newSurfaceHandler(agentServer, serverSurfaceAgent))
+	mux.Handle("/admin/mcp", newSurfaceHandler(adminServer, serverSurfaceAdmin))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -1555,6 +1616,11 @@ func newHTTPHandlerWithShutdown(service *app.Service, owner *runtimeOwner, shutd
 	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !gatewayShutdownRequestAllowed(service, r) {
+			service.Log("warn", "gateway.shutdown_denied", map[string]string{"host": r.Host, "remote_addr": r.RemoteAddr})
+			http.Error(w, "Forbidden: gateway access denied", http.StatusForbidden)
 			return
 		}
 		if owner == nil || shutdown == nil {
@@ -1598,10 +1664,14 @@ func RunHTTP(ctx context.Context, service *app.Service, listen string) error {
 	if host != "localhost" {
 		ip := net.ParseIP(host)
 		if ip == nil || !ip.IsLoopback() {
-			return fmt.Errorf("gateway HTTP listen must be loopback; got %q", listen)
+			if !remoteGatewayListenAllowed(service) {
+				return fmt.Errorf("remote gateway listen %q requires at least one allowed host plus separate Admin MCP and Agent MCP API keys", listen)
+			}
 		}
 	}
 
+	service.Log("info", "gateway.start", map[string]string{"listen": listen})
+	defer service.Log("info", "gateway.stop", map[string]string{"listen": listen})
 	runCtx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
 	owner := newRuntimeOwner(service)

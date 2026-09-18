@@ -14,6 +14,7 @@ const elements = {
   gatewayRefreshButton: document.getElementById('gatewayRefreshButton'),
   gatewayStartButton: document.getElementById('gatewayStartButton'),
   gatewayStopButton: document.getElementById('gatewayStopButton'),
+  gatewayAllowedHosts: document.getElementById('gatewayAllowedHosts'), gatewayAccessSaveHosts: document.getElementById('gatewayAccessSaveHosts'), gatewayAdminAPIKey: document.getElementById('gatewayAdminAPIKey'), gatewayAccessSetAdminKey: document.getElementById('gatewayAccessSetAdminKey'), gatewayAccessClearAdminKey: document.getElementById('gatewayAccessClearAdminKey'), gatewayAgentAPIKey: document.getElementById('gatewayAgentAPIKey'), gatewayAccessSetAgentKey: document.getElementById('gatewayAccessSetAgentKey'), gatewayAccessClearAgentKey: document.getElementById('gatewayAccessClearAgentKey'), gatewayAccessSummary: document.getElementById('gatewayAccessSummary'),
   workspaceCount: document.getElementById('workspaceCount'), environmentCount: document.getElementById('environmentCount'),
   execCount: document.getElementById('execCount'), mcpCount: document.getElementById('mcpCount'), skillCount: document.getElementById('skillCount'), memoryCount: document.getElementById('memoryCount'),
   workspaceBadge: document.getElementById('workspaceBadge'), environmentBadge: document.getElementById('environmentBadge'), execBadge: document.getElementById('execBadge'),
@@ -39,12 +40,13 @@ const elements = {
   workspaceDiscoveryDialog: document.getElementById('workspaceDiscoveryDialog'), workspaceDiscoveryTitle: document.getElementById('workspaceDiscoveryTitle'), workspaceDiscoveryForm: document.getElementById('workspaceDiscoveryForm'), workspaceDiscoveryPath: document.getElementById('workspaceDiscoveryPath'), workspaceDiscoveryQuery: document.getElementById('workspaceDiscoveryQuery'), workspaceDiscoveryMaxDepth: document.getElementById('workspaceDiscoveryMaxDepth'), workspaceDiscoveryMaxEntries: document.getElementById('workspaceDiscoveryMaxEntries'), workspaceDiscoveryMaxCandidates: document.getElementById('workspaceDiscoveryMaxCandidates'), workspaceDiscoveryMaxDigestEntries: document.getElementById('workspaceDiscoveryMaxDigestEntries'), workspaceDiscoveryMaxOutputBytes: document.getElementById('workspaceDiscoveryMaxOutputBytes'), workspaceDiscoveryScanButton: document.getElementById('workspaceDiscoveryScanButton'), workspaceDiscoveryFilter: document.getElementById('workspaceDiscoveryFilter'), workspaceDiscoverySummary: document.getElementById('workspaceDiscoverySummary'), workspaceDiscoveryResult: document.getElementById('workspaceDiscoveryResult'),
   environmentForm: document.getElementById('environmentForm'), environmentWorkspace: document.getElementById('environmentWorkspace'), environmentName: document.getElementById('environmentName'), environmentRoot: document.getElementById('environmentRoot'), environmentList: document.getElementById('environmentList'), environmentFilter: document.getElementById('environmentFilter'), environmentWorkspaceFilter: document.getElementById('environmentWorkspaceFilter'), environmentVisibleCount: document.getElementById('environmentVisibleCount'), environmentListTotalCount: document.getElementById('environmentListTotalCount'), environmentFilterHint: document.getElementById('environmentFilterHint'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
-  environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
+  environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
   environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'),
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
+  aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
   loadEnvironmentMemory: document.getElementById('loadEnvironmentMemory'), writeEnvironmentMemoryButton: document.getElementById('writeEnvironmentMemoryButton'), environmentMemoryScopeHint: document.getElementById('environmentMemoryScopeHint'), environmentMemoryForm: document.getElementById('environmentMemoryForm'), environmentMemoryKey: document.getElementById('environmentMemoryKey'), environmentMemoryValue: document.getElementById('environmentMemoryValue'), environmentMemoryList: document.getElementById('environmentMemoryList'),
-  execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'),
+  execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'), execAuthorizationMode: document.getElementById('execAuthorizationMode'), execAuthorizationSave: document.getElementById('execAuthorizationSave'), execAuthorizationModeLabel: document.getElementById('execAuthorizationModeLabel'),
   loadGlobalMemory: document.getElementById('loadGlobalMemory'), globalMemoryForm: document.getElementById('globalMemoryForm'), globalMemoryKey: document.getElementById('globalMemoryKey'), globalMemoryValue: document.getElementById('globalMemoryValue'), globalMemoryList: document.getElementById('globalMemoryList'),
 };
 
@@ -60,6 +62,8 @@ let environmentSkillAvailabilityByID = new Map();
 let mcpHealthByKey = new Map();
 let temporaryLifecycleByEnvironmentID = new Map();
 let temporaryCleanupPreviewIDs = new Set();
+let gatewayAccessStatus = null;
+let execAuthorizationStatus = null;
 let runtimeRunsByID = new Map();
 let runtimeSubview = 'verifiers';
 let environmentDetailSubview = 'summary';
@@ -440,6 +444,95 @@ async function updateLaunchAtLogin() {
     setStatus(`开机启动设置失败：${error?.message || String(error)}`, 'error');
   } finally {
     elements.launchAtLogin.disabled = false;
+  }
+}
+function renderGatewayAccessStatus(status) {
+  gatewayAccessStatus = status || null;
+  const hosts = safeArray(status?.allowed_hosts);
+  elements.gatewayAllowedHosts.value = hosts.join('\n');
+  const hostSummary = hosts.includes('*') ? '不限制 (*)' : (hosts.length ? hosts.length + ' 个' : '未配置');
+  elements.gatewayAccessSummary.textContent = `远程 Host ${hostSummary} · Admin Key ${status?.admin_api_key_configured ? '已配置' : '未配置'} · Agent Key ${status?.agent_api_key_configured ? '已配置' : '未配置'}`;
+  elements.gatewayAccessClearAdminKey.disabled = !Boolean(status?.admin_api_key_configured);
+  elements.gatewayAccessClearAgentKey.disabled = !Boolean(status?.agent_api_key_configured);
+}
+async function refreshGatewayAccessStatus() {
+  try {
+    renderGatewayAccessStatus(await desktopAdapter().GetGatewayAccessStatus());
+    return '';
+  } catch (error) {
+    gatewayAccessStatus = null;
+    elements.gatewayAccessSummary.textContent = '远程访问配置读取失败：' + errorText(error);
+    return 'Gateway access: ' + errorText(error);
+  }
+}
+function renderExecAuthorizationStatus(status) {
+  execAuthorizationStatus = status || null;
+  const full = Boolean(status?.full_authorization);
+  elements.execAuthorizationMode.value = full ? 'full' : 'strict';
+  elements.execAuthorizationModeLabel.textContent = full ? 'Full' : 'Strict';
+}
+async function refreshExecAuthorizationStatus() {
+  try {
+    renderExecAuthorizationStatus(await desktopAdapter().GetExecAuthorizationStatus());
+    return '';
+  } catch (error) {
+    execAuthorizationStatus = null;
+    return 'Exec authorization: ' + errorText(error);
+  }
+}
+async function saveGatewayAllowedHosts() {
+  const hosts = String(elements.gatewayAllowedHosts.value || '').split(/[\n,]+/).map((value) => value.trim()).filter(Boolean);
+  const profile = activeConnectionProfile();
+  if (hosts.length && (!gatewayAccessStatus?.admin_api_key_configured || !gatewayAccessStatus?.agent_api_key_configured)) {
+    return setStatus('启用远程 Host 前必须先配置 Admin Key 和 Agent Key。', 'error');
+  }
+  if (hosts.length && gatewayAccessStatus?.admin_api_key_configured && !profile?.api_key_configured) {
+    return setStatus('服务端已经配置 Admin Key，但当前 Desktop 连接还没有保存 Admin Key。请先用下方“设置 Admin Key”同步后再启用远程 Host。', 'error');
+  }
+  await runMutation('保存远程 Host 白名单', () => desktopAdapter().SetGatewayAllowedHosts(hosts));
+}
+async function setGatewayAdminAPIKey() {
+  const value = String(elements.gatewayAdminAPIKey.value || '').trim();
+  if (!value) return setStatus('请输入 Admin API Key。', 'error');
+  await runMutation('设置 Admin API Key', async () => {
+    await desktopAdapter().ConfigureGatewayAdminAPIKey(value);
+    elements.gatewayAdminAPIKey.value = '';
+    connectionProfiles = await desktopAdapter().GetConnectionProfiles();
+    renderConnectionProfiles();
+  });
+}
+async function clearGatewayAdminAPIKey() {
+  if (!window.confirm('清除 Admin API Key 后，/admin/mcp 将无法进行远程鉴权，直到重新配置。继续？')) return;
+  await runMutation('清除 Admin API Key', () => desktopAdapter().ClearGatewayAdminAPIKey());
+}
+async function setGatewayAgentAPIKey() {
+  const value = String(elements.gatewayAgentAPIKey.value || '').trim();
+  if (!value) return setStatus('请输入 Agent API Key。', 'error');
+  await runMutation('设置 Agent API Key', async () => {
+    await desktopAdapter().SetGatewayAgentAPIKey(value);
+    elements.gatewayAgentAPIKey.value = '';
+  });
+}
+async function clearGatewayAgentAPIKey() {
+  if (!window.confirm('清除 Agent API Key 后，/mcp 将无法进行远程鉴权，直到重新配置。继续？')) return;
+  await runMutation('清除 Agent API Key', () => desktopAdapter().ClearGatewayAgentAPIKey());
+}
+async function saveExecAuthorizationMode() {
+  const full = elements.execAuthorizationMode.value === 'full';
+  if (full && !window.confirm('Full 模式允许执行未列入 allowlist 的 executable；这些调用仍会记录审计。确认开启？')) {
+    renderExecAuthorizationStatus(execAuthorizationStatus);
+    return;
+  }
+  await runMutation('保存执行授权模式', () => desktopAdapter().SetExecFullAuthorization(full));
+}
+async function loadAboutInfo() {
+  try {
+    const info = await desktopAdapter().GetAboutInfo();
+    elements.aboutVersion.textContent = info?.version || '—';
+    elements.aboutRuntime.textContent = [info?.go_version, info?.goos && info?.goarch ? info.goos + '/' + info.goarch : ''].filter(Boolean).join(' · ') || '—';
+  } catch (_) {
+    elements.aboutVersion.textContent = '—';
+    elements.aboutRuntime.textContent = '—';
   }
 }
 function renderGatewayStatus(status) {
@@ -917,7 +1010,7 @@ function renderExecutables(executables, denials = []) {
     }
   }
 
-  if (!denials.length) emptyMessage(elements.execBlockedList, '暂无被拦截 executable');
+  if (!denials.length) emptyMessage(elements.execBlockedList, '暂无执行授权观察');
   else {
     elements.execBlockedList.replaceChildren(); elements.execBlockedList.classList.remove('empty');
     for (const denial of denials) {
@@ -926,13 +1019,14 @@ function renderExecutables(executables, denials = []) {
       const content = document.createElement('div'); content.className = 'item-content';
       const title = document.createElement('div'); title.className = 'item-title-line';
       const code = document.createElement('code'); code.textContent = executable || 'unknown executable';
-      title.append(code, stateBadge('拒绝 × ' + safeNumber(denial.count, 1), 'error'));
+      const bypass = String(denial.last_reason || '').includes('full_authorization_bypass');
+      title.append(code, stateBadge((bypass ? 'Full 旁路 × ' : '拒绝 × ') + safeNumber(denial.count, 1), bypass ? 'degraded' : 'error'));
       const meta = document.createElement('small');
       meta.textContent = [denial.last_surface || 'unknown surface', denial.last_environment_id || 'unknown Environment', formatDateTime(denial.last_blocked_at)].join(' · ');
       const reason = document.createElement('small'); reason.className = 'warning-text'; reason.textContent = denial.last_reason || 'executable was blocked by Runtime allowlist';
       content.append(title, meta, reason);
       const actions = document.createElement('div'); actions.className = 'item-actions';
-      actions.append(createActionButton('允许', 'allow-blocked-executable', executable), createActionButton('清理', 'clear-blocked-executable', executable, 'danger'));
+      actions.append(createActionButton(bypass ? '加入白名单' : '允许', 'allow-blocked-executable', executable), createActionButton('清理', 'clear-blocked-executable', executable, 'danger'));
       row.append(content, actions);
       elements.execBlockedList.append(row);
     }
@@ -1582,15 +1676,36 @@ function diagnosticFactText(fact) {
   if (fact.observed_at) parts.push('observed ' + new Date(fact.observed_at).toLocaleString());
   return parts.join(' · ');
 }
+function diagnosticGroupLabel(kind) {
+  const labels = {environment: 'Environment 基础', files: '文件访问', exec: '命令执行', verifier: 'Verifier', git: 'Git', isolation: 'Worktree / 隔离', mcp: 'MCP', skill: 'Skill', process: 'Process', run: 'Run'};
+  return labels[String(kind || '').toLowerCase()] || (kind || '其他能力');
+}
+function diagnosticActionHint(fact) {
+  const reason = String(fact?.reason_code || fact?.reason || '').toLowerCase();
+  if (reason.includes('writer')) return '处理建议：等待当前 writer 到期，或由持有 owner 的会话续租/释放；管理员可使用 CLI 强制释放。';
+  if (reason.includes('executable') || reason.includes('allow')) return '处理建议：检查执行许可页的 Strict/Full 模式和 executable allowlist。';
+  if (reason.includes('mcp') || reason.includes('connection') || reason.includes('auth')) return '处理建议：检查 MCP Endpoint、鉴权引用、网络和全局 MCP 探测结果。';
+  if (reason.includes('skill') || reason.includes('artifact') || reason.includes('source')) return '处理建议：刷新 Skill Source，并检查 artifact/support root 是否存在。';
+  if (reason.includes('git') || reason.includes('worktree')) return '处理建议：检查 Git/worktree 状态；dirty 或 unpublished 工作不会被自动清理。';
+  if (reason.includes('root') || reason.includes('path')) return '处理建议：检查 Environment root 与 Workspace containment。';
+  return '';
+}
 function environmentDiagnosticGroups(inspection) {
   const environment = inspection?.environment || {}, report = inspection?.capability_report || {};
   const facts = safeArray(report.facts);
   const unresolvedMCP = safeArray(inspection?.unresolved_mcp_ids), unresolvedSkill = safeArray(inspection?.unresolved_skill_ids);
+  const stateCounts = {available: 0, degraded: 0, unavailable: 0, unconfigured: 0, disabled: 0, unknown: 0};
+  for (const fact of facts) {
+    const state = normalizedState(fact.state);
+    if (Object.prototype.hasOwnProperty.call(stateCounts, state)) stateCounts[state]++;
+    else stateCounts.unknown++;
+  }
   const sourceRows = [
-    detailRow('Source', 'Existing InspectEnvironment payload only'),
-    detailRow('Generated at', report.generated_at ? new Date(report.generated_at).toLocaleString() : 'Unknown'),
-    detailRow('Environment ID', environment.environment_id || '—'),
-    detailRow('Capability facts', String(facts.length)),
+    detailRow('Environment', (environment.name || environment.environment_id || '—') + ' · ' + (environment.root || '')),
+    detailRow('诊断时间', report.generated_at ? new Date(report.generated_at).toLocaleString() : '未返回'),
+    detailRow('正常', String(stateCounts.available)),
+    detailRow('需关注', String(stateCounts.degraded + stateCounts.unavailable + stateCounts.unconfigured)),
+    detailRow('Disabled / Unknown', String(stateCounts.disabled + stateCounts.unknown)),
   ];
   const unresolvedRows = [
     detailRow('MCP IDs', unresolvedMCP.join(', ') || 'None'),
@@ -1603,24 +1718,24 @@ function environmentDiagnosticGroups(inspection) {
     grouped.get(group).push(fact);
   }
   const groups = [
-    detailGroup('Diagnostic source', sourceRows, 'Diagnostics here never probes MCPs, runs verifiers, reconnects, or reads Memory values.'),
-    detailGroup('Unresolved references', unresolvedRows, '正常 catalog 删除会同步清理 Workspace / Environment 选择；这里显示的是历史或外部状态留下的 unresolved ID，可用“清除不存在引用”修复。'),
+    detailGroup('诊断摘要', sourceRows, '这里解释当前已返回的 capability facts；不会自动执行命令、MCP 探测、Verifier 或读取 Memory。'),
+    detailGroup('未解析引用', unresolvedRows, '正常 catalog 删除会同步清理 Workspace / Environment 选择；这里显示的是历史或外部状态留下的 unresolved ID，可用“清除不存在引用”修复。'),
   ];
   if (!facts.length) {
     groups.push(detailGroup('Capability facts', [detailRow('Returned facts', 'None')], 'Unknown means no fact was returned; it is not an all-green live health claim.'));
   } else {
     for (const [group, items] of grouped) {
       const container = document.createElement('section'); container.className = 'detail-group';
-      const heading = document.createElement('h3'); heading.textContent = group + ' facts';
+      const heading = document.createElement('h3'); heading.textContent = diagnosticGroupLabel(group);
       const list = document.createElement('div'); list.className = 'diagnostic-fact-list';
       for (const fact of items) {
         const row = document.createElement('article'); row.className = 'diagnostic-fact';
         const title = document.createElement('strong'); title.textContent = fact.key || fact.kind || 'capability';
         const badge = stateBadge(humanRuntimeState(fact.state || 'unknown'), fact.state || 'unknown');
-        const detail = document.createElement('small'); detail.textContent = diagnosticFactText(fact);
+        const detail = document.createElement('small'); const actionHint = diagnosticActionHint(fact); detail.textContent = diagnosticFactText(fact) + (actionHint ? ' · ' + actionHint : '');
         row.append(title, badge, detail); list.append(row);
       }
-      const note = document.createElement('small'); note.textContent = 'Static/observed labels come only from returned fact fields; filtering this view performs no new check.';
+      const note = document.createElement('small'); note.textContent = '状态来自当前诊断事实；这里只做解释和分组，不会在后台自动执行修复。';
       container.append(heading, list, note); groups.push(container);
     }
   }
@@ -1640,7 +1755,7 @@ function renderDiagnosticsPage() {
     elements.diagnosticsPageHint.textContent = '请选择 Management Environment 后查看诊断。';
     return emptyMessage(elements.diagnosticsPageContent, '未选择 Environment；诊断页不会自动 fan-out 到所有 Environment。');
   }
-  elements.diagnosticsPageHint.textContent = '当前 Environment：' + (environment.name || environment.environment_id) + ' · 仅展示已返回的 InspectEnvironment payload。';
+  elements.diagnosticsPageHint.textContent = '当前 Environment：' + (environment.name || environment.environment_id) + ' · 先看“诊断摘要”，再查看需关注的能力分组。';
   if (!managementInspection || managementInspection?.environment?.environment_id !== environment.environment_id) {
     return emptyMessage(elements.diagnosticsPageContent, '尚未加载当前 Environment 的诊断事实；点击“刷新诊断”或重新选择 Environment。');
   }
@@ -1664,7 +1779,7 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
     detailRow('State', environment.state),
   ];
   const authorityRows = [
-    detailRow('Writer observation', environment.writer?.owner || 'No active writer observed'),
+    detailRow('Writer lease', environment.writer ? ('Active · expires ' + (environment.writer.expires_at ? new Date(environment.writer.expires_at).toLocaleString() : 'unknown')) : 'No active writer'),
     detailRow('Private Memory count', safeNumber(environment.private_memory_count) + ' entries'),
   ];
   const unresolvedRows = [
@@ -1676,7 +1791,7 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
     detailGroup('Lifecycle retention', temporaryLifecycleRows(environment), 'Lifecycle owner/session/run are retention provenance only, not task hierarchy or status.'),
     detailGroup('Runtime authority', authorityRows, 'Writer is an observation only; this page never acquires or force-releases a lease.'),
     detailGroup('Capability issues', capabilityRows, issueFacts.length + ' issue fact(s); optional failures stay local.'),
-    detailGroup('Unresolved references', unresolvedRows, '正常 catalog 删除会同步清理选择；若这里仍有 unresolved ID，说明是历史或外部状态残留。')
+    detailGroup('未解析引用', unresolvedRows, '正常 catalog 删除会同步清理选择；若这里仍有 unresolved ID，说明是历史或外部状态残留。')
   );
   renderEnvironmentDiagnostics(inspection);
   syncEnvironmentDetailSubviewUI();
@@ -1789,6 +1904,8 @@ async function refreshSnapshot(successMessage = '') {
     catch (error) { skillSources = []; skillSourcesState = 'error'; skillSourcesError = errorText(error); sourceError = `Skill sources: ${skillSourcesError}`; }
     if (requestGeneration !== connectionGeneration) return false;
     renderSkillManager(safeArray(currentSnapshot?.skills));
+    const [gatewayAccessError, execAuthorizationError] = await Promise.all([refreshGatewayAccessStatus(), refreshExecAuthorizationStatus()]);
+    if (requestGeneration !== connectionGeneration) return false;
 
     const contextResult = await refreshManagementContext(captureEnvironmentScope());
     if (requestGeneration !== connectionGeneration) return false;
@@ -1797,7 +1914,7 @@ async function refreshSnapshot(successMessage = '') {
       try { await refreshSelectedEnvironmentDetail(); }
       catch (error) { detailError = `Environment detail: ${errorText(error)}`; }
     }
-    const auxiliaryErrors = [sourceError, ...safeArray(contextResult?.errors), detailError].filter(Boolean);
+    const auxiliaryErrors = [sourceError, gatewayAccessError, execAuthorizationError, ...safeArray(contextResult?.errors), detailError].filter(Boolean);
     if (auxiliaryErrors.length) setStatus(`基础快照已刷新；部分状态不可用：${auxiliaryErrors.join(' · ')}`, 'error');
     else setStatus(successMessage || `已刷新 · ${new Date().toLocaleTimeString()}`, 'success');
     return true;
@@ -1811,6 +1928,35 @@ async function refreshConnectedADM(showConnectionMessage = false) {
 }
 async function runMutation(label, action, after) { setStatus(`${label}…`, 'loading'); try { await action(); await refreshSnapshot(`${label}完成`); if (after) await after(); } catch (error) { setStatus(`${label}失败：${error?.message || String(error)}`, 'error'); } }
 
+async function cleanupExpiredTemporaryEnvironments() {
+  if (!currentSnapshot) return setStatus('请先连接 ADM 并加载管理快照。', 'error');
+  const button = elements.cleanupExpiredTemporaryEnvironmentsButton;
+  button.disabled = true;
+  setStatus('正在检查已过期 temporary Environment…', 'loading');
+  try {
+    const preview = await desktopAdapter().CleanupExpiredTemporaryEnvironments(false);
+    const eligible = safeArray(preview?.report?.resources).filter((item) => item.kind === 'environment' && item.cleanup_eligible);
+    const blocked = safeArray(preview?.report?.resources).filter((item) => item.kind === 'environment' && !item.cleanup_eligible);
+    if (!eligible.length) {
+      setStatus(blocked.length ? `没有可安全清理的过期 Environment；${blocked.length} 个存在 blocker。` : '没有已过期的 temporary Environment。', blocked.length ? 'error' : 'success');
+      return;
+    }
+    const names = eligible.slice(0, 8).map((item) => item.name || item.id).join('\n');
+    const suffix = eligible.length > 8 ? `\n…以及另外 ${eligible.length - 8} 个` : '';
+    if (!window.confirm(`将清理 ${eligible.length} 个已过期且通过安全检查的 temporary Environment。\n\n${names}${suffix}\n\n有 blocker 的 Environment 不会被强制删除。继续？`)) {
+      setStatus('已取消清理；未修改 Environment。', 'success');
+      return;
+    }
+    const result = await desktopAdapter().CleanupExpiredTemporaryEnvironments(true);
+    const removed = safeArray(result?.removed).filter((item) => item.kind === 'environment').length;
+    await refreshSnapshot();
+    setStatus(`过期 temporary Environment 清理完成：移除 ${removed} 个；被阻止项保持不变。`, 'success');
+  } catch (error) {
+    setStatus('清理过期 temporary Environment 失败：' + errorText(error), 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
 function temporaryLifecycleOwner(environment) { return String(environment?.retention?.owner_id || temporaryLifecycleStatus(environment)?.retention?.owner_id || '').trim(); }
 function temporaryCleanupItem(result, environmentID) { return safeArray(result?.report?.resources).find((item) => item.kind === 'environment' && item.id === environmentID) || null; }
 function rerenderTemporaryLifecycle(environmentID) {
@@ -2356,8 +2502,15 @@ elements.hostEnvironmentRefreshButton?.addEventListener('click', async () => {
 elements.launchAtLogin.addEventListener('change', updateLaunchAtLogin);
 window.addEventListener('focus', () => { loadDesktopPreferences(false); });
 window.addEventListener('keydown', (event) => { if (event.key !== 'Escape' || activeEditorDialog()) return; if (selectedEnvironmentID) closeEnvironmentDetail(); else if (editingMCPID) resetMCPEditor(true); });
+elements.gatewayAccessSaveHosts.addEventListener('click', saveGatewayAllowedHosts);
+elements.gatewayAccessSetAdminKey.addEventListener('click', setGatewayAdminAPIKey);
+elements.gatewayAccessClearAdminKey.addEventListener('click', clearGatewayAdminAPIKey);
+elements.gatewayAccessSetAgentKey.addEventListener('click', setGatewayAgentAPIKey);
+elements.gatewayAccessClearAgentKey.addEventListener('click', clearGatewayAgentAPIKey);
+elements.execAuthorizationSave.addEventListener('click', saveExecAuthorizationMode);
+elements.cleanupExpiredTemporaryEnvironmentsButton.addEventListener('click', cleanupExpiredTemporaryEnvironments);
 elements.gatewayRefreshButton.addEventListener('click', () => refreshConnectedADM(true).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));
 elements.gatewayStartButton.addEventListener('click', () => runGatewayAction('启动本地 ADM', (input) => desktopAdapter().StartLocalADM(input)));
 elements.gatewayStopButton.addEventListener('click', () => runGatewayAction('停止本地 ADM', (input) => desktopAdapter().StopLocalADM(input)));
 elements.refreshButton.addEventListener('click', () => refreshConnectedADM(false).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));
-window.addEventListener('DOMContentLoaded', () => { window.runtime?.EventsOn?.('desktop:preferences-changed', () => loadDesktopPreferences(false)); initializeManagementNavigation(); initializeConnectionProfiles(); syncMCPTransportForm(); clearManagementData(); loadDesktopPreferences(false); });
+window.addEventListener('DOMContentLoaded', () => { window.runtime?.EventsOn?.('desktop:preferences-changed', () => loadDesktopPreferences(false)); initializeManagementNavigation(); initializeConnectionProfiles(); syncMCPTransportForm(); clearManagementData(); loadDesktopPreferences(false); loadAboutInfo(); });

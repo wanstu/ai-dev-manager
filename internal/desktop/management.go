@@ -160,6 +160,17 @@ func (a *Adapter) PromoteTemporaryEnvironment(id, ownerID string) (model.Tempora
 	return backend.EnvironmentTemporaryPromote(id, ownerID)
 }
 
+func (a *Adapter) CleanupExpiredTemporaryEnvironments(execute bool) (model.ResourceRetentionCleanupResult, error) {
+	if err := a.ready(); err != nil {
+		return model.ResourceRetentionCleanupResult{}, err
+	}
+	backend, ok := a.management.(temporaryEnvironmentBackend)
+	if !ok {
+		return model.ResourceRetentionCleanupResult{}, errors.New("temporary Environment lifecycle requires ADM Admin MCP")
+	}
+	return backend.EnvironmentTemporaryCleanupExpired(execute)
+}
+
 func (a *Adapter) CleanupTemporaryEnvironment(id, ownerID string, execute bool) (model.ResourceRetentionCleanupResult, error) {
 	if err := a.ready(); err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
@@ -183,6 +194,62 @@ func (a *Adapter) RemoveExecutable(executable string) ([]string, error) {
 		return nil, err
 	}
 	return a.management.ExecRemove(executable)
+}
+
+func (a *Adapter) GetExecAuthorizationStatus() (app.ExecAuthorizationStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.ExecAuthorizationStatus{}, err
+	}
+	return a.management.ExecAuthorizationStatus()
+}
+
+func (a *Adapter) SetExecFullAuthorization(enabled bool) (app.ExecAuthorizationStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.ExecAuthorizationStatus{}, err
+	}
+	return a.management.ExecFullAuthorizationSet(enabled)
+}
+
+func (a *Adapter) GetGatewayAccessStatus() (app.GatewayAccessStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.GatewayAccessStatus{}, err
+	}
+	return a.management.GatewayAccessStatus()
+}
+
+func (a *Adapter) SetGatewayAllowedHosts(hosts []string) (app.GatewayAccessStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.GatewayAccessStatus{}, err
+	}
+	return a.management.GatewayAllowedHostsSet(hosts)
+}
+
+func (a *Adapter) SetGatewayAdminAPIKey(apiKey string) (app.GatewayAccessStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.GatewayAccessStatus{}, err
+	}
+	return a.management.GatewayAdminAPIKeySet(apiKey)
+}
+
+func (a *Adapter) ClearGatewayAdminAPIKey() (app.GatewayAccessStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.GatewayAccessStatus{}, err
+	}
+	return a.management.GatewayAdminAPIKeyClear()
+}
+
+func (a *Adapter) SetGatewayAgentAPIKey(apiKey string) (app.GatewayAccessStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.GatewayAccessStatus{}, err
+	}
+	return a.management.GatewayAgentAPIKeySet(apiKey)
+}
+
+func (a *Adapter) ClearGatewayAgentAPIKey() (app.GatewayAccessStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.GatewayAccessStatus{}, err
+	}
+	return a.management.GatewayAgentAPIKeyClear()
 }
 
 func (a *Adapter) ListExecDenials() ([]model.ExecDenial, error) {

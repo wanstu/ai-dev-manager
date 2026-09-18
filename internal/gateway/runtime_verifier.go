@@ -152,7 +152,7 @@ func (o *runtimeOwner) CancelVerifierRun(environmentID, writerOwner, runID strin
 		return verifierRunStatus{}, err
 	}
 	if run.writerOwner != writerOwner {
-		return verifierRunStatus{}, fmt.Errorf("verifier run %q belongs to writer %q", runID, run.writerOwner)
+		return verifierRunStatus{}, fmt.Errorf("verifier run %q belongs to another writer", runID)
 	}
 	o.requestVerifierRunCancel(run, "", "")
 	if err := waitOwnedVerifierRun(run, verifierRunStopTimeout); err != nil {

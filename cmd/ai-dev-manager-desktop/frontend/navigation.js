@@ -11,6 +11,7 @@
     'diagnostics',
     'exec-allowlist',
     'settings',
+    'about',
   ];
   const routeSet = new Set(routes);
 

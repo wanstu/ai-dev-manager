@@ -158,6 +158,38 @@ func (s *Service) ExecDenyClearAll() error {
 	return s.app.ClearExecDenials()
 }
 
+func (s *Service) ExecAuthorizationStatus() (app.ExecAuthorizationStatus, error) {
+	return s.app.ExecAuthorizationStatus()
+}
+
+func (s *Service) ExecFullAuthorizationSet(enabled bool) (app.ExecAuthorizationStatus, error) {
+	return s.app.SetExecFullAuthorization(enabled)
+}
+
+func (s *Service) GatewayAccessStatus() (app.GatewayAccessStatus, error) {
+	return s.app.GatewayAccessStatus()
+}
+
+func (s *Service) GatewayAllowedHostsSet(hosts []string) (app.GatewayAccessStatus, error) {
+	return s.app.SetGatewayAllowedHosts(hosts)
+}
+
+func (s *Service) GatewayAdminAPIKeySet(apiKey string) (app.GatewayAccessStatus, error) {
+	return s.app.SetGatewayAdminAPIKey(apiKey)
+}
+
+func (s *Service) GatewayAdminAPIKeyClear() (app.GatewayAccessStatus, error) {
+	return s.app.ClearGatewayAdminAPIKey()
+}
+
+func (s *Service) GatewayAgentAPIKeySet(apiKey string) (app.GatewayAccessStatus, error) {
+	return s.app.SetGatewayAgentAPIKey(apiKey)
+}
+
+func (s *Service) GatewayAgentAPIKeyClear() (app.GatewayAccessStatus, error) {
+	return s.app.ClearGatewayAgentAPIKey()
+}
+
 func (s *Service) MCPAdd(name, endpoint string, defaultInclude bool) (model.MCPDefinition, error) {
 	return s.app.MCPs.AddMCP(name, endpoint, defaultInclude)
 }

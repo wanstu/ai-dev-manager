@@ -12,6 +12,7 @@ import (
 	"ai-dev-manager-v2/internal/environment"
 	"ai-dev-manager-v2/internal/hostenv"
 	"ai-dev-manager-v2/internal/isolation"
+	"ai-dev-manager-v2/internal/logging"
 	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/runtime"
@@ -30,6 +31,7 @@ type Service struct {
 	MCPs                    *catalog.MCPService
 	Skills                  *catalog.Service
 	Memory                  *memory.Service
+	Logger                  *logging.Logger
 	Verifiers               *verifier.Service
 	writerHeartbeatInterval func(time.Duration) time.Duration
 }
@@ -63,6 +65,7 @@ func New(statePath string) *Service {
 		MCPs:                    catalog.NewMCP(s),
 		Skills:                  catalog.New(s, catalog.KindSkill),
 		Memory:                  memory.New(s),
+		Logger:                  logging.New(filepath.Join(filepath.Dir(statePath), "logs"), 5*1024*1024, 7),
 		Verifiers:               verifier.New(s),
 		writerHeartbeatInterval: defaultWriterHeartbeatInterval,
 	}
@@ -157,6 +160,11 @@ func (s *Service) InspectEnvironment(ctx context.Context, environmentID string) 
 func environmentSummary(env model.Environment) EnvironmentSummary {
 	count := len(env.PrivateMemory)
 	env.PrivateMemory = nil
+	if env.Writer != nil {
+		lease := *env.Writer
+		lease.Owner = ""
+		env.Writer = &lease
+	}
 	return EnvironmentSummary{Environment: env, PrivateMemoryCount: count}
 }
 
@@ -345,9 +353,9 @@ func (s *Service) Runtime(environmentID string) (*runtime.Runtime, model.Environ
 	}
 	var rt *runtime.Runtime
 	if s.HostEnvironment != nil {
-		rt, err = runtime.NewWithEnvironment(env.Root, state.AllowedExecutables, s.HostEnvironment.Environ())
+		rt, err = runtime.NewWithPolicy(env.Root, state.AllowedExecutables, s.HostEnvironment.Environ(), state.ExecFullAuthorization)
 	} else {
-		rt, err = runtime.New(env.Root, state.AllowedExecutables)
+		rt, err = runtime.NewWithAuthorization(env.Root, state.AllowedExecutables, state.ExecFullAuthorization)
 	}
 	if err != nil {
 		return nil, model.Environment{}, err
@@ -521,7 +529,14 @@ func (s *Service) Exec(ctx context.Context, environmentID, owner, executable str
 		}
 	}()
 
+	s.recordFullAuthorizationBypass(rt, environmentID, executable, "exec")
+	s.Log("info", "exec.start", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "exec"})
 	result, execErr := rt.Exec(commandCtx, executable, args, cwd, timeoutMS, maxOutputBytes)
+	if execErr != nil {
+		s.Log("error", "exec.failed", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "exec", "error": execErr.Error()})
+	} else {
+		s.Log("info", "exec.completed", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "exec", "exit_code": fmt.Sprint(result.ExitCode)})
+	}
 	if isExecutableNotAllowedError(execErr) {
 		s.recordExecDenial(environmentID, executable, "exec", execErr.Error())
 	}

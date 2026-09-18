@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ import (
 
 type Client struct {
 	endpoint string
+	apiKey   string
 }
 
 type ProcessStatus struct {
@@ -61,7 +63,11 @@ type RunStatus struct {
 }
 
 func New(endpoint string) *Client {
-	return &Client{endpoint: strings.TrimSpace(endpoint)}
+	return NewWithAPIKey(endpoint, "")
+}
+
+func NewWithAPIKey(endpoint, apiKey string) *Client {
+	return &Client{endpoint: strings.TrimSpace(endpoint), apiKey: strings.TrimSpace(apiKey)}
 }
 
 func callAdmin[T any](client *Client, ctx context.Context, tool string, arguments map[string]any) (T, error) {
@@ -70,7 +76,11 @@ func callAdmin[T any](client *Client, ctx context.Context, tool string, argument
 		return zero, fmt.Errorf("ADM Admin MCP is not connected")
 	}
 	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "adm-admin-client", Version: productversion.Current()}, nil)
-	session, err := mcpClient.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: client.endpoint}, nil)
+	transport := &mcp.StreamableClientTransport{Endpoint: client.endpoint}
+	if client.apiKey != "" {
+		transport.HTTPClient = &http.Client{Transport: apiKeyRoundTripper{base: http.DefaultTransport, apiKey: client.apiKey}}
+	}
+	session, err := mcpClient.Connect(ctx, transport, nil)
 	if err != nil {
 		return zero, fmt.Errorf("connect Admin MCP %s: %w", client.endpoint, err)
 	}
@@ -111,6 +121,18 @@ func callAdmin[T any](client *Client, ctx context.Context, tool string, argument
 		return zero, fmt.Errorf("decode Admin MCP tool %s result: %w", tool, err)
 	}
 	return output, nil
+}
+
+type apiKeyRoundTripper struct {
+	base   http.RoundTripper
+	apiKey string
+}
+
+func (r apiKeyRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	clone := request.Clone(request.Context())
+	clone.Header = request.Header.Clone()
+	clone.Header.Set("X-ADM-API-Key", r.apiKey)
+	return r.base.RoundTrip(clone)
 }
 
 func compactArguments(arguments map[string]any) map[string]any {
@@ -164,6 +186,38 @@ func nonNilStringMap(values map[string]string) map[string]string {
 		return map[string]string{}
 	}
 	return values
+}
+
+func (c *Client) GatewayAccessStatus() (app.GatewayAccessStatus, error) {
+	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_access_status", map[string]any{})
+}
+
+func (c *Client) GatewayAllowedHostsSet(hosts []string) (app.GatewayAccessStatus, error) {
+	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_allowed_hosts_set", map[string]any{"hosts": hosts})
+}
+
+func (c *Client) GatewayAdminAPIKeySet(apiKey string) (app.GatewayAccessStatus, error) {
+	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_admin_api_key_set", map[string]any{"api_key": apiKey})
+}
+
+func (c *Client) GatewayAdminAPIKeyClear() (app.GatewayAccessStatus, error) {
+	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_admin_api_key_clear", map[string]any{})
+}
+
+func (c *Client) GatewayAgentAPIKeySet(apiKey string) (app.GatewayAccessStatus, error) {
+	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_agent_api_key_set", map[string]any{"api_key": apiKey})
+}
+
+func (c *Client) GatewayAgentAPIKeyClear() (app.GatewayAccessStatus, error) {
+	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_agent_api_key_clear", map[string]any{})
+}
+
+func (c *Client) ExecAuthorizationStatus() (app.ExecAuthorizationStatus, error) {
+	return callAdmin[app.ExecAuthorizationStatus](c, context.Background(), "exec_authorization_status", map[string]any{})
+}
+
+func (c *Client) ExecFullAuthorizationSet(enabled bool) (app.ExecAuthorizationStatus, error) {
+	return callAdmin[app.ExecAuthorizationStatus](c, context.Background(), "exec_full_authorization_set", map[string]any{"enabled": enabled})
 }
 
 func (c *Client) Snapshot() (management.Snapshot, error) {
@@ -395,6 +449,10 @@ func (c *Client) EnvironmentTemporaryStatus(id string) (model.TemporaryEnvironme
 
 func (c *Client) EnvironmentTemporaryPromote(id, ownerID string) (model.TemporaryEnvironmentStatus, error) {
 	return callAdmin[model.TemporaryEnvironmentStatus](c, context.Background(), "environment_temporary_promote", map[string]any{"environment_id": id, "owner_id": ownerID})
+}
+
+func (c *Client) EnvironmentTemporaryCleanupExpired(execute bool) (model.ResourceRetentionCleanupResult, error) {
+	return callAdmin[model.ResourceRetentionCleanupResult](c, context.Background(), "environment_temporary_cleanup_expired", map[string]any{"execute": execute})
 }
 
 func (c *Client) EnvironmentTemporaryCleanup(id, ownerID string, execute bool) (model.ResourceRetentionCleanupResult, error) {
