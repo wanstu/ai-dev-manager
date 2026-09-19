@@ -79,10 +79,10 @@ agent-myclient-session-42
 3. environment_injection_plan(environment_id)
 4. environment_context_bundle(environment_id)
 5. 需要更细时 environment_inspect / environment_capability_report
-6. tree / read / search
-6. 只有需要 mutation 时 environment_writer_acquire
-7. write / edit / exec / verifier / process / run
-8. environment_writer_release
+6. tree / read / search（隐式 reader；无需 reader/writer lease，也不要为了读代码先 acquire writer）
+7. 只有首次 mutation / execution 明确要求 writer_owner 时才 environment_writer_acquire
+8. write / edit / exec / verifier / process / run
+9. environment_writer_release
 ```
 
 `environment_injection_plan` 先回答“哪些 MCP/Skill 被选中、来源是什么、当前能否注入、下一步调用什么”；`environment_context_bundle` 再提供 bounded root/tree/capability/MCP/Skill/verifier guidance。两者都不会主动连接 MCP、读取完整 Skill 正文或扩大权限。

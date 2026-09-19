@@ -491,6 +491,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				"notes": []string{
 					"Workspace is a registered local directory; Git is optional.",
 					"Environment is a persistent development context; worktree is not a prerequisite.",
+					gatewayReaderContractNote,
 					"MCP/Skill catalogs and Memory are optional development-context capabilities.",
 				},
 			}
@@ -963,7 +964,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(map[string]any{"removed": env}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_writer_acquire", Description: "Acquire or renew the single writer lease for an Environment physical root."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_writer_acquire", Description: "Acquire or renew the single writer lease for an Environment physical root. Use this only immediately before an operation that explicitly requires writer_owner; do not acquire a writer for tree/read/search or other read-only inspection."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.AcquireWriter(in.EnvironmentID, in.Owner)
 			return toolResult(env, err)
@@ -1384,19 +1385,19 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(map[string]any{"deleted": in.Key}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "tree", Description: "List files under an Environment root. Works in ordinary non-Git directories."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "tree", Description: "List files under an Environment root. Read-only: no reader lease or writer lease is required, and a writer must not be acquired solely for this operation. Works in ordinary non-Git directories."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in TreeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Tree(in.EnvironmentID, in.Path, in.MaxDepth, in.MaxEntries)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "read", Description: "Read a text file under an Environment root."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "read", Description: "Read a text file under an Environment root. Read-only: no reader lease or writer lease is required, and a writer must not be acquired solely for this operation."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ReadInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Read(in.EnvironmentID, in.Path, in.MaxBytes)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "search", Description: "Search literal text under an Environment root."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "search", Description: "Search literal text under an Environment root. Read-only: no reader lease or writer lease is required, and a writer must not be acquired solely for this operation."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in SearchInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Search(in.EnvironmentID, in.Path, in.Query, in.MaxFiles, in.MaxMatches, in.MaxBytesPerFile)
 			return toolResult(value, err)
@@ -1519,19 +1520,19 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_status", Description: "Optional Git status tool. Fails locally when the Environment root is not a Git repository."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_status", Description: "Optional read-only Git status tool. No reader lease or writer lease is required; do not acquire a writer solely to inspect status. Fails locally when the Environment root is not a Git repository."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitStatus(ctx, in.EnvironmentID)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_diff", Description: "Optional Git diff tool. Git is never required for Environment creation or file development."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_diff", Description: "Optional read-only Git diff tool. No reader lease or writer lease is required; do not acquire a writer solely to review changes. Git is never required for Environment creation or file development."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitDiff(ctx, in.EnvironmentID)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_branch", Description: "Optional Git branch tool."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_branch", Description: "Optional read-only Git branch inspection tool. No reader lease or writer lease is required; do not acquire a writer solely to inspect the current branch."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitBranch(ctx, in.EnvironmentID)
 			return toolResult(value, err)

@@ -272,7 +272,7 @@ func environmentContextGuidance(facts map[string]model.CapabilityFact, mcps []mo
 	inspectState := combinedCapabilityState(facts, runtime.CapabilityTree, runtime.CapabilityRead, runtime.CapabilitySearch)
 	guidance = append(guidance, model.EnvironmentContextGuidance{
 		Operation: "files.inspect", State: inspectState, RequiresWriter: false,
-		Message: "Use Environment-scoped tree/read/search operations for project inspection; these reads do not require the writer lease.",
+		Message: "Use Environment-scoped tree/read/search operations directly for project inspection. Read access is implicit: there is no reader lease, these operations do not require the writer lease, and a writer should not be acquired solely for inspection.",
 	})
 	mutationState := combinedCapabilityState(facts, runtime.CapabilityWrite, runtime.CapabilityEdit, runtime.CapabilityDelete)
 	guidance = append(guidance, model.EnvironmentContextGuidance{
