@@ -1,24 +1,21 @@
 package desktop
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 
 	"ai-dev-manager-v2/internal/configpath"
+
+	"github.com/wanstu/wails-desktop-kit/jsonstore"
+	kittheme "github.com/wanstu/wails-desktop-kit/theme"
 )
 
 const (
 	defaultDesktopThemeMode = "system"
 	defaultDesktopThemePack = "aurora"
 )
-
-var desktopThemePackPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
 type persistedDesktopPreferences struct {
 	ThemeMode string `json:"theme_mode"`
@@ -38,45 +35,47 @@ func (a *Adapter) desktopPreferencesPath() (string, error) {
 }
 
 func defaultPersistedDesktopPreferences() persistedDesktopPreferences {
+	preference := kittheme.DefaultPreference()
 	return persistedDesktopPreferences{
-		ThemeMode: defaultDesktopThemeMode,
-		ThemePack: defaultDesktopThemePack,
+		ThemeMode: string(preference.Mode),
+		ThemePack: preference.Pack,
 	}
 }
 
 func validateDesktopTheme(mode, pack string) (string, string, error) {
 	mode = strings.TrimSpace(strings.ToLower(mode))
-	switch mode {
-	case "light", "dark", "system":
-	default:
-		return "", "", fmt.Errorf("invalid Desktop theme mode %q", mode)
+	if err := kittheme.ValidateMode(kittheme.Mode(mode)); err != nil {
+		return "", "", fmt.Errorf("invalid Desktop theme mode %q: %w", mode, err)
 	}
 
 	pack = strings.TrimSpace(strings.ToLower(pack))
-	if pack != "" && !desktopThemePackPattern.MatchString(pack) {
-		return "", "", fmt.Errorf("invalid Desktop theme pack %q", pack)
+	if pack != "" {
+		if err := kittheme.ValidatePackName(pack); err != nil {
+			return "", "", fmt.Errorf("invalid Desktop theme pack %q: %w", pack, err)
+		}
 	}
 	return mode, pack, nil
 }
 
+func desktopPreferenceStore(path string) *jsonstore.Store[persistedDesktopPreferences] {
+	return jsonstore.New(path, jsonstore.Options[persistedDesktopPreferences]{
+		Default: defaultPersistedDesktopPreferences,
+		Validate: func(state persistedDesktopPreferences) error {
+			_, _, err := validateDesktopTheme(state.ThemeMode, state.ThemePack)
+			return err
+		},
+	})
+}
+
 func readPersistedDesktopPreferences(path string) (persistedDesktopPreferences, error) {
-	state := defaultPersistedDesktopPreferences()
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return state, nil
-	}
+	state, err := desktopPreferenceStore(path).Load()
 	if err != nil {
-		return state, err
+		return defaultPersistedDesktopPreferences(), fmt.Errorf("read Desktop preferences: %w", err)
 	}
-	if err := json.Unmarshal(data, &state); err != nil {
-		return state, fmt.Errorf("read Desktop preferences: %w", err)
-	}
-	mode, pack, err := validateDesktopTheme(state.ThemeMode, state.ThemePack)
+	state.ThemeMode, state.ThemePack, err = validateDesktopTheme(state.ThemeMode, state.ThemePack)
 	if err != nil {
 		return defaultPersistedDesktopPreferences(), err
 	}
-	state.ThemeMode = mode
-	state.ThemePack = pack
 	return state, nil
 }
 
@@ -87,15 +86,7 @@ func writePersistedDesktopPreferences(path string, state persistedDesktopPrefere
 	}
 	state.ThemeMode = mode
 	state.ThemePack = pack
-
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	return desktopPreferenceStore(path).Save(state)
 }
 
 func (a *Adapter) desktopThemePreferences() (persistedDesktopPreferences, error) {

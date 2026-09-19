@@ -157,7 +157,7 @@ jobs:
             dist/${{ steps.linux_desktop.outputs.desktop_name }}
             dist/adm-*-linux-amd64.deb
             dist/adm-*-linux-amd64.tar.gz
-            dist/adm-*-linux-amd64.sha256
+            dist/adm-*-linux-amd64*.sha256
           if-no-files-found: error
           retention-days: 14
 

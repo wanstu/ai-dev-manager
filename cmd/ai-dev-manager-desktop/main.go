@@ -18,7 +18,6 @@ import (
 	"ai-dev-manager-v2/internal/store"
 	productversion "ai-dev-manager-v2/internal/version"
 
-	"github.com/wailsapp/wails/v2/pkg/options"
 	desktopkit "github.com/wanstu/wails-desktop-kit"
 	kitui "github.com/wanstu/wails-desktop-kit/ui"
 )
@@ -108,12 +107,10 @@ func runDesktop(startHidden bool) error {
 		Theme:  desktopkit.DefaultThemeConfig(),
 		Tray:   desktopTrayConfig(trayIcon, adapter, autoStart),
 		Hooks: desktopkit.Hooks{
-			Startup: autoStart.setContext,
+			Ready: autoStart.setController,
 		},
-		SingleInstance: true,
-		SecondInstance: func(controller *desktopkit.Controller, _ options.SecondInstanceData) {
-			controller.ShowWindow()
-		},
+		SingleInstance:       true,
+		SecondInstancePolicy: desktopkit.SecondInstanceWakeManual,
 	})
 }
 

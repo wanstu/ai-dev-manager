@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"sync"
 
 	"ai-dev-manager-v2/internal/desktop"
@@ -18,20 +17,20 @@ const (
 type desktopAutoStartProvider struct {
 	adapter *desktop.Adapter
 
-	mu  sync.RWMutex
-	ctx context.Context
+	mu         sync.RWMutex
+	controller *desktopkit.Controller
 }
 
 func newDesktopAutoStartProvider(adapter *desktop.Adapter) *desktopAutoStartProvider {
 	return &desktopAutoStartProvider{adapter: adapter}
 }
 
-func (p *desktopAutoStartProvider) setContext(ctx context.Context) {
+func (p *desktopAutoStartProvider) setController(controller *desktopkit.Controller) {
 	if p == nil {
 		return
 	}
 	p.mu.Lock()
-	p.ctx = ctx
+	p.controller = controller
 	p.mu.Unlock()
 }
 
@@ -62,10 +61,10 @@ func (p *desktopAutoStartProvider) SetEnabled(enabled bool) error {
 		return err
 	}
 	p.mu.RLock()
-	ctx := p.ctx
+	controller := p.controller
 	p.mu.RUnlock()
-	if ctx != nil {
-		wailsruntime.EventsEmit(ctx, "desktop:preferences-changed")
+	if controller != nil {
+		_ = controller.Emit("desktop:preferences-changed")
 	}
 	return nil
 }
@@ -95,14 +94,14 @@ func quitAndStopLocalBackground(controller *desktopkit.Controller, adapter *desk
 		return
 	}
 	if adapter == nil {
-		showTrayStopBlocked(controller.Context(), "Desktop adapter 不可用，无法确认或停止后台服务。")
+		showTrayStopBlocked(controller, "Desktop adapter 不可用，无法确认或停止后台服务。")
 		return
 	}
 
 	controller.ShowWindow()
 	profile, status, err := activeConnectionStatusForQuit(adapter)
 	if err != nil {
-		showTrayStopBlocked(controller.Context(), "无法安全确认当前后台服务状态；未停止任何服务。\n\n"+err.Error())
+		showTrayStopBlocked(controller, "无法安全确认当前后台服务状态；未停止任何服务。\n\n"+err.Error())
 		return
 	}
 	if status.State != "running" {
@@ -110,21 +109,21 @@ func quitAndStopLocalBackground(controller *desktopkit.Controller, adapter *desk
 		return
 	}
 	if profile.ID == "" || profile.BaseURL == "" || !status.LocalBootstrapEligible {
-		showTrayStopBlocked(controller.Context(), "当前活动连接不是 Desktop 可安全停止的本地 loopback ADM；未停止任何服务。")
+		showTrayStopBlocked(controller, "当前活动连接不是 Desktop 可安全停止的本地 loopback ADM；未停止任何服务。")
 		return
 	}
 	if _, err := adapter.StopLocalADM(desktop.ADMConnectionInput{BaseURL: profile.BaseURL}); err != nil {
-		showTrayStopBlocked(controller.Context(), "本地后台服务停止失败；Desktop 保持运行，后台服务没有被强制终止。\n\n"+err.Error())
+		showTrayStopBlocked(controller, "本地后台服务停止失败；Desktop 保持运行，后台服务没有被强制终止。\n\n"+err.Error())
 		return
 	}
 	controller.Quit()
 }
 
-func showTrayStopBlocked(ctx context.Context, message string) {
-	if ctx == nil {
+func showTrayStopBlocked(controller *desktopkit.Controller, message string) {
+	if controller == nil {
 		return
 	}
-	_, _ = wailsruntime.MessageDialog(ctx, wailsruntime.MessageDialogOptions{
+	_, _ = controller.MessageDialog(wailsruntime.MessageDialogOptions{
 		Type:    wailsruntime.WarningDialog,
 		Title:   "未退出",
 		Message: message,

@@ -61,10 +61,10 @@ func TestProductionDesktopUsesDesktopKitRuntime(t *testing.T) {
 		`desktopkit.LaunchOptions{AutoStart: startHidden}`,
 		`kitui.Mount(assets)`,
 		`desktopkit.DefaultThemeConfig()`,
-		`SingleInstance: true`,
-		`SecondInstance:`,
+		`SingleInstance:`,
+		`SecondInstancePolicy: desktopkit.SecondInstanceWakeManual`,
 		`desktopTrayConfig(trayIcon, adapter, autoStart)`,
-		`Startup: autoStart.setContext`,
+		`Ready: autoStart.setController`,
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("production Desktop missing desktop-kit lifecycle marker %q", required)
@@ -149,7 +149,7 @@ func TestDesktopLaunchOptionsRecogniseAutostart(t *testing.T) {
 	if !hidden {
 		t.Fatal("--autostart must start the Desktop hidden")
 	}
-	if _, err := desktopLaunchOptions([]string{"unexpected"}); err == nil || !strings.Contains(err.Error(), "only --autostart") {
+	if _, err := desktopLaunchOptions([]string{"unexpected"}); err == nil || !strings.Contains(err.Error(), "autostart launch flags") {
 		t.Fatalf("unexpected Desktop launch option error: %v", err)
 	}
 }

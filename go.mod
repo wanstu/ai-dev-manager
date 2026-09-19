@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/wailsapp/wails/v2 v2.15.0
-	github.com/wanstu/wails-desktop-kit v0.6.0
+	github.com/wanstu/wails-desktop-kit v0.8.0
 	golang.org/x/sys v0.47.0
 )
 
