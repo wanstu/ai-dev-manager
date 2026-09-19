@@ -439,16 +439,18 @@ func (c *Client) EnvironmentContext(id string, request model.EnvironmentContextR
 
 func (c *Client) EnvironmentTemporaryCreate(request model.TemporaryEnvironmentCreateRequest) (model.TemporaryEnvironmentCreateResult, error) {
 	return callAdmin[model.TemporaryEnvironmentCreateResult](c, context.Background(), "environment_temporary_create", map[string]any{
-		"workspace_id":          request.WorkspaceID,
-		"source_environment_id": request.SourceEnvironmentID,
-		"name":                  request.Name,
-		"owner_id":              request.OwnerID,
-		"ttl_seconds":           request.TTLSeconds,
-		"session_id":            request.SessionID,
-		"run_id":                request.RunID,
-		"mode":                  request.Mode,
-		"root":                  request.Root,
-		"base_ref":              request.BaseRef,
+		"workspace_id":                request.WorkspaceID,
+		"source_environment_id":       request.SourceEnvironmentID,
+		"name":                        request.Name,
+		"owner_id":                    request.OwnerID,
+		"ttl_seconds":                 request.TTLSeconds,
+		"session_id":                  request.SessionID,
+		"run_id":                      request.RunID,
+		"mode":                        request.Mode,
+		"root":                        request.Root,
+		"branch_name":                 request.BranchName,
+		"base_ref":                    request.BaseRef,
+		"migrate_uncommitted_changes": request.MigrateUncommittedChanges,
 	})
 }
 

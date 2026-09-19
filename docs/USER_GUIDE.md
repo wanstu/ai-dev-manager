@@ -911,15 +911,18 @@ Agent 面有可选：
 
 managed worktree 是可选 isolation：
 
-- source Workspace 必须是 Git top-level；
-- ADM 选择 destination 和 branch；
-- source checkout 不切 branch；
+- source 可以是 Git top-level Workspace，或 root 本身是 Git top-level 的现有 Environment；
+- Agent 必须提供业务分支片段，例如 `fix/check-ref`；ADM 自动应用已配置的 branch prefix，prefix 会规范化为以 `/` 结尾；
+- ADM 始终选择 worktree destination，Agent 不能传入任意路径；
+- branch fragment 只接受简单 ASCII Git-safe 字符，并再次执行 Git ref 校验；
+- 可显式选择是否迁移 source checkout 的未提交变动；ignored 文件不会迁移，冲突会让创建整体回滚；
+- source checkout 不切 branch、不 reset、不 pull；
+- managed worktree 不提供 reset/sync/reuse/switch-branch；新任务应从新的 base_ref 创建新的 managed worktree；
 - routed access 前会重新验证 managed root identity；
-- destroy 要 matching Writer；
+- destroy 需 matching Writer；
 - dirty/unpublished 默认拒绝；
 - generic managed destroy 有 force 恢复路径，但 branch 始终保留；
 - **temporary cleanup 不暴露 force**。
-
 ## 18. Desktop 怎么用
 
 `adm-desktop` 是管理面，不是 Agent Gateway 的替代品。

@@ -28,6 +28,7 @@ func (s *Service) CreateTemporaryEnvironment(ctx context.Context, creatorSurface
 	request.RunID = strings.TrimSpace(request.RunID)
 	request.Mode = strings.TrimSpace(request.Mode)
 	request.Root = strings.TrimSpace(request.Root)
+	request.BranchName = strings.TrimSpace(request.BranchName)
 	request.BaseRef = strings.TrimSpace(request.BaseRef)
 	creatorSurface = strings.TrimSpace(creatorSurface)
 	if creatorSurface == "" {
@@ -71,8 +72,8 @@ func (s *Service) CreateTemporaryEnvironment(ctx context.Context, creatorSurface
 		if request.SourceEnvironmentID != "" {
 			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("source_environment_id is only valid for managed_worktree mode")
 		}
-		if request.BaseRef != "" {
-			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("base_ref is only valid for managed_worktree mode")
+		if request.BranchName != "" || request.BaseRef != "" || request.MigrateUncommittedChanges {
+			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("branch_name, base_ref and migrate_uncommitted_changes are only valid for managed_worktree mode")
 		}
 		environment, err := s.Environments.CreateNewWithRetention(request.WorkspaceID, request.Name, request.Root, retention)
 		if err != nil {
@@ -86,6 +87,9 @@ func (s *Service) CreateTemporaryEnvironment(ctx context.Context, creatorSurface
 		if (request.WorkspaceID == "") == (request.SourceEnvironmentID == "") {
 			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("managed_worktree mode requires exactly one of workspace_id or source_environment_id")
 		}
+		if request.BranchName == "" {
+			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("branch_name is required for managed_worktree mode")
+		}
 		if s.Isolation == nil {
 			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("managed worktree isolation is unavailable")
 		}
@@ -93,10 +97,15 @@ func (s *Service) CreateTemporaryEnvironment(ctx context.Context, creatorSurface
 			created isolation.CreateResult
 			err     error
 		)
+		options := isolation.CreateOptions{
+			BranchName:                request.BranchName,
+			BaseRef:                   request.BaseRef,
+			MigrateUncommittedChanges: request.MigrateUncommittedChanges,
+		}
 		if request.SourceEnvironmentID != "" {
-			created, err = s.Isolation.CreateFromEnvironmentWithRetention(ctx, request.SourceEnvironmentID, request.Name, request.BaseRef, retention)
+			created, err = s.Isolation.CreateFromEnvironmentWithRetention(ctx, request.SourceEnvironmentID, request.Name, options, retention)
 		} else {
-			created, err = s.Isolation.CreateWithRetention(ctx, request.WorkspaceID, request.Name, request.BaseRef, retention)
+			created, err = s.Isolation.CreateWithRetention(ctx, request.WorkspaceID, request.Name, options, retention)
 		}
 		if err != nil {
 			return model.TemporaryEnvironmentCreateResult{}, err

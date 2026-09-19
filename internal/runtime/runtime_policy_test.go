@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,5 +39,24 @@ func TestFullAuthorizationResolvesUnlistedExecutable(t *testing.T) {
 	}
 	if rt.IsExplicitlyAllowed(executable) {
 		t.Fatal("unlisted executable must remain distinguishable for bypass auditing")
+	}
+}
+
+func TestGitWorktreeIsReservedEvenWithFullAuthorization(t *testing.T) {
+	rt, err := NewWithPolicy(t.TempDir(), []string{"git"}, os.Environ(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"worktree", "add", "x"},
+		{"--no-pager", "worktree", "list"},
+		{"-C", ".", "worktree", "remove", "x"},
+	} {
+		if _, err := rt.PrepareCommand(context.Background(), "git", args, ""); err == nil || !strings.Contains(err.Error(), "environment_worktree_create") {
+			t.Fatalf("git %v should be reserved by ADM, got %v", args, err)
+		}
+	}
+	if _, err := rt.PrepareCommand(context.Background(), "git", []string{"status", "--short"}, ""); err != nil {
+		t.Fatalf("ordinary git command should remain available: %v", err)
 	}
 }

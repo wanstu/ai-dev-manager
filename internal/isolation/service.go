@@ -3,6 +3,7 @@ package isolation
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,9 +27,31 @@ type Service struct {
 	createManagedEnvironment func(string, string, string, model.ManagedWorktree, model.ResourceRetention) (model.Environment, model.ManagedWorktree, error)
 }
 
+type CreateOptions struct {
+	BranchName                string `json:"branch_name"`
+	BaseRef                   string `json:"base_ref,omitempty"`
+	MigrateUncommittedChanges bool   `json:"migrate_uncommitted_changes"`
+}
+
+type MigrationSummary struct {
+	Requested       bool `json:"requested"`
+	Applied         bool `json:"applied"`
+	StagedChanged   bool `json:"staged_changed"`
+	UnstagedChanged bool `json:"unstaged_changed"`
+	UntrackedFiles  int  `json:"untracked_files"`
+}
+
 type CreateResult struct {
 	ManagedWorktree model.ManagedWorktree `json:"managed_worktree"`
 	Environment     model.Environment     `json:"environment"`
+	Migration       MigrationSummary      `json:"migration"`
+}
+
+type dirtyMigrationSnapshot struct {
+	stagedPatch   string
+	unstagedPatch string
+	untrackedRoot string
+	untracked     []string
 }
 
 type DestroyResult struct {
@@ -78,23 +101,23 @@ func (s *Service) GetByEnvironment(environmentID string) (model.ManagedWorktree,
 	return model.ManagedWorktree{}, false, nil
 }
 
-func (s *Service) Create(ctx context.Context, workspaceID, name, baseRef string) (CreateResult, error) {
-	return s.CreateWithRetention(ctx, workspaceID, name, baseRef, model.ResourceRetention{})
+func (s *Service) Create(ctx context.Context, workspaceID, name string, options CreateOptions) (CreateResult, error) {
+	return s.CreateWithRetention(ctx, workspaceID, name, options, model.ResourceRetention{})
 }
 
-func (s *Service) CreateWithRetention(ctx context.Context, workspaceID, name, baseRef string, retention model.ResourceRetention) (CreateResult, error) {
-	return s.createWithRetention(ctx, strings.TrimSpace(workspaceID), "", name, baseRef, retention)
+func (s *Service) CreateWithRetention(ctx context.Context, workspaceID, name string, options CreateOptions, retention model.ResourceRetention) (CreateResult, error) {
+	return s.createWithRetention(ctx, strings.TrimSpace(workspaceID), "", name, options, retention)
 }
 
-func (s *Service) CreateFromEnvironment(ctx context.Context, sourceEnvironmentID, name, baseRef string) (CreateResult, error) {
-	return s.CreateFromEnvironmentWithRetention(ctx, sourceEnvironmentID, name, baseRef, model.ResourceRetention{})
+func (s *Service) CreateFromEnvironment(ctx context.Context, sourceEnvironmentID, name string, options CreateOptions) (CreateResult, error) {
+	return s.CreateFromEnvironmentWithRetention(ctx, sourceEnvironmentID, name, options, model.ResourceRetention{})
 }
 
-func (s *Service) CreateFromEnvironmentWithRetention(ctx context.Context, sourceEnvironmentID, name, baseRef string, retention model.ResourceRetention) (CreateResult, error) {
-	return s.createWithRetention(ctx, "", strings.TrimSpace(sourceEnvironmentID), name, baseRef, retention)
+func (s *Service) CreateFromEnvironmentWithRetention(ctx context.Context, sourceEnvironmentID, name string, options CreateOptions, retention model.ResourceRetention) (CreateResult, error) {
+	return s.createWithRetention(ctx, "", strings.TrimSpace(sourceEnvironmentID), name, options, retention)
 }
 
-func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEnvironmentID, name, baseRef string, retention model.ResourceRetention) (CreateResult, error) {
+func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEnvironmentID, name string, options CreateOptions, retention model.ResourceRetention) (CreateResult, error) {
 	var (
 		ws         model.Workspace
 		sourceRoot string
@@ -122,9 +145,13 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 	if name == "" {
 		return CreateResult{}, fmt.Errorf("environment name is required")
 	}
-	baseRef = strings.TrimSpace(baseRef)
-	if strings.HasPrefix(baseRef, "-") || strings.ContainsRune(baseRef, '\x00') {
-		return CreateResult{}, fmt.Errorf("invalid base_ref %q", baseRef)
+	options.BranchName = strings.TrimSpace(options.BranchName)
+	if err := validateBranchFragment(options.BranchName); err != nil {
+		return CreateResult{}, err
+	}
+	options.BaseRef = strings.TrimSpace(options.BaseRef)
+	if strings.HasPrefix(options.BaseRef, "-") || strings.ContainsRune(options.BaseRef, '\x00') {
+		return CreateResult{}, fmt.Errorf("invalid base_ref %q", options.BaseRef)
 	}
 	if _, err := exec.LookPath("git"); err != nil {
 		return CreateResult{}, fmt.Errorf("git worktree isolation is unavailable: %w", err)
@@ -158,7 +185,7 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 	if _, err := s.gitOutput(ctx, sourceRoot, "fetch", "--all", "--prune"); err != nil {
 		return CreateResult{}, fmt.Errorf("fetch source Git refs: %w", err)
 	}
-	resolvedBaseRef := baseRef
+	resolvedBaseRef := options.BaseRef
 	if resolvedBaseRef == "" {
 		upstream, upstreamErr := s.gitOutput(ctx, sourceRoot, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
 		if upstreamErr == nil && strings.TrimSpace(upstream) != "" {
@@ -188,8 +215,21 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 	if err != nil {
 		return CreateResult{}, err
 	}
-	branch := settings.BranchPrefix + managedID
+	branch := settings.BranchPrefix + options.BranchName
+	if err := validateFinalBranch(ctx, sourceRoot, branch); err != nil {
+		return CreateResult{}, err
+	}
 	root := filepath.Join(settings.Root, ws.ID, managedID)
+	var migration dirtyMigrationSnapshot
+	migrationSummary := MigrationSummary{Requested: options.MigrateUncommittedChanges}
+	if options.MigrateUncommittedChanges {
+		migration, migrationSummary, err = s.captureDirtyMigration(ctx, sourceRoot)
+		if err != nil {
+			return CreateResult{}, fmt.Errorf("capture source uncommitted changes: %w", err)
+		}
+		defer migration.cleanup()
+	}
+
 	if err := os.MkdirAll(filepath.Dir(root), 0o755); err != nil {
 		return CreateResult{}, err
 	}
@@ -212,14 +252,23 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 		_ = os.RemoveAll(root)
 	}()
 
+	if options.MigrateUncommittedChanges {
+		if err := s.applyDirtyMigration(ctx, root, migration); err != nil {
+			return CreateResult{}, fmt.Errorf("migrate source uncommitted changes: %w", err)
+		}
+		migrationSummary.Applied = true
+	}
+
 	managed := model.ManagedWorktree{
-		ID:                  managedID,
-		SourceEnvironmentID: sourceEnvironmentID,
-		SourceRoot:          sourceRoot,
-		Branch:              branch,
-		BaseCommit:          baseCommit,
-		GitCommonDir:        commonDir,
-		CreatedAt:           s.nowUTC(),
+		ID:                         managedID,
+		SourceEnvironmentID:        sourceEnvironmentID,
+		SourceRoot:                 sourceRoot,
+		Branch:                     branch,
+		BaseRef:                    resolvedBaseRef,
+		BaseCommit:                 baseCommit,
+		MigratedUncommittedChanges: options.MigrateUncommittedChanges,
+		GitCommonDir:               commonDir,
+		CreatedAt:                  s.nowUTC(),
 	}
 	createManagedEnvironment := s.createManagedEnvironment
 	if createManagedEnvironment == nil {
@@ -230,7 +279,7 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 		return CreateResult{}, err
 	}
 	rollback = false
-	return CreateResult{ManagedWorktree: persisted, Environment: env}, nil
+	return CreateResult{ManagedWorktree: persisted, Environment: env, Migration: migrationSummary}, nil
 }
 
 func (s *Service) ValidateEnvironment(ctx context.Context, env model.Environment) error {
@@ -507,8 +556,11 @@ func (s *Service) effectiveSettings(settings model.WorktreeSettings) model.Workt
 	} else if abs, err := filepath.Abs(settings.Root); err == nil {
 		settings.Root = filepath.Clean(abs)
 	}
-	if strings.TrimSpace(settings.BranchPrefix) == "" {
+	settings.BranchPrefix = strings.TrimSpace(settings.BranchPrefix)
+	if settings.BranchPrefix == "" {
 		settings.BranchPrefix = "adm/"
+	} else if !strings.HasSuffix(settings.BranchPrefix, "/") {
+		settings.BranchPrefix += "/"
 	}
 	return settings
 }
@@ -532,14 +584,243 @@ func (s *Service) ownedRoot() string {
 	return pathutil.ForCompare(s.defaultOwnedRoot())
 }
 
+func (s *Service) captureDirtyMigration(ctx context.Context, sourceRoot string) (dirtyMigrationSnapshot, MigrationSummary, error) {
+	summary := MigrationSummary{Requested: true}
+	staged, err := s.gitOutput(ctx, sourceRoot, "diff", "--cached", "--binary", "--full-index", "--no-ext-diff", "HEAD", "--")
+	if err != nil {
+		return dirtyMigrationSnapshot{}, summary, err
+	}
+	unstaged, err := s.gitOutput(ctx, sourceRoot, "diff", "--binary", "--full-index", "--no-ext-diff", "--")
+	if err != nil {
+		return dirtyMigrationSnapshot{}, summary, err
+	}
+	rawUntracked, err := s.gitOutput(ctx, sourceRoot, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return dirtyMigrationSnapshot{}, summary, err
+	}
+
+	snapshot := dirtyMigrationSnapshot{
+		stagedPatch:   staged,
+		unstagedPatch: unstaged,
+	}
+	summary.StagedChanged = strings.TrimSpace(staged) != ""
+	summary.UnstagedChanged = strings.TrimSpace(unstaged) != ""
+
+	for _, value := range strings.Split(rawUntracked, "\x00") {
+		if value == "" {
+			continue
+		}
+		value = filepath.ToSlash(value)
+		if value == "" {
+			continue
+		}
+		if err := validateMigrationRelativePath(value); err != nil {
+			return dirtyMigrationSnapshot{}, summary, err
+		}
+		snapshot.untracked = append(snapshot.untracked, value)
+	}
+	summary.UntrackedFiles = len(snapshot.untracked)
+	if len(snapshot.untracked) == 0 {
+		return snapshot, summary, nil
+	}
+
+	snapshot.untrackedRoot, err = os.MkdirTemp("", "adm-worktree-migrate-*")
+	if err != nil {
+		return dirtyMigrationSnapshot{}, summary, err
+	}
+	for _, rel := range snapshot.untracked {
+		source := filepath.Join(sourceRoot, filepath.FromSlash(rel))
+		target := filepath.Join(snapshot.untrackedRoot, filepath.FromSlash(rel))
+		if err := copyMigrationEntry(source, target); err != nil {
+			snapshot.cleanup()
+			return dirtyMigrationSnapshot{}, summary, fmt.Errorf("snapshot untracked file %q: %w", rel, err)
+		}
+	}
+	return snapshot, summary, nil
+}
+
+func (s *Service) applyDirtyMigration(ctx context.Context, targetRoot string, snapshot dirtyMigrationSnapshot) error {
+	if strings.TrimSpace(snapshot.stagedPatch) != "" {
+		if err := s.gitInput(ctx, targetRoot, snapshot.stagedPatch, "apply", "--index", "--binary", "--whitespace=nowarn", "-"); err != nil {
+			return fmt.Errorf("apply staged changes: %w", err)
+		}
+	}
+	if strings.TrimSpace(snapshot.unstagedPatch) != "" {
+		if err := s.gitInput(ctx, targetRoot, snapshot.unstagedPatch, "apply", "--binary", "--whitespace=nowarn", "-"); err != nil {
+			return fmt.Errorf("apply unstaged changes: %w", err)
+		}
+	}
+	for _, rel := range snapshot.untracked {
+		source := filepath.Join(snapshot.untrackedRoot, filepath.FromSlash(rel))
+		target := filepath.Join(targetRoot, filepath.FromSlash(rel))
+		if !within(targetRoot, target) {
+			return fmt.Errorf("untracked path escapes target worktree: %q", rel)
+		}
+		if _, err := os.Lstat(target); err == nil {
+			return fmt.Errorf("untracked file %q conflicts with a path from base_ref or migrated tracked changes", rel)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if err := copyMigrationEntry(source, target); err != nil {
+			return fmt.Errorf("copy untracked file %q: %w", rel, err)
+		}
+	}
+	return nil
+}
+
+func (snapshot *dirtyMigrationSnapshot) cleanup() {
+	if snapshot == nil || strings.TrimSpace(snapshot.untrackedRoot) == "" {
+		return
+	}
+	_ = os.RemoveAll(snapshot.untrackedRoot)
+	snapshot.untrackedRoot = ""
+}
+
+func validateMigrationRelativePath(value string) error {
+	if value == "" || filepath.IsAbs(value) {
+		return fmt.Errorf("invalid untracked path %q", value)
+	}
+	clean := filepath.Clean(filepath.FromSlash(value))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("invalid untracked path %q", value)
+	}
+	return nil
+}
+
+func copyMigrationEntry(source, target string) error {
+	info, err := os.Lstat(source)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		link, err := os.Readlink(source)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(link, target)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("unsupported untracked file type %s", info.Mode().String())
+	}
+	in, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	return os.Chmod(target, info.Mode().Perm())
+}
+
+func validateBranchFragment(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("branch_name is required")
+	}
+	if err := validateASCIIRefName(value, false); err != nil {
+		return fmt.Errorf("invalid branch_name %q: %w", value, err)
+	}
+	return nil
+}
+
+func validateASCIIRefName(value string, allowTrailingSlash bool) error {
+	if value == "" {
+		return fmt.Errorf("value is empty")
+	}
+	if strings.HasPrefix(value, "/") || (!allowTrailingSlash && strings.HasSuffix(value, "/")) || strings.Contains(value, "//") || strings.Contains(value, "..") {
+		return fmt.Errorf("slashes or dot sequences are invalid")
+	}
+	for _, r := range value {
+		if r > 127 {
+			return fmt.Errorf("only ASCII branch characters are allowed")
+		}
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			continue
+		}
+		switch r {
+		case '/', '-', '_', '+', '.':
+			continue
+		default:
+			return fmt.Errorf("character %q is not allowed", r)
+		}
+	}
+	trimmed := value
+	if allowTrailingSlash {
+		trimmed = strings.TrimSuffix(trimmed, "/")
+	}
+	for _, segment := range strings.Split(trimmed, "/") {
+		if segment == "" {
+			return fmt.Errorf("empty branch path segment is not allowed")
+		}
+		if strings.HasPrefix(segment, ".") || strings.HasSuffix(segment, ".") || strings.HasSuffix(strings.ToLower(segment), ".lock") {
+			return fmt.Errorf("branch path segment %q is not allowed", segment)
+		}
+	}
+	first := trimmed[0]
+	if first == '-' || first == '.' {
+		return fmt.Errorf("branch name cannot start with %q", first)
+	}
+	return nil
+}
+
+func validateFinalBranch(ctx context.Context, sourceRoot, branch string) error {
+	if err := validateASCIIRefName(branch, false); err != nil {
+		return fmt.Errorf("invalid managed branch %q: %w", branch, err)
+	}
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, git, "-C", sourceRoot, "check-ref-format", "--branch", branch)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("invalid managed branch %q: %s", branch, strings.TrimSpace(string(out)))
+	}
+	exists := exec.CommandContext(ctx, git, "-C", sourceRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	if err := exists.Run(); err == nil {
+		return fmt.Errorf("managed branch %q already exists; choose a new branch_name", branch)
+	} else if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
+		return fmt.Errorf("check managed branch %q existence: %w", branch, err)
+	}
+	return nil
+}
+
+func (s *Service) gitInput(ctx context.Context, dir, input string, args ...string) error {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return err
+	}
+	fullArgs := append([]string{"-C", dir}, args...)
+	cmd := exec.CommandContext(ctx, git, fullArgs...)
+	cmd.Stdin = strings.NewReader(input)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func normalizeBranchPrefix(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		value = "adm/"
+	} else if !strings.HasSuffix(value, "/") {
+		value += "/"
 	}
-	candidate := value + "wt_probe"
-	if strings.HasPrefix(candidate, "-") || strings.HasPrefix(candidate, ".") || strings.HasSuffix(candidate, ".") || strings.HasSuffix(candidate, "/") || strings.Contains(candidate, "..") || strings.Contains(candidate, "//") || strings.Contains(candidate, "@{") || strings.ContainsAny(candidate, " ~^:?*[\\") {
-		return "", fmt.Errorf("invalid worktree branch prefix %q", value)
+	if err := validateASCIIRefName(value, true); err != nil {
+		return "", fmt.Errorf("invalid worktree branch prefix %q: %w", value, err)
 	}
 	return value, nil
 }

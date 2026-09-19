@@ -596,16 +596,23 @@ Agent 可以显式请求 optional Git isolation。
 
 ```json
 {
-  "workspace_id": "ws_xxx",
+  "source_environment_id": "env_source",
   "name": "isolated-work",
-  "base_ref": "HEAD"
+  "branch_name": "fix/check-ref",
+  "base_ref": "origin/dev",
+  "migrate_uncommitted_changes": true
 }
 ```
 
-要求 Workspace root 是 Git top-level。
+也可以用 Git top-level `workspace_id` 代替 `source_environment_id`，两者只能提供一个。
 
-caller 不选择 destination 或 branch name；ADM 生成并持久化 identity。
+Agent 决定 `branch_name` 的业务语义和 `base_ref`；ADM 决定物理 destination，并把当前配置的 `branch_prefix` 加到 branch fragment 前。`branch_prefix` 会规范化为以 `/` 结尾，因此配置 `agent` 或 `agent/`、Agent 传 `fix/check-ref`，最终 branch 都是 `agent/fix/check-ref`。
 
+`branch_name` 只允许 ASCII 字母、数字及 `/ - _ + .`，还会经过 Git ref 校验。空 segment、`..`、`.lock`、空格、中文和 Git 特殊字符都会被拒绝。
+
+`migrate_uncommitted_changes=true` 时，ADM 会把 source checkout 的 staged、unstaged、delete、rename 以及 untracked 非 ignored 文件迁移到新 worktree；ignored 文件不迁移。若这些变动不能安全应用到新的 `base_ref`，创建整体失败并回滚。
+
+Managed worktree 是 create-once 资源：不要 reset/sync/reuse 旧 worktree 来承载新任务。新任务从新的 `base_ref` 再创建一个 managed worktree。Agent 也不应通过 `exec` 调用 `git worktree`；ADM 会拒绝并要求使用 managed-worktree tools。
 ### `environment_worktree_list`
 
 列 persisted ADM-managed worktrees。

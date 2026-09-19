@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/model"
 )
 
@@ -21,7 +22,7 @@ func TestManagedWorktreeTamperBlocksRoutedMutationBeforeFileChange(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := service.CreateManagedWorktree(context.Background(), ws.ID, "managed", "HEAD")
+	created, err := service.CreateManagedWorktree(context.Background(), ws.ID, "managed", isolation.CreateOptions{BranchName: "test/managed", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"ai-dev-manager-v2/internal/app"
+	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/verifier"
 
@@ -386,7 +387,7 @@ func TestAsyncVerifierManagedRootValidationInstallsNoRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := service.CreateManagedWorktree(context.Background(), ws.ID, "managed-verifier", "HEAD")
+	created, err := service.CreateManagedWorktree(context.Background(), ws.ID, "managed-verifier", isolation.CreateOptions{BranchName: "test/managed-verifier", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}

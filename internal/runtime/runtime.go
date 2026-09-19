@@ -110,6 +110,9 @@ func (r *Runtime) Command(ctx context.Context, executable string, args []string,
 	if err != nil {
 		return nil, err
 	}
+	if err := validateReservedCommand(executable, args); err != nil {
+		return nil, err
+	}
 	cmd := exec.CommandContext(ctx, resolved, args...)
 	cmd.Dir = r.root
 	cmd.Env = append([]string(nil), r.baseEnvironment...)
@@ -364,6 +367,9 @@ func (r *Runtime) PrepareCommand(ctx context.Context, executable string, args []
 	if err != nil {
 		return nil, err
 	}
+	if err := validateReservedCommand(executable, args); err != nil {
+		return nil, err
+	}
 	workingDir := r.root
 	if strings.TrimSpace(cwd) != "" {
 		workingDir, err = r.existing(cwd)
@@ -537,6 +543,50 @@ func (r *Runtime) allowedExecutable(executable string) (string, error) {
 		return resolved, nil
 	}
 	return "", fmt.Errorf("executable %q is not allowed", executable)
+}
+
+func validateReservedCommand(executable string, args []string) error {
+	name := strings.ToLower(filepath.Base(strings.TrimSpace(executable)))
+	name = strings.TrimSuffix(name, ".exe")
+	if name != "git" {
+		return nil
+	}
+	if gitSubcommand(args) != "worktree" {
+		return nil
+	}
+	return fmt.Errorf("git worktree is managed by ADM and cannot be invoked through exec; use environment_worktree_create, environment_worktree_list, or environment_worktree_destroy")
+}
+
+func gitSubcommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		switch arg {
+		case "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env", "--exec-path":
+			i++
+			continue
+		case "--":
+			if i+1 < len(args) {
+				return strings.TrimSpace(args[i+1])
+			}
+			return ""
+		}
+		if strings.HasPrefix(arg, "--git-dir=") ||
+			strings.HasPrefix(arg, "--work-tree=") ||
+			strings.HasPrefix(arg, "--namespace=") ||
+			strings.HasPrefix(arg, "--super-prefix=") ||
+			strings.HasPrefix(arg, "--config-env=") ||
+			strings.HasPrefix(arg, "--exec-path=") {
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		return arg
+	}
+	return ""
 }
 
 func isCommandProxyExecutable(executable string) bool {

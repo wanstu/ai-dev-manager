@@ -276,18 +276,18 @@ func (s *Service) EnvironmentSkillEntries(environmentID string) ([]model.Catalog
 	return configured, unresolved, nil
 }
 
-func (s *Service) CreateManagedWorktree(ctx context.Context, workspaceID, name, baseRef string) (isolation.CreateResult, error) {
+func (s *Service) CreateManagedWorktree(ctx context.Context, workspaceID, name string, options isolation.CreateOptions) (isolation.CreateResult, error) {
 	if s.Isolation == nil {
 		return isolation.CreateResult{}, fmt.Errorf("managed worktree isolation is unavailable")
 	}
-	return s.Isolation.Create(ctx, workspaceID, name, baseRef)
+	return s.Isolation.Create(ctx, workspaceID, name, options)
 }
 
-func (s *Service) CreateManagedWorktreeFromEnvironment(ctx context.Context, sourceEnvironmentID, name, baseRef string) (isolation.CreateResult, error) {
+func (s *Service) CreateManagedWorktreeFromEnvironment(ctx context.Context, sourceEnvironmentID, name string, options isolation.CreateOptions) (isolation.CreateResult, error) {
 	if s.Isolation == nil {
 		return isolation.CreateResult{}, fmt.Errorf("managed worktree isolation is unavailable")
 	}
-	return s.Isolation.CreateFromEnvironment(ctx, sourceEnvironmentID, name, baseRef)
+	return s.Isolation.CreateFromEnvironment(ctx, sourceEnvironmentID, name, options)
 }
 
 func (s *Service) ManagedWorktrees() ([]model.ManagedWorktree, error) {

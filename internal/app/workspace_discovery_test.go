@@ -1,6 +1,7 @@
 package app
 
 import (
+	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/model"
 	"context"
 	"encoding/json"
@@ -94,7 +95,7 @@ func TestDiscoveryDigestRejectsTamperedManagedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := s.CreateManagedWorktree(context.Background(), ws.ID, "managed", "HEAD")
+	created, err := s.CreateManagedWorktree(context.Background(), ws.ID, "managed", isolation.CreateOptions{BranchName: "test/discovery", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}

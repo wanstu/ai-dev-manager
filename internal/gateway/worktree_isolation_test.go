@@ -57,7 +57,7 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 
 	createdResult, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "environment_worktree_create",
-		Arguments: map[string]any{"workspace_id": ws.ID, "name": "managed"},
+		Arguments: map[string]any{"workspace_id": ws.ID, "name": "managed", "branch_name": "test/gateway-managed"},
 	})
 	if err != nil || createdResult.IsError {
 		t.Fatalf("environment_worktree_create failed: err=%v result=%+v", err, createdResult)
@@ -71,8 +71,11 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 		_, _ = gatewayGitCommand(source, "worktree", "remove", "--force", managed.Root)
 		_, _ = gatewayGitCommand(source, "branch", "-D", managed.Branch)
 	}()
-	if !strings.Contains(toolText(t, createdResult), managed.ID) || !strings.Contains(toolText(t, createdResult), managed.EnvironmentID) {
-		t.Fatalf("create result missing managed identities: %s", toolText(t, createdResult))
+	if managed.Branch != "adm/test/gateway-managed" {
+		t.Fatalf("managed branch=%q want adm/test/gateway-managed", managed.Branch)
+	}
+	if !strings.Contains(toolText(t, createdResult), managed.ID) || !strings.Contains(toolText(t, createdResult), managed.EnvironmentID) || !strings.Contains(toolText(t, createdResult), managed.Branch) {
+		t.Fatalf("create result missing managed identities/branch: %s", toolText(t, createdResult))
 	}
 	if !pathutil.Within(filepath.Join(filepath.Dir(statePath), "worktrees"), managed.Root) {
 		t.Fatalf("managed root %s is not under ADM-owned state root", managed.Root)
@@ -133,6 +136,7 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 		Arguments: map[string]any{
 			"source_environment_id": sourceEnvironment.ID,
 			"name":                  "managed-from-environment",
+			"branch_name":           "test/from-environment",
 			"base_ref":              "HEAD",
 		},
 	})
@@ -161,7 +165,7 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 	}
 	unsupported, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "environment_worktree_create",
-		Arguments: map[string]any{"workspace_id": plainWS.ID, "name": "unsupported"},
+		Arguments: map[string]any{"workspace_id": plainWS.ID, "name": "unsupported", "branch_name": "test/non-git"},
 	})
 	if err != nil {
 		t.Fatalf("non-Git worktree create transport error: %v", err)

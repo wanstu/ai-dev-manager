@@ -34,7 +34,7 @@ func TestNonGitEnvironmentRemainsValidWhenWorktreeIsolationUnavailableForWorkspa
 		t.Fatalf("ordinary Environment root=%q want %q", env.Root, root)
 	}
 	service := New(stateStore, workspaces, environments)
-	if _, err := service.Create(context.Background(), ws.ID, "isolated", "HEAD"); err == nil || !strings.Contains(err.Error(), "not a usable Git worktree") {
+	if _, err := service.Create(context.Background(), ws.ID, "isolated", CreateOptions{BranchName: "test/isolated", BaseRef: "HEAD"}); err == nil || !strings.Contains(err.Error(), "not a usable Git worktree") {
 		t.Fatalf("Git-specific create should fail locally for non-Git Workspace, got %v", err)
 	}
 	if err := service.ValidateEnvironment(context.Background(), env); err != nil {
@@ -52,11 +52,11 @@ func TestCreateTwoManagedWorktreesKeepsSourceCheckoutUnchanged(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	first, err := service.Create(ctx, ws.ID, "lane-a", "HEAD")
+	first, err := service.Create(ctx, ws.ID, "lane-a", CreateOptions{BranchName: "test/lane-a", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.Create(ctx, ws.ID, "lane-b", "HEAD")
+	second, err := service.Create(ctx, ws.ID, "lane-b", CreateOptions{BranchName: "test/lane-b", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestCreateFromEnvironmentFetchesUpstreamWithoutTouchingDirtySource(t *testi
 		t.Fatal(err)
 	}
 	service := New(stateStore, workspaces, environments)
-	created, err := service.CreateFromEnvironment(context.Background(), sourceEnvironment.ID, "agent-task", "")
+	created, err := service.CreateFromEnvironment(context.Background(), sourceEnvironment.ID, "agent-task", CreateOptions{BranchName: "fix/agent-task"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestCreateWithRetentionRollsBackWorktreeWhenEnvironmentPersistenceFails(t *
 		return model.Environment{}, model.ManagedWorktree{}, errors.New("injected managed Environment persistence failure")
 	}
 	expiresAt := time.Now().UTC().Add(time.Hour)
-	_, err := service.CreateWithRetention(ctx, ws.ID, "rollback", "HEAD", model.ResourceRetention{
+	_, err := service.CreateWithRetention(ctx, ws.ID, "rollback", CreateOptions{BranchName: "test/rollback", BaseRef: "HEAD"}, model.ResourceRetention{
 		Persistence: model.PersistenceTemporary,
 		OwnerID:     "owner-rollback",
 		ExpiresAt:   &expiresAt,
@@ -234,7 +234,7 @@ func TestCreateWithRetentionRollsBackWorktreeWhenEnvironmentPersistenceFails(t *
 func TestDestroyRefusesDirtyByDefaultAndForceRetainsBranch(t *testing.T) {
 	service, environments, ws, source := newGitIsolationService(t)
 	ctx := context.Background()
-	created, err := service.Create(ctx, ws.ID, "dirty", "HEAD")
+	created, err := service.Create(ctx, ws.ID, "dirty", CreateOptions{BranchName: "test/dirty", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestDestroyRefusesDirtyByDefaultAndForceRetainsBranch(t *testing.T) {
 func TestDestroyRefusesUnpublishedCommitAndRetainsCommittedWork(t *testing.T) {
 	service, environments, ws, source := newGitIsolationService(t)
 	ctx := context.Background()
-	created, err := service.Create(ctx, ws.ID, "committed", "HEAD")
+	created, err := service.Create(ctx, ws.ID, "committed", CreateOptions{BranchName: "test/committed", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestDestroyRefusesUnpublishedCommitAndRetainsCommittedWork(t *testing.T) {
 func TestCleanDestroyNeedsWriterAndRetainsBranch(t *testing.T) {
 	service, environments, ws, source := newGitIsolationService(t)
 	ctx := context.Background()
-	created, err := service.Create(ctx, ws.ID, "clean", "HEAD")
+	created, err := service.Create(ctx, ws.ID, "clean", CreateOptions{BranchName: "test/clean", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestCleanDestroyNeedsWriterAndRetainsBranch(t *testing.T) {
 func TestValidationDetectsManagedBranchTamper(t *testing.T) {
 	service, _, ws, source := newGitIsolationService(t)
 	ctx := context.Background()
-	created, err := service.Create(ctx, ws.ID, "tamper", "HEAD")
+	created, err := service.Create(ctx, ws.ID, "tamper", CreateOptions{BranchName: "test/tamper", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +386,7 @@ func TestCreateUsesConfiguredRootAndBranchPrefixAndRootChangeIsBlockedWhileActiv
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := service.Create(context.Background(), ws.ID, "configured", "HEAD")
+	created, err := service.Create(context.Background(), ws.ID, "configured", CreateOptions{BranchName: "fix/check-ref", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,14 +394,200 @@ func TestCreateUsesConfiguredRootAndBranchPrefixAndRootChangeIsBlockedWhileActiv
 	if !within(settings.Root, created.ManagedWorktree.Root) {
 		t.Fatalf("managed root %s escaped configured root %s", created.ManagedWorktree.Root, settings.Root)
 	}
-	if !strings.HasPrefix(created.ManagedWorktree.Branch, "agent/") {
-		t.Fatalf("managed branch %q did not use configured prefix", created.ManagedWorktree.Branch)
+	if created.ManagedWorktree.Branch != "agent/fix/check-ref" {
+		t.Fatalf("managed branch=%q want agent/fix/check-ref", created.ManagedWorktree.Branch)
+	}
+	if created.ManagedWorktree.BaseRef != "HEAD" {
+		t.Fatalf("managed base_ref=%q want HEAD", created.ManagedWorktree.BaseRef)
 	}
 	if _, err := service.UpdateSettings(filepath.Join(t.TempDir(), "other-root"), "agent/"); err == nil || !strings.Contains(err.Error(), "managed worktree") {
 		t.Fatalf("root change with active managed worktree should fail, got %v", err)
 	}
 	if updated, err := service.UpdateSettings(settings.Root, "next/"); err != nil || updated.BranchPrefix != "next/" {
 		t.Fatalf("branch-only settings change failed: settings=%+v err=%v", updated, err)
+	}
+}
+
+func TestCreateRejectsUnsafeAgentBranchFragments(t *testing.T) {
+	service, _, ws, _ := newGitIsolationService(t)
+	cases := []string{
+		"",
+		"修复/check-ref",
+		"fix/check ref",
+		"fix/@check",
+		"fix//check",
+		"../fix",
+		"fix/check.lock",
+		"fix\\check",
+		"-fix/check",
+		".fix/check",
+	}
+	for _, branchName := range cases {
+		t.Run(branchName, func(t *testing.T) {
+			_, err := service.Create(context.Background(), ws.ID, "invalid-branch", CreateOptions{
+				BranchName: branchName,
+				BaseRef:    "HEAD",
+			})
+			if err == nil {
+				t.Fatalf("branch_name %q should be rejected", branchName)
+			}
+		})
+	}
+}
+
+func TestCreateMigratesDirtyStateAndExcludesIgnoredFiles(t *testing.T) {
+	service, _, ws, source := newGitIsolationService(t)
+	ctx := context.Background()
+
+	if err := os.WriteFile(filepath.Join(source, "delete-me.txt"), []byte("delete me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "rename-me.txt"), []byte("rename me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, ".gitignore"), []byte("*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, source, "add", "delete-me.txt", "rename-me.txt", ".gitignore")
+	gitRun(t, source, "commit", "-m", "migration fixture")
+
+	if err := os.WriteFile(filepath.Join(source, "tracked.txt"), []byte("staged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, source, "add", "tracked.txt")
+	if err := os.WriteFile(filepath.Join(source, "tracked.txt"), []byte("staged\nunstaged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(source, "delete-me.txt")); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, source, "mv", "rename-me.txt", "renamed.txt")
+	if err := os.WriteFile(filepath.Join(source, "untracked.txt"), []byte("untracked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "ignored.log"), []byte("ignored\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sourceStatusBefore := gitRun(t, source, "status", "--porcelain=v1", "--untracked-files=all")
+	created, err := service.Create(ctx, ws.ID, "migrated", CreateOptions{
+		BranchName:                "fix/migrate-dirty",
+		BaseRef:                   "HEAD",
+		MigrateUncommittedChanges: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer removeManagedWorktreeForTest(t, source, created.ManagedWorktree)
+
+	if created.ManagedWorktree.Branch != "adm/fix/migrate-dirty" {
+		t.Fatalf("branch=%q want adm/fix/migrate-dirty", created.ManagedWorktree.Branch)
+	}
+	if !created.ManagedWorktree.MigratedUncommittedChanges {
+		t.Fatalf("managed metadata did not record dirty migration: %+v", created.ManagedWorktree)
+	}
+	if !created.Migration.Requested || !created.Migration.Applied || !created.Migration.StagedChanged || !created.Migration.UnstagedChanged || created.Migration.UntrackedFiles != 1 {
+		t.Fatalf("migration summary=%+v", created.Migration)
+	}
+
+	root := created.ManagedWorktree.Root
+	data, err := os.ReadFile(filepath.Join(root, "tracked.txt"))
+	if err != nil || strings.ReplaceAll(string(data), "\r\n", "\n") != "staged\nunstaged\n" {
+		t.Fatalf("tracked migration data=%q err=%v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "delete-me.txt")); !os.IsNotExist(err) {
+		t.Fatalf("unstaged deletion was not migrated: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "renamed.txt")); err != nil {
+		t.Fatalf("staged rename target missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "rename-me.txt")); !os.IsNotExist(err) {
+		t.Fatalf("staged rename source still exists: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "untracked.txt")); err != nil || string(data) != "untracked\n" {
+		t.Fatalf("untracked migration data=%q err=%v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "ignored.log")); !os.IsNotExist(err) {
+		t.Fatalf("ignored file must not migrate: %v", err)
+	}
+
+	staged := gitRun(t, root, "diff", "--cached", "--name-status")
+	if !strings.Contains(staged, "tracked.txt") || !strings.Contains(staged, "rename-me.txt") || !strings.Contains(staged, "renamed.txt") {
+		t.Fatalf("staged state was not preserved:\n%s", staged)
+	}
+	unstaged := gitRun(t, root, "diff", "--name-status")
+	if !strings.Contains(unstaged, "tracked.txt") || !strings.Contains(unstaged, "delete-me.txt") {
+		t.Fatalf("unstaged state was not preserved:\n%s", unstaged)
+	}
+	untracked := gitRun(t, root, "ls-files", "--others", "--exclude-standard")
+	if untracked != "untracked.txt" {
+		t.Fatalf("untracked set=%q want untracked.txt", untracked)
+	}
+	if got := gitRun(t, source, "status", "--porcelain=v1", "--untracked-files=all"); got != sourceStatusBefore {
+		t.Fatalf("source checkout changed during migration:\nbefore:\n%s\nafter:\n%s", sourceStatusBefore, got)
+	}
+}
+
+func TestCreateDirtyMigrationConflictRollsBackWorktreeAndBranch(t *testing.T) {
+	service, _, ws, source := newGitIsolationService(t)
+	ctx := context.Background()
+
+	gitRun(t, source, "checkout", "-b", "new-base")
+	if err := os.WriteFile(filepath.Join(source, "tracked.txt"), []byte("new base content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, source, "add", "tracked.txt")
+	gitRun(t, source, "commit", "-m", "new base")
+	gitRun(t, source, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(source, "tracked.txt"), []byte("dirty on old base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	worktreesBefore := gitRun(t, source, "worktree", "list", "--porcelain")
+	_, err := service.Create(ctx, ws.ID, "conflict", CreateOptions{
+		BranchName:                "fix/conflict",
+		BaseRef:                   "new-base",
+		MigrateUncommittedChanges: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "migrate source uncommitted changes") {
+		t.Fatalf("expected migration conflict, got %v", err)
+	}
+	if _, err := gitCommand(source, "show-ref", "--verify", "refs/heads/adm/fix/conflict"); err == nil {
+		t.Fatal("failed migration left managed branch behind")
+	}
+	if got := gitRun(t, source, "worktree", "list", "--porcelain"); got != worktreesBefore {
+		t.Fatalf("failed migration left worktree registration:\nbefore:\n%s\nafter:\n%s", worktreesBefore, got)
+	}
+	items, listErr := service.List()
+	if listErr != nil {
+		t.Fatal(listErr)
+	}
+	if len(items) != 0 {
+		t.Fatalf("failed migration persisted managed metadata: %+v", items)
+	}
+}
+
+func TestWorktreeBranchPrefixRejectsUnicodeAndUnsafeCharacters(t *testing.T) {
+	service, _, _, _ := newGitIsolationService(t)
+	for _, prefix := range []string{"代理/", "agent space/", "agent@/", "../agent/"} {
+		if _, err := service.UpdateSettings("", prefix); err == nil {
+			t.Fatalf("branch prefix %q should be rejected", prefix)
+		}
+	}
+	if settings, err := service.UpdateSettings("", "agent-v2+"); err != nil || settings.BranchPrefix != "agent-v2+/" {
+		t.Fatalf("safe ASCII prefix normalization failed: settings=%+v err=%v", settings, err)
+	}
+}
+
+func TestCreateRejectsExistingFinalBranch(t *testing.T) {
+	service, _, ws, source := newGitIsolationService(t)
+	gitRun(t, source, "branch", "adm/fix/already-exists")
+	_, err := service.Create(context.Background(), ws.ID, "collision", CreateOptions{
+		BranchName: "fix/already-exists",
+		BaseRef:    "HEAD",
+	})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("existing final branch should be rejected, got %v", err)
 	}
 }
 

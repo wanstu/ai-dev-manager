@@ -294,6 +294,7 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		"owner_id":     "managed-owner",
 		"ttl_seconds":  1,
 		"mode":         model.TemporaryEnvironmentModeManagedWorktree,
+		"branch_name":  "test/phase22-clean",
 		"base_ref":     "HEAD",
 	}))
 	if created.ManagedWorktree == nil || created.Environment.Retention.Persistence != model.PersistenceTemporary || created.Environment.Retention.CreatorSurface != string(serverSurfaceAgent) {
@@ -329,6 +330,7 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		"owner_id":              "managed-owner",
 		"ttl_seconds":           60,
 		"mode":                  model.TemporaryEnvironmentModeManagedWorktree,
+		"branch_name":           "test/phase22-derived",
 		"base_ref":              "HEAD",
 	}))
 	if derived.ManagedWorktree == nil || derived.ManagedWorktree.SourceEnvironmentID != sourceEnvironment.ID || !pathutil.Same(derived.ManagedWorktree.SourceRoot, sourceEnvironment.Root) {
@@ -341,9 +343,9 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dirty := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-dirty", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree}))
-	unpublished := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-unpublished", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree}))
-	tampered := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-tampered", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree}))
+	dirty := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-dirty", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-dirty"}))
+	unpublished := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-unpublished", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-unpublished"}))
+	tampered := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-tampered", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-tampered"}))
 	defer func() {
 		for _, item := range []*model.ManagedWorktree{dirty.ManagedWorktree, unpublished.ManagedWorktree, tampered.ManagedWorktree} {
 			if item == nil {
@@ -389,7 +391,7 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	managedFailure := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": plainWS.ID, "name": "non-git-managed", "owner_id": "plain-owner", "ttl_seconds": 60, "mode": model.TemporaryEnvironmentModeManagedWorktree})
+	managedFailure := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": plainWS.ID, "name": "non-git-managed", "owner_id": "plain-owner", "ttl_seconds": 60, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/non-git-managed"})
 	if !managedFailure.IsError {
 		t.Fatalf("non-Git Workspace unexpectedly accepted managed-worktree mode: %s", toolText(t, managedFailure))
 	}

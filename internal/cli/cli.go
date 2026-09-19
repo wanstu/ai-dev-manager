@@ -629,7 +629,7 @@ func runEnvironmentTemporary(service cliManagementBackend, args []string) error 
 	switch args[0] {
 	case "create":
 		fs := newFlagSet("environment temporary create", func() {
-			fmt.Fprintln(os.Stdout, "用法：adm environment temporary create (--workspace-id WS_ID | --source-environment-id ENV_ID) --name NAME --owner-id OWNER --ttl-seconds N [--session-id ID] [--run-id ID] [--mode existing_root|managed_worktree] [--root PATH] [--base-ref REF]")
+			fmt.Fprintln(os.Stdout, "用法：adm environment temporary create (--workspace-id WS_ID | --source-environment-id ENV_ID) --name NAME --owner-id OWNER --ttl-seconds N [--session-id ID] [--run-id ID] [--mode existing_root|managed_worktree] [--root PATH] [--branch-name NAME] [--base-ref REF] [--migrate-uncommitted-changes]")
 			fmt.Fprintln(os.Stdout, "\n创建一个新的 temporary Environment。existing_root 只接受 Workspace；managed_worktree 可从 Workspace 或已有 Git Environment 派生，ADM 只 fetch，不 pull/改写源 checkout。")
 		})
 		workspaceID := fs.String("workspace-id", "", "Workspace ID")
@@ -641,18 +641,29 @@ func runEnvironmentTemporary(service cliManagementBackend, args []string) error 
 		runID := fs.String("run-id", "", "可选 provenance；不要求对应 Run 存在")
 		mode := fs.String("mode", "", "existing_root 或 managed_worktree；空值使用服务端 existing_root 默认")
 		root := fs.String("root", "", "existing_root 模式下 Workspace 内已存在目录")
+		branchName := fs.String("branch-name", "", "managed_worktree 模式下必填的 ASCII 分支片段；ADM 会自动加配置前缀")
+		migrateUncommitted := fs.Bool("migrate-uncommitted-changes", false, "将 source checkout 的非 ignored 未提交变动迁移到新 worktree")
 		baseRef := fs.String("base-ref", "", "managed_worktree 模式下可选 Git ref")
 		if err := fs.Parse(args[1:]); err != nil {
 			return flagError(err)
 		}
 		workspaceValue := strings.TrimSpace(*workspaceID)
 		sourceEnvironmentValue := strings.TrimSpace(*sourceEnvironmentID)
+		modeValue := strings.TrimSpace(*mode)
+		branchValue := strings.TrimSpace(*branchName)
 		if fs.NArg() != 0 || (workspaceValue == "") == (sourceEnvironmentValue == "") || strings.TrimSpace(*name) == "" || strings.TrimSpace(*ownerID) == "" || *ttlSeconds <= 0 {
 			return fmt.Errorf("必须且只能提供 --workspace-id 或 --source-environment-id 之一，并提供 --name、非空 --owner-id 和正数 --ttl-seconds；运行 adm environment temporary create -h 查看帮助")
 		}
+		if modeValue == model.TemporaryEnvironmentModeManagedWorktree && branchValue == "" {
+			return fmt.Errorf("managed_worktree 模式必须提供 --branch-name")
+		}
+		if modeValue != model.TemporaryEnvironmentModeManagedWorktree && (branchValue != "" || *migrateUncommitted) {
+			return fmt.Errorf("--branch-name 和 --migrate-uncommitted-changes 只适用于 managed_worktree 模式")
+		}
 		created, err := backend.EnvironmentTemporaryCreate(model.TemporaryEnvironmentCreateRequest{
 			WorkspaceID: workspaceValue, SourceEnvironmentID: sourceEnvironmentValue, Name: strings.TrimSpace(*name), OwnerID: strings.TrimSpace(*ownerID), TTLSeconds: *ttlSeconds,
-			SessionID: strings.TrimSpace(*sessionID), RunID: strings.TrimSpace(*runID), Mode: strings.TrimSpace(*mode), Root: *root, BaseRef: *baseRef,
+			SessionID: strings.TrimSpace(*sessionID), RunID: strings.TrimSpace(*runID), Mode: modeValue, Root: *root,
+			BranchName: branchValue, BaseRef: *baseRef, MigrateUncommittedChanges: *migrateUncommitted,
 		})
 		if err != nil {
 			return err
@@ -2282,7 +2293,7 @@ func printEnvironmentTemporaryHelp() {
 	fmt.Fprintln(os.Stdout, `Temporary Environment = Phase-22 显式 lifecycle/retention 投影；仍是普通稳定 env_，不是 ADM task。
 
 命令：
-  adm environment temporary create (--workspace-id WS_ID | --source-environment-id ENV_ID) --name NAME --owner-id OWNER --ttl-seconds N [--session-id ID] [--run-id ID] [--mode existing_root|managed_worktree] [--root PATH] [--base-ref REF]
+  adm environment temporary create (--workspace-id WS_ID | --source-environment-id ENV_ID) --name NAME --owner-id OWNER --ttl-seconds N [--session-id ID] [--run-id ID] [--mode existing_root|managed_worktree] [--root PATH] [--branch-name NAME] [--base-ref REF] [--migrate-uncommitted-changes]
       owner/TTL 必须显式提供；existing_root 只接受 Workspace。managed_worktree 可从 Workspace 或已有 Git Environment 派生；ADM fetch 后从指定 ref 或 upstream 最新提交创建，不 pull 源 checkout。
 
   adm environment temporary status --environment-id ENV_ID

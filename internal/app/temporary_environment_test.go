@@ -134,6 +134,7 @@ func TestCreateTemporaryManagedWorktreePersistsRetentionAndKeepsSourceUnchanged(
 		OwnerID:     "owner-managed",
 		TTLSeconds:  3600,
 		Mode:        model.TemporaryEnvironmentModeManagedWorktree,
+		BranchName:  "test/temporary-managed",
 		BaseRef:     "HEAD",
 		RunID:       "run_external_managed",
 	})

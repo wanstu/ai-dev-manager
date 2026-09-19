@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"ai-dev-manager-v2/internal/catalog"
+	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/runtime"
 	"ai-dev-manager-v2/internal/verifier"
@@ -281,7 +282,7 @@ func TestEnvironmentContextBundleRejectsTamperedManagedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := service.CreateManagedWorktree(context.Background(), ws.ID, "managed-context", "HEAD")
+	created, err := service.CreateManagedWorktree(context.Background(), ws.ID, "managed-context", isolation.CreateOptions{BranchName: "test/managed-context", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}

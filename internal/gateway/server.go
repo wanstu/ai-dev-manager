@@ -114,16 +114,18 @@ type EnvironmentCreateInput struct {
 }
 
 type TemporaryEnvironmentCreateInput struct {
-	WorkspaceID         string `json:"workspace_id,omitempty" jsonschema:"Workspace source; required for existing_root and optional alternative to source_environment_id for managed_worktree"`
-	SourceEnvironmentID string `json:"source_environment_id,omitempty" jsonschema:"existing Git Environment source; only valid for managed_worktree and alternative to workspace_id"`
-	Name                string `json:"name"`
-	OwnerID             string `json:"owner_id" jsonschema:"stable lifecycle owner provenance; not an ADM task owner"`
-	TTLSeconds          int64  `json:"ttl_seconds" jsonschema:"positive temporary retention TTL in seconds"`
-	SessionID           string `json:"session_id,omitempty" jsonschema:"optional lifecycle provenance only"`
-	RunID               string `json:"run_id,omitempty" jsonschema:"optional provenance only; the Run need not exist and is not started or parented"`
-	Mode                string `json:"mode,omitempty" jsonschema:"existing_root or managed_worktree; defaults to existing_root"`
-	Root                string `json:"root,omitempty" jsonschema:"existing workspace-contained directory; only valid for existing_root mode"`
-	BaseRef             string `json:"base_ref,omitempty" jsonschema:"optional Git ref; managed_worktree defaults to the fetched upstream commit"`
+	WorkspaceID               string `json:"workspace_id,omitempty" jsonschema:"Workspace source; required for existing_root and optional alternative to source_environment_id for managed_worktree"`
+	SourceEnvironmentID       string `json:"source_environment_id,omitempty" jsonschema:"existing Git Environment source; only valid for managed_worktree and alternative to workspace_id"`
+	Name                      string `json:"name"`
+	OwnerID                   string `json:"owner_id" jsonschema:"stable lifecycle owner provenance; not an ADM task owner"`
+	TTLSeconds                int64  `json:"ttl_seconds" jsonschema:"positive temporary retention TTL in seconds"`
+	SessionID                 string `json:"session_id,omitempty" jsonschema:"optional lifecycle provenance only"`
+	RunID                     string `json:"run_id,omitempty" jsonschema:"optional provenance only; the Run need not exist and is not started or parented"`
+	Mode                      string `json:"mode,omitempty" jsonschema:"existing_root or managed_worktree; defaults to existing_root"`
+	Root                      string `json:"root,omitempty" jsonschema:"existing workspace-contained directory; only valid for existing_root mode"`
+	BranchName                string `json:"branch_name,omitempty" jsonschema:"required managed_worktree branch fragment supplied by the agent; ADM prepends configured branch_prefix"`
+	BaseRef                   string `json:"base_ref,omitempty" jsonschema:"optional Git ref; managed_worktree defaults to the fetched upstream commit"`
+	MigrateUncommittedChanges bool   `json:"migrate_uncommitted_changes,omitempty" jsonschema:"copy tracked/staged/unstaged/untracked non-ignored source changes into the new managed worktree; conflicts fail creation"`
 }
 
 type TemporaryEnvironmentOwnerInput struct {
@@ -142,10 +144,12 @@ type TemporaryEnvironmentCleanupInput struct {
 }
 
 type EnvironmentWorktreeCreateInput struct {
-	WorkspaceID         string `json:"workspace_id,omitempty" jsonschema:"Workspace Git root source; alternative to source_environment_id"`
-	SourceEnvironmentID string `json:"source_environment_id,omitempty" jsonschema:"existing Git Environment source; alternative to workspace_id"`
-	Name                string `json:"name"`
-	BaseRef             string `json:"base_ref,omitempty" jsonschema:"optional Git ref; defaults to the fetched upstream commit"`
+	WorkspaceID               string `json:"workspace_id,omitempty" jsonschema:"Workspace Git root source; alternative to source_environment_id"`
+	SourceEnvironmentID       string `json:"source_environment_id,omitempty" jsonschema:"existing Git Environment source; alternative to workspace_id"`
+	Name                      string `json:"name"`
+	BranchName                string `json:"branch_name" jsonschema:"required ASCII branch fragment such as fix/check-ref; ADM prepends configured branch_prefix"`
+	BaseRef                   string `json:"base_ref,omitempty" jsonschema:"optional Git ref; defaults to the fetched upstream commit"`
+	MigrateUncommittedChanges bool   `json:"migrate_uncommitted_changes,omitempty" jsonschema:"migrate tracked staged/unstaged/deleted/renamed and untracked non-ignored changes from the source checkout"`
 }
 
 type EnvironmentWorktreeDestroyInput struct {
@@ -721,19 +725,21 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration. existing_root mode uses a registered Workspace; managed_worktree mode accepts either a Git-top-level Workspace or an existing Git Environment as the source and never pulls the source checkout."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration. existing_root mode uses a registered Workspace. managed_worktree mode also requires branch_name, applies the configured ADM branch prefix/root, optionally migrates non-ignored uncommitted source changes, and never pulls/resets/reuses the source checkout."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCreateInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.CreateTemporaryEnvironment(ctx, string(surface), model.TemporaryEnvironmentCreateRequest{
-				WorkspaceID:         in.WorkspaceID,
-				SourceEnvironmentID: in.SourceEnvironmentID,
-				Name:                in.Name,
-				OwnerID:             in.OwnerID,
-				TTLSeconds:          in.TTLSeconds,
-				SessionID:           in.SessionID,
-				RunID:               in.RunID,
-				Mode:                in.Mode,
-				Root:                in.Root,
-				BaseRef:             in.BaseRef,
+				WorkspaceID:               in.WorkspaceID,
+				SourceEnvironmentID:       in.SourceEnvironmentID,
+				Name:                      in.Name,
+				OwnerID:                   in.OwnerID,
+				TTLSeconds:                in.TTLSeconds,
+				SessionID:                 in.SessionID,
+				RunID:                     in.RunID,
+				Mode:                      in.Mode,
+				Root:                      in.Root,
+				BranchName:                in.BranchName,
+				BaseRef:                   in.BaseRef,
+				MigrateUncommittedChanges: in.MigrateUncommittedChanges,
 			})
 			return toolResult(value, err)
 		})
@@ -776,18 +782,23 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_create", Description: "Create an optional managed Git worktree Environment under the ADM-owned worktree root. Supply exactly one source: a Git-top-level Workspace or an existing Git Environment whose root is the Git top-level. ADM fetches refs and never pulls or rewrites the source checkout."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_create", Description: "Create a fresh ADM-managed Git worktree Environment under the configured worktree root. The agent must provide branch_name; ADM prepends the configured branch_prefix, validates the final ASCII Git ref, resolves base_ref to an exact commit, and never reuses/resets an old managed worktree. migrate_uncommitted_changes optionally carries tracked staged/unstaged/deleted/renamed plus untracked non-ignored source changes; conflicts fail and roll back creation."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentWorktreeCreateInput) (*mcp.CallToolResult, any, error) {
 			workspaceID := strings.TrimSpace(in.WorkspaceID)
 			sourceEnvironmentID := strings.TrimSpace(in.SourceEnvironmentID)
 			if (workspaceID == "") == (sourceEnvironmentID == "") {
 				return toolResult(isolation.CreateResult{}, fmt.Errorf("environment_worktree_create requires exactly one of workspace_id or source_environment_id"))
 			}
+			options := isolation.CreateOptions{
+				BranchName:                in.BranchName,
+				BaseRef:                   in.BaseRef,
+				MigrateUncommittedChanges: in.MigrateUncommittedChanges,
+			}
 			if sourceEnvironmentID != "" {
-				value, err := service.CreateManagedWorktreeFromEnvironment(ctx, sourceEnvironmentID, in.Name, in.BaseRef)
+				value, err := service.CreateManagedWorktreeFromEnvironment(ctx, sourceEnvironmentID, in.Name, options)
 				return toolResult(value, err)
 			}
-			value, err := service.CreateManagedWorktree(ctx, workspaceID, in.Name, in.BaseRef)
+			value, err := service.CreateManagedWorktree(ctx, workspaceID, in.Name, options)
 			return toolResult(value, err)
 		})
 

@@ -11,6 +11,7 @@ import (
 
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
+	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/model"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -155,7 +156,7 @@ func TestGatewayResourceRetentionCleanupExecuteDestroysSafeTemporaryManagedWorkt
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	created, err := service.Isolation.Create(ctx, workspace.ID, "temporary-managed-worktree", "HEAD")
+	created, err := service.Isolation.Create(ctx, workspace.ID, "temporary-managed-worktree", isolation.CreateOptions{BranchName: "test/temporary-managed", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +209,7 @@ func TestGatewayResourceRetentionCleanupBlocksDirtyTemporaryManagedWorktree(t *t
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	created, err := service.Isolation.Create(ctx, workspace.ID, "dirty-temporary-managed-worktree", "HEAD")
+	created, err := service.Isolation.Create(ctx, workspace.ID, "dirty-temporary-managed-worktree", isolation.CreateOptions{BranchName: "test/dirty-temporary-managed", BaseRef: "HEAD"})
 	if err != nil {
 		t.Fatal(err)
 	}

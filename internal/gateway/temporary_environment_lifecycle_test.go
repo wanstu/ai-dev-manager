@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ai-dev-manager-v2/internal/app"
+	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/model"
 )
 
@@ -181,6 +182,7 @@ func TestTemporaryManagedWorktreeTargetedCleanupUsesDestroySafety(t *testing.T) 
 		OwnerID:     "owner-managed",
 		TTLSeconds:  1,
 		Mode:        model.TemporaryEnvironmentModeManagedWorktree,
+		BranchName:  "test/cleanup-managed",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -221,6 +223,7 @@ func TestTemporaryManagedWorktreeTargetedCleanupBlocksDirtyWork(t *testing.T) {
 		OwnerID:     "owner-dirty",
 		TTLSeconds:  1,
 		Mode:        model.TemporaryEnvironmentModeManagedWorktree,
+		BranchName:  "test/dirty-managed",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -264,7 +267,7 @@ func TestTemporaryManagedWorktreeTargetedCleanupBlocksUnpublishedAndTamperedWork
 			t.Fatal(err)
 		}
 		ctx := context.Background()
-		created, err := service.Isolation.Create(ctx, workspace.ID, "managed-unpublished", "HEAD")
+		created, err := service.Isolation.Create(ctx, workspace.ID, "managed-unpublished", isolation.CreateOptions{BranchName: "test/managed-unpublished", BaseRef: "HEAD"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -308,7 +311,7 @@ func TestTemporaryManagedWorktreeTargetedCleanupBlocksUnpublishedAndTamperedWork
 			t.Fatal(err)
 		}
 		ctx := context.Background()
-		created, err := service.Isolation.Create(ctx, workspace.ID, "managed-tampered", "HEAD")
+		created, err := service.Isolation.Create(ctx, workspace.ID, "managed-tampered", isolation.CreateOptions{BranchName: "test/managed-tampered", BaseRef: "HEAD"})
 		if err != nil {
 			t.Fatal(err)
 		}

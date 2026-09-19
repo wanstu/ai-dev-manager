@@ -133,16 +133,18 @@ type CatalogEntry struct {
 }
 
 type ManagedWorktree struct {
-	ID                  string    `json:"managed_worktree_id"`
-	EnvironmentID       string    `json:"environment_id"`
-	WorkspaceID         string    `json:"workspace_id"`
-	SourceEnvironmentID string    `json:"source_environment_id,omitempty"`
-	SourceRoot          string    `json:"source_root,omitempty"`
-	Root                string    `json:"root"`
-	Branch              string    `json:"branch"`
-	BaseCommit          string    `json:"base_commit"`
-	GitCommonDir        string    `json:"git_common_dir"`
-	CreatedAt           time.Time `json:"created_at"`
+	ID                         string    `json:"managed_worktree_id"`
+	EnvironmentID              string    `json:"environment_id"`
+	WorkspaceID                string    `json:"workspace_id"`
+	SourceEnvironmentID        string    `json:"source_environment_id,omitempty"`
+	SourceRoot                 string    `json:"source_root,omitempty"`
+	Root                       string    `json:"root"`
+	Branch                     string    `json:"branch"`
+	BaseRef                    string    `json:"base_ref,omitempty"`
+	BaseCommit                 string    `json:"base_commit"`
+	MigratedUncommittedChanges bool      `json:"migrated_uncommitted_changes,omitempty"`
+	GitCommonDir               string    `json:"git_common_dir"`
+	CreatedAt                  time.Time `json:"created_at"`
 }
 
 type ExecDenial struct {

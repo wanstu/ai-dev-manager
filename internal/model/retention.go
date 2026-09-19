@@ -103,16 +103,18 @@ type ResourceRetentionCleanupResult struct {
 }
 
 type TemporaryEnvironmentCreateRequest struct {
-	WorkspaceID         string `json:"workspace_id,omitempty"`
-	SourceEnvironmentID string `json:"source_environment_id,omitempty"`
-	Name                string `json:"name"`
-	OwnerID             string `json:"owner_id"`
-	TTLSeconds          int64  `json:"ttl_seconds"`
-	SessionID           string `json:"session_id,omitempty"`
-	RunID               string `json:"run_id,omitempty"`
-	Mode                string `json:"mode,omitempty"`
-	Root                string `json:"root,omitempty"`
-	BaseRef             string `json:"base_ref,omitempty"`
+	WorkspaceID               string `json:"workspace_id,omitempty"`
+	SourceEnvironmentID       string `json:"source_environment_id,omitempty"`
+	Name                      string `json:"name"`
+	OwnerID                   string `json:"owner_id"`
+	TTLSeconds                int64  `json:"ttl_seconds"`
+	SessionID                 string `json:"session_id,omitempty"`
+	RunID                     string `json:"run_id,omitempty"`
+	Mode                      string `json:"mode,omitempty"`
+	Root                      string `json:"root,omitempty"`
+	BranchName                string `json:"branch_name,omitempty"`
+	BaseRef                   string `json:"base_ref,omitempty"`
+	MigrateUncommittedChanges bool   `json:"migrate_uncommitted_changes,omitempty"`
 }
 
 type TemporaryEnvironmentCreateResult struct {
