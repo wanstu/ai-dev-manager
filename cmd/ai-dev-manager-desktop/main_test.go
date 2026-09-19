@@ -11,6 +11,8 @@ import (
 
 	"ai-dev-manager-v2/internal/desktop"
 	productversion "ai-dev-manager-v2/internal/version"
+
+	kitui "github.com/wanstu/wails-desktop-kit/ui"
 )
 
 func TestDesktopTitleUsesSharedProductVersion(t *testing.T) {
@@ -43,24 +45,78 @@ func TestProductionDesktopUsesDisconnectedAdminMCPClient(t *testing.T) {
 	}
 }
 
-func TestProductionDesktopUsesTrayLifecycleAndSingleInstance(t *testing.T) {
+func TestProductionDesktopUsesDesktopKitRuntime(t *testing.T) {
 	source, err := os.ReadFile("main.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(source)
-	for _, required := range []string{"newTrayManager", "StartHidden", "HideWindowOnClose", "OnDomReady", "SingleInstanceLock", "OnSecondInstanceLaunch", "--autostart", "trayIcon"} {
+	for _, required := range []string{
+		`desktopkit.Run`,
+		`desktopkit.DefaultWindowConfig()`,
+		`desktopkit.HideSafe`,
+		`desktopkit.LaunchOptions{AutoStart: startHidden}`,
+		`kitui.Mount(assets)`,
+		`desktopkit.DefaultThemeConfig()`,
+		`SingleInstance: true`,
+		`SecondInstance:`,
+		`desktopTrayConfig(trayIcon, adapter, autoStart)`,
+		`Startup: autoStart.setContext`,
+	} {
 		if !strings.Contains(text, required) {
-			t.Fatalf("production Desktop missing lifecycle marker %q", required)
+			t.Fatalf("production Desktop missing desktop-kit lifecycle marker %q", required)
 		}
 	}
-	traySource, err := os.ReadFile("tray_manager_supported.go")
+	for _, forbidden := range []string{"wails.Run(", "assetserver.Options", "HideWindowOnClose:", "StartHidden:", "newTrayManager"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("production Desktop must not retain duplicated Wails shell marker %q", forbidden)
+		}
+	}
+
+	traySource, err := os.ReadFile("desktop_runtime.go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"github.com/gogpu/systray", "runtime.LockOSThread", "systray.New", "AddCheckbox", "显示主窗口", "隐藏主窗口", "开机启动", "退出", "OnClick", "OnDoubleClick", "OnRightClick", "tray.Run"} {
+	for _, required := range []string{
+		`desktopkit.TrayConfig`,
+		`desktopkit.Action`,
+		`AutoStart:   autoStart`,
+		`desktop:preferences-changed`,
+		`DisableQuit: true`,
+		`controller.Quit()`,
+		`StopLocalADM`,
+	} {
 		if !strings.Contains(string(traySource), required) {
-			t.Fatalf("cross-platform tray manager missing %q", required)
+			t.Fatalf("desktop-kit tray business adapter missing %q", required)
+		}
+	}
+	for _, forbidden := range []string{"github.com/gogpu/systray", "runtime.LockOSThread", "systray.New(", "tray.Run()"} {
+		if strings.Contains(string(traySource), forbidden) {
+			t.Fatalf("Desktop must not own native tray runtime marker %q", forbidden)
+		}
+	}
+}
+
+func TestDesktopKitAssetsAreMounted(t *testing.T) {
+	appAssets, err := frontendAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mounted := kitui.Mount(appAssets)
+	for _, path := range []string{
+		"desktopkit/tokens.css",
+		"desktopkit/base.css",
+		"desktopkit/components.css",
+		"desktopkit/navigation.css",
+		"desktopkit/theme.js",
+		"index.html",
+	} {
+		data, err := fs.ReadFile(mounted, path)
+		if err != nil {
+			t.Fatalf("read mounted asset %s: %v", path, err)
+		}
+		if len(data) == 0 {
+			t.Fatalf("mounted asset %s is empty", path)
 		}
 	}
 }
@@ -148,14 +204,21 @@ func TestDesktopIconAssetsAreWired(t *testing.T) {
 		t.Fatal("embedded Desktop brand mark must match assets/icons/ai-dev-manager-window.png")
 	}
 
+	prepareTool, err := os.ReadFile(filepath.Join("..", "..", "tools", "prepare-desktop-assets", "main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"wails-desktop-kit/icon", "kiticon.NormalizeFile", "kiticon.DefaultOptions()", "options.Fill = 0.94", "ai-dev-manager-app.png", "ai-dev-manager-window.png", "ai-dev-manager-tray.png", "tray.png", "appicon.png", "icon.ico"} {
+		if !strings.Contains(string(prepareTool), required) {
+			t.Fatalf("Desktop asset preparation tool missing marker %q", required)
+		}
+	}
 	prepareScript, err := os.ReadFile(filepath.Join("..", "..", "scripts", "prepare-desktop-icons.ps1"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"Export-FittedTransparentPng", "ai-dev-manager-app.png", "ai-dev-manager-window.png", "ai-dev-manager-tray.png", "assets\\tray.png", "appicon.png", "windows\\icon.ico", "Remove-Item"} {
-		if !strings.Contains(string(prepareScript), required) {
-			t.Fatalf("Desktop icon preparation script missing marker %q", required)
-		}
+	if !strings.Contains(string(prepareScript), "go run ./tools/prepare-desktop-assets") {
+		t.Fatal("manual icon preparation script must delegate to the shared Go asset tool")
 	}
 }
 
@@ -213,6 +276,7 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, required := range []string{
+		"/desktopkit/tokens.css", "/desktopkit/base.css", "/desktopkit/components.css", "/desktopkit/navigation.css", "/desktopkit/theme.js", "desktopThemeMode", "desktopThemePack", "desktopThemeHint", "desktopThemeRefreshButton",
 		"workspaceCount", "environmentCount", "execCount", "mcpCount", "skillCount", "memoryCount", "refreshButton", "launchAtLogin", "desktopShellHint", "app-brand-mark", "ai-dev-manager-window.png", "navigation.js", "dashboard.js", "project-pages.js", "runtime-view.js", "skill-bulk.js", "dashboardDataState", "dashboardLastSuccess", "management-sidebar", "data-management-page=\"overview\"", "data-route-link=\"settings\"",
 		"gatewayState", "gatewayBaseURL", "gatewayHealthURL", "gatewayURL", "gatewayAdminURL", "gatewayRefreshButton", "gatewayStartButton", "gatewayStopButton", "gatewayHostState", "gatewayAdminKeyState", "gatewayAdminKeyHint", "gatewayAgentKeyState", "gatewayAgentKeyHint", "connectionAPIKeyState",
 		"workspaceForm", "workspaceFilter", "workspaceVisibleCount", "workspaceListTotalCount", "connectionStartOnDesktopLaunch", "environmentForm", "environmentFilter", "environmentWorkspaceFilter", "environmentVisibleCount", "environmentListTotalCount", "environmentFilterHint", "environmentDetailPanel", "environmentDetailRoutes", "aria-modal",
@@ -230,7 +294,7 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 	}
 	for _, required := range []string{
 		"window.go?.desktop?.Adapter", "GetSnapshot", "refreshSnapshot",
-		"GetDesktopPreferences", "SetLaunchAtLogin", "loadDesktopPreferences", "updateLaunchAtLogin",
+		"GetDesktopPreferences", "SetLaunchAtLogin", "SetDesktopTheme", "loadDesktopPreferences", "updateLaunchAtLogin", "ensureDesktopThemeCatalog", "refreshDesktopThemeCatalog", "applyDesktopThemePreferences", "updateDesktopTheme", "loadCatalog", "refreshCatalog", "applyPack", "clearAppliedPack", "desktopKitTheme",
 		"ConnectADM", "StartLocalADM", "StopLocalADM", "refreshConnectedADM", "initializeConnectionProfiles",
 		"AddWorkspace", "RenameWorkspace", "RemoveWorkspace",
 		"CreateEnvironment", "RenameEnvironment", "RemoveEnvironment", "InspectEnvironment", "GetTemporaryEnvironmentStatus", "PromoteTemporaryEnvironment", "CleanupTemporaryEnvironment",
@@ -320,7 +384,7 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{".topbar-brand", ".app-brand-mark", ".topbar-actions", ".desktop-toggle", ".management-layout", ".management-sidebar", ".nav-link[aria-current", "[data-management-page][hidden]", ".list-toolbar", ".project-filter-hint", ".filtered-project-list", ".managed-item.current-context", ".project-path", ".detail-group", ".detail-route-actions", ".runtime-subview-tabs", ".runtime-subview-panel", ".runtime-output-panel", ".status-legend", ".editor-hint", ".filtered-resource-list", ".resource-row[data-editing", ".resource-actions .check-field", ".editor-dialog", ".dialog-message"} {
+	for _, required := range []string{".topbar-brand", ".app-brand-mark", ".topbar-actions", ".desktop-toggle", ".management-layout", ".management-sidebar", ".nav-link[aria-current", "[data-management-page][hidden]", ".list-toolbar", ".project-filter-hint", ".filtered-project-list", ".managed-item.current-context", ".project-path", ".detail-group", ".detail-route-actions", ".runtime-subview-tabs", ".runtime-subview-panel", ".runtime-output-panel", ".status-legend", ".editor-hint", ".filtered-resource-list", ".resource-row[data-editing", ".resource-actions .check-field", ".editor-dialog", ".dialog-message", ".desktop-theme-controls", ".desktop-theme-field", ".desktop-theme-status-row", "Wails Desktop Kit theme bridge", "--dk-primary"} {
 		if !strings.Contains(string(styles), required) {
 			t.Fatalf("desktop styles.css missing %q", required)
 		}

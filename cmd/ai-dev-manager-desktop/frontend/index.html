@@ -4,7 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Dev Manager V2</title>
+  <link rel="stylesheet" href="/desktopkit/tokens.css">
+  <link rel="stylesheet" href="/desktopkit/base.css">
+  <link rel="stylesheet" href="/desktopkit/components.css">
+  <link rel="stylesheet" href="/desktopkit/navigation.css">
   <link rel="stylesheet" href="./styles.css">
+  <script src="/desktopkit/theme.js"></script>
 </head>
 <body>
   <main class="app-shell">
@@ -416,13 +421,33 @@
           </div>
         </section>
         <section class="subpanel">
-          <div class="subpanel-heading"><h3>Desktop shell preferences</h3><span>仅限 Desktop 外壳行为</span></div>
-          <div class="subpanel-body">
-          <label class="desktop-toggle" title="随用户登录自动启动 Desktop；托盘/关闭行为取决于当前平台">
-            <input id="launchAtLogin" type="checkbox">
-            <span><strong>开机启动</strong><small id="desktopShellHint">随用户登录自动启动 Desktop</small></span>
-          </label>
-          <p class="subpanel-note">此处管理桌面应用偏好。项目环境和能力配置请前往对应管理页面。</p>
+          <div class="subpanel-heading"><h3>Desktop shell preferences</h3><span>主题与 Desktop 外壳行为</span></div>
+          <div class="subpanel-body desktop-preferences-grid">
+            <div class="desktop-theme-controls">
+              <label class="desktop-theme-field">
+                <span>明暗模式</span>
+                <select id="desktopThemeMode">
+                  <option value="system">跟随系统</option>
+                  <option value="light">浅色</option>
+                  <option value="dark">深色</option>
+                </select>
+              </label>
+              <label class="desktop-theme-field">
+                <span>主题包</span>
+                <select id="desktopThemePack">
+                  <option value="">Kit 默认配色</option>
+                </select>
+              </label>
+            </div>
+            <div class="desktop-theme-status-row">
+              <p id="desktopThemeHint" class="subpanel-note">默认使用跟随系统 + 极光主题；主题库由 Kit Runtime 管理。</p>
+              <button id="desktopThemeRefreshButton" type="button" class="secondary-button">刷新主题库</button>
+            </div>
+            <label class="desktop-toggle" title="随用户登录自动启动 Desktop；托盘/关闭行为取决于当前平台">
+              <input id="launchAtLogin" type="checkbox">
+              <span><strong>开机启动</strong><small id="desktopShellHint">随用户登录自动启动 Desktop</small></span>
+            </label>
+            <p class="subpanel-note">主题设置保存在 <code>~/.config/adm/desktop-preferences.json</code>，不依赖浏览器 localStorage。</p>
           </div>
         </section>
       </div>

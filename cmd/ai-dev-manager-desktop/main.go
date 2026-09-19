@@ -17,9 +17,9 @@ import (
 	"ai-dev-manager-v2/internal/store"
 	productversion "ai-dev-manager-v2/internal/version"
 
-	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	desktopkit "github.com/wanstu/wails-desktop-kit"
+	kitui "github.com/wanstu/wails-desktop-kit/ui"
 )
 
 //go:embed all:frontend
@@ -50,24 +50,20 @@ func main() {
 }
 
 func desktopLaunchOptions(args []string) (bool, error) {
-	flags := flag.NewFlagSet("desktop", flag.ContinueOnError)
-	autostart := flags.Bool("autostart", false, "start after user login; hide automatically when the platform tray is safe for window recovery")
-	if err := flags.Parse(args); err != nil {
+	launch, err := desktopkit.ParseLaunchOptions(args)
+	if err != nil {
 		return false, err
 	}
-	if flags.NArg() != 0 {
-		return false, fmt.Errorf("desktop accepts only --autostart")
-	}
-	return *autostart, nil
+	return launch.AutoStart, nil
 }
 
 func runGatewayChild(args []string) error {
-	fs := flag.NewFlagSet("gateway-child", flag.ContinueOnError)
-	listen := fs.String("listen", gateway.DefaultHTTPListen, "Gateway listen address")
-	if err := fs.Parse(args); err != nil {
+	flags := flag.NewFlagSet("gateway-child", flag.ContinueOnError)
+	listen := flags.String("listen", gateway.DefaultHTTPListen, "Gateway listen address")
+	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 {
+	if flags.NArg() != 0 {
 		return fmt.Errorf("gateway child accepts only --listen")
 	}
 	statePath, err := store.DefaultPath()
@@ -90,30 +86,32 @@ func runDesktop(startHidden bool) error {
 		return err
 	}
 	adapter := desktop.NewClientAdapter()
-	tray := newTrayManager(trayIcon, adapter)
-	return wails.Run(&options.App{
-		Title:             desktopTitle(),
-		Width:             1120,
-		Height:            760,
-		MinWidth:          820,
-		MinHeight:         560,
-		StartHidden:       startHidden && traySupported && trayWindowHidingSupported(),
-		HideWindowOnClose: traySupported && trayWindowHidingSupported(),
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		BackgroundColour: &options.RGBA{R: 246, G: 247, B: 249, A: 1},
-		OnStartup:        tray.Startup,
-		OnDomReady:       tray.DomReady,
-		OnShutdown:       tray.Shutdown,
-		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "adm-desktop-v1",
-			OnSecondInstanceLaunch: func(_ options.SecondInstanceData) {
-				tray.ShowWindow()
-			},
-		},
+	autoStart := newDesktopAutoStartProvider(adapter)
+	window := desktopkit.DefaultWindowConfig()
+	window.Width = 1120
+	window.Height = 760
+	window.MinWidth = 820
+	window.MinHeight = 560
+	window.HidePolicy = desktopkit.HideSafe
+	window.StartHiddenOnAutoStart = true
+
+	return desktopkit.Run(desktopkit.Config{
+		ID:     "com.wanstu.adm-desktop",
+		Title:  desktopTitle(),
+		Assets: kitui.Mount(assets),
 		Bind: []interface{}{
 			adapter,
+		},
+		Launch: desktopkit.LaunchOptions{AutoStart: startHidden},
+		Window: window,
+		Theme:  desktopkit.DefaultThemeConfig(),
+		Tray:   desktopTrayConfig(trayIcon, adapter, autoStart),
+		Hooks: desktopkit.Hooks{
+			Startup: autoStart.setContext,
+		},
+		SingleInstance: true,
+		SecondInstance: func(controller *desktopkit.Controller, _ options.SecondInstanceData) {
+			controller.ShowWindow()
 		},
 	})
 }

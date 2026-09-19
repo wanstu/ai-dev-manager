@@ -293,6 +293,10 @@ Start 只有在 `/healthz` ready 后才报告成功。
 
 ## 14. 平台壳层与开机启动
 
+Desktop 的 Wails 生命周期、单实例、窗口显隐、原生 tray、登录自启与 Runtime Theme 统一由 `github.com/wanstu/wails-desktop-kit` v0.5.0 提供。ADM 只保留连接管理、Gateway 生命周期和“两种退出”这类产品业务；不再维护自己的 systray message loop 或三平台 autostart 实现。
+
+窗口策略使用 Kit `HideSafe`：Windows/macOS 在 tray 可恢复时允许关闭到 tray；Linux 默认不把主窗口隐藏成只能依赖 StatusNotifier host 恢复的状态。
+
 Windows：
 
 - 关闭主窗口默认隐藏到 tray，不直接退出整个 app；
@@ -304,25 +308,51 @@ Windows：
 Windows Autostart 使用 HKCU Run：
 
 ```text
-value name: adm-desktop
+value name: com.wanstu.adm-desktop
 command: <current desktop exe> --autostart
 ```
 
 macOS：
 
-- autostart 使用 `~/Library/LaunchAgents/com.wanstu.adm-desktop.plist`；
+- Kit autostart 使用统一应用 ID `com.wanstu.adm-desktop`，对应 `~/Library/LaunchAgents/com.wanstu.adm-desktop.plist`；
 - LaunchAgent 以当前 Desktop executable + `--autostart` 启动；
-- tray 使用与 Windows 相同的 `gogpu/systray` 管理逻辑，可显示/隐藏窗口、切换 autostart，并提供两种显式退出动作；
-- `--autostart` 启动时默认隐藏到 tray。
+- tray 生命周期、显示/恢复与登录自启 checkbox 由 Kit 管理；ADM 只声明“退出（保留后台）/退出（不保留后台）”两项业务动作；
+- `--autostart` 在 tray 就绪后按 `HideSafe` 隐藏，因此启动阶段可能短暂显示窗口。
 
 Linux：
 
-- autostart 使用 XDG `autostart/adm-desktop.desktop`（优先 `$XDG_CONFIG_HOME`，否则 `~/.config`）；
+- Kit autostart 使用 XDG `autostart/com.wanstu.adm-desktop.desktop`（优先 `$XDG_CONFIG_HOME`，否则 `~/.config`）；
 - Desktop entry 以当前 executable + `--autostart` 启动；
-- tray 使用 `gogpu/systray` 的 StatusNotifierItem / D-Bus 实现；
-- 为避免某些桌面环境没有可用 StatusNotifier host 时把窗口隐藏后无法恢复，Linux 当前不会强制 `HideWindowOnClose`，`--autostart` 也保持主窗口可见；tray 可用时仍可通过图标菜单显示/隐藏窗口。
+- tray 的 StatusNotifierItem / D-Bus 平台实现由 Kit 维护；
+- `HideSafe` 在 Linux 不隐藏主窗口，`--autostart` 也保持窗口可见，避免没有可见 StatusNotifier host 时窗口不可恢复。
 
 开机启动设置只修改当前用户的 Desktop 启动项，不改变 ADM Core、Gateway authority 或连接 profile。
+
+### Desktop Theme
+
+ADM 使用 Wails Desktop Kit v0.5.0 的 Runtime Theme，不再直接依赖或编译嵌入 `wails-desktop-kit-theme`。
+
+“设置 → Desktop shell preferences” 可以选择明暗模式和主题包。默认是：
+
+```text
+mode = system
+pack = aurora
+```
+
+也可以选择“Kit 默认配色”，此时只使用 Kit 自带的 light/dark token。主题偏好仍由 ADM 保存到：
+
+```text
+~/.config/adm/desktop-preferences.json
+```
+
+ADM 不使用 localStorage 保存主题，也不在后端复制 Theme manifest。运行时由 Kit 提供：
+
+- `desktopKitTheme.loadCatalog()`：读取本地 catalog，并按 Kit 策略使用远端更新；
+- `desktopKitTheme.refreshCatalog()`：用户点击“刷新主题库”时显式同步最新 catalog；
+- `desktopKitTheme.applyPack()`：通过 `/desktopkit-theme/*` 加载经过 SHA-256 校验的本地缓存 Theme CSS；
+- 远端不可用时使用 last-known-good cache；首次离线也固定提供 aurora / ocean / forest / sunset 4 个 fallback Theme Pack。
+
+因此主题仓库新增或更新 Theme Pack 后，用户只需刷新主题库即可获取，不需要升级 Kit 版本，也不需要重新构建 ADM。ADM 的业务布局仍由自身 CSS 负责，但颜色、边框、状态色、导航、表单、Dialog 等公共视觉继续桥接到 `--dk-*` token。
 
 ## 15. “启动 ADM 服务” Profile 选项
 
@@ -334,7 +364,7 @@ Linux：
 - `assets/icons/ai-dev-manager-tray.png`：tray source；
 - `assets/icons/ai-dev-manager-window.png`：window branding source。
 
-Wails frontend build 会执行 icon preparation script，以处理 Windows tray transparent padding/尺寸。
+Wails frontend build 会执行共享 asset preparation tool；托盘 PNG 的透明边距裁剪和 0.94 fill 规范化由 Wails Desktop Kit `icon.NormalizeFile` 完成，ADM 不再维护自己的 System.Drawing 图像缩放实现。
 
 ## 17. Desktop 不做什么
 

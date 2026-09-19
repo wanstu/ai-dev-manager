@@ -80,6 +80,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-rc.ps1 -Vers
 
 ## 6. GitHub Actions workflow
 
+ADM Desktop runtime 已使用 Wails Desktop Kit，但发布编排继续保留在 ADM 仓库：ADM 同一 Release 还包含多架构 CLI、Linux `.deb` / `.tar.gz`、统一版本注入和总校验清单，这些超出 Kit 通用三平台 Desktop reusable workflow 的职责。Kit 负责公共桌面基础设施，ADM workflow 负责产品发布图。
+
 `.github/workflows/ci.yml` 在以下情况触发：
 
 - push `master`；
@@ -183,16 +185,18 @@ master CI green
 
 `cmd/ai-dev-manager-desktop/wails.json` 的 frontend build 会运行：
 
-```powershell
-scripts\prepare-desktop-icons.ps1
+```text
+go run ../../../tools/prepare-desktop-assets
 ```
 
 它会：
 
 - 复制 `assets/icons/ai-dev-manager-app.png` 到 Wails `build/appicon.png`；
 - 复制 window branding asset 到 Desktop frontend；
-- 裁掉 tray source 透明留白并生成 Wails tray asset；
-- 删除旧 generated Windows icon，确保新 app icon 生效。
+- 使用 Wails Desktop Kit `icon.NormalizeFile` 裁掉 tray source 透明留白并按 0.94 fill 生成 tray asset；
+- Windows 下删除旧 generated icon，让 Wails 从最新 `build/appicon.png` 重建平台图标。
+
+`scripts/prepare-desktop-icons.ps1` 只保留为手动入口，内部直接委托同一个 Go asset tool，不再包含 System.Drawing 图像处理实现。
 
 ## 12. 发布前最低检查
 

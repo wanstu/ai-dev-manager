@@ -1,5 +1,3 @@
-//go:build windows || darwin || linux
-
 package main
 
 import (
@@ -28,8 +26,8 @@ func TestActiveConnectionProfile(t *testing.T) {
 	}
 }
 
-func TestTrayExitMenuHasTwoExplicitLifecycleChoices(t *testing.T) {
-	source, err := os.ReadFile("tray_manager_supported.go")
+func TestDesktopKitTrayKeepsTwoExplicitLifecycleChoices(t *testing.T) {
+	source, err := os.ReadFile("desktop_runtime.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,32 +35,19 @@ func TestTrayExitMenuHasTwoExplicitLifecycleChoices(t *testing.T) {
 	for _, required := range []string{
 		`trayQuitKeepBackgroundLabel = "退出（保留后台）"`,
 		`trayQuitStopBackgroundLabel = "退出（不保留后台）"`,
-		`menu.Add(trayQuitKeepBackgroundLabel, t.quitDesktop)`,
-		`menu.Add(trayQuitStopBackgroundLabel, t.quitAndStopLocalBackground)`,
-		`func (t *trayManager) quitDesktop()`,
-		`func (t *trayManager) quitAndStopLocalBackground()`,
+		`desktopkit.Action(trayQuitKeepBackgroundLabel`,
+		`desktopkit.Action(trayQuitStopBackgroundLabel`,
+		`DisableQuit: true`,
 		`StopLocalADM`,
 	} {
 		if !strings.Contains(text, required) {
-			t.Fatalf("tray source missing %q", required)
-		}
-	}
-	for _, forbidden := range []string{
-		`QuestionDialog`,
-		`DefaultButton`,
-		`CancelButton`,
-		`退出 Desktop（保留后台服务）`,
-		`停止本地后台服务并退出`,
-		`仅退出 Desktop`,
-	} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("tray source must not contain the old ambiguous exit UI %q", forbidden)
+			t.Fatalf("desktop runtime source missing %q", required)
 		}
 	}
 }
 
 func TestStopAndExitUsesOnlySafeLocalADMPath(t *testing.T) {
-	source, err := os.ReadFile("tray_manager_supported.go")
+	source, err := os.ReadFile("desktop_runtime.go")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -585,3 +585,238 @@ body.has-editor-dialog { overflow: hidden; }
 .config-source-card code { color: #334155; font-size: 10px; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
 .config-source-card span { color: #64748b; font-size: 11px; line-height: 1.5; }
 @media (max-width: 900px) { .config-source-grid { grid-template-columns: 1fr; } }
+
+
+/* Wails Desktop Kit theme bridge. Product layout stays local; shared visual tokens come from Kit/Theme. */
+:root {
+  color: var(--dk-text);
+  background: var(--dk-bg-app);
+  font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+}
+body { background: var(--dk-bg-app); color: var(--dk-text); }
+button {
+  background: var(--dk-primary);
+  color: var(--dk-primary-contrast);
+}
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline-color: var(--dk-primary);
+}
+.secondary-button {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  color: var(--dk-text);
+}
+.secondary-button:hover:not(:disabled) { background: var(--dk-bg-subtle); }
+.danger-button {
+  border-color: var(--dk-danger-border);
+  background: var(--dk-danger-bg);
+  color: var(--dk-danger);
+}
+.topbar,
+.panel,
+.subpanel,
+.management-sidebar,
+.metric,
+.overview-data-state,
+.editor-dialog,
+.dialog-heading,
+.credential-card,
+.auth-usage-card,
+.auth-usage-grid > div,
+.config-source-card,
+.remote-access-intro {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  color: var(--dk-text);
+}
+.topbar,
+.management-sidebar,
+.panel,
+.editor-dialog { border-radius: var(--dk-radius-lg); }
+.metric,
+.overview-data-state,
+.credential-card,
+.auth-usage-card,
+.config-source-card,
+.remote-access-intro { border-radius: var(--dk-radius-md); }
+.panel-heading,
+.subpanel-heading,
+.dialog-heading {
+  border-color: var(--dk-border-subtle);
+  background: var(--dk-bg-subtle);
+}
+.panel-heading p,
+.subpanel-heading span,
+.subpanel-note,
+.field-help,
+.subtitle,
+.item-content small,
+.runtime-item small,
+.overview-data-state,
+.auth-usage-grid small,
+.credential-heading small,
+.config-source-card span {
+  color: var(--dk-text-secondary);
+}
+.eyebrow,
+.nav-group-label,
+.list-item small,
+.selection-row code {
+  color: var(--dk-text-muted);
+}
+.management-sidebar { box-shadow: var(--dk-shadow-panel); }
+.nav-link { color: var(--dk-nav-text); }
+.nav-link:hover { background: var(--dk-bg-subtle); color: var(--dk-text); }
+.nav-link[aria-current="page"] {
+  border-color: var(--dk-nav-active-border);
+  background: var(--dk-nav-active-bg);
+  color: var(--dk-nav-active-text);
+  box-shadow: inset 3px 0 0 var(--dk-nav-active-accent);
+}
+.metric-link:hover { border-color: var(--dk-border); box-shadow: var(--dk-shadow-panel); }
+.badge,
+.resource-badge,
+.state-badge {
+  background: var(--dk-bg-muted);
+  color: var(--dk-text-secondary);
+}
+.state-badge[data-state="success"] { background: var(--dk-success-bg); color: var(--dk-success); }
+.state-badge[data-state="error"] { background: var(--dk-danger-bg); color: var(--dk-danger); }
+.state-badge[data-state="loading"] { background: var(--dk-nav-active-bg); color: var(--dk-primary); }
+.state-badge[data-state="stale"] { background: var(--dk-warning-bg); color: var(--dk-warning); }
+.state-badge[data-state="unloaded"] { background: var(--dk-bg-muted); color: var(--dk-text-muted); }
+.status-panel {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  color: var(--dk-text-secondary);
+  box-shadow: var(--dk-shadow-dialog);
+}
+.status-panel[data-kind="success"] { border-color: var(--dk-success); background: var(--dk-success-bg); color: var(--dk-success); }
+.status-panel[data-kind="error"] { border-color: var(--dk-danger-border); background: var(--dk-danger-bg); color: var(--dk-danger); }
+.inline-form,
+.single-line-form,
+.catalog-form,
+.memory-form,
+.form-actions {
+  border-color: var(--dk-border-subtle);
+  background: var(--dk-bg-subtle);
+}
+input,
+select,
+textarea,
+.gateway-profile-field select,
+.remote-access-panel .gateway-profile-field textarea,
+.remote-access-panel .gateway-profile-field input {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  color: var(--dk-text);
+}
+input:focus,
+select:focus,
+textarea:focus,
+.remote-access-panel .gateway-profile-field textarea:focus,
+.remote-access-panel .gateway-profile-field input:focus {
+  border-color: var(--dk-primary);
+  box-shadow: 0 0 0 3px var(--dk-focus-ring);
+}
+.gateway-profile-field input[readonly] { background: var(--dk-bg-muted); color: var(--dk-text-secondary); }
+.desktop-toggle {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  color: var(--dk-text);
+}
+.desktop-toggle:hover { border-color: var(--dk-primary); background: var(--dk-bg-subtle); }
+.desktop-toggle input { accent-color: var(--dk-primary); }
+.desktop-toggle small { color: var(--dk-text-muted); }
+.list-item,
+.managed-row,
+.selection-row,
+.runtime-item,
+.resource-row,
+.detail-group,
+.editor-toolbar,
+.connection-toolbar,
+.runtime-subview-tabs {
+  border-color: var(--dk-border-subtle);
+}
+.managed-item.current-context {
+  background: var(--dk-bg-subtle);
+  box-shadow: inset 3px 0 0 var(--dk-nav-active-accent);
+}
+.list-item code,
+.managed-row code,
+.runtime-item code,
+.discovery-candidate code,
+.digest-row code,
+.discovery-digest code,
+.auth-usage-grid strong,
+.config-source-card code {
+  color: var(--dk-text-secondary);
+}
+.list-item span { color: var(--dk-text); }
+.empty { color: var(--dk-text-muted); }
+.detail-backdrop { background: var(--dk-backdrop); }
+.detail-panel,
+.editor-dialog { box-shadow: var(--dk-shadow-dialog); }
+.editor-dialog::backdrop { background: var(--dk-backdrop); }
+.runtime-output,
+.runtime-output-panel pre,
+.auth-usage-grid code {
+  background: var(--dk-log-bg);
+  color: var(--dk-log-text);
+}
+.editor-dialog .form-actions { background: var(--dk-bg-subtle); }
+.dialog-message { background: var(--dk-danger-bg); color: var(--dk-danger); }
+.endpoint-stack span,
+.remote-access-intro,
+.connection-auth-guide,
+.discovery-digest {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-subtle);
+}
+.endpoint-stack span strong,
+.remote-access-intro > strong,
+.credential-heading strong,
+.auth-usage-heading strong,
+.config-source-card strong {
+  color: var(--dk-text);
+}
+.desktop-preferences-grid { gap: 14px; }
+.desktop-theme-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.desktop-theme-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--dk-text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+.desktop-theme-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--dk-border);
+  border-radius: var(--dk-radius-sm);
+  background: var(--dk-bg-elevated);
+  color: var(--dk-text);
+}
+.desktop-theme-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.desktop-theme-status-row .subpanel-note {
+  margin: 0;
+  min-width: 0;
+}
+.desktop-theme-status-row .secondary-button {
+  flex: 0 0 auto;
+}
+@media (max-width: 720px) {
+  .desktop-theme-controls { grid-template-columns: 1fr; }
+}

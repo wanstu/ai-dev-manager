@@ -4,22 +4,16 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	kiticon "github.com/wanstu/wails-desktop-kit/icon"
 )
 
 func main() {
 	root, err := findRepoRoot()
 	if err != nil {
 		fatal(err)
-	}
-
-	if runtime.GOOS == "windows" {
-		if err := runWindowsIconPreparation(root); err != nil {
-			fatal(err)
-		}
-		return
 	}
 
 	copies := [][2]string{
@@ -32,19 +26,27 @@ func main() {
 		}
 	}
 
-	// The tray implementation is currently Windows-only, but main.go embeds
-	// this asset on every platform. Keep the checked-in fitted tray image when
-	// present; only seed it from the source asset for a fresh checkout/layout.
+	traySource := filepath.Join(root, "assets", "icons", "ai-dev-manager-tray.png")
 	trayTarget := filepath.Join(root, "cmd", "ai-dev-manager-desktop", "assets", "tray.png")
-	if _, err := os.Stat(trayTarget); os.IsNotExist(err) {
-		if err := copyFile(filepath.Join(root, "assets", "icons", "ai-dev-manager-tray.png"), trayTarget); err != nil {
-			fatal(err)
-		}
-	} else if err != nil {
-		fatal(err)
+	options := kiticon.DefaultOptions()
+	options.CanvasSize = 1024
+	options.Fill = 0.94
+	options.TrimAlpha = true
+	options.AlphaThreshold = 8
+	if err := kiticon.NormalizeFile(traySource, trayTarget, options); err != nil {
+		fatal(fmt.Errorf("normalize tray icon with desktop-kit: %w", err))
 	}
 
-	fmt.Println("Prepared adm-desktop assets for", runtime.GOOS)
+	if runtime.GOOS == "windows" {
+		// Wails regenerates icon.ico from build/appicon.png when the previous
+		// generated resource is absent.
+		windowsIcon := filepath.Join(root, "cmd", "ai-dev-manager-desktop", "build", "windows", "icon.ico")
+		if err := os.Remove(windowsIcon); err != nil && !os.IsNotExist(err) {
+			fatal(fmt.Errorf("remove generated Windows icon: %w", err))
+		}
+	}
+
+	fmt.Println("Prepared adm-desktop assets with Wails Desktop Kit for", runtime.GOOS)
 }
 
 func findRepoRoot() (string, error) {
@@ -64,17 +66,6 @@ func findRepoRoot() (string, error) {
 		}
 		dir = parent
 	}
-}
-
-func runWindowsIconPreparation(root string) error {
-	script := filepath.Join(root, "scripts", "prepare-desktop-icons.ps1")
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("prepare Windows desktop icons: %w", err)
-	}
-	return nil
 }
 
 func copyFile(source, destination string) error {

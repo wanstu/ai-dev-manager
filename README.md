@@ -58,7 +58,7 @@ Windows Desktop 发布名：
 adm-desktop-v1.2.0-windows-amd64.exe
 ```
 
-Desktop 通过所选 ADM Base URL 的 `/admin/mcp` 管理 ADM；连接失败不会直接回退读写本机 `state.json`。
+Desktop 通过所选 ADM Base URL 的 `/admin/mcp` 管理 ADM；连接失败不会直接回退读写本机 `state.json`。桌面壳层统一使用 Wails Desktop Kit v0.5.0，窗口、单实例、tray、登录自启、公共 UI assets、图标规范化与 Runtime Theme 均由 Kit 提供。ADM 只持久化用户选择的 light/dark/system 与 Theme Pack；主题目录和 CSS 由 Kit 在运行时同步、校验和缓存，因此 Theme 仓库新增主题不需要重新构建 ADM。
 
 源码构建必须使用 Wails：
 

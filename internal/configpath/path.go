@@ -1,18 +1,15 @@
 package configpath
 
 import (
-	"os"
 	"path/filepath"
+
+	kitpaths "github.com/wanstu/wails-desktop-kit/paths"
 )
 
 const DirName = "adm"
 
 func Dir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", DirName), nil
+	return kitpaths.ConfigDir(DirName)
 }
 
 func File(name string) (string, error) {
