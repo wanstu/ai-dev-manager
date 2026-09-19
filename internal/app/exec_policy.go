@@ -38,7 +38,7 @@ func (s *Service) RecordFullAuthorizationBypass(rt *runtime.Runtime, environment
 }
 
 func (s *Service) recordFullAuthorizationBypass(rt *runtime.Runtime, environmentID, executable, surface string) {
-	if rt == nil || !rt.FullAuthorizationEnabled() || rt.IsExplicitlyAllowed(executable) {
+	if rt == nil || !rt.FullAuthorizationEnabled() || rt.IsBlockedExecutable(executable) || rt.IsExplicitlyAllowed(executable) {
 		return
 	}
 	_ = s.RecordExecDenial(

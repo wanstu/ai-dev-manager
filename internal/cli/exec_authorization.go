@@ -13,7 +13,8 @@ func runExecAuthorization(service cliManagementBackend, args []string) error {
   adm exec authorization set --mode strict|full
 
 strict：只允许显式 allowlist，并阻止 PowerShell/cmd/bash/sh 等通用命令解释器作为绕过入口。
-full：允许未列入 allowlist 的 executable，但仍记录 full_authorization_bypass 审计。`)
+full：允许未列入 allowlist 的 executable，但仍记录 full_authorization_bypass 审计。
+两种模式都不能执行命令黑名单中的 executable。`)
 		return nil
 	}
 	switch args[0] {

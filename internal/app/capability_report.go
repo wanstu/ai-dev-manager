@@ -83,7 +83,7 @@ func (s *Service) environmentCapabilityReportWithOptions(ctx context.Context, en
 	var rt *runtime.Runtime
 	var runtimeErr error
 	if isolationErr == nil {
-		rt, runtimeErr = runtime.New(env.Root, state.AllowedExecutables)
+		rt, runtimeErr = runtime.NewWithExecutionPolicy(env.Root, state.AllowedExecutables, state.BlockedExecutables, os.Environ(), false)
 	}
 
 	rootErr := firstError(isolationErr, runtimeErr)
@@ -663,6 +663,8 @@ func classifyCommandCapabilityError(err error) string {
 		return "cwd_escapes_root"
 	case strings.Contains(message, "cwd"):
 		return "invalid_cwd"
+	case strings.Contains(message, "blocked by the command blacklist"):
+		return "executable_blocked"
 	case strings.Contains(message, "not allowed"):
 		return "executable_not_allowed"
 	case strings.Contains(message, "not available"), strings.Contains(message, "executable file not found"), strings.Contains(message, "no such file"), strings.Contains(message, "cannot find"):

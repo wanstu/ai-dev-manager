@@ -475,6 +475,15 @@ func (c *Client) ExecAllow(executable string) ([]string, error) {
 func (c *Client) ExecRemove(executable string) ([]string, error) {
 	return callAdmin[[]string](c, context.Background(), "exec_allow_remove", map[string]any{"executable": executable})
 }
+func (c *Client) ExecBlock(executable string) ([]string, error) {
+	return callAdmin[[]string](c, context.Background(), "exec_block", map[string]any{"executable": executable})
+}
+func (c *Client) ExecUnblock(executable string) ([]string, error) {
+	return callAdmin[[]string](c, context.Background(), "exec_block_remove", map[string]any{"executable": executable})
+}
+func (c *Client) ExecBlockList() ([]string, error) {
+	return callAdmin[[]string](c, context.Background(), "exec_block_list", map[string]any{})
+}
 func (c *Client) ExecDenyList() ([]model.ExecDenial, error) {
 	return callAdmin[[]model.ExecDenial](c, context.Background(), "exec_deny_list", map[string]any{})
 }

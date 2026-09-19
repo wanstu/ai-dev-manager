@@ -35,6 +35,9 @@ type managementBackend interface {
 	EnvironmentRemove(string) error
 	ExecAllow(string) ([]string, error)
 	ExecRemove(string) ([]string, error)
+	ExecBlock(string) ([]string, error)
+	ExecUnblock(string) ([]string, error)
+	ExecBlockList() ([]string, error)
 	ExecDenyList() ([]model.ExecDenial, error)
 	ExecDenyClear(string) ([]model.ExecDenial, error)
 	ExecDenyClearAll() error

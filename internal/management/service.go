@@ -18,6 +18,7 @@ type Snapshot struct {
 	WorktreeSettings   model.WorktreeSettings   `json:"worktree_settings"`
 	HostEnvironment    hostenv.Status           `json:"host_environment"`
 	AllowedExecutables []string                 `json:"allowed_executables"`
+	BlockedExecutables []string                 `json:"blocked_executables"`
 	ExecDenials        []model.ExecDenial       `json:"exec_denials"`
 	MCPs               []model.MCPDefinition    `json:"mcps"`
 	Skills             []model.CatalogEntry     `json:"skills"`
@@ -145,6 +146,24 @@ func (s *Service) ExecRemove(executable string) ([]string, error) {
 		return nil, err
 	}
 	return s.app.AllowedExecutables()
+}
+
+func (s *Service) ExecBlock(executable string) ([]string, error) {
+	if err := s.app.BlockExecutable(executable); err != nil {
+		return nil, err
+	}
+	return s.app.BlockedExecutables()
+}
+
+func (s *Service) ExecUnblock(executable string) ([]string, error) {
+	if err := s.app.RemoveBlockedExecutable(executable); err != nil {
+		return nil, err
+	}
+	return s.app.BlockedExecutables()
+}
+
+func (s *Service) ExecBlockList() ([]string, error) {
+	return s.app.BlockedExecutables()
 }
 
 func (s *Service) ExecDenyList() ([]model.ExecDenial, error) {
@@ -342,6 +361,10 @@ func (s *Service) Snapshot() (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	blocked, err := s.app.BlockedExecutables()
+	if err != nil {
+		return Snapshot{}, err
+	}
 	execDenials, err := s.app.ExecDenials()
 	if err != nil {
 		return Snapshot{}, err
@@ -364,6 +387,7 @@ func (s *Service) Snapshot() (Snapshot, error) {
 		WorktreeSettings:   worktreeSettings,
 		HostEnvironment:    hostEnvironment,
 		AllowedExecutables: nonNilStrings(allowed),
+		BlockedExecutables: nonNilStrings(blocked),
 		ExecDenials:        nonNilExecDenials(execDenials),
 		MCPs:               nonNilMCP(mcps),
 		Skills:             nonNilCatalog(skills),

@@ -520,6 +520,77 @@ func TestExecIsOptionalAndExplicitlyAllowlisted(t *testing.T) {
 	}
 }
 
+func TestCommandBlacklistOverridesAllowlistAndFullAuthorization(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	service := app.New(statePath)
+	ws, err := service.Workspaces.Add(root, "blacklist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "blacklist", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Environments.AcquireWriter(env.ID, "blacklist-owner"); err != nil {
+		t.Fatal(err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AllowExecutable(exe); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.BlockExecutable(exe); err != nil {
+		t.Fatal(err)
+	}
+	allowed, err := service.AllowedExecutables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allowed) != 0 {
+		t.Fatalf("blacklisting must remove executable from allowlist: %v", allowed)
+	}
+	blocked, err := service.BlockedExecutables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocked) != 1 || !pathutil.Same(blocked[0], exe) {
+		t.Fatalf("blocked executables = %v; want %q", blocked, exe)
+	}
+	if _, err := service.SetExecFullAuthorization(true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Exec(context.Background(), env.ID, "blacklist-owner", exe, []string{"-test.run=TestExecHelperProcess"}, "", 10000, 20000); err == nil || !strings.Contains(err.Error(), "command blacklist") {
+		t.Fatalf("blacklist must override full authorization, got %v", err)
+	}
+	if err := service.AllowExecutable(exe); err == nil || !strings.Contains(err.Error(), "remove it from the blacklist") {
+		t.Fatalf("allowing a blacklisted executable must require explicit unblock, got %v", err)
+	}
+	denials, err := service.ExecDenials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(denials) != 1 || !strings.Contains(denials[0].LastReason, "command blacklist") {
+		t.Fatalf("blacklist denial observation = %+v", denials)
+	}
+	reloaded := app.New(statePath)
+	persistedBlocked, err := reloaded.BlockedExecutables()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(persistedBlocked) != 1 || !pathutil.Same(persistedBlocked[0], exe) {
+		t.Fatalf("persisted blacklist = %v; want %q", persistedBlocked, exe)
+	}
+	if err := service.RemoveBlockedExecutable(exe); err != nil {
+		t.Fatal(err)
+	}
+	if items, err := service.BlockedExecutables(); err != nil || len(items) != 0 {
+		t.Fatalf("blacklist after removal = %v err=%v", items, err)
+	}
+}
+
 func TestVerifierDefinitionsPersistPerEnvironmentAndZeroConfigReloadsCleanly(t *testing.T) {
 	root := t.TempDir()
 	statePath := filepath.Join(t.TempDir(), "state.json")

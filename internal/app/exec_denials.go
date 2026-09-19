@@ -121,7 +121,7 @@ func isExecutableNotAllowedError(err error) bool {
 
 func isExecutableNotAllowedErrorText(message string) bool {
 	message = strings.ToLower(message)
-	return strings.Contains(message, "executable") && strings.Contains(message, "not allowed")
+	return strings.Contains(message, "executable") && (strings.Contains(message, "not allowed") || strings.Contains(message, "blocked by the command blacklist"))
 }
 
 func removeExecDenial(items []model.ExecDenial, executable string) []model.ExecDenial {

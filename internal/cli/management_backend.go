@@ -73,6 +73,9 @@ type cliManagementBackend interface {
 	ExecAllow(string) ([]string, error)
 	ExecRemove(string) ([]string, error)
 	ExecList() ([]string, error)
+	ExecBlock(string) ([]string, error)
+	ExecUnblock(string) ([]string, error)
+	ExecBlockList() ([]string, error)
 	ExecAuthorizationStatus() (app.ExecAuthorizationStatus, error)
 	ExecFullAuthorizationSet(bool) (app.ExecAuthorizationStatus, error)
 

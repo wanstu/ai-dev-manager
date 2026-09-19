@@ -134,6 +134,24 @@ func (s *Service) ExecList() ([]string, error) {
 	return s.AllowedExecutables()
 }
 
+func (s *Service) ExecBlock(executable string) ([]string, error) {
+	if err := s.BlockExecutable(executable); err != nil {
+		return nil, err
+	}
+	return s.BlockedExecutables()
+}
+
+func (s *Service) ExecUnblock(executable string) ([]string, error) {
+	if err := s.RemoveBlockedExecutable(executable); err != nil {
+		return nil, err
+	}
+	return s.BlockedExecutables()
+}
+
+func (s *Service) ExecBlockList() ([]string, error) {
+	return s.BlockedExecutables()
+}
+
 func (s *Service) MCPAddConfig(name string, config catalog.MCPConfig) (model.MCPDefinition, error) {
 	return s.MCPs.AddMCPConfig(name, config)
 }

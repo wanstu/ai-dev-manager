@@ -19,9 +19,9 @@ func (s *Service) GlobalRuntime() (*runtime.Runtime, error) {
 		return nil, err
 	}
 	if s.HostEnvironment != nil {
-		return runtime.NewWithPolicy(root, state.AllowedExecutables, s.HostEnvironment.Environ(), state.ExecFullAuthorization)
+		return runtime.NewWithExecutionPolicy(root, state.AllowedExecutables, state.BlockedExecutables, s.HostEnvironment.Environ(), state.ExecFullAuthorization)
 	}
-	return runtime.NewWithAuthorization(root, state.AllowedExecutables, state.ExecFullAuthorization)
+	return runtime.NewWithExecutionPolicy(root, state.AllowedExecutables, state.BlockedExecutables, nil, state.ExecFullAuthorization)
 }
 
 func (s *Service) GlobalExec(ctx context.Context, executable string, args []string, timeoutMS int64, maxOutputBytes int) (runtime.CommandResult, error) {

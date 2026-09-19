@@ -37,9 +37,9 @@ func (s *Service) MCPProbe(ctx context.Context, mcpID string) (MCPHealthStatus, 
 	}
 	var rt *runtime.Runtime
 	if s.HostEnvironment != nil {
-		rt, err = runtime.NewWithPolicy(root, allowed, s.HostEnvironment.Environ(), state.ExecFullAuthorization)
+		rt, err = runtime.NewWithExecutionPolicy(root, allowed, state.BlockedExecutables, s.HostEnvironment.Environ(), state.ExecFullAuthorization)
 	} else {
-		rt, err = runtime.NewWithAuthorization(root, allowed, state.ExecFullAuthorization)
+		rt, err = runtime.NewWithExecutionPolicy(root, allowed, state.BlockedExecutables, nil, state.ExecFullAuthorization)
 	}
 	if err != nil {
 		return mcpHealthErrorStatus(mcpID, "probe_directory_unavailable"), nil

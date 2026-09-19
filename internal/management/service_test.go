@@ -46,6 +46,9 @@ func TestSnapshotAggregatesPersistedStateWithoutMemoryValuesOrGit(t *testing.T) 
 	if err := application.AllowExecutable("go"); err != nil {
 		t.Fatal(err)
 	}
+	if err := application.BlockExecutable("pwsh"); err != nil {
+		t.Fatal(err)
+	}
 
 	service := management.New(application)
 	snapshot, err := service.Snapshot()
@@ -63,6 +66,9 @@ func TestSnapshotAggregatesPersistedStateWithoutMemoryValuesOrGit(t *testing.T) 
 	}
 	if len(snapshot.AllowedExecutables) != 1 || snapshot.AllowedExecutables[0] != "go" {
 		t.Fatalf("snapshot allowlist = %+v", snapshot.AllowedExecutables)
+	}
+	if len(snapshot.BlockedExecutables) != 1 || snapshot.BlockedExecutables[0] != "pwsh" {
+		t.Fatalf("snapshot command blacklist = %+v", snapshot.BlockedExecutables)
 	}
 	if len(snapshot.MCPs) != 1 || snapshot.MCPs[0].ID != mcpEntry.ID {
 		t.Fatalf("snapshot MCPs = %+v", snapshot.MCPs)
@@ -140,6 +146,20 @@ func TestManagementMutationsDelegateToExistingServicesAndRemainSafe(t *testing.T
 	allowed, err := service.ExecAllow("go")
 	if err != nil || len(allowed) != 1 || allowed[0] != "go" {
 		t.Fatalf("ExecAllow result = %v err=%v", allowed, err)
+	}
+	blocked, err := service.ExecBlock("go")
+	if err != nil || len(blocked) != 1 || blocked[0] != "go" {
+		t.Fatalf("ExecBlock result = %v err=%v", blocked, err)
+	}
+	if allowed, err := application.AllowedExecutables(); err != nil || len(allowed) != 0 {
+		t.Fatalf("blacklisting must remove allowlist entry: %v err=%v", allowed, err)
+	}
+	if blocked, err = service.ExecUnblock("go"); err != nil || len(blocked) != 0 {
+		t.Fatalf("ExecUnblock result = %v err=%v", blocked, err)
+	}
+	allowed, err = service.ExecAllow("go")
+	if err != nil || len(allowed) != 1 || allowed[0] != "go" {
+		t.Fatalf("ExecAllow after unblock result = %v err=%v", allowed, err)
 	}
 
 	renamedWorkspace, err := service.WorkspaceRename(ws.ID, "after-workspace")
@@ -231,7 +251,7 @@ func TestSnapshotReflectsSubsequentPersistedChangesAndUsesArrays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if empty.Workspaces == nil || empty.Environments == nil || empty.AllowedExecutables == nil || empty.MCPs == nil || empty.Skills == nil {
+	if empty.Workspaces == nil || empty.Environments == nil || empty.AllowedExecutables == nil || empty.BlockedExecutables == nil || empty.MCPs == nil || empty.Skills == nil {
 		t.Fatalf("empty snapshot must use arrays, not nil slices: %+v", empty)
 	}
 

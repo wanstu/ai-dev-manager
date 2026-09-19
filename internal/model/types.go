@@ -165,6 +165,7 @@ type State struct {
 	WorktreeSettings      WorktreeSettings      `json:"worktree_settings"`
 	GatewayAccess         GatewayAccessSettings `json:"gateway_access"`
 	AllowedExecutables    []string              `json:"allowed_executables,omitempty"`
+	BlockedExecutables    []string              `json:"blocked_executables,omitempty"`
 	ExecFullAuthorization bool                  `json:"exec_full_authorization,omitempty"`
 	ExecDenials           []ExecDenial          `json:"exec_denials,omitempty"`
 	MCPs                  []MCPDefinition       `json:"mcps,omitempty"`

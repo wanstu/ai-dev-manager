@@ -403,7 +403,7 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 必须同时满足：
 
 - Writer matching；
-- executable 在 global allowlist；
+- executable 满足当前 execution policy：不在 command blacklist，且在 Strict 模式下位于 global allowlist（Full Authorization 可放行未列入 allowlist 的 executable）；
 - cwd 在 Environment 内；
 - managed worktree（若有）identity 仍有效。
 
@@ -492,7 +492,7 @@ Writer：不需要。
 
 返回 `proc_...`。
 
-要求 Writer + allowlist。
+要求 Writer + execution policy；command blacklist 在 Strict / Full Authorization 下都优先拒绝。
 
 ### `process_list`
 
@@ -925,11 +925,14 @@ Agent 如需短生命周期 context，可使用专门的 temporary Environment l
 
 - `exec_allow`
 - `exec_allow_remove`
+- `exec_block`
+- `exec_block_remove`
+- `exec_block_list`
 - `exec_deny_list`
 - `exec_deny_clear`
 - `exec_deny_clear_all`
 
-Agent 只能在管理员已批准的 allowlist 下执行。
+默认 Strict 模式下 Agent 只能在管理员已批准的 allowlist 下执行；Full Authorization 可放行未列入 allowlist 的 executable，但 command blacklist 始终拥有最高拒绝优先级。
 
 ### Global MCP management
 
@@ -975,7 +978,7 @@ Agent temporary Environment lifecycle 是更窄、owner-scoped、no-force 的 wo
 
 ## 21. 管理面还有哪些通用工具
 
-`/admin/mcp` 还提供 `management_snapshot`，用于 Desktop/CLI 获取 sanitized overview：Workspace、Environment summaries、exec allowlist、MCP/Skill catalog、Global Memory count 等。
+`/admin/mcp` 还提供 `management_snapshot`，用于 Desktop/CLI 获取 sanitized overview：Workspace、Environment summaries、exec allowlist / command blacklist、MCP/Skill catalog、Global Memory count 等。
 
 snapshot 不返回 Global/Private Memory values。
 

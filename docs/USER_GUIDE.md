@@ -14,7 +14,7 @@ ADM 的核心原则是：
 - **Environment 是一个持久开发上下文**，不是服务、容器或 Git 分支。
 - **Gateway 才是真正运行的服务进程**。
 - **读操作和写操作分权**：读通常不需要 Writer；文件写入、命令执行等 mutation 需要 Writer lease。
-- **命令执行必须经过 allowlist**。
+- **命令执行必须经过 ADM execution policy**：Strict 默认依赖 allowlist；命令黑名单始终优先，并且 Full Authorization 也不能绕过。
 - **MCP 和 Skill 是全局定义，Environment 只保存启用选择**。
 - **Git、Verifier、MCP、Skill、Worktree 都是可选能力**；缺一个能力只阻止依赖它的操作。
 - **ADM 不负责 Planner/Executor/Reviewer、GSD phase 推进或任务编排**。ADM 提供能力、权限、生命周期和诊断，Agent 自己决定任务流程。
@@ -296,9 +296,16 @@ Agent 面提供：
 & $adm exec allow --executable node
 & $adm exec list
 & $adm exec remove --executable git
+
+# 永久优先拒绝某个 executable
+& $adm exec blacklist add --executable pwsh
+& $adm exec blacklist list
+& $adm exec blacklist remove --executable pwsh
 ```
 
 这不是 shell 字符串白名单，而是 executable 权限边界。Agent 调用 `exec` / process / run / verifier / stdio MCP 时，最终都要经过相关 executable 检查。
+
+Execution policy 的优先级是：**command blacklist → reserved ADM command policy → allowlist / Full Authorization**。加入黑名单时同名 executable 会从 allowlist 移除；移出黑名单不会自动重新加入 allowlist。Full Authorization 允许未列入 allowlist 的 executable，但**永远不能执行黑名单中的 executable**。
 
 ### 8.2 Agent 执行命令
 
@@ -324,11 +331,11 @@ Agent 工具 `exec` 需要：
 }
 ```
 
-工作目录必须留在 Environment root 中。allowlist 中不存在的 executable 会被明确拒绝。
+工作目录必须留在 Environment root 中。默认 Strict 模式下，allowlist 中不存在的 executable 会被明确拒绝；Full Authorization 可放行未列入 allowlist 的 executable，但命令黑名单仍会明确拒绝。
 
 ### 8.3 Exec denial observations
 
-Gateway/Admin 管理面还会记录轻量的“最近被 Runtime allowlist 拒绝的 executable”观察，包括次数、最近时间、来源 Environment 等；不会持久化命令参数或 stdout/stderr。Desktop 可以用这些观察帮助人决定是否加入 allowlist。
+Gateway/Admin 管理面还会记录轻量的 executable authorization observations，包括 Strict allowlist 拒绝、command blacklist 拒绝与 Full Authorization bypass；包含次数、最近时间、来源 Environment 等，但不会持久化命令参数或 stdout/stderr。Desktop 可以用这些观察帮助人决定是否调整 allowlist / blacklist。
 
 ## 9. MCP：全局定义、Environment 授权、运行时观察是三件不同的事
 
@@ -680,7 +687,7 @@ environment_verifier_run_cancel
 异步 verifier 使用独立的 owner-local `vfrun_...` 身份。它复用同一套：
 
 - verifier definition；
-- exec allowlist；
+- exec execution policy（allowlist / command blacklist / authorization mode）；
 - cwd containment；
 - configured timeout；
 - Writer 权限；
@@ -935,7 +942,7 @@ managed worktree 是可选 isolation：
 - MCP；
 - Skill / Skill Sources；
 - Global / Environment Memory；
-- Exec allowlist 与 denial observations；
+- Exec allowlist、command blacklist、authorization mode 与 denial observations；
 - Gateway/system/diagnostics；
 - temporary Environment lifecycle 操作。
 
@@ -954,7 +961,7 @@ Windows / macOS / Linux 的托盘、autostart 和平台构建说明见 [desktop.
 - Workspace；
 - Environment；
 - Writer lease 元数据（过期后视为无效）；
-- exec allowlist；
+- exec execution policy（allowlist / command blacklist / authorization mode）；
 - MCP definitions；
 - Skill sources/catalog snapshot；
 - Environment MCP/Skill selections；
@@ -999,7 +1006,7 @@ Windows / macOS / Linux 的托盘、autostart 和平台构建说明见 [desktop.
 
 ### “exec allow go 后，Agent 能执行任意 shell 字符串吗？”
 
-不是。ADM 授权 executable，仍然检查 Environment、Writer、cwd containment 等 Runtime 约束。
+不是。ADM 授权 executable，仍然检查 Environment、Writer、cwd containment 等 Runtime 约束。若 executable 在 command blacklist 中，即使开启 Full Authorization 也会被拒绝。
 
 ### “temporary 到期会自动删除吗？”
 

@@ -197,6 +197,20 @@ func (a *Adapter) RemoveExecutable(executable string) ([]string, error) {
 	return a.management.ExecRemove(executable)
 }
 
+func (a *Adapter) BlockExecutable(executable string) ([]string, error) {
+	if err := a.ready(); err != nil {
+		return nil, err
+	}
+	return a.management.ExecBlock(executable)
+}
+
+func (a *Adapter) UnblockExecutable(executable string) ([]string, error) {
+	if err := a.ready(); err != nil {
+		return nil, err
+	}
+	return a.management.ExecUnblock(executable)
+}
+
 func (a *Adapter) GetExecAuthorizationStatus() (app.ExecAuthorizationStatus, error) {
 	if err := a.ready(); err != nil {
 		return app.ExecAuthorizationStatus{}, err

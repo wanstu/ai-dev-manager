@@ -456,7 +456,7 @@ func isAdminOnlyTool(name string) bool {
 	case "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
 		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired",
-		"exec_allow", "exec_allow_remove", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
+		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
 		"logging_status", "gateway_access_status", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_clear",
 		"mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
 		"environment_mcp_set",
@@ -547,7 +547,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			status, err := service.ExecAuthorizationStatus()
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_full_authorization_set", Description: "Enable or disable full command authorization. When enabled, unlisted executables may run but are still recorded as authorization-bypass observations."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "exec_full_authorization_set", Description: "Enable or disable full command authorization. When enabled, unlisted executables may run and are recorded as authorization-bypass observations, but command-blacklist entries remain denied."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ExecFullAuthorizationInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetExecFullAuthorization(in.Enabled)
 			return toolResult(status, err)
@@ -695,7 +695,33 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_deny_list", Description: "List executable names recently blocked by the Runtime allowlist, sorted by denial count."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "exec_block", Description: "Add one executable to the command blacklist. Blacklisted executables are denied before allowlist/full-authorization checks and are removed from the allowlist."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ExecutableInput) (*mcp.CallToolResult, any, error) {
+			err := service.BlockExecutable(in.Executable)
+			if err != nil {
+				return toolResult(nil, err)
+			}
+			items, err := service.BlockedExecutables()
+			return toolResult(items, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "exec_block_remove", Description: "Remove one executable from the command blacklist. This does not add it to the allowlist."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ExecutableInput) (*mcp.CallToolResult, any, error) {
+			err := service.RemoveBlockedExecutable(in.Executable)
+			if err != nil {
+				return toolResult(nil, err)
+			}
+			items, err := service.BlockedExecutables()
+			return toolResult(items, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "exec_block_list", Description: "List executables in the command blacklist. These entries remain denied even when full authorization is enabled."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			items, err := service.BlockedExecutables()
+			return toolResult(items, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "exec_deny_list", Description: "List executable authorization observations, including allowlist and command-blacklist denials, sorted by count."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.ExecDenials()
 			return toolResult(items, err)

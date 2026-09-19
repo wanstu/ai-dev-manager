@@ -34,6 +34,7 @@ const (
 type Runtime struct {
 	root                     string
 	allowedExecutables       []string
+	blockedExecutables       []string
 	baseEnvironment          []string
 	allowUnlistedExecutables bool
 }
@@ -80,14 +81,18 @@ func New(root string, allowedExecutables []string) (*Runtime, error) {
 }
 
 func NewWithAuthorization(root string, allowedExecutables []string, allowUnlistedExecutables bool) (*Runtime, error) {
-	return NewWithPolicy(root, allowedExecutables, os.Environ(), allowUnlistedExecutables)
+	return NewWithExecutionPolicy(root, allowedExecutables, nil, os.Environ(), allowUnlistedExecutables)
 }
 
 func NewWithEnvironment(root string, allowedExecutables, environment []string) (*Runtime, error) {
-	return NewWithPolicy(root, allowedExecutables, environment, false)
+	return NewWithExecutionPolicy(root, allowedExecutables, nil, environment, false)
 }
 
 func NewWithPolicy(root string, allowedExecutables, environment []string, allowUnlistedExecutables bool) (*Runtime, error) {
+	return NewWithExecutionPolicy(root, allowedExecutables, nil, environment, allowUnlistedExecutables)
+}
+
+func NewWithExecutionPolicy(root string, allowedExecutables, blockedExecutables, environment []string, allowUnlistedExecutables bool) (*Runtime, error) {
 	resolved, err := canonicalDir(root)
 	if err != nil {
 		return nil, err
@@ -95,6 +100,7 @@ func NewWithPolicy(root string, allowedExecutables, environment []string, allowU
 	return &Runtime{
 		root:                     resolved,
 		allowedExecutables:       append([]string(nil), allowedExecutables...),
+		blockedExecutables:       append([]string(nil), blockedExecutables...),
 		baseEnvironment:          append([]string(nil), environment...),
 		allowUnlistedExecutables: allowUnlistedExecutables,
 	}, nil
@@ -508,10 +514,53 @@ func (r *Runtime) IsExplicitlyAllowed(executable string) bool {
 
 func (r *Runtime) FullAuthorizationEnabled() bool { return r.allowUnlistedExecutables }
 
+func (r *Runtime) IsBlockedExecutable(executable string) bool {
+	executable = strings.TrimSpace(executable)
+	if executable == "" {
+		return false
+	}
+	for _, blocked := range r.blockedExecutables {
+		blocked = strings.TrimSpace(blocked)
+		if blocked == "" {
+			continue
+		}
+		if filepath.IsAbs(blocked) {
+			if filepath.IsAbs(executable) && samePath(blocked, executable) {
+				return true
+			}
+			continue
+		}
+		if executablePolicyNameMatch(blocked, executable) {
+			return true
+		}
+	}
+	return false
+}
+
+func executablePolicyNameMatch(policy, executable string) bool {
+	policy = strings.TrimSpace(policy)
+	executable = strings.TrimSpace(executable)
+	if policy == "" || executable == "" {
+		return false
+	}
+	if strings.EqualFold(policy, executable) {
+		return true
+	}
+	if filepath.Base(policy) != policy {
+		return false
+	}
+	policyName := strings.TrimSuffix(strings.ToLower(policy), ".exe")
+	executableName := strings.TrimSuffix(strings.ToLower(filepath.Base(executable)), ".exe")
+	return policyName == executableName
+}
+
 func (r *Runtime) allowedExecutable(executable string) (string, error) {
 	executable = strings.TrimSpace(executable)
 	if executable == "" {
 		return "", fmt.Errorf("executable is required")
+	}
+	if r.IsBlockedExecutable(executable) {
+		return "", fmt.Errorf("executable %q is blocked by the command blacklist", executable)
 	}
 	if isCommandProxyExecutable(executable) && !r.allowUnlistedExecutables {
 		return "", fmt.Errorf("executable %q is not allowed in strict mode because it can dispatch arbitrary commands", executable)

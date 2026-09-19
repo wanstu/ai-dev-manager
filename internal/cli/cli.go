@@ -950,6 +950,9 @@ func runExec(service cliManagementBackend, args []string) error {
 	if len(args) > 0 && args[0] == "authorization" {
 		return runExecAuthorization(service, args[1:])
 	}
+	if len(args) > 0 && args[0] == "blacklist" {
+		return runExecBlacklist(service, args[1:])
+	}
 	if wantsHelp(args) {
 		printExecHelp()
 		return nil
@@ -2359,17 +2362,23 @@ func printWriterHelp() {
 }
 
 func printExecHelp() {
-	fmt.Fprintln(os.Stdout, `Exec 白名单决定 Agent 可以运行哪些本地程序。
+	fmt.Fprintln(os.Stdout, `Exec authority 由 allowlist、命令黑名单和 authorization mode 共同决定；黑名单优先级最高。
 
 命令：
   adm exec allow --executable NAME_OR_PATH
-      加入一个允许执行的程序。
+      加入一个允许执行的程序；黑名单中的 executable 必须先显式移出黑名单。
 
   adm exec remove --executable NAME_OR_PATH
       从白名单移除一个程序；后续 exec 立即按新的白名单判断。
 
   adm exec list
-      查看当前白名单。`)
+      查看当前白名单。
+
+  adm exec blacklist add|remove|list ...
+      管理命令黑名单；黑名单即使在 Full Authorization 下仍然拒绝执行。
+
+  adm exec authorization status|set --mode strict|full
+      查看或修改执行授权模式。`)
 }
 
 func printCatalogHelp(kind string) {

@@ -353,9 +353,9 @@ func (s *Service) Runtime(environmentID string) (*runtime.Runtime, model.Environ
 	}
 	var rt *runtime.Runtime
 	if s.HostEnvironment != nil {
-		rt, err = runtime.NewWithPolicy(env.Root, state.AllowedExecutables, s.HostEnvironment.Environ(), state.ExecFullAuthorization)
+		rt, err = runtime.NewWithExecutionPolicy(env.Root, state.AllowedExecutables, state.BlockedExecutables, s.HostEnvironment.Environ(), state.ExecFullAuthorization)
 	} else {
-		rt, err = runtime.NewWithAuthorization(env.Root, state.AllowedExecutables, state.ExecFullAuthorization)
+		rt, err = runtime.NewWithExecutionPolicy(env.Root, state.AllowedExecutables, state.BlockedExecutables, nil, state.ExecFullAuthorization)
 	}
 	if err != nil {
 		return nil, model.Environment{}, err
@@ -372,14 +372,16 @@ func (s *Service) Capabilities(ctx context.Context, environmentID string) ([]str
 }
 
 func (s *Service) AllowExecutable(executable string) error {
-	executable = strings.TrimSpace(executable)
+	executable = normalizeExecutableName(executable)
 	if executable == "" {
 		return fmt.Errorf("executable is required")
 	}
-	if filepath.IsAbs(executable) {
-		executable = filepath.Clean(executable)
-	}
 	return s.Store.Update(func(state *model.State) error {
+		for _, current := range state.BlockedExecutables {
+			if executablePolicyMatches(current, executable) {
+				return fmt.Errorf("executable %q is blocked by the command blacklist; remove it from the blacklist before allowing it", executable)
+			}
+		}
 		state.ExecDenials = removeExecDenial(state.ExecDenials, executable)
 		for _, current := range state.AllowedExecutables {
 			if strings.EqualFold(current, executable) {
@@ -387,29 +389,56 @@ func (s *Service) AllowExecutable(executable string) error {
 			}
 		}
 		state.AllowedExecutables = append(state.AllowedExecutables, executable)
-		sort.Slice(state.AllowedExecutables, func(i, j int) bool {
-			return strings.ToLower(state.AllowedExecutables[i]) < strings.ToLower(state.AllowedExecutables[j])
-		})
+		sortExecutableNames(state.AllowedExecutables)
 		return nil
 	})
 }
 
 func (s *Service) RemoveAllowedExecutable(executable string) error {
-	executable = strings.TrimSpace(executable)
+	executable = normalizeExecutableName(executable)
 	if executable == "" {
 		return fmt.Errorf("executable is required")
 	}
-	if filepath.IsAbs(executable) {
-		executable = filepath.Clean(executable)
+	return s.Store.Update(func(state *model.State) error {
+		var removed bool
+		state.AllowedExecutables, removed = removeExecutableName(state.AllowedExecutables, executable)
+		if !removed {
+			return fmt.Errorf("executable %q is not allowlisted", executable)
+		}
+		return nil
+	})
+}
+
+func (s *Service) BlockExecutable(executable string) error {
+	executable = normalizeExecutableName(executable)
+	if executable == "" {
+		return fmt.Errorf("executable is required")
 	}
 	return s.Store.Update(func(state *model.State) error {
-		for i, current := range state.AllowedExecutables {
+		state.AllowedExecutables = removeExecutablePolicyMatches(state.AllowedExecutables, executable)
+		for _, current := range state.BlockedExecutables {
 			if strings.EqualFold(current, executable) {
-				state.AllowedExecutables = append(state.AllowedExecutables[:i], state.AllowedExecutables[i+1:]...)
 				return nil
 			}
 		}
-		return fmt.Errorf("executable %q is not allowlisted", executable)
+		state.BlockedExecutables = append(state.BlockedExecutables, executable)
+		sortExecutableNames(state.BlockedExecutables)
+		return nil
+	})
+}
+
+func (s *Service) RemoveBlockedExecutable(executable string) error {
+	executable = normalizeExecutableName(executable)
+	if executable == "" {
+		return fmt.Errorf("executable is required")
+	}
+	return s.Store.Update(func(state *model.State) error {
+		var removed bool
+		state.BlockedExecutables, removed = removeExecutableName(state.BlockedExecutables, executable)
+		if !removed {
+			return fmt.Errorf("executable %q is not in the command blacklist", executable)
+		}
+		return nil
 	})
 }
 
@@ -419,6 +448,60 @@ func (s *Service) AllowedExecutables() ([]string, error) {
 		return nil, err
 	}
 	return append([]string(nil), state.AllowedExecutables...), nil
+}
+
+func (s *Service) BlockedExecutables() ([]string, error) {
+	state, err := s.Store.Load()
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), state.BlockedExecutables...), nil
+}
+
+func removeExecutableName(items []string, executable string) ([]string, bool) {
+	for i, current := range items {
+		if strings.EqualFold(current, executable) {
+			return append(items[:i], items[i+1:]...), true
+		}
+	}
+	return items, false
+}
+
+func removeExecutablePolicyMatches(items []string, policy string) []string {
+	out := items[:0]
+	for _, item := range items {
+		if executablePolicyMatches(policy, item) {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func executablePolicyMatches(policy, executable string) bool {
+	policy = normalizeExecutableName(policy)
+	executable = normalizeExecutableName(executable)
+	if policy == "" || executable == "" {
+		return false
+	}
+	if filepath.IsAbs(policy) {
+		return filepath.IsAbs(executable) && strings.EqualFold(filepath.Clean(policy), filepath.Clean(executable))
+	}
+	if strings.EqualFold(policy, executable) {
+		return true
+	}
+	if filepath.Base(policy) != policy {
+		return false
+	}
+	policyName := strings.TrimSuffix(strings.ToLower(policy), ".exe")
+	executableName := strings.TrimSuffix(strings.ToLower(filepath.Base(executable)), ".exe")
+	return policyName == executableName
+}
+
+func sortExecutableNames(items []string) {
+	sort.Slice(items, func(i, j int) bool {
+		return strings.ToLower(items[i]) < strings.ToLower(items[j])
+	})
 }
 
 func (s *Service) Tree(environmentID, path string, maxDepth, maxEntries int) (any, error) {

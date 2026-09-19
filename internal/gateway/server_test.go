@@ -51,7 +51,7 @@ func TestGatewayDevelopsPlainDirectoryWithoutGit(t *testing.T) {
 			t.Fatalf("missing Agent gateway tool %q in %v", required, names)
 		}
 	}
-	for _, adminOnly := range []string{"management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "workspace_rename", "workspace_remove", "environment_create", "environment_rename", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_allow_remove", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "mcp_list", "mcp_add", "mcp_update", "mcp_import_preview", "mcp_import_apply", "environment_mcp_set", "skill_list", "skill_add", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete"} {
+	for _, adminOnly := range []string{"management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "workspace_rename", "workspace_remove", "environment_create", "environment_rename", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "mcp_list", "mcp_add", "mcp_update", "mcp_import_preview", "mcp_import_apply", "environment_mcp_set", "skill_list", "skill_add", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete"} {
 		if contains(names, adminOnly) {
 			t.Fatalf("Admin-only tool %q leaked into Agent gateway: %v", adminOnly, names)
 		}
@@ -572,6 +572,46 @@ func TestGatewayExecAllowlistRemoveRevokesEntry(t *testing.T) {
 	}
 }
 
+func TestGatewayExecBlacklistOverridesAllowlist(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	if err := service.AllowExecutable("go"); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	session := connectInMemory(t, ctx, NewAdmin(service))
+	defer session.Close()
+
+	blocked, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "exec_block",
+		Arguments: map[string]any{"executable": "go"},
+	})
+	if err != nil || blocked.IsError || !strings.Contains(toolText(t, blocked), "go") {
+		t.Fatalf("exec_block failed: err=%v result=%+v", err, blocked)
+	}
+	if allowed, err := service.AllowedExecutables(); err != nil || len(allowed) != 0 {
+		t.Fatalf("exec_block must remove matching allowlist entry: %v err=%v", allowed, err)
+	}
+
+	listed, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "exec_block_list", Arguments: map[string]any{}})
+	if err != nil || listed.IsError || !strings.Contains(toolText(t, listed), "go") {
+		t.Fatalf("exec_block_list failed: err=%v result=%+v", err, listed)
+	}
+
+	unblocked, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "exec_block_remove",
+		Arguments: map[string]any{"executable": "GO"},
+	})
+	if err != nil || unblocked.IsError {
+		t.Fatalf("exec_block_remove failed: err=%v result=%+v", err, unblocked)
+	}
+	if items, err := service.BlockedExecutables(); err != nil || len(items) != 0 {
+		t.Fatalf("blacklist after removal = %v err=%v", items, err)
+	}
+	if allowed, err := service.AllowedExecutables(); err != nil || len(allowed) != 0 {
+		t.Fatalf("unblocking must not re-add allowlist entry: %v err=%v", allowed, err)
+	}
+}
+
 func TestGatewayUsesOnlyEnabledConfiguredExternalMCPAndSkillRuntime(t *testing.T) {
 	external := mcp.NewServer(&mcp.Implementation{Name: "external-test", Version: "dev"}, nil)
 	mcp.AddTool(external, &mcp.Tool{Name: "external_ping", Description: "Return a test pong."},
@@ -1022,7 +1062,7 @@ func TestHTTPGatewaySeparatesAgentAndAdminMCPPaths(t *testing.T) {
 			t.Fatalf("Agent MCP missing %q: %v", required, agentNames)
 		}
 	}
-	for _, adminOnly := range []string{"management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete"} {
+	for _, adminOnly := range []string{"management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete"} {
 		if contains(agentNames, adminOnly) {
 			t.Fatalf("Admin-only tool %q leaked into Agent MCP: %v", adminOnly, agentNames)
 		}
@@ -1039,7 +1079,7 @@ func TestHTTPGatewaySeparatesAgentAndAdminMCPPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	adminNames := toolNames(adminTools.Tools)
-	for _, required := range []string{"gateway_info", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "workspace_rename", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete", "environment_inspect", "environment_injection_plan", "read"} {
+	for _, required := range []string{"gateway_info", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "workspace_rename", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete", "environment_inspect", "environment_injection_plan", "read"} {
 		if !contains(adminNames, required) {
 			t.Fatalf("Admin MCP missing %q: %v", required, adminNames)
 		}

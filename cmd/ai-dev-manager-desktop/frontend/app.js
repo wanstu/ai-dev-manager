@@ -46,7 +46,7 @@ const elements = {
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
   loadEnvironmentMemory: document.getElementById('loadEnvironmentMemory'), writeEnvironmentMemoryButton: document.getElementById('writeEnvironmentMemoryButton'), environmentMemoryScopeHint: document.getElementById('environmentMemoryScopeHint'), environmentMemoryForm: document.getElementById('environmentMemoryForm'), environmentMemoryKey: document.getElementById('environmentMemoryKey'), environmentMemoryValue: document.getElementById('environmentMemoryValue'), environmentMemoryList: document.getElementById('environmentMemoryList'),
-  execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'), execAuthorizationMode: document.getElementById('execAuthorizationMode'), execAuthorizationSave: document.getElementById('execAuthorizationSave'), execAuthorizationModeLabel: document.getElementById('execAuthorizationModeLabel'),
+  execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execBlacklistForm: document.getElementById('execBlacklistForm'), execBlacklistExecutable: document.getElementById('execBlacklistExecutable'), execBlacklistList: document.getElementById('execBlacklistList'), execBlacklistCount: document.getElementById('execBlacklistCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'), execAuthorizationMode: document.getElementById('execAuthorizationMode'), execAuthorizationSave: document.getElementById('execAuthorizationSave'), execAuthorizationModeLabel: document.getElementById('execAuthorizationModeLabel'),
   loadGlobalMemory: document.getElementById('loadGlobalMemory'), globalMemoryForm: document.getElementById('globalMemoryForm'), globalMemoryKey: document.getElementById('globalMemoryKey'), globalMemoryValue: document.getElementById('globalMemoryValue'), globalMemoryList: document.getElementById('globalMemoryList'),
 };
 
@@ -1050,12 +1050,14 @@ function updateEnvironmentContextMarkers() {
     const marker = item.querySelector('.context-marker'); if (marker) marker.hidden = !current;
   }
 }
-function renderExecutables(executables, denials = []) {
+function renderExecutables(executables, blacklist = [], denials = []) {
   executables = safeArray(executables);
+  blacklist = safeArray(blacklist);
   denials = safeArray(denials).slice().sort((a, b) => (safeNumber(b.count) - safeNumber(a.count)) || String(a.executable || '').localeCompare(String(b.executable || '')));
   const denialCount = denials.reduce((sum, item) => sum + safeNumber(item.count), 0);
-  elements.execBadge.textContent = String(executables.length);
+  elements.execBadge.textContent = String(executables.length + blacklist.length);
   setMetric(elements.execAllowedCount, executables.length);
+  setMetric(elements.execBlacklistCount, blacklist.length);
   setMetric(elements.execBlockedCount, denialCount);
   elements.execClearAllBlockedButton.disabled = denials.length === 0;
 
@@ -1075,6 +1077,22 @@ function renderExecutables(executables, denials = []) {
     }
   }
 
+  if (!blacklist.length) emptyMessage(elements.execBlacklistList, '暂无黑名单 executable');
+  else {
+    elements.execBlacklistList.replaceChildren(); elements.execBlacklistList.classList.remove('empty');
+    for (const executable of blacklist) {
+      const row = document.createElement('div'); row.className = 'managed-row exec-row';
+      const content = document.createElement('div'); content.className = 'item-content';
+      const title = document.createElement('div'); title.className = 'item-title-line';
+      const code = document.createElement('code'); code.textContent = executable;
+      title.append(code, stateBadge('禁止', 'error'));
+      const meta = document.createElement('small'); meta.textContent = '命令黑名单优先；Strict / Full Authorization 下都不能执行。';
+      content.append(title, meta);
+      row.append(content, createActionButton('移出黑名单', 'unblock-executable', executable, 'danger'));
+      elements.execBlacklistList.append(row);
+    }
+  }
+
   if (!denials.length) emptyMessage(elements.execBlockedList, '暂无执行授权观察');
   else {
     elements.execBlockedList.replaceChildren(); elements.execBlockedList.classList.remove('empty');
@@ -1085,13 +1103,16 @@ function renderExecutables(executables, denials = []) {
       const title = document.createElement('div'); title.className = 'item-title-line';
       const code = document.createElement('code'); code.textContent = executable || 'unknown executable';
       const bypass = String(denial.last_reason || '').includes('full_authorization_bypass');
-      title.append(code, stateBadge((bypass ? 'Full 旁路 × ' : '拒绝 × ') + safeNumber(denial.count, 1), bypass ? 'degraded' : 'error'));
+      const blacklisted = blacklist.some((item) => String(item).toLowerCase() === String(executable).toLowerCase());
+      title.append(code, stateBadge((blacklisted ? '黑名单拒绝 × ' : bypass ? 'Full 旁路 × ' : '拒绝 × ') + safeNumber(denial.count, 1), bypass ? 'degraded' : 'error'));
       const meta = document.createElement('small');
       meta.textContent = [denial.last_surface || 'unknown surface', denial.last_environment_id || 'unknown Environment', formatDateTime(denial.last_blocked_at)].join(' · ');
-      const reason = document.createElement('small'); reason.className = 'warning-text'; reason.textContent = denial.last_reason || 'executable was blocked by Runtime allowlist';
+      const reason = document.createElement('small'); reason.className = 'warning-text'; reason.textContent = denial.last_reason || 'executable was blocked by Runtime authority';
       content.append(title, meta, reason);
       const actions = document.createElement('div'); actions.className = 'item-actions';
-      actions.append(createActionButton(bypass ? '加入白名单' : '允许', 'allow-blocked-executable', executable), createActionButton('清理', 'clear-blocked-executable', executable, 'danger'));
+      if (blacklisted) actions.append(createActionButton('移出黑名单', 'unblock-executable', executable));
+      else actions.append(createActionButton(bypass ? '加入白名单' : '允许', 'allow-blocked-executable', executable));
+      actions.append(createActionButton('清理', 'clear-blocked-executable', executable, 'danger'));
       row.append(content, actions);
       elements.execBlockedList.append(row);
     }
@@ -1583,9 +1604,9 @@ function renderOperationalSettings(snapshot) {
 }
 
 function renderSnapshotBase(snapshot) {
-  currentSnapshot = snapshot; const workspaces = safeArray(snapshot.workspaces), environments = safeArray(snapshot.environments), executables = safeArray(snapshot.allowed_executables), mcps = safeArray(snapshot.mcps), skills = safeArray(snapshot.skills);
+  currentSnapshot = snapshot; const workspaces = safeArray(snapshot.workspaces), environments = safeArray(snapshot.environments), executables = safeArray(snapshot.allowed_executables), blacklist = safeArray(snapshot.blocked_executables), mcps = safeArray(snapshot.mcps), skills = safeArray(snapshot.skills);
   if (editingMCPID && !mcps.some((mcp) => mcp.id === editingMCPID)) resetMCPEditor(false, false);
-  renderWorkspaces(workspaces); renderManagementEnvironmentOptions(workspaces, environments); renderEnvironments(environments); renderExecutables(executables, safeArray(snapshot.exec_denials)); renderMCPManager(mcps); renderSkillManager(skills); renderOperationalSettings(snapshot); renderDiagnosticsPage(); updateManagementContextVisibility();
+  renderWorkspaces(workspaces); renderManagementEnvironmentOptions(workspaces, environments); renderEnvironments(environments); renderExecutables(executables, blacklist, safeArray(snapshot.exec_denials)); renderMCPManager(mcps); renderSkillManager(skills); renderOperationalSettings(snapshot); renderDiagnosticsPage(); updateManagementContextVisibility();
   if (!globalMemoryLoaded) emptyMessage(elements.globalMemoryList, '尚未加载 Global Memory');
   renderDashboardState('success');
   if (selectedEnvironmentID && !environments.some((env) => env.environment_id === selectedEnvironmentID)) closeEnvironmentDetail();
@@ -1595,7 +1616,7 @@ function renderManagementUnavailable(message) {
   renderWorkspaceOptions([]); renderEnvironmentWorkspaceFilter([]);
   elements.managementWorkspace.replaceChildren(new Option('管理数据未加载', '')); elements.managementWorkspace.value = ''; elements.managementWorkspace.disabled = true; elements.managementEnvironment.replaceChildren(new Option('管理数据未加载', '')); elements.managementEnvironment.value = ''; elements.managementEnvironment.disabled = true; elements.editEnvironmentButton.disabled = true;
   elements.managementEnvironmentHint.textContent = message;
-  emptyMessage(elements.workspaceList, message); emptyMessage(elements.environmentList, message); emptyMessage(elements.execList, message); emptyMessage(elements.execBlockedList, message); elements.execClearAllBlockedButton.disabled = true; setMetric(elements.execAllowedCount, '—'); setMetric(elements.execBlockedCount, '—'); emptyMessage(elements.mcpList, message); emptyMessage(elements.skillSourceList, message); emptyMessage(elements.skillList, message); emptyMessage(elements.globalMemoryList, message); emptyMessage(elements.environmentMemoryList, message); emptyMessage(elements.diagnosticsPageContent, message); elements.diagnosticsPageHint.textContent = message; renderEnvironmentMemoryScope(); updateManagementContextVisibility();
+  emptyMessage(elements.workspaceList, message); emptyMessage(elements.environmentList, message); emptyMessage(elements.execList, message); emptyMessage(elements.execBlacklistList, message); emptyMessage(elements.execBlockedList, message); elements.execClearAllBlockedButton.disabled = true; setMetric(elements.execAllowedCount, '—'); setMetric(elements.execBlacklistCount, '—'); setMetric(elements.execBlockedCount, '—'); emptyMessage(elements.mcpList, message); emptyMessage(elements.skillSourceList, message); emptyMessage(elements.skillList, message); emptyMessage(elements.globalMemoryList, message); emptyMessage(elements.environmentMemoryList, message); emptyMessage(elements.diagnosticsPageContent, message); elements.diagnosticsPageHint.textContent = message; renderEnvironmentMemoryScope(); updateManagementContextVisibility();
   elements.runtimeHint.textContent = message; resetRuntimeCollections('error', message); emptyMessage(elements.verifierList, message); emptyMessage(elements.processList, message); emptyMessage(elements.runList, message); clearRuntimeOutput(message);
   updateSkillBulkControls();
   updateMCPBulkControls();
@@ -2459,6 +2480,7 @@ elements.environmentWorkspaceForm.addEventListener('submit', async (event) => {
   });
 });
 elements.execForm.addEventListener('submit', async (event) => { event.preventDefault(); const executable = elements.execExecutable.value.trim(); if (executable) await runMutation('更新 exec allowlist', async () => { await desktopAdapter().AllowExecutable(executable); elements.execForm.reset(); closeFormDialog(elements.execForm); }); });
+elements.execBlacklistForm.addEventListener('submit', async (event) => { event.preventDefault(); const executable = elements.execBlacklistExecutable.value.trim(); if (executable) await runMutation('更新命令黑名单', async () => { await desktopAdapter().BlockExecutable(executable); elements.execBlacklistForm.reset(); closeFormDialog(elements.execBlacklistForm); }); });
 elements.globalMemoryForm.addEventListener('submit', async (event) => {
   event.preventDefault(); const key = elements.globalMemoryKey.value.trim(), value = elements.globalMemoryValue.value; if (!key) return;
   const scope = currentGlobalMemoryScope();
@@ -2529,10 +2551,12 @@ elements.environmentList.addEventListener('click', async (event) => {
   if (button.dataset.action === 'remove-environment' && window.confirm('只移除 ADM Environment 记录，不删除 root 或项目文件。继续？\n' + (environment?.root || id))) await runMutation('移除 Environment', () => desktopAdapter().RemoveEnvironment(id));
 });
 elements.execList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="remove-executable"]'); if (button) await runMutation('移除 executable', () => desktopAdapter().RemoveExecutable(button.dataset.id)); });
+elements.execBlacklistList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="unblock-executable"]'); if (button) await runMutation('移出命令黑名单', () => desktopAdapter().UnblockExecutable(button.dataset.id)); });
 elements.execBlockedList.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-action]'); if (!button) return;
   const executable = button.dataset.id; if (!executable) return;
   if (button.dataset.action === 'allow-blocked-executable') await runMutation('允许被拦截 executable', () => desktopAdapter().AllowExecutable(executable));
+  if (button.dataset.action === 'unblock-executable') await runMutation('移出命令黑名单', () => desktopAdapter().UnblockExecutable(executable));
   if (button.dataset.action === 'clear-blocked-executable') await runMutation('清理被拦截 executable', () => desktopAdapter().ClearExecDenial(executable));
 });
 elements.execClearAllBlockedButton.addEventListener('click', async () => {

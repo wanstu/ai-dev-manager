@@ -415,7 +415,7 @@ adm environment verifier remove --environment-id ENV_ID --verifier-id VF_ID
 
 CLI 当前负责定义管理；实际 verifier run 是 Agent Gateway Runtime tool，见 [AGENT_GATEWAY.md](AGENT_GATEWAY.md)。
 
-# Exec Allowlist
+# Exec Authority
 
 ## `exec allow`
 
@@ -423,7 +423,7 @@ CLI 当前负责定义管理；实际 verifier run 是 Agent Gateway Runtime too
 adm exec allow --executable NAME_OR_PATH
 ```
 
-允许一个 executable 用于 Environment Runtime execution。
+允许一个 executable 用于 Environment Runtime execution。若 executable 已在 command blacklist 中，必须先显式移出黑名单。
 
 ## `exec remove`
 
@@ -440,6 +440,26 @@ adm exec list
 ```
 
 列当前 allowlist。
+
+## `exec blacklist`
+
+```text
+adm exec blacklist add --executable NAME_OR_PATH
+adm exec blacklist remove --executable NAME_OR_PATH
+adm exec blacklist list
+```
+
+Command blacklist 的优先级高于 allowlist 和 Full Authorization。加入黑名单会自动移除匹配的 allowlist 项；移出黑名单不会自动重新允许 executable。
+
+## `exec authorization`
+
+```text
+adm exec authorization status
+adm exec authorization set --mode strict
+adm exec authorization set --mode full
+```
+
+Strict 默认只允许 allowlist。Full 可以执行未列入 allowlist 的 executable，但**不能绕过 command blacklist**。
 
 # MCP Catalog
 
