@@ -12,6 +12,7 @@ import (
 	"ai-dev-manager-v2/internal/desktop"
 	productversion "ai-dev-manager-v2/internal/version"
 
+	desktopkit "github.com/wanstu/wails-desktop-kit"
 	kitui "github.com/wanstu/wails-desktop-kit/ui"
 )
 
@@ -54,6 +55,8 @@ func TestProductionDesktopUsesDesktopKitRuntime(t *testing.T) {
 	for _, required := range []string{
 		`desktopkit.Run`,
 		`desktopkit.DefaultWindowConfig()`,
+		`desktopHidePolicy(runtime.GOOS)`,
+		`desktopkit.HideAlways`,
 		`desktopkit.HideSafe`,
 		`desktopkit.LaunchOptions{AutoStart: startHidden}`,
 		`kitui.Mount(assets)`,
@@ -124,6 +127,17 @@ func TestDesktopKitAssetsAreMounted(t *testing.T) {
 func TestGatewayChildRejectsPositionalArgumentsBeforeStartingServer(t *testing.T) {
 	if err := runGatewayChild([]string{"unexpected"}); err == nil || !strings.Contains(err.Error(), "only --listen") {
 		t.Fatalf("unexpected gateway child error: %v", err)
+	}
+}
+
+func TestDesktopHidePolicyUsesAlwaysOnLinux(t *testing.T) {
+	if got := desktopHidePolicy("linux"); got != desktopkit.HideAlways {
+		t.Fatalf("desktopHidePolicy(linux)=%q, want %q", got, desktopkit.HideAlways)
+	}
+	for _, goos := range []string{"windows", "darwin"} {
+		if got := desktopHidePolicy(goos); got != desktopkit.HideSafe {
+			t.Fatalf("desktopHidePolicy(%s)=%q, want %q", goos, got, desktopkit.HideSafe)
+		}
 	}
 }
 

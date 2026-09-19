@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"ai-dev-manager-v2/internal/app"
@@ -92,7 +93,7 @@ func runDesktop(startHidden bool) error {
 	window.Height = 760
 	window.MinWidth = 820
 	window.MinHeight = 560
-	window.HidePolicy = desktopkit.HideSafe
+	window.HidePolicy = desktopHidePolicy(runtime.GOOS)
 	window.StartHiddenOnAutoStart = true
 
 	return desktopkit.Run(desktopkit.Config{
@@ -114,6 +115,13 @@ func runDesktop(startHidden bool) error {
 			controller.ShowWindow()
 		},
 	})
+}
+
+func desktopHidePolicy(goos string) desktopkit.HidePolicy {
+	if goos == "linux" {
+		return desktopkit.HideAlways
+	}
+	return desktopkit.HideSafe
 }
 
 func frontendAssets() (fs.FS, error) {
