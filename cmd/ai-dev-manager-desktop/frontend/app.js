@@ -1534,6 +1534,7 @@ function renderExecutables(executables, blacklist = [], denials = [], usages = [
       }
       if (blocked) title.append(stateBadge('当前黑名单', 'error'));
       else if (allowed) title.append(stateBadge('当前允许', 'available'));
+      else if (Boolean(execAuthorizationStatus?.full_authorization)) title.append(stateBadge('Full 允许 · 非 allowlist', 'available'));
       else title.append(stateBadge('非 allowlist / 历史', 'degraded'));
       const meta = document.createElement('small');
       meta.textContent = ['来源 ' + execSurfaceText(usage.surface_counts), '本小时 ' + recent.current, '近24小时 ' + recent.recent24, '最近 ' + (usage.last_surface || 'unknown surface'), usage.last_environment_id || 'global', formatDateTime(usage.last_executed_at)].join(' · ');

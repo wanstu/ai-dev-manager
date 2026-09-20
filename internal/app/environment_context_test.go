@@ -445,6 +445,44 @@ func TestEnvironmentContextBundleBudgetsSectionCapsAndStableOrdering(t *testing.
 	}
 }
 
+func TestEnvironmentContextBundleReportsFullAuthorizationWithoutAllowlist(t *testing.T) {
+	root := t.TempDir()
+	service := New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(root, "full-context")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "full-context", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	strict, err := service.EnvironmentContextBundle(context.Background(), env.ID, model.EnvironmentContextRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	strictExec := contextCapabilityByKey(t, strict.CapabilityIssues, runtime.CapabilityExec)
+	if strictExec.State != model.CapabilityStateUnconfigured || strictExec.ReasonCode != "no_allowed_executables" {
+		t.Fatalf("strict shell.exec=%+v", strictExec)
+	}
+
+	if _, err := service.SetExecFullAuthorization(true); err != nil {
+		t.Fatal(err)
+	}
+	full, err := service.EnvironmentContextBundle(context.Background(), env.ID, model.EnvironmentContextRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullExec := contextCapabilityByKey(t, full.AvailableCapabilities, runtime.CapabilityExec)
+	if fullExec.State != model.CapabilityStateAvailable || fullExec.ReasonCode != "full_authorization" {
+		t.Fatalf("full shell.exec=%+v", fullExec)
+	}
+	run := contextGuidance(t, full, "run.lifecycle")
+	if !strings.Contains(run.Message, "Full authorization") || !strings.Contains(run.Message, "PATH") {
+		t.Fatalf("Full run guidance is misleading: %+v", run)
+	}
+}
+
 func TestEnvironmentContextVerifierSideEffectHelper(t *testing.T) {
 	path := os.Getenv("ADM_CONTEXT_VERIFIER_SIDE_EFFECT")
 	if path == "" || !strings.Contains(strings.Join(os.Args, " "), "TestEnvironmentContextVerifierSideEffectHelper") {

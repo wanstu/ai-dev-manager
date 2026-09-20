@@ -297,9 +297,13 @@ func environmentContextGuidance(facts map[string]model.CapabilityFact, mcps []mo
 	if fact, ok := facts["run.lifecycle"]; ok {
 		runState = fact.State
 	}
+	runMessage := "Generic async run lifecycle is for one allowlisted Environment-scoped command; task planning and multi-step orchestration remain outside ADM."
+	if execFact, ok := facts[runtime.CapabilityExec]; ok && execFact.ReasonCode == "full_authorization" {
+		runMessage = "Generic async run lifecycle may execute an Environment-scoped command under Full authorization even when it is not in the allowlist. Unlisted executions are permitted but recorded as Full authorization bypass audit observations; executable availability still depends on PATH."
+	}
 	guidance = append(guidance, model.EnvironmentContextGuidance{
 		Operation: "run.lifecycle", State: runState, RequiresWriter: true,
-		Message: "Generic async run lifecycle is for one allowlisted Environment-scoped command; task planning and multi-step orchestration remain outside ADM.",
+		Message: runMessage,
 	})
 	mcpState := summaryMCPState(mcps)
 	guidance = append(guidance, model.EnvironmentContextGuidance{

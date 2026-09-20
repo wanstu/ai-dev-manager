@@ -259,6 +259,89 @@ func TestCapabilityReportHandlesTamperedRootWithoutErasingGlobalDiagnostics(t *t
 	}
 }
 
+func TestCapabilityReportDistinguishesStrictAndFullWithoutAllowlist(t *testing.T) {
+	root := t.TempDir()
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(root, "full-capability")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "full-capability", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	strict, err := service.EnvironmentCapabilityReport(context.Background(), env.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFact(t, strict, runtime.CapabilityExec, model.CapabilityStateUnconfigured, "no_allowed_executables", true)
+
+	if _, err := service.SetExecFullAuthorization(true); err != nil {
+		t.Fatal(err)
+	}
+	full, err := service.EnvironmentCapabilityReport(context.Background(), env.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execFact := assertFact(t, full, runtime.CapabilityExec, model.CapabilityStateAvailable, "full_authorization", true)
+	if !strings.Contains(execFact.Message, "Full authorization permits unlisted executables") {
+		t.Fatalf("unexpected Full exec message: %+v", execFact)
+	}
+	if got := execFact.Evidence[len(execFact.Evidence)-1].Details["full_authorization"]; got != "true" {
+		t.Fatalf("full_authorization evidence=%q, want true; fact=%+v", got, execFact)
+	}
+
+	info, err := service.InspectEnvironment(context.Background(), env.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(info.Capabilities, runtime.CapabilityExec) {
+		t.Fatalf("legacy capabilities must include shell.exec under Full authorization: %v", info.Capabilities)
+	}
+}
+
+func TestCapabilityReportFullAuthorizationAppliesToVerifierPreparation(t *testing.T) {
+	root := t.TempDir()
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(root, "full-verifier")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "full-verifier", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := service.AddVerifier(env.ID, model.VerifierDefinition{
+		Kind:       verifier.KindCustom,
+		Enabled:    true,
+		Executable: executable,
+		Args:       []string{"-test.run=^$"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	strict, err := service.EnvironmentCapabilityReport(context.Background(), env.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFact(t, strict, "verifier/"+definition.ID, model.CapabilityStateUnavailable, "executable_not_allowed", true)
+
+	if _, err := service.SetExecFullAuthorization(true); err != nil {
+		t.Fatal(err)
+	}
+	full, err := service.EnvironmentCapabilityReport(context.Background(), env.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFact(t, full, "verifier/"+definition.ID, model.CapabilityStateAvailable, "", true)
+}
+
 func TestCapabilityReportVerifierSideEffectHelper(t *testing.T) {
 	path := os.Getenv("ADM_CAP_VERIFIER_SIDE_EFFECT")
 	if path == "" || !strings.Contains(strings.Join(os.Args, " "), "TestCapabilityReportVerifierSideEffectHelper") {

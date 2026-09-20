@@ -331,7 +331,7 @@ Agent 工具 `exec` 需要：
 }
 ```
 
-工作目录必须留在 Environment root 中。默认 Strict 模式下，allowlist 中不存在的 executable 会被明确拒绝；Full Authorization 可放行未列入 allowlist 的 executable，但命令黑名单仍会明确拒绝。
+工作目录必须留在 Environment root 中。默认 Strict 模式下，allowlist 中不存在的 executable 会被明确拒绝；Full Authorization 可放行未列入 allowlist 的 executable，但命令黑名单仍会明确拒绝。**Full 模式下 allowlist 为空不代表不可执行**：Capability Report / Context Bundle 会将 `shell.exec` 标记为 available，并通过 Full bypass 审计记录未列入 allowlist 的执行；如果某个命令仍失败，应继续区分 PATH/可执行文件不存在等运行环境问题。
 
 ### 8.3 Exec denial observations
 

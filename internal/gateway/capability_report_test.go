@@ -12,6 +12,7 @@ import (
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
 	"ai-dev-manager-v2/internal/model"
+	"ai-dev-manager-v2/internal/runtime"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -97,6 +98,52 @@ func TestGatewayCapabilityReportEnrichesOwnerObservationWithoutSideEffects(t *te
 	}
 	if connects != 0 {
 		t.Fatalf("gateway capability report made %d MCP connections", connects)
+	}
+}
+
+func TestGatewayCapabilityReportFullAuthorizationWithoutAllowlist(t *testing.T) {
+	root := t.TempDir()
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	workspace, err := service.Workspaces.Add(root, "full-gateway-capability")
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := service.Environments.Create(workspace.ID, "full-gateway-capability", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetExecFullAuthorization(true); err != nil {
+		t.Fatal(err)
+	}
+
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	report, err := owner.CapabilityReport(context.Background(), environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execFact := requireCapabilityFact(t, report, runtime.CapabilityExec)
+	if execFact.State != model.CapabilityStateAvailable || execFact.ReasonCode != "full_authorization" {
+		t.Fatalf("Full shell.exec fact=%+v", execFact)
+	}
+	for _, key := range []string{"process.lifecycle", "run.lifecycle"} {
+		fact := requireCapabilityFact(t, report, key)
+		if fact.State != model.CapabilityStateAvailable {
+			t.Fatalf("Full %s fact=%+v", key, fact)
+		}
+	}
+
+	session := connectInMemory(t, context.Background(), newServer(service, owner))
+	defer session.Close()
+	result := callGatewayTool(t, context.Background(), session, "environment_capability_report", map[string]any{"environment_id": environment.ID})
+	if result.IsError {
+		t.Fatalf("environment_capability_report failed: %s", toolText(t, result))
+	}
+	text := toolText(t, result)
+	for _, required := range []string{"shell.exec", "full_authorization", "Full authorization permits unlisted executables"} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("Full capability output missing %q:\n%s", required, text)
+		}
 	}
 }
 

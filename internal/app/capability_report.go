@@ -83,7 +83,7 @@ func (s *Service) environmentCapabilityReportWithOptions(ctx context.Context, en
 	var rt *runtime.Runtime
 	var runtimeErr error
 	if isolationErr == nil {
-		rt, runtimeErr = runtime.NewWithExecutionPolicy(env.Root, state.AllowedExecutables, state.BlockedExecutables, os.Environ(), false)
+		rt, runtimeErr = runtime.NewWithExecutionPolicy(env.Root, state.AllowedExecutables, state.BlockedExecutables, os.Environ(), state.ExecFullAuthorization)
 	}
 
 	rootErr := firstError(isolationErr, runtimeErr)
@@ -101,7 +101,7 @@ func (s *Service) environmentCapabilityReportWithOptions(ctx context.Context, en
 	}
 	report.Facts = append(report.Facts, capabilityFact("environment.root", capabilityKindEnvironment, rootState, rootReason, rootMessage, false, rootEvidence))
 	report.Facts = append(report.Facts, fileCapabilityFacts(env, ws, rootErr)...)
-	execFacts, execAvailable := execCapabilityFacts(ctx, env, ws, rt, state.AllowedExecutables, rootErr)
+	execFacts, execAvailable := execCapabilityFacts(ctx, env, ws, rt, state.AllowedExecutables, state.ExecFullAuthorization, rootErr)
 	report.Facts = append(report.Facts, execFacts...)
 	report.Facts = append(report.Facts, verifierCapabilityFacts(ctx, env, ws, rt, rootErr)...)
 	report.Facts = append(report.Facts, gitCapabilityFacts(ctx, env, ws, rt, rootErr, inspectGit)...)
@@ -185,17 +185,29 @@ func fileCapabilityFacts(env model.Environment, ws model.Workspace, rootErr erro
 	return facts
 }
 
-func execCapabilityFacts(ctx context.Context, env model.Environment, ws model.Workspace, rt *runtime.Runtime, allowed []string, rootErr error) ([]model.CapabilityFact, bool) {
+func execCapabilityFacts(ctx context.Context, env model.Environment, ws model.Workspace, rt *runtime.Runtime, allowed []string, fullAuthorization bool, rootErr error) ([]model.CapabilityFact, bool) {
 	evidence := []model.CapabilityEvidence{environmentEvidence(env, ws), writerEvidence(env), {
 		Kind: capabilityKindExec,
 		Details: map[string]string{
 			"allowed_executable_count": strconv.Itoa(len(allowed)),
+			"full_authorization":       strconv.FormatBool(fullAuthorization),
 		},
 	}}
 	if rootErr != nil {
 		return []model.CapabilityFact{capabilityFact(runtime.CapabilityExec, capabilityKindExec, model.CapabilityStateUnavailable, rootFailureReason(rootErr), rootFailureMessage(rootErr), true, evidence)}, false
 	}
 	if len(allowed) == 0 {
+		if fullAuthorization {
+			return []model.CapabilityFact{capabilityFact(
+				runtime.CapabilityExec,
+				capabilityKindExec,
+				model.CapabilityStateAvailable,
+				"full_authorization",
+				"Full authorization permits unlisted executables. Executions outside the allowlist are allowed and recorded as Full authorization bypass audit observations; executable availability is still resolved from PATH at execution time.",
+				true,
+				evidence,
+			)}, true
+		}
 		return []model.CapabilityFact{capabilityFact(runtime.CapabilityExec, capabilityKindExec, model.CapabilityStateUnconfigured, "no_allowed_executables", "No executable is allowlisted for this Environment runtime.", true, evidence)}, false
 	}
 
@@ -219,14 +231,19 @@ func execCapabilityFacts(ctx context.Context, env model.Environment, ws model.Wo
 	summaryState := model.CapabilityStateAvailable
 	summaryReason := ""
 	summaryMessage := "At least one allowlisted executable can be prepared without starting a process."
-	if available == 0 {
+	execAvailable := available > 0
+	if fullAuthorization {
+		summaryReason = "full_authorization"
+		summaryMessage = "Full authorization permits unlisted executables in addition to the explicit allowlist. Unlisted executions are recorded as Full authorization bypass audit observations."
+		execAvailable = true
+	} else if available == 0 {
 		summaryState = model.CapabilityStateUnavailable
 		summaryReason = "allowed_executables_unavailable"
 		summaryMessage = "No allowlisted executable can be prepared under Runtime command authority."
 	}
 	evidence[len(evidence)-1].Details["available_executable_count"] = strconv.Itoa(available)
 	facts = append(facts, capabilityFact(runtime.CapabilityExec, capabilityKindExec, summaryState, summaryReason, summaryMessage, true, evidence))
-	return facts, available > 0
+	return facts, execAvailable
 }
 
 func verifierCapabilityFacts(ctx context.Context, env model.Environment, ws model.Workspace, rt *runtime.Runtime, rootErr error) []model.CapabilityFact {

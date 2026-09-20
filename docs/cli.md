@@ -474,7 +474,7 @@ adm exec authorization set --mode strict
 adm exec authorization set --mode full
 ```
 
-Strict 默认只允许 allowlist。Full 可以执行未列入 allowlist 的 executable，但**不能绕过 command blacklist**。
+Strict 默认只允许 allowlist。Full 可以执行未列入 allowlist 的 executable，但**不能绕过 command blacklist**。因此 Full 模式下即使 allowlist 为空，Runtime 仍具有执行能力；`environment_capability_report` / context bundle 应报告 `shell.exec=available`、reason=`full_authorization`，未列入 allowlist 的实际执行记录为 Full bypass 审计观察。executable 是否真实存在仍由 PATH / 启动时解析决定。
 
 # MCP Catalog
 
