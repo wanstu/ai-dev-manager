@@ -15,7 +15,7 @@ func startDetachedGatewayProcess(listen string) (*os.Process, error) {
 		return nil, fmt.Errorf("get desktop executable path: %w", err)
 	}
 	cmd := exec.Command(executable, "--gateway-child", "--listen", listen)
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000008 | 0x00000200} // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x00000008 | 0x00000200 | 0x08000000} // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}

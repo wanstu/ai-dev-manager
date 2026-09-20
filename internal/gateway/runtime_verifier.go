@@ -165,6 +165,7 @@ func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) 
 	commandStarted := time.Now()
 	err := cmd.Start()
 	if err == nil {
+		_ = o.service.RecordExecUsage(run.environmentID, run.prepared.Definition.Executable, "verifier_async_start")
 		err = cmd.Wait()
 	}
 	duration := time.Since(commandStarted)

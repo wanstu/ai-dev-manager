@@ -20,6 +20,7 @@ type Snapshot struct {
 	AllowedExecutables []string                 `json:"allowed_executables"`
 	BlockedExecutables []string                 `json:"blocked_executables"`
 	ExecDenials        []model.ExecDenial       `json:"exec_denials"`
+	ExecUsages         []model.ExecUsage        `json:"exec_usages"`
 	MCPs               []model.MCPDefinition    `json:"mcps"`
 	Skills             []model.CatalogEntry     `json:"skills"`
 	GlobalMemoryCount  int                      `json:"global_memory_count"`
@@ -170,6 +171,10 @@ func (s *Service) ExecDenyList() ([]model.ExecDenial, error) {
 	return s.app.ExecDenials()
 }
 
+func (s *Service) ExecUsageList() ([]model.ExecUsage, error) {
+	return s.app.ExecUsages()
+}
+
 func (s *Service) ExecDenyClear(executable string) ([]model.ExecDenial, error) {
 	return s.app.ClearExecDenial(executable)
 }
@@ -202,12 +207,20 @@ func (s *Service) GatewayAdminAPIKeySet(apiKey string) (app.GatewayAccessStatus,
 	return s.app.SetGatewayAdminAPIKey(apiKey)
 }
 
+func (s *Service) GatewayAdminAPIKeyRotate() (app.GatewayKeyRotationResult, error) {
+	return s.app.RotateGatewayAdminAPIKey()
+}
+
 func (s *Service) GatewayAdminAPIKeyClear() (app.GatewayAccessStatus, error) {
 	return s.app.ClearGatewayAdminAPIKey()
 }
 
 func (s *Service) GatewayAgentAPIKeySet(apiKey string) (app.GatewayAccessStatus, error) {
 	return s.app.SetGatewayAgentAPIKey(apiKey)
+}
+
+func (s *Service) GatewayAgentAPIKeyRotate() (app.GatewayKeyRotationResult, error) {
+	return s.app.RotateGatewayAgentAPIKey()
 }
 
 func (s *Service) GatewayAgentAPIKeyClear() (app.GatewayAccessStatus, error) {
@@ -369,6 +382,10 @@ func (s *Service) Snapshot() (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	execUsages, err := s.app.ExecUsages()
+	if err != nil {
+		return Snapshot{}, err
+	}
 	mcps, err := s.app.MCPs.List()
 	if err != nil {
 		return Snapshot{}, err
@@ -389,6 +406,7 @@ func (s *Service) Snapshot() (Snapshot, error) {
 		AllowedExecutables: nonNilStrings(allowed),
 		BlockedExecutables: nonNilStrings(blocked),
 		ExecDenials:        nonNilExecDenials(execDenials),
+		ExecUsages:         nonNilExecUsages(execUsages),
 		MCPs:               nonNilMCP(mcps),
 		Skills:             nonNilCatalog(skills),
 		GlobalMemoryCount:  len(globalMemory),
@@ -419,6 +437,13 @@ func nonNilStrings(values []string) []string {
 func nonNilExecDenials(values []model.ExecDenial) []model.ExecDenial {
 	if values == nil {
 		return []model.ExecDenial{}
+	}
+	return values
+}
+
+func nonNilExecUsages(values []model.ExecUsage) []model.ExecUsage {
+	if values == nil {
+		return []model.ExecUsage{}
 	}
 	return values
 }

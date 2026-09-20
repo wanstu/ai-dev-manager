@@ -58,6 +58,6 @@ func (s *Service) MCPProbe(ctx context.Context, mcpID string) (MCPHealthStatus, 
 		if err != nil {
 			return nil, err
 		}
-		return &mcp.CommandTransport{Command: cmd}, nil
+		return s.TrackMCPCommandTransport(cmd, "", activation.Executable, "mcp_global_probe"), nil
 	})
 }

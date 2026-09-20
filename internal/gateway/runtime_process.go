@@ -106,6 +106,7 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 		cancel()
 		return devProcessStatus{}, err
 	}
+	_ = o.service.RecordExecUsage(environmentID, executable, "process_start")
 	process := &ownedDevProcess{
 		id:            processID,
 		environmentID: environmentID,

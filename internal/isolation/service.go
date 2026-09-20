@@ -785,10 +785,12 @@ func validateFinalBranch(ctx context.Context, sourceRoot, branch string) error {
 		return err
 	}
 	cmd := exec.CommandContext(ctx, git, "-C", sourceRoot, "check-ref-format", "--branch", branch)
+	configureProcessCommand(cmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("invalid managed branch %q: %s", branch, strings.TrimSpace(string(out)))
 	}
 	exists := exec.CommandContext(ctx, git, "-C", sourceRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
+	configureProcessCommand(exists)
 	if err := exists.Run(); err == nil {
 		return fmt.Errorf("managed branch %q already exists; choose a new branch_name", branch)
 	} else if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
@@ -804,6 +806,7 @@ func (s *Service) gitInput(ctx context.Context, dir, input string, args ...strin
 	}
 	fullArgs := append([]string{"-C", dir}, args...)
 	cmd := exec.CommandContext(ctx, git, fullArgs...)
+	configureProcessCommand(cmd)
 	cmd.Stdin = strings.NewReader(input)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -832,6 +835,7 @@ func (s *Service) gitOutput(ctx context.Context, dir string, args ...string) (st
 	}
 	fullArgs := append([]string{"-C", dir}, args...)
 	cmd := exec.CommandContext(ctx, git, fullArgs...)
+	configureProcessCommand(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))

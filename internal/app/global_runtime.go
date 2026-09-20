@@ -32,6 +32,9 @@ func (s *Service) GlobalExec(ctx context.Context, executable string, args []stri
 	s.recordFullAuthorizationBypass(rt, "", executable, "global_exec")
 	s.Log("info", "global_exec.start", map[string]string{"executable": executable, "surface": "global_exec"})
 	result, err := rt.Exec(ctx, executable, args, "", timeoutMS, maxOutputBytes)
+	if result.Started {
+		_ = s.RecordExecUsage("", executable, "global_exec")
+	}
 	if err != nil {
 		s.Log("error", "global_exec.failed", map[string]string{"executable": executable, "surface": "global_exec", "error": err.Error()})
 	} else {

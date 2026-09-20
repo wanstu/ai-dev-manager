@@ -76,6 +76,23 @@
             </div>
           </div>
         </section>
+        <section class="subpanel gateway-diagnostics-panel">
+          <div class="subpanel-heading"><div><h3>Gateway 诊断</h3><span>Admin MCP · 不包含 Key 原文</span></div><div class="gateway-actions"><span id="gatewayDiagnosticsReadiness" class="resource-badge" data-state="unconfigured">未读取</span><button id="gatewayDiagnosticsCopyButton" type="button" class="secondary-button small-button" disabled>复制诊断报告</button></div></div>
+          <div class="gateway-info compact-gateway-info">
+            <div class="gateway-meta endpoint-stack">
+              <span><strong>Listen</strong> <code id="gatewayDiagnosticListen">—</code></span>
+              <span><strong>运行用户</strong> <code id="gatewayDiagnosticUser">—</code></span>
+              <span><strong>平台</strong> <code id="gatewayDiagnosticRuntime">—</code></span>
+              <span><strong>State</strong> <code id="gatewayDiagnosticStatePath">—</code></span>
+              <span><strong>客户端配置</strong> <code id="gatewayDiagnosticClientConfigDir">—</code></span>
+              <span><strong>Executable</strong> <code id="gatewayDiagnosticExecutable">—</code></span>
+              <span><strong>Service</strong> <code id="gatewayDiagnosticService">—</code></span>
+              <span><strong>Issues</strong> <code id="gatewayDiagnosticIssues">—</code></span>
+              <span><strong>建议操作</strong> <code id="gatewayDiagnosticSuggestion">—</code></span>
+              <span id="gatewayDiagnosticServiceDetail">连接后通过 Admin MCP 读取服务端诊断信息。</span>
+            </div>
+          </div>
+        </section>
         <section class="subpanel">
           <div class="subpanel-heading"><h3>本地服务生命周期</h3><span>仅限本机连接</span></div>
           <div class="subpanel-body">
@@ -107,13 +124,13 @@
                 <div class="credential-heading"><div><strong>Admin API Key</strong><small>/admin/mcp · Desktop / CLI 管理面</small></div><span id="gatewayAdminKeyState" class="resource-badge" data-state="unconfigured">未配置</span></div>
                 <label class="gateway-profile-field full-width-field"><span>新 Key</span><input id="gatewayAdminAPIKey" type="password" autocomplete="new-password" placeholder="至少 16 字符；保存后不回显"></label>
                 <p id="gatewayAdminKeyHint" class="field-help">远端 Desktop/CLI 管理连接必须使用与这里相同的 Admin Key。</p>
-                <div class="gateway-actions"><button id="gatewayAccessSetAdminKey" type="button">设置 Admin Key</button><button id="gatewayAccessClearAdminKey" type="button" class="danger-button">清除</button></div>
+                <div class="gateway-actions"><button id="gatewayGenerateAdminKey" type="button" class="secondary-button">轮换 Key</button><button id="gatewayCopyAdminKey" type="button" class="secondary-button" disabled>复制新 Key</button><button id="gatewayAccessSetAdminKey" type="button">手动设置</button><button id="gatewayAccessClearAdminKey" type="button" class="danger-button">清除</button></div>
               </div>
               <div class="credential-card">
                 <div class="credential-heading"><div><strong>Agent API Key</strong><small>/mcp · Agent / MCP 客户端</small></div><span id="gatewayAgentKeyState" class="resource-badge" data-state="unconfigured">未配置</span></div>
                 <label class="gateway-profile-field full-width-field"><span>新 Key</span><input id="gatewayAgentAPIKey" type="password" autocomplete="new-password" placeholder="至少 16 字符；保存后不回显"></label>
                 <p id="gatewayAgentKeyHint" class="field-help">Agent 访问 /mcp 时必须携带与这里相同的 Agent Key。</p>
-                <div class="gateway-actions"><button id="gatewayAccessSetAgentKey" type="button">设置 Agent Key</button><button id="gatewayAccessClearAgentKey" type="button" class="danger-button">清除</button></div>
+                <div class="gateway-actions"><button id="gatewayGenerateAgentKey" type="button" class="secondary-button">轮换 Key</button><button id="gatewayCopyAgentKey" type="button" class="secondary-button" disabled>复制新 Key</button><button id="gatewayAccessSetAgentKey" type="button">手动设置</button><button id="gatewayAccessClearAgentKey" type="button" class="danger-button">清除</button></div>
               </div>
             </div>
 
@@ -315,6 +332,7 @@
           <span>模式 <strong id="execAuthorizationModeLabel">Strict</strong></span>
           <span>已允许 <strong id="execAllowedCount">0</strong></span>
           <span>黑名单 <strong id="execBlacklistCount">0</strong></span>
+          <span>累计执行 <strong id="execUsageCount">0</strong></span>
           <span>授权观察次数 <strong id="execBlockedCount">0</strong></span>
         </div>
         <div class="system-control-grid single-column-grid exec-authority-grid">
@@ -329,6 +347,17 @@
           <section class="subpanel">
             <div class="subpanel-heading"><div><h3>Allowed executables</h3><span>允许后立即可用于 exec / verifier / process / run；不会自动执行命令。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execDialog">允许 executable</button></div>
             <div id="execList" class="managed-list empty">暂无 allowed executable</div>
+          </section>
+          <section class="subpanel">
+            <div class="subpanel-heading"><div><h3>Execution usage</h3><span>统计 Agent/Runtime 实际启动的业务 executable；不记录 args、命令正文或输出，ADM 内部维护进程不混入。</span></div></div>
+            <div id="execUsageSurfaceSummary" class="subpanel-note">暂无 surface 统计</div>
+            <div class="list-toolbar exec-usage-toolbar">
+              <label class="filter-field"><span>搜索</span><input id="execUsageFilter" type="search" placeholder="executable / Environment / surface；正则用 /pattern/i"></label>
+              <label class="filter-field compact-filter"><span>Surface</span><select id="execUsageSurfaceFilter"><option value="all">全部</option><option value="exec">Exec</option><option value="verifier">Verifier</option><option value="mcp">MCP / Probe</option><option value="process">Dev Process</option><option value="run">Run</option><option value="unattributed">历史未归类</option></select></label>
+              <label class="filter-field compact-filter"><span>时间</span><select id="execUsageTimeFilter"><option value="all">全部历史</option><option value="current">本小时有执行</option><option value="recent24">近 24 小时有执行</option><option value="spike">近期突增</option></select></label>
+              <span class="visible-count">显示 <strong id="execUsageVisibleCount">0</strong> / <strong id="execUsageTotalCount">0</strong></span>
+            </div>
+            <div id="execUsageList" class="managed-list empty">暂无执行记录</div>
           </section>
           <section class="subpanel">
             <div class="subpanel-heading"><div><h3>Command blacklist</h3><span>优先于 allowlist 与 Full Authorization；加入时会自动从 allowlist 移除。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execBlacklistDialog">加入黑名单</button></div>
@@ -398,7 +427,7 @@
           <div class="subpanel-heading"><h3>ADM 配置</h3><span>用户级配置 + 应用目录覆盖</span></div>
           <div class="subpanel-body">
             <div class="config-source-grid">
-              <div class="config-source-card"><strong>用户级 .env</strong><code>~/.config/adm/.env</code><span>CLI 与 Desktop 都会读取，适合保存 ADM_V2_URL、ADM_V2_ADMIN_API_KEY 等客户端连接变量。</span></div>
+              <div class="config-source-card"><strong>用户级 .env</strong><code>~/.config/adm/.env</code><span>CLI 与 Desktop 都会读取，适合保存 ADM_V2_URL、ADM_ADMIN_API_KEY 等客户端连接变量；旧 ADM_V2_ADMIN_API_KEY 仅兼容读取。</span></div>
               <div class="config-source-card"><strong>应用目录 .env</strong><code>&lt;adm / adm-desktop 可执行文件目录&gt;/.env</code><span>同名变量会覆盖用户级 .env，适合便携部署或单个安装实例的覆盖配置。</span></div>
               <div class="config-source-card"><strong>Desktop 连接</strong><code>~/.config/adm/desktop-connections.json</code><span>保存 Desktop 连接 profile。UI 不回显 Admin Key，但保存的客户端连接仍可继续使用。</span></div>
             </div>
@@ -556,7 +585,7 @@
 <dialog id="execBlacklistDialog" class="editor-dialog" aria-labelledby="execBlacklistDialogTitle"><header class="dialog-heading"><h2 id="execBlacklistDialogTitle">加入命令黑名单</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="execBlacklistForm" class="single-line-form"><input id="execBlacklistExecutable" type="text" placeholder="pwsh / cmd / absolute path" required><button type="submit">加入黑名单</button></form></dialog>
 <dialog id="globalMemoryDialog" class="editor-dialog" aria-labelledby="globalMemoryDialogTitle"><header class="dialog-heading"><h2 id="globalMemoryDialogTitle">写入 Global Memory</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="globalMemoryForm" class="memory-form"><input id="globalMemoryKey" type="text" placeholder="key" required><input id="globalMemoryValue" type="text" placeholder="value（可以为空）"><button type="submit">写入</button></form></dialog>
 <dialog id="environmentMemoryDialog" class="editor-dialog" aria-labelledby="environmentMemoryDialogTitle"><header class="dialog-heading"><h2 id="environmentMemoryDialogTitle">写入 Environment Memory</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="environmentMemoryForm" class="memory-form"><input id="environmentMemoryKey" type="text" placeholder="key" required><input id="environmentMemoryValue" type="text" placeholder="value（可以为空）"><button type="submit">写入</button></form></dialog>
-<dialog id="connectionDialog" class="editor-dialog" aria-labelledby="connectionDialogTitle"><header class="dialog-heading"><h2 id="connectionDialogTitle">添加连接</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="connectionForm" class="manager-form"><input id="connectionID" type="hidden"><label class="wide-field"><span>连接名称</span><input id="connectionName" type="text" required maxlength="120" placeholder="例如 开发环境"></label><label class="wide-field"><span>ADM Base URL</span><input id="connectionURL" type="url" required placeholder="http://127.0.0.1:8001"></label><label class="wide-field"><span class="field-label-line"><span>客户端 Admin API Key</span><span id="connectionAPIKeyState" class="resource-badge" data-state="unconfigured">未配置</span></span><input id="connectionAPIKey" type="password" autocomplete="new-password" placeholder="远端管理连接必填；编辑时留空保留原密钥"></label><p id="connectionAPIKeyHint" class="editor-hint wide-field">填写 Remote access 中服务端 /admin/mcp 使用的同一把 Admin Key；密钥不会在重新打开编辑窗口时回显。</p><div class="connection-auth-guide wide-field"><strong>连接凭据说明</strong><p><b>Admin Key</b> 只用于 Desktop / CLI 管理连接（/admin/mcp）；<b>Agent Key</b> 只用于 Agent 的 /mcp，不能填在这里。</p><p>CLI 可在 <code>~/.config/adm/.env</code> 配置 <code>ADM_V2_URL</code> 与 <code>ADM_V2_ADMIN_API_KEY</code>。应用可执行文件同目录的 <code>.env</code> 优先级更高。</p></div><label class="check-field wide-field"><input id="connectionStartOnDesktopLaunch" type="checkbox"><span>启动 Desktop 时自动启动此本地 ADM Service</span></label><p class="editor-hint wide-field">仅支持本机 loopback ADM URL 自动启动。连接资料保存在 <code>~/.config/adm/desktop-connections.json</code>；用户级环境配置位于 <code>~/.config/adm/.env</code>。</p><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button type="submit">保存连接</button></div></form></dialog>
+<dialog id="connectionDialog" class="editor-dialog" aria-labelledby="connectionDialogTitle"><header class="dialog-heading"><h2 id="connectionDialogTitle">添加连接</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="connectionForm" class="manager-form"><input id="connectionID" type="hidden"><label class="wide-field"><span>连接名称</span><input id="connectionName" type="text" required maxlength="120" placeholder="例如 开发环境"></label><label class="wide-field"><span>ADM Base URL</span><input id="connectionURL" type="url" required placeholder="http://127.0.0.1:8001"></label><label class="wide-field"><span class="field-label-line"><span>客户端 Admin API Key</span><span id="connectionAPIKeyState" class="resource-badge" data-state="unconfigured">未配置</span></span><input id="connectionAPIKey" type="password" autocomplete="new-password" placeholder="远端管理连接必填；编辑时留空保留原密钥"></label><p id="connectionAPIKeyHint" class="editor-hint wide-field">填写 Remote access 中服务端 /admin/mcp 使用的同一把 Admin Key；密钥不会在重新打开编辑窗口时回显。</p><div class="connection-auth-guide wide-field"><strong>连接凭据说明</strong><p><b>Admin Key</b> 只用于 Desktop / CLI 管理连接（/admin/mcp）；<b>Agent Key</b> 只用于 Agent 的 /mcp，不能填在这里。</p><p>CLI 可在 <code>~/.config/adm/.env</code> 配置 <code>ADM_V2_URL</code> 与 <code>ADM_ADMIN_API_KEY</code>。应用可执行文件同目录的 <code>.env</code> 优先级更高。</p></div><label class="check-field wide-field"><input id="connectionStartOnDesktopLaunch" type="checkbox"><span>启动 Desktop 时自动启动此本地 ADM Service</span></label><p class="editor-hint wide-field">仅支持本机 loopback ADM URL 自动启动。连接资料保存在 <code>~/.config/adm/desktop-connections.json</code>；用户级环境配置位于 <code>~/.config/adm/.env</code>。</p><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button type="submit">保存连接</button></div></form></dialog>
 <dialog id="renameDialog" class="editor-dialog" aria-labelledby="renameDialogTitle"><header class="dialog-heading"><h2 id="renameDialogTitle">重命名</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="renameForm" class="manager-form"><label class="wide-field"><span>名称</span><input id="renameName" type="text" required></label><div class="form-actions wide-field"><button type="button" class="secondary-button" data-dialog-close>取消</button><button type="submit">保存修改</button></div></form></dialog>
   <script src="./dialogs.js" defer></script>
   <script src="./connections.js" defer></script>

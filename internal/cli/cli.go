@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -1000,9 +1001,164 @@ func runExec(service cliManagementBackend, args []string) error {
 			return err
 		}
 		return writeJSON(items)
+	case "usage", "stats":
+		fs := newFlagSet("exec usage", func() {
+			fmt.Fprintln(os.Stdout, "用法：adm exec usage [--recent-hours N] [--surface SURFACE]")
+			fmt.Fprintln(os.Stdout, "\\n不带参数时保持兼容，返回完整累计 usage 数组。--recent-hours 支持 1..48 小时的精简近期视图。")
+		})
+		recentHours := fs.Int("recent-hours", 0, "只汇总最近 N 个小时桶（1..48）；0 返回完整累计 usage")
+		surface := fs.String("surface", "", "按执行 surface 筛选；例如 exec、verifier、mcp_probe、run_start")
+		if err := fs.Parse(args[1:]); err != nil {
+			return flagError(err)
+		}
+		if fs.NArg() != 0 {
+			return fmt.Errorf("exec usage 只接受 --recent-hours / --surface")
+		}
+		if *recentHours < 0 || *recentHours > 48 {
+			return fmt.Errorf("--recent-hours 必须是 0..48；0 表示完整累计 usage")
+		}
+		items, err := service.ExecUsageList()
+		if err != nil {
+			return err
+		}
+		return writeExecUsageView(items, *recentHours, *surface)
 	default:
 		return fmt.Errorf("未知 exec 命令 %q；运行 adm exec -h 查看帮助", args[0])
 	}
+}
+
+type execUsageRecentItem struct {
+	Executable           string         `json:"executable"`
+	TotalCount           int            `json:"total_count"`
+	RecentCount          int            `json:"recent_count"`
+	CurrentHourCount     int            `json:"current_hour_count"`
+	CurrentHourSpike     bool           `json:"current_hour_spike,omitempty"`
+	RecentSurfaceCounts  map[string]int `json:"recent_surface_counts,omitempty"`
+	SelectedSurfaceCount int            `json:"selected_surface_count,omitempty"`
+	LastExecutedAt       time.Time      `json:"last_executed_at"`
+	LastEnvironmentID    string         `json:"last_environment_id,omitempty"`
+	LastSurface          string         `json:"last_surface,omitempty"`
+}
+
+type execUsageRecentReport struct {
+	RecentHours      int                   `json:"recent_hours"`
+	Surface          string                `json:"surface,omitempty"`
+	ExecutableCount  int                   `json:"executable_count"`
+	RecentCount      int                   `json:"recent_count"`
+	CurrentHourCount int                   `json:"current_hour_count"`
+	SpikeExecutables []string              `json:"spike_executables,omitempty"`
+	Items            []execUsageRecentItem `json:"items"`
+}
+
+func writeExecUsageView(items []model.ExecUsage, recentHours int, surface string) error {
+	surface = strings.ToLower(strings.TrimSpace(surface))
+	if recentHours == 0 {
+		if surface == "" {
+			return writeJSON(items)
+		}
+		filtered := make([]model.ExecUsage, 0, len(items))
+		for _, item := range items {
+			if item.SurfaceCounts[surface] > 0 {
+				filtered = append(filtered, item)
+			}
+		}
+		return writeJSON(filtered)
+	}
+
+	nowHour := time.Now().UTC().Truncate(time.Hour)
+	cutoff := nowHour.Add(-time.Duration(recentHours-1) * time.Hour)
+	baselineCutoff := nowHour.Add(-23 * time.Hour)
+	report := execUsageRecentReport{
+		RecentHours: recentHours,
+		Surface:     surface,
+		Items:       make([]execUsageRecentItem, 0, len(items)),
+	}
+	for _, usage := range items {
+		recentSurfaceCounts := make(map[string]int)
+		recentCount := 0
+		currentHourCount := 0
+		previous23Count := 0
+		for _, bucket := range usage.HourlyCounts {
+			hour := bucket.Hour.UTC().Truncate(time.Hour)
+			if hour.After(nowHour) {
+				continue
+			}
+			if !hour.Before(cutoff) {
+				recentCount += bucket.Count
+				for name, count := range bucket.SurfaceCounts {
+					if count > 0 {
+						recentSurfaceCounts[strings.ToLower(strings.TrimSpace(name))] += count
+					}
+				}
+			}
+			if hour.Equal(nowHour) {
+				currentHourCount += bucket.Count
+			} else if !hour.Before(baselineCutoff) {
+				previous23Count += bucket.Count
+			}
+		}
+		if recentCount == 0 {
+			continue
+		}
+		selectedSurfaceCount := 0
+		if surface != "" {
+			selectedSurfaceCount = recentSurfaceCounts[surface]
+			if selectedSurfaceCount == 0 {
+				continue
+			}
+		}
+		baseline := float64(previous23Count) / 23
+		spike := currentHourCount >= 10 && float64(currentHourCount) >= maxFloat64(10, baseline*3)
+		item := execUsageRecentItem{
+			Executable:           usage.Executable,
+			TotalCount:           usage.Count,
+			RecentCount:          recentCount,
+			CurrentHourCount:     currentHourCount,
+			CurrentHourSpike:     spike,
+			RecentSurfaceCounts:  recentSurfaceCounts,
+			SelectedSurfaceCount: selectedSurfaceCount,
+			LastExecutedAt:       usage.LastExecutedAt,
+			LastEnvironmentID:    usage.LastEnvironmentID,
+			LastSurface:          usage.LastSurface,
+		}
+		report.Items = append(report.Items, item)
+		if surface == "" {
+			report.RecentCount += recentCount
+			report.CurrentHourCount += currentHourCount
+		} else {
+			report.RecentCount += selectedSurfaceCount
+			for _, bucket := range usage.HourlyCounts {
+				if bucket.Hour.UTC().Truncate(time.Hour).Equal(nowHour) {
+					report.CurrentHourCount += bucket.SurfaceCounts[surface]
+				}
+			}
+		}
+		if spike {
+			report.SpikeExecutables = append(report.SpikeExecutables, usage.Executable)
+		}
+	}
+	sort.Slice(report.Items, func(i, j int) bool {
+		if report.Items[i].CurrentHourCount != report.Items[j].CurrentHourCount {
+			return report.Items[i].CurrentHourCount > report.Items[j].CurrentHourCount
+		}
+		if report.Items[i].RecentCount != report.Items[j].RecentCount {
+			return report.Items[i].RecentCount > report.Items[j].RecentCount
+		}
+		if report.Items[i].TotalCount != report.Items[j].TotalCount {
+			return report.Items[i].TotalCount > report.Items[j].TotalCount
+		}
+		return strings.ToLower(report.Items[i].Executable) < strings.ToLower(report.Items[j].Executable)
+	})
+	report.ExecutableCount = len(report.Items)
+	sort.Strings(report.SpikeExecutables)
+	return writeJSON(report)
+}
+
+func maxFloat64(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func runCatalog(kind string, application cliManagementBackend, service any, args []string) error {
@@ -1686,10 +1842,19 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 		if err != nil {
 			return err
 		}
+		if err := validateGatewayStartReadiness(service, targetListen); err != nil {
+			return err
+		}
 		if detach {
 			return startGatewayDetached(targetListen)
 		}
 		return startHTTPGateway(service, targetListen)
+	case "setup":
+		return runGatewaySetup(service, args[1:])
+	case "install":
+		return runGatewayInstall(args[1:])
+	case "service":
+		return runGatewayService(args[1:])
 	case "status":
 		fs := newFlagSet("gateway status", func() {
 			fmt.Fprintln(os.Stdout, "用法：adm [--adm-url URL] gateway status [--listen HOST:PORT]")
@@ -1706,6 +1871,19 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 			return printGatewayStatus(strings.TrimSpace(*listen))
 		}
 		return printGatewayStatusBaseURL(baseURL)
+	case "diagnostics":
+		if len(args) != 1 {
+			return fmt.Errorf("gateway diagnostics 不接受额外参数")
+		}
+		client, err := newCLIAdminClient(baseURL)
+		if err != nil {
+			return err
+		}
+		diagnostics, err := client.GatewayDiagnostics()
+		if err != nil {
+			return err
+		}
+		return writeJSON(diagnostics)
 	case "stop":
 		fs := newFlagSet("gateway stop", func() {
 			fmt.Fprintln(os.Stdout, "用法：adm [--adm-url URL] gateway stop [--listen HOST:PORT]")
@@ -1737,6 +1915,9 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 		}
 		targetListen, err := resolveListen(fs, *listen)
 		if err != nil {
+			return err
+		}
+		if err := validateGatewayStartReadiness(service, targetListen); err != nil {
 			return err
 		}
 		if err := stopHTTPGateway(targetListen); err != nil {
@@ -1792,6 +1973,9 @@ func runDoctor(service *app.Service, statePath string, args []string) error {
 	fmt.Println("ADM V2 诊断")
 	fmt.Println("当前程序：", executable)
 	fmt.Println("状态文件：", statePath)
+	printGatewayIdentity(0)
+	fmt.Println()
+	printDotenvDiagnostics()
 	fmt.Println()
 
 	health, running, healthErr := fetchGatewayHealth(defaultGatewayListen)
@@ -1882,16 +2066,50 @@ func startHTTPGateway(service *app.Service, listen string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("ADM V2 HTTP Gateway")
-	fmt.Println("状态：    正在启动")
+	probeURL, err := gateway.HTTPProbeBaseURL(listen)
+	if err != nil {
+		return err
+	}
+	fmt.Println("ADM V2 HTTP Gateway starting...")
+	fmt.Println("监听：    ", listen)
 	fmt.Println("MCP 地址：", baseURL+"/mcp")
-	fmt.Println("健康检查：", baseURL+"/healthz")
+	fmt.Println("健康检查：", probeURL+"/healthz")
 	fmt.Println("停止方式：当前终端按 Ctrl+C，或另开终端运行 adm gateway stop")
 	fmt.Println()
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := gateway.RunHTTP(ctx, service, listen); err != nil {
-		return fmt.Errorf("在 %s 启动 HTTP Gateway 失败: %w；监听地址可能已被占用或被操作系统保留，可改用 --listen 并检查系统端口排除范围", listen, err)
+	done := make(chan error, 1)
+	go func() {
+		done <- gateway.RunHTTP(ctx, service, listen)
+	}()
+
+	ready := make(chan error, 1)
+	go func() {
+		_, readyErr := gateway.WaitHTTPReady(listen, 5*time.Second)
+		ready <- readyErr
+	}()
+
+	select {
+	case runErr := <-done:
+		if runErr != nil {
+			return fmt.Errorf("在 %s 启动 HTTP Gateway 失败: %w", listen, runErr)
+		}
+		return nil
+	case readyErr := <-ready:
+		if readyErr != nil {
+			stop()
+			runErr := <-done
+			if runErr != nil {
+				return fmt.Errorf("在 %s 启动 HTTP Gateway 失败: %w", listen, runErr)
+			}
+			return readyErr
+		}
+		fmt.Println("ADM Gateway ready")
+	}
+
+	if runErr := <-done; runErr != nil {
+		return fmt.Errorf("Gateway 运行失败: %w", runErr)
 	}
 	return nil
 }
@@ -1979,6 +2197,7 @@ func printGatewayStatusBaseURL(rawBaseURL string) error {
 	default:
 		fmt.Println("状态：    已停止或不可达")
 	}
+	printGatewayIdentity(0)
 	return nil
 }
 
@@ -1996,15 +2215,18 @@ func printGatewayStatus(listen string) error {
 			fmt.Println("状态：    版本不兼容")
 			fmt.Println("详情：   ", incompatible)
 			fmt.Println("处理：    运行 adm gateway restart；新版 CLI 会尝试安全停止同一路径的旧版 ADM Gateway")
+			printGatewayIdentity(0)
 			return nil
 		}
 		fmt.Println("状态：    未知")
+		printGatewayIdentity(0)
 		return err
 	}
 	fmt.Println("ADM V2 HTTP Gateway")
 	if !running {
 		fmt.Println("状态：    已停止")
 		fmt.Println("MCP 地址：", baseURL+"/mcp")
+		printGatewayIdentity(0)
 		fmt.Println("启动：    adm gateway start")
 		return nil
 	}
@@ -2015,6 +2237,7 @@ func printGatewayStatus(listen string) error {
 	if health.OwnerID != "" {
 		fmt.Println("Runtime Owner：", health.OwnerID)
 	}
+	printGatewayIdentity(health.PID)
 	fmt.Println("停止：    adm gateway stop")
 	return nil
 }
@@ -2052,7 +2275,7 @@ func stopHTTPGateway(listen string) error {
 		return fmt.Errorf("Gateway %s 没有提供可用 PID，无法自动停止", baseURL)
 	}
 	if health.OwnerID != "" {
-		if _, err := gateway.StopHTTPWithAPIKey(listen, strings.TrimSpace(os.Getenv(admAdminAPIKeyEnv))); err != nil {
+		if _, err := gateway.StopHTTPWithAPIKey(listen, clientAdminAPIKey()); err != nil {
 			return err
 		}
 		fmt.Printf("ADM V2 HTTP Gateway 已停止（PID %d）。\n", health.PID)
@@ -2189,8 +2412,12 @@ func printUsage() {
   state          查看本机 ADM 状态文件位置
 
 Gateway 常用命令：
+  gateway setup      一次初始化远程 Host policy 与双 Key；已有 Key 默认保留
+  gateway install    Linux 一键 setup + managed system service 安装/升级 + ready 检查
+  gateway service    管理 Gateway 系统服务（Linux 第一版使用 systemd）
   gateway start      启动本机 HTTP Gateway；未写 --listen 时使用当前 --adm-url / ADM_V2_URL（默认 127.0.0.1:43137）
   gateway status     查看当前 ADM Base URL，或用 --listen 显式检查一个本机监听地址
+  gateway diagnostics 通过 Admin MCP 读取运行用户、状态路径、远程访问 readiness 与 systemd 元数据
   gateway stop       停止当前本机 ADM Base URL 对应的 Gateway；远端 URL 不会被停止
   gateway restart    重启当前本机 ADM Base URL 对应的 Gateway
   gateway access     配置远程 Host/IP 白名单、Admin API Key 与 Agent API Key\n  gateway logs       查看持久日志目录与轮转/保留策略\n  gateway stdio      仅供 MCP 客户端使用；不要在普通终端里手动运行
@@ -2374,6 +2601,9 @@ func printExecHelp() {
   adm exec list
       查看当前白名单。
 
+  adm exec usage [--recent-hours N] [--surface SURFACE]
+      无参数时保持原完整数组；可按 1..48 小时近期窗口或 surface 筛选。统计包含累计/小时桶/surface 次数，不保存 args、命令正文或输出。
+
   adm exec blacklist add|remove|list ...
       管理命令黑名单；黑名单即使在 Full Authorization 下仍然拒绝执行。
 
@@ -2506,6 +2736,24 @@ func printGatewayHelp() {
   start/restart 默认使用本机 loopback；配置 gateway access Host 白名单、Admin API Key 和 Agent API Key 后可显式 --listen 远程地址。stop 仍只安全停止本机进程；status 可检查自定义端口或远端 health。
   显式 --listen HOST:PORT 时，它优先于 ADM Base URL。
 
+远程初始化：
+  adm gateway setup --remote [--listen HOST:PORT] [--hosts HOST1,HOST2] [--rotate-keys]
+      自动补齐 Host policy 与缺失的 Admin/Agent Key；已有 Key 默认保留。
+
+Linux 一键安装：
+  sudo adm gateway install --remote [--user USER] [--port PORT | --listen HOST:PORT] [--hosts HOST1,HOST2] [--rotate-keys] [--dry-run]
+      首次安装需要 --user；已有 ADM managed service 可重复执行升级，省略 user/listen/hosts 时保留原值，启动并等待 /healthz ready。
+
+系统服务：
+  sudo adm gateway service install [--user USER] [--listen HOST:PORT]
+  adm gateway service status
+  sudo adm gateway service start
+  sudo adm gateway service stop
+  sudo adm gateway service restart
+  sudo adm gateway service enable
+  sudo adm gateway service disable
+  sudo adm gateway service uninstall
+
 人工使用的 HTTP Gateway：
   adm [--adm-url URL] gateway start [--listen HOST:PORT] [-d|--detach]
   adm gateway logs status
@@ -2514,6 +2762,9 @@ func printGatewayHelp() {
 
   adm [--adm-url URL] gateway status [--listen HOST:PORT]
       查看当前 ADM Base URL 或显式监听地址的运行状态、MCP 地址、PID 和版本。
+
+  adm [--adm-url URL] gateway diagnostics
+      通过 Admin MCP 输出服务端诊断 JSON：运行用户/平台、state/config 路径、Host/双 Key readiness 与 systemd 状态；不返回 Key 原文。
 
   adm [--adm-url URL] gateway stop [--listen HOST:PORT]
       停止本机 Gateway。不会通过远端 URL 发送停止操作。

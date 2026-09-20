@@ -128,11 +128,6 @@ func remoteGatewayListenAllowed(service *app.Service) bool {
 	if service == nil {
 		return false
 	}
-	settings, err := service.GatewayAccessConfig()
-	if err != nil {
-		return false
-	}
-	return len(settings.AllowedHosts) > 0 &&
-		strings.TrimSpace(settings.AdminAPIKeyHash) != "" &&
-		strings.TrimSpace(settings.AgentAPIKeyHash) != ""
+	readiness, err := service.GatewayRemoteReadiness()
+	return err == nil && readiness.Ready
 }

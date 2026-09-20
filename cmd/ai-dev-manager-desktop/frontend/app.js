@@ -14,7 +14,8 @@ const elements = {
   gatewayRefreshButton: document.getElementById('gatewayRefreshButton'),
   gatewayStartButton: document.getElementById('gatewayStartButton'),
   gatewayStopButton: document.getElementById('gatewayStopButton'),
-  gatewayAllowedHosts: document.getElementById('gatewayAllowedHosts'), gatewayHostState: document.getElementById('gatewayHostState'), gatewayAccessSaveHosts: document.getElementById('gatewayAccessSaveHosts'), gatewayAdminAPIKey: document.getElementById('gatewayAdminAPIKey'), gatewayAdminKeyState: document.getElementById('gatewayAdminKeyState'), gatewayAdminKeyHint: document.getElementById('gatewayAdminKeyHint'), gatewayAccessSetAdminKey: document.getElementById('gatewayAccessSetAdminKey'), gatewayAccessClearAdminKey: document.getElementById('gatewayAccessClearAdminKey'), gatewayAgentAPIKey: document.getElementById('gatewayAgentAPIKey'), gatewayAgentKeyState: document.getElementById('gatewayAgentKeyState'), gatewayAgentKeyHint: document.getElementById('gatewayAgentKeyHint'), gatewayAccessSetAgentKey: document.getElementById('gatewayAccessSetAgentKey'), gatewayAccessClearAgentKey: document.getElementById('gatewayAccessClearAgentKey'), gatewayAccessSummary: document.getElementById('gatewayAccessSummary'),
+  gatewayAllowedHosts: document.getElementById('gatewayAllowedHosts'), gatewayHostState: document.getElementById('gatewayHostState'), gatewayAccessSaveHosts: document.getElementById('gatewayAccessSaveHosts'), gatewayAdminAPIKey: document.getElementById('gatewayAdminAPIKey'), gatewayAdminKeyState: document.getElementById('gatewayAdminKeyState'), gatewayAdminKeyHint: document.getElementById('gatewayAdminKeyHint'), gatewayGenerateAdminKey: document.getElementById('gatewayGenerateAdminKey'), gatewayCopyAdminKey: document.getElementById('gatewayCopyAdminKey'), gatewayAccessSetAdminKey: document.getElementById('gatewayAccessSetAdminKey'), gatewayAccessClearAdminKey: document.getElementById('gatewayAccessClearAdminKey'), gatewayAgentAPIKey: document.getElementById('gatewayAgentAPIKey'), gatewayAgentKeyState: document.getElementById('gatewayAgentKeyState'), gatewayAgentKeyHint: document.getElementById('gatewayAgentKeyHint'), gatewayGenerateAgentKey: document.getElementById('gatewayGenerateAgentKey'), gatewayCopyAgentKey: document.getElementById('gatewayCopyAgentKey'), gatewayAccessSetAgentKey: document.getElementById('gatewayAccessSetAgentKey'), gatewayAccessClearAgentKey: document.getElementById('gatewayAccessClearAgentKey'), gatewayAccessSummary: document.getElementById('gatewayAccessSummary'),
+  gatewayDiagnosticsReadiness: document.getElementById('gatewayDiagnosticsReadiness'), gatewayDiagnosticsCopyButton: document.getElementById('gatewayDiagnosticsCopyButton'), gatewayDiagnosticListen: document.getElementById('gatewayDiagnosticListen'), gatewayDiagnosticUser: document.getElementById('gatewayDiagnosticUser'), gatewayDiagnosticRuntime: document.getElementById('gatewayDiagnosticRuntime'), gatewayDiagnosticStatePath: document.getElementById('gatewayDiagnosticStatePath'), gatewayDiagnosticClientConfigDir: document.getElementById('gatewayDiagnosticClientConfigDir'), gatewayDiagnosticExecutable: document.getElementById('gatewayDiagnosticExecutable'), gatewayDiagnosticService: document.getElementById('gatewayDiagnosticService'), gatewayDiagnosticIssues: document.getElementById('gatewayDiagnosticIssues'), gatewayDiagnosticSuggestion: document.getElementById('gatewayDiagnosticSuggestion'), gatewayDiagnosticServiceDetail: document.getElementById('gatewayDiagnosticServiceDetail'),
   workspaceCount: document.getElementById('workspaceCount'), environmentCount: document.getElementById('environmentCount'),
   execCount: document.getElementById('execCount'), mcpCount: document.getElementById('mcpCount'), skillCount: document.getElementById('skillCount'), memoryCount: document.getElementById('memoryCount'),
   workspaceBadge: document.getElementById('workspaceBadge'), environmentBadge: document.getElementById('environmentBadge'), execBadge: document.getElementById('execBadge'),
@@ -46,7 +47,7 @@ const elements = {
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
   loadEnvironmentMemory: document.getElementById('loadEnvironmentMemory'), writeEnvironmentMemoryButton: document.getElementById('writeEnvironmentMemoryButton'), environmentMemoryScopeHint: document.getElementById('environmentMemoryScopeHint'), environmentMemoryForm: document.getElementById('environmentMemoryForm'), environmentMemoryKey: document.getElementById('environmentMemoryKey'), environmentMemoryValue: document.getElementById('environmentMemoryValue'), environmentMemoryList: document.getElementById('environmentMemoryList'),
-  execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execBlacklistForm: document.getElementById('execBlacklistForm'), execBlacklistExecutable: document.getElementById('execBlacklistExecutable'), execBlacklistList: document.getElementById('execBlacklistList'), execBlacklistCount: document.getElementById('execBlacklistCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'), execAuthorizationMode: document.getElementById('execAuthorizationMode'), execAuthorizationSave: document.getElementById('execAuthorizationSave'), execAuthorizationModeLabel: document.getElementById('execAuthorizationModeLabel'),
+  execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execUsageCount: document.getElementById('execUsageCount'), execUsageSurfaceSummary: document.getElementById('execUsageSurfaceSummary'), execUsageFilter: document.getElementById('execUsageFilter'), execUsageSurfaceFilter: document.getElementById('execUsageSurfaceFilter'), execUsageTimeFilter: document.getElementById('execUsageTimeFilter'), execUsageVisibleCount: document.getElementById('execUsageVisibleCount'), execUsageTotalCount: document.getElementById('execUsageTotalCount'), execUsageList: document.getElementById('execUsageList'), execBlacklistForm: document.getElementById('execBlacklistForm'), execBlacklistExecutable: document.getElementById('execBlacklistExecutable'), execBlacklistList: document.getElementById('execBlacklistList'), execBlacklistCount: document.getElementById('execBlacklistCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'), execAuthorizationMode: document.getElementById('execAuthorizationMode'), execAuthorizationSave: document.getElementById('execAuthorizationSave'), execAuthorizationModeLabel: document.getElementById('execAuthorizationModeLabel'),
   loadGlobalMemory: document.getElementById('loadGlobalMemory'), globalMemoryForm: document.getElementById('globalMemoryForm'), globalMemoryKey: document.getElementById('globalMemoryKey'), globalMemoryValue: document.getElementById('globalMemoryValue'), globalMemoryList: document.getElementById('globalMemoryList'),
 };
 
@@ -63,6 +64,8 @@ let mcpHealthByKey = new Map();
 let temporaryLifecycleByEnvironmentID = new Map();
 let temporaryCleanupPreviewIDs = new Set();
 let gatewayAccessStatus = null;
+let gatewayDiagnostics = null;
+let gatewayConnectionStatus = null;
 let execAuthorizationStatus = null;
 let runtimeRunsByID = new Map();
 let runtimeSubview = 'verifiers';
@@ -612,8 +615,10 @@ function renderGatewayAccessStatus(status) {
   elements.gatewayAgentKeyHint.textContent = agentConfigured
     ? '服务端 Agent Key 已配置。Agent 访问 /mcp 时必须携带同一把 Agent Key；原值不会回显。'
     : '用于 /mcp。请把这把 Key 配置到 Agent/MCP 客户端的 Authorization Bearer 或 X-ADM-API-Key 请求头。';
-  elements.gatewayAccessSetAdminKey.textContent = adminConfigured ? '轮换 Admin Key' : '设置 Admin Key';
-  elements.gatewayAccessSetAgentKey.textContent = agentConfigured ? '轮换 Agent Key' : '设置 Agent Key';
+  elements.gatewayGenerateAdminKey.textContent = adminConfigured ? '轮换 Key' : '生成并设置 Key';
+  elements.gatewayGenerateAgentKey.textContent = agentConfigured ? '轮换 Key' : '生成并设置 Key';
+  elements.gatewayAccessSetAdminKey.textContent = '手动设置';
+  elements.gatewayAccessSetAgentKey.textContent = '手动设置';
   elements.gatewayAccessClearAdminKey.disabled = !adminConfigured;
   elements.gatewayAccessClearAgentKey.disabled = !agentConfigured;
 }
@@ -652,6 +657,139 @@ async function refreshGatewayAccessStatus() {
     return 'Gateway access: ' + detail;
   }
 }
+
+function gatewayDiagnosticIssueText(issue) {
+  const detail = String(issue?.detail || '').trim();
+  switch (issue?.code) {
+    case 'remote_access_not_ready': return '远程访问未就绪' + (detail ? '：缺少 ' + detail : '');
+    case 'service_unmanaged': return '同名 systemd unit 不是 ADM 管理的服务' + (detail ? '（' + detail + '）' : '');
+    case 'service_unit_outdated': return 'systemd unit 模板版本较旧' + (detail ? '（' + detail + '）' : '');
+    case 'service_disabled': return 'systemd 服务未启用开机启动';
+    case 'service_inactive': return 'systemd 服务已安装但未运行';
+    case 'service_pid_mismatch': return '当前连接的 Gateway 进程不是 systemd 正在管理的进程' + (detail ? '（' + detail + '）' : '');
+    case 'service_user_mismatch': return 'systemd 用户与实际 Gateway 运行用户不一致' + (detail ? '（' + detail + '）' : '');
+    case 'service_state_path_mismatch': return 'systemd StatePath 与实际 Gateway 不一致' + (detail ? '（' + detail + '）' : '');
+    case 'service_executable_mismatch': return 'systemd Executable 与实际 Gateway 不一致' + (detail ? '（' + detail + '）' : '');
+    default: return [issue?.code || 'unknown_issue', detail].filter(Boolean).join(' · ');
+  }
+}
+
+function gatewayDiagnosticSuggestedActions(diagnostics) {
+  if (!diagnostics) return [];
+  const service = diagnostics?.service || {};
+  const codes = new Set(safeArray(diagnostics?.issues).map((issue) => issue?.code).filter(Boolean));
+  const actions = [];
+  const add = (value) => { if (value && !actions.includes(value)) actions.push(value); };
+  if (codes.has('service_unmanaged')) {
+    add('先确认同名 systemd unit 的来源；ADM 不会自动覆盖或删除非 managed unit');
+  }
+  if (codes.has('remote_access_not_ready')) {
+    const listen = gatewayConnectionStatus?.listen || service?.listen || '0.0.0.0:8001';
+    add('在 Gateway 服务用户下运行：adm gateway setup --remote --listen ' + listen);
+  }
+  if (codes.has('service_unit_outdated') ||
+      codes.has('service_pid_mismatch') ||
+      codes.has('service_user_mismatch') ||
+      codes.has('service_state_path_mismatch') ||
+      codes.has('service_executable_mismatch')) {
+    add('sudo adm gateway install --remote --dry-run');
+    add('确认计划后：sudo adm gateway install --remote');
+  }
+  if (codes.has('service_disabled')) add('sudo adm gateway service enable');
+  if (codes.has('service_inactive')) add('sudo adm gateway service start');
+  return actions;
+}
+
+function renderGatewayDiagnostics(diagnostics) {
+  gatewayDiagnostics = diagnostics || null;
+  const service = diagnostics?.service || {};
+  const readiness = diagnostics?.readiness || {};
+  if (elements.gatewayDiagnosticsReadiness) {
+    const ready = Boolean(diagnostics && readiness.ready);
+    elements.gatewayDiagnosticsReadiness.dataset.state = ready ? 'ready' : (diagnostics ? 'warning' : 'unconfigured');
+    elements.gatewayDiagnosticsReadiness.textContent = ready ? '远程访问就绪' : (diagnostics ? ('缺少：' + (safeArray(readiness.missing).join(' / ') || '配置')) : '未读取');
+  }
+  const listen = gatewayConnectionStatus?.listen || service.listen || '—';
+  elements.gatewayDiagnosticListen.textContent = listen;
+  elements.gatewayDiagnosticUser.textContent = diagnostics?.process_user || service.user || '—';
+  elements.gatewayDiagnosticRuntime.textContent = [diagnostics?.goos, diagnostics?.goarch].filter(Boolean).join('/') || '—';
+  elements.gatewayDiagnosticStatePath.textContent = diagnostics?.state_path || service.state_path || '—';
+  elements.gatewayDiagnosticClientConfigDir.textContent = diagnostics?.client_config_dir || '—';
+  elements.gatewayDiagnosticExecutable.textContent = diagnostics?.executable || service.executable || '—';
+  let serviceText = '不可用';
+  if (service?.supported) {
+    if (!service?.installed) serviceText = 'systemd · 未安装';
+    else if (!service?.managed) serviceText = 'systemd · 非 ADM managed';
+    else serviceText = 'systemd · ' + (service?.active ? 'active' : 'inactive') + ' · unit v' + (service?.unit_version || 'legacy');
+  } else if (diagnostics) {
+    serviceText = '当前平台不支持 systemd 管理';
+  }
+  elements.gatewayDiagnosticService.textContent = serviceText;
+  const issues = safeArray(diagnostics?.issues).map(gatewayDiagnosticIssueText);
+  elements.gatewayDiagnosticIssues.textContent = issues.length ? issues.join(' · ') : (diagnostics ? 'none' : '—');
+  const suggestions = gatewayDiagnosticSuggestedActions(diagnostics);
+  elements.gatewayDiagnosticSuggestion.textContent = suggestions.length ? suggestions.join(' · ') : (diagnostics ? '无需操作' : '—');
+  const detail = diagnostics?.service_error || service?.detail || (service?.installed
+    ? [service?.user && ('User ' + service.user), service?.listen && ('Listen ' + service.listen)].filter(Boolean).join(' · ')
+    : '运行时信息来自当前 ADM 服务进程；systemd 元数据仅 Linux 可用。');
+  elements.gatewayDiagnosticServiceDetail.textContent = detail || '—';
+  elements.gatewayDiagnosticsCopyButton.disabled = !diagnostics;
+}
+async function refreshGatewayDiagnostics() {
+  try {
+    renderGatewayDiagnostics(await desktopAdapter().GetGatewayDiagnostics());
+    return '';
+  } catch (error) {
+    gatewayDiagnostics = null;
+    renderGatewayDiagnostics(null);
+    const detail = errorText(error);
+    elements.gatewayDiagnosticServiceDetail.textContent = '诊断读取失败：' + detail;
+    return 'Gateway diagnostics: ' + detail;
+  }
+}
+function gatewayDiagnosticsReport() {
+  const diagnostics = gatewayDiagnostics || {};
+  const service = diagnostics.service || {};
+  const access = gatewayAccessStatus || diagnostics.access || {};
+  const readiness = diagnostics.readiness || {};
+  const connection = gatewayConnectionStatus || {};
+  return [
+    'AI Dev Manager Gateway Diagnostics',
+    'Observed: ' + (diagnostics.observed_at || new Date().toISOString()),
+    'Connection: ' + (connection.base_url || currentADMBaseURL() || '—'),
+    'State: ' + (connection.state || '—'),
+    'Listen: ' + (connection.listen || service.listen || '—'),
+    'PID: ' + (connection.pid || diagnostics.process_pid || '—'),
+    'Version: ' + (connection.version || '—'),
+    'Runtime user: ' + (diagnostics.process_user || service.user || '—'),
+    'Platform: ' + ([diagnostics.goos, diagnostics.goarch].filter(Boolean).join('/') || '—'),
+    'Executable: ' + (diagnostics.executable || service.executable || '—'),
+    'State path: ' + (diagnostics.state_path || service.state_path || '—'),
+    'Client config dir: ' + (diagnostics.client_config_dir || '—'),
+    'Host policy: ' + (safeArray(access.allowed_hosts).join(', ') || '未配置'),
+    'Admin key configured: ' + (access.admin_api_key_configured ? 'yes' : 'no'),
+    'Agent key configured: ' + (access.agent_api_key_configured ? 'yes' : 'no'),
+    'Remote ready: ' + (readiness.ready ? 'yes' : 'no'),
+    'Remote missing: ' + (safeArray(readiness.missing).join(', ') || 'none'),
+    'Service supported: ' + (service.supported ? 'yes' : 'no'),
+    'Service installed: ' + (service.installed ? 'yes' : 'no'),
+    'Service managed: ' + (service.managed ? 'yes' : 'no'),
+    'Service unit version: ' + (service.unit_version || 'legacy'),
+    'Service active: ' + (service.active ? 'yes' : 'no'),
+    'Service enabled: ' + (service.enabled ? 'yes' : 'no'),
+    'Service PID: ' + (service.pid || '—'),
+    'Service unit: ' + (service.unit_path || '—'),
+    'Issues: ' + (safeArray(diagnostics.issues).map((issue) => [issue?.code, issue?.detail].filter(Boolean).join(': ')).join(' | ') || 'none'),
+    'Suggested actions: ' + (gatewayDiagnosticSuggestedActions(diagnostics).join(' | ') || 'none'),
+    'Service detail: ' + (diagnostics.service_error || service.detail || '—'),
+  ].join('\n');
+}
+async function copyGatewayDiagnosticsReport() {
+  if (!gatewayDiagnostics) return;
+  await copyText(gatewayDiagnosticsReport());
+  setStatus('Gateway 诊断报告已复制；不包含 API Key 原文。', 'success');
+}
+
 function renderExecAuthorizationStatus(status) {
   execAuthorizationStatus = status || null;
   const full = Boolean(status?.full_authorization);
@@ -678,12 +816,44 @@ async function saveGatewayAllowedHosts() {
   }
   await runMutation('保存远程 Host 白名单', () => desktopAdapter().SetGatewayAllowedHosts(hosts));
 }
+async function rotateGatewayAPIKey(kind) {
+  const admin = kind === 'admin';
+  const input = admin ? elements.gatewayAdminAPIKey : elements.gatewayAgentAPIKey;
+  const label = admin ? 'Admin API Key' : 'Agent API Key';
+  const warning = admin
+    ? '轮换 Admin Key 后，当前 Desktop 连接会自动更新；其他使用旧 Key 的客户端会断开。继续？'
+    : '轮换 Agent Key 后，所有使用旧 Key 的 Agent/MCP 客户端都需要更新。继续？';
+  if (!window.confirm(warning)) return;
+  try {
+    const value = String(admin
+      ? await desktopAdapter().RotateGatewayAdminAPIKey()
+      : await desktopAdapter().RotateGatewayAgentAPIKey()).trim();
+    if (!value) throw new Error('轮换结果为空');
+    input.type = 'text';
+    input.value = value;
+    const copyButton = admin ? elements.gatewayCopyAdminKey : elements.gatewayCopyAgentKey;
+    copyButton.disabled = false;
+    input.focus();
+    input.select();
+    setStatus(`${label} 已轮换。新 Key 仅在当前输入框中显示，请立即复制保存。`, 'success');
+    await refreshGatewayAccessStatus();
+    if (admin) {
+      connectionProfiles = await desktopAdapter().GetConnectionProfiles();
+      renderConnectionProfiles();
+    }
+  } catch (error) {
+    setStatus(`轮换 ${label} 失败：${error?.message || String(error)}`, 'error');
+  }
+}
+
 async function setGatewayAdminAPIKey() {
   const value = String(elements.gatewayAdminAPIKey.value || '').trim();
   if (!value) return setStatus('请输入 Admin API Key。', 'error');
   await runMutation('设置 Admin API Key', async () => {
     await desktopAdapter().ConfigureGatewayAdminAPIKey(value);
     elements.gatewayAdminAPIKey.value = '';
+    elements.gatewayAdminAPIKey.type = 'password';
+    elements.gatewayCopyAdminKey.disabled = true;
     connectionProfiles = await desktopAdapter().GetConnectionProfiles();
     renderConnectionProfiles();
   });
@@ -698,6 +868,8 @@ async function setGatewayAgentAPIKey() {
   await runMutation('设置 Agent API Key', async () => {
     await desktopAdapter().SetGatewayAgentAPIKey(value);
     elements.gatewayAgentAPIKey.value = '';
+    elements.gatewayAgentAPIKey.type = 'password';
+    elements.gatewayCopyAgentKey.disabled = true;
   });
 }
 async function clearGatewayAgentAPIKey() {
@@ -723,6 +895,7 @@ async function loadAboutInfo() {
   }
 }
 function renderGatewayStatus(status) {
+  gatewayConnectionStatus = status || null;
   const state = status?.state || 'unknown'; elements.gatewayState.textContent = state; elements.gatewayState.dataset.state = state;
   const baseURL = status?.base_url || currentADMBaseURL();
   elements.gatewayBaseURL.value = baseURL; elements.gatewayHealthURL.textContent = status?.health_url || `${baseURL.replace(/\/$/, '')}/healthz`;
@@ -733,6 +906,7 @@ function renderGatewayStatus(status) {
   elements.gatewayDetail.textContent = status?.detail || (state === 'running' ? 'ADM health check 通过；Desktop 管理数据通过 Admin MCP 读取。' : 'ADM 未连接时 Desktop 不读取或修改本地 state。');
   elements.gatewayStartButton.disabled = !localEligible || state === 'running' || state === 'incompatible';
   elements.gatewayStopButton.disabled = !localEligible || state === 'stopped' || state === 'incompatible' || state === 'unknown';
+  if (elements.gatewayDiagnosticListen) elements.gatewayDiagnosticListen.textContent = status?.listen || gatewayDiagnostics?.service?.listen || '—';
 
 }
 async function refreshGatewayStatus(showMessage = false) {
@@ -1189,15 +1363,113 @@ function updateEnvironmentContextMarkers() {
     const marker = item.querySelector('.context-marker'); if (marker) marker.hidden = !current;
   }
 }
-function renderExecutables(executables, blacklist = [], denials = []) {
+function execSurfaceLabel(surface) {
+  const labels = {
+    exec: 'Exec',
+    global_exec: 'Global Exec',
+    verifier: 'Verifier',
+    verifier_async_start: '异步 Verifier',
+    process_start: 'Dev Process',
+    run_start: 'Run',
+    global_mcp: 'Global MCP',
+    mcp_probe: 'MCP Probe',
+    mcp_stdio: 'MCP stdio',
+    mcp_global_probe: 'Global MCP Probe',
+    unattributed: '历史未归类',
+    unknown: '未知来源',
+  };
+  const key = String(surface || 'unknown').toLowerCase();
+  return labels[key] || key;
+}
+function execSurfaceEntries(counts) {
+  return Object.entries(counts || {})
+    .map(([surface, count]) => [String(surface || 'unknown'), safeNumber(count)])
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
+}
+function execSurfaceText(counts) {
+  const entries = execSurfaceEntries(counts);
+  return entries.length ? entries.map(([surface, count]) => execSurfaceLabel(surface) + ' × ' + count).join(' / ') : '无 surface 统计';
+}
+function execRecentUsage(usage) {
+  const currentHour = new Date();
+  currentHour.setUTCMinutes(0, 0, 0);
+  const currentMS = currentHour.getTime();
+  const cutoffMS = currentMS - (23 * 60 * 60 * 1000);
+  let current = 0; let recent24 = 0; let previous23 = 0;
+  for (const bucket of safeArray(usage?.hourly_counts)) {
+    const hourMS = Date.parse(bucket?.hour);
+    if (!Number.isFinite(hourMS) || hourMS < cutoffMS || hourMS > currentMS) continue;
+    const count = safeNumber(bucket?.count);
+    recent24 += count;
+    if (hourMS === currentMS) current += count;
+    else previous23 += count;
+  }
+  const baseline = previous23 / 23;
+  const spike = current >= 10 && current >= Math.max(10, baseline * 3);
+  return {current, recent24, baseline, spike};
+}
+function execUsageMatchesSurface(usage, filter) {
+  const counts = usage?.surface_counts || {};
+  const has = (...names) => names.some((name) => safeNumber(counts[name]) > 0);
+  switch (filter) {
+    case 'exec': return has('exec', 'global_exec');
+    case 'verifier': return has('verifier', 'verifier_async_start');
+    case 'mcp': return has('global_mcp', 'mcp_probe', 'mcp_stdio', 'mcp_global_probe');
+    case 'process': return has('process_start');
+    case 'run': return has('run_start');
+    case 'unattributed': return has('unattributed');
+    default: return true;
+  }
+}
+function renderExecUsageFromSnapshot() {
+  if (!currentSnapshot) return;
+  renderExecutables(safeArray(currentSnapshot.allowed_executables), safeArray(currentSnapshot.blocked_executables), safeArray(currentSnapshot.exec_denials), safeArray(currentSnapshot.exec_usages));
+}
+function renderExecutables(executables, blacklist = [], denials = [], usages = []) {
   executables = safeArray(executables);
   blacklist = safeArray(blacklist);
   denials = safeArray(denials).slice().sort((a, b) => (safeNumber(b.count) - safeNumber(a.count)) || String(a.executable || '').localeCompare(String(b.executable || '')));
+  usages = safeArray(usages).slice().sort((a, b) => { const ar = execRecentUsage(a); const br = execRecentUsage(b); return (br.current - ar.current) || (br.recent24 - ar.recent24) || (safeNumber(b.count) - safeNumber(a.count)) || String(a.executable || '').localeCompare(String(b.executable || '')); });
   const denialCount = denials.reduce((sum, item) => sum + safeNumber(item.count), 0);
+  const usageCount = usages.reduce((sum, item) => sum + safeNumber(item.count), 0);
+  const usageRecent = usages.map((item) => ({usage: item, recent: execRecentUsage(item)}));
+  const usageMatcher = searchMatcher(elements.execUsageFilter?.value);
+  const surfaceFilter = elements.execUsageSurfaceFilter?.value || 'all';
+  const timeFilter = elements.execUsageTimeFilter?.value || 'all';
+  const usageRows = usages.filter((usage) => {
+    const recent = execRecentUsage(usage);
+    const haystack = [usage.executable, usage.last_environment_id, usage.last_surface, ...Object.keys(usage.surface_counts || {}), ...Object.keys(usage.surface_counts || {}).map(execSurfaceLabel)].join(' ');
+    if (!usageMatcher(haystack) || !execUsageMatchesSurface(usage, surfaceFilter)) return false;
+    if (timeFilter === 'current') return recent.current > 0;
+    if (timeFilter === 'recent24') return recent.recent24 > 0;
+    if (timeFilter === 'spike') return recent.spike;
+    return true;
+  });
+  const currentHourCount = usageRecent.reduce((sum, item) => sum + item.recent.current, 0);
+  const recent24Count = usageRecent.reduce((sum, item) => sum + item.recent.recent24, 0);
+  const spikeNames = usageRecent.filter((item) => item.recent.spike).slice(0, 5).map((item) => item.usage.executable || 'unknown');
+  const usageMap = new Map(usages.map((item) => [String(item.executable || '').toLowerCase(), item]));
+  const surfaceTotals = {};
+  for (const usage of usages) {
+    for (const [surface, count] of execSurfaceEntries(usage.surface_counts)) {
+      surfaceTotals[surface] = safeNumber(surfaceTotals[surface]) + count;
+    }
+  }
+  const usageText = (executable) => {
+    const usage = usageMap.get(String(executable || '').toLowerCase());
+    if (!usage) return '尚未执行';
+    return `已执行 ${safeNumber(usage.count)} 次 · 来源 ${execSurfaceText(usage.surface_counts)} · 最近 ${usage.last_surface || 'unknown surface'} · ${formatDateTime(usage.last_executed_at)}`;
+  };
+
   elements.execBadge.textContent = String(executables.length + blacklist.length);
   setMetric(elements.execAllowedCount, executables.length);
   setMetric(elements.execBlacklistCount, blacklist.length);
   setMetric(elements.execBlockedCount, denialCount);
+  setMetric(elements.execUsageCount, usageCount);
+  setMetric(elements.execUsageVisibleCount, usageRows.length);
+  setMetric(elements.execUsageTotalCount, usages.length);
+  elements.execUsageSurfaceSummary.textContent = usageCount ? ('本小时 ' + currentHourCount + ' · 近24小时 ' + recent24Count + ' · Surface：' + execSurfaceText(surfaceTotals) + (spikeNames.length ? ' · 突增：' + spikeNames.join(', ') : '')) : '暂无 surface 统计';
   elements.execClearAllBlockedButton.disabled = denials.length === 0;
 
   if (!executables.length) emptyMessage(elements.execList, '暂无 allowed executable');
@@ -1208,8 +1480,9 @@ function renderExecutables(executables, blacklist = [], denials = []) {
       const content = document.createElement('div'); content.className = 'item-content';
       const title = document.createElement('div'); title.className = 'item-title-line';
       const code = document.createElement('code'); code.textContent = executable;
-      title.append(code, stateBadge('允许', 'available'));
-      const meta = document.createElement('small'); meta.textContent = 'Runtime 可以准备此 executable；真正执行仍需要对应操作权限和 writer。';
+      const usage = usageMap.get(String(executable).toLowerCase());
+      title.append(code, stateBadge('允许', 'available'), stateBadge(`执行 × ${safeNumber(usage?.count)}`, usage ? 'selected' : 'unconfigured'));
+      const meta = document.createElement('small'); meta.textContent = usageText(executable);
       content.append(title, meta);
       row.append(content, createActionButton('移除', 'remove-executable', executable, 'danger'));
       elements.execList.append(row);
@@ -1224,11 +1497,40 @@ function renderExecutables(executables, blacklist = [], denials = []) {
       const content = document.createElement('div'); content.className = 'item-content';
       const title = document.createElement('div'); title.className = 'item-title-line';
       const code = document.createElement('code'); code.textContent = executable;
-      title.append(code, stateBadge('禁止', 'error'));
-      const meta = document.createElement('small'); meta.textContent = '命令黑名单优先；Strict / Full Authorization 下都不能执行。';
+      const usage = usageMap.get(String(executable).toLowerCase());
+      title.append(code, stateBadge('禁止', 'error'), stateBadge(`历史执行 × ${safeNumber(usage?.count)}`, usage ? 'degraded' : 'unconfigured'));
+      const meta = document.createElement('small'); meta.textContent = usageText(executable) + ' · 当前黑名单禁止后续执行';
       content.append(title, meta);
       row.append(content, createActionButton('移出黑名单', 'unblock-executable', executable, 'danger'));
       elements.execBlacklistList.append(row);
+    }
+  }
+
+  if (!usageRows.length) emptyMessage(elements.execUsageList, usages.length ? '没有符合当前筛选条件的执行记录。' : '暂无执行记录');
+  else {
+    elements.execUsageList.replaceChildren(); elements.execUsageList.classList.remove('empty');
+    for (const usage of usageRows) {
+      const executable = usage.executable || '';
+      const row = document.createElement('div'); row.className = 'managed-row exec-row';
+      const content = document.createElement('div'); content.className = 'item-content';
+      const title = document.createElement('div'); title.className = 'item-title-line';
+      const code = document.createElement('code'); code.textContent = executable || 'unknown executable';
+      const allowed = executables.some((item) => String(item).toLowerCase() === String(executable).toLowerCase());
+      const blocked = blacklist.some((item) => String(item).toLowerCase() === String(executable).toLowerCase());
+      const recent = execRecentUsage(usage);
+      title.append(code, stateBadge(`执行 × ${safeNumber(usage.count)}`, 'selected'));
+      if (recent.current) title.append(stateBadge('本小时 × ' + recent.current, recent.spike ? 'warning' : 'count'));
+      if (recent.recent24) title.append(stateBadge('近24h × ' + recent.recent24, 'count'));
+      if (recent.spike) title.append(stateBadge('近期突增', 'warning'));
+      for (const [surface, count] of execSurfaceEntries(usage.surface_counts).slice(0, 3)) {
+        title.append(stateBadge(execSurfaceLabel(surface) + ' × ' + count, 'count'));
+      }
+      if (blocked) title.append(stateBadge('当前黑名单', 'error'));
+      else if (allowed) title.append(stateBadge('当前允许', 'available'));
+      else title.append(stateBadge('非 allowlist / 历史', 'degraded'));
+      const meta = document.createElement('small');
+      meta.textContent = ['来源 ' + execSurfaceText(usage.surface_counts), '本小时 ' + recent.current, '近24小时 ' + recent.recent24, '最近 ' + (usage.last_surface || 'unknown surface'), usage.last_environment_id || 'global', formatDateTime(usage.last_executed_at)].join(' · ');
+      content.append(title, meta); row.append(content); elements.execUsageList.append(row);
     }
   }
 
@@ -1745,7 +2047,7 @@ function renderOperationalSettings(snapshot) {
 function renderSnapshotBase(snapshot) {
   currentSnapshot = snapshot; const workspaces = safeArray(snapshot.workspaces), environments = safeArray(snapshot.environments), executables = safeArray(snapshot.allowed_executables), blacklist = safeArray(snapshot.blocked_executables), mcps = safeArray(snapshot.mcps), skills = safeArray(snapshot.skills);
   if (editingMCPID && !mcps.some((mcp) => mcp.id === editingMCPID)) resetMCPEditor(false, false);
-  renderWorkspaces(workspaces); renderManagementEnvironmentOptions(workspaces, environments); renderEnvironments(environments); renderExecutables(executables, blacklist, safeArray(snapshot.exec_denials)); renderMCPManager(mcps); renderSkillManager(skills); renderOperationalSettings(snapshot); renderDiagnosticsPage(); updateManagementContextVisibility();
+  renderWorkspaces(workspaces); renderManagementEnvironmentOptions(workspaces, environments); renderEnvironments(environments); renderExecutables(executables, blacklist, safeArray(snapshot.exec_denials), safeArray(snapshot.exec_usages)); renderMCPManager(mcps); renderSkillManager(skills); renderOperationalSettings(snapshot); renderDiagnosticsPage(); updateManagementContextVisibility();
   if (!globalMemoryLoaded) emptyMessage(elements.globalMemoryList, '尚未加载 Global Memory');
   renderDashboardState('success');
   if (selectedEnvironmentID && !environments.some((env) => env.environment_id === selectedEnvironmentID)) closeEnvironmentDetail();
@@ -1755,7 +2057,7 @@ function renderManagementUnavailable(message) {
   renderWorkspaceOptions([]); renderEnvironmentWorkspaceFilter([]);
   elements.managementWorkspace.replaceChildren(new Option('管理数据未加载', '')); elements.managementWorkspace.value = ''; elements.managementWorkspace.disabled = true; elements.managementEnvironment.replaceChildren(new Option('管理数据未加载', '')); elements.managementEnvironment.value = ''; elements.managementEnvironment.disabled = true; elements.editEnvironmentButton.disabled = true;
   elements.managementEnvironmentHint.textContent = message;
-  emptyMessage(elements.workspaceList, message); emptyMessage(elements.environmentList, message); emptyMessage(elements.execList, message); emptyMessage(elements.execBlacklistList, message); emptyMessage(elements.execBlockedList, message); elements.execClearAllBlockedButton.disabled = true; setMetric(elements.execAllowedCount, '—'); setMetric(elements.execBlacklistCount, '—'); setMetric(elements.execBlockedCount, '—'); emptyMessage(elements.mcpList, message); emptyMessage(elements.skillSourceList, message); emptyMessage(elements.skillList, message); emptyMessage(elements.globalMemoryList, message); emptyMessage(elements.environmentMemoryList, message); emptyMessage(elements.diagnosticsPageContent, message); elements.diagnosticsPageHint.textContent = message; renderEnvironmentMemoryScope(); updateManagementContextVisibility();
+  emptyMessage(elements.workspaceList, message); emptyMessage(elements.environmentList, message); emptyMessage(elements.execList, message); emptyMessage(elements.execUsageList, message); emptyMessage(elements.execBlacklistList, message); emptyMessage(elements.execBlockedList, message); elements.execUsageSurfaceSummary.textContent = message; setMetric(elements.execUsageVisibleCount, '—'); setMetric(elements.execUsageTotalCount, '—'); elements.execClearAllBlockedButton.disabled = true; setMetric(elements.execAllowedCount, '—'); setMetric(elements.execUsageCount, '—'); setMetric(elements.execBlacklistCount, '—'); setMetric(elements.execBlockedCount, '—'); emptyMessage(elements.mcpList, message); emptyMessage(elements.skillSourceList, message); emptyMessage(elements.skillList, message); emptyMessage(elements.globalMemoryList, message); emptyMessage(elements.environmentMemoryList, message); emptyMessage(elements.diagnosticsPageContent, message); elements.diagnosticsPageHint.textContent = message; renderEnvironmentMemoryScope(); updateManagementContextVisibility();
   elements.runtimeHint.textContent = message; resetRuntimeCollections('error', message); emptyMessage(elements.verifierList, message); emptyMessage(elements.processList, message); emptyMessage(elements.runList, message); clearRuntimeOutput(message);
   updateSkillBulkControls();
   updateMCPBulkControls();
@@ -1769,6 +2071,7 @@ function clearManagementData(message = 'ADM 未连接。连接 Admin MCP 后加�
   pendingMCPImport = null; elements.mcpImportApplyButton.disabled = true;
   elements.mcpImportContent.value = ''; resetMCPImportPreview();
   managementWorkspaceID = ''; managementEnvironmentID = ''; currentSnapshot = null; lastSnapshotSuccessAt = 0;
+  gatewayDiagnostics = null; renderGatewayDiagnostics(null);
   elements.workspaceFilter.value = ''; elements.environmentFilter.value = ''; elements.environmentWorkspaceFilter.value = '';
   skillSources = []; skillSourcesState = 'unloaded'; skillSourcesError = ''; managementContextError = ''; managementSkillAvailabilityError = '';
   selectedMCPIDs = new Set(); selectedSkillIDs = new Set(); selectedAssignmentEnvironmentIDs = new Set(); capabilityAssignmentBusy = false; explicitSkillAvailabilityProbe = null; skillBulkBusy = false; mcpBulkBusy = false; editingSkillSourceID = ''; skillSubview = 'skills'; syncSkillSubviewUI();
@@ -2129,7 +2432,7 @@ async function refreshSnapshot(successMessage = '') {
     catch (error) { skillSources = []; skillSourcesState = 'error'; skillSourcesError = errorText(error); sourceError = `Skill sources: ${skillSourcesError}`; }
     if (requestGeneration !== connectionGeneration) return false;
     renderSkillManager(safeArray(currentSnapshot?.skills));
-    const [loggingError, gatewayAccessError, execAuthorizationError] = await Promise.all([refreshLoggingStatus(), refreshGatewayAccessStatus(), refreshExecAuthorizationStatus()]);
+    const [loggingError, gatewayAccessError, gatewayDiagnosticsError, execAuthorizationError] = await Promise.all([refreshLoggingStatus(), refreshGatewayAccessStatus(), refreshGatewayDiagnostics(), refreshExecAuthorizationStatus()]);
     if (requestGeneration !== connectionGeneration) return false;
 
     const contextResult = await refreshManagementContext(captureEnvironmentScope());
@@ -2139,7 +2442,7 @@ async function refreshSnapshot(successMessage = '') {
       try { await refreshSelectedEnvironmentDetail(); }
       catch (error) { detailError = `Environment detail: ${errorText(error)}`; }
     }
-    const auxiliaryErrors = [sourceError, loggingError, gatewayAccessError, execAuthorizationError, ...safeArray(contextResult?.errors), detailError].filter(Boolean);
+    const auxiliaryErrors = [sourceError, loggingError, gatewayAccessError, gatewayDiagnosticsError, execAuthorizationError, ...safeArray(contextResult?.errors), detailError].filter(Boolean);
     if (auxiliaryErrors.length) setStatus(`基础快照已刷新；部分状态不可用：${auxiliaryErrors.join(' · ')}`, 'error');
     else setStatus(successMessage || `已刷新 · ${new Date().toLocaleTimeString()}`, 'success');
     return true;
@@ -2287,6 +2590,9 @@ elements.mcpEditCancelButton.addEventListener('click', () => resetMCPEditor(true
 elements.workspaceFilter.addEventListener('input', () => renderWorkspaces(safeArray(currentSnapshot?.workspaces)));
 elements.environmentFilter.addEventListener('input', () => renderEnvironments(safeArray(currentSnapshot?.environments)));
 elements.environmentWorkspaceFilter.addEventListener('change', () => renderEnvironments(safeArray(currentSnapshot?.environments)));
+elements.execUsageFilter.addEventListener('input', renderExecUsageFromSnapshot);
+elements.execUsageSurfaceFilter.addEventListener('change', renderExecUsageFromSnapshot);
+elements.execUsageTimeFilter.addEventListener('change', renderExecUsageFromSnapshot);
 elements.mcpFilter.addEventListener('input', () => renderMCPManager(safeArray(currentSnapshot?.mcps)));
 elements.mcpStateFilter.addEventListener('change', () => renderMCPManager(safeArray(currentSnapshot?.mcps)));
 for (const element of [elements.mcpImportFormat, elements.mcpImportConflict, elements.mcpImportDefault]) element.addEventListener('change', () => invalidateMCPImportPreview());
@@ -2754,8 +3060,13 @@ elements.desktopThemeRefreshButton.addEventListener('click', refreshDesktopTheme
 window.addEventListener('focus', () => { loadDesktopPreferences(false); });
 window.addEventListener('keydown', (event) => { if (event.key !== 'Escape' || activeEditorDialog()) return; if (selectedEnvironmentID) closeEnvironmentDetail(); else if (editingMCPID) resetMCPEditor(true); });
 elements.gatewayAccessSaveHosts.addEventListener('click', saveGatewayAllowedHosts);
+elements.gatewayDiagnosticsCopyButton.addEventListener('click', copyGatewayDiagnosticsReport);
+elements.gatewayGenerateAdminKey.addEventListener('click', () => rotateGatewayAPIKey('admin'));
+elements.gatewayCopyAdminKey.addEventListener('click', async () => { if (elements.gatewayAdminAPIKey.value) { await copyText(elements.gatewayAdminAPIKey.value); setStatus('Admin API Key 已复制。', 'success'); } });
 elements.gatewayAccessSetAdminKey.addEventListener('click', setGatewayAdminAPIKey);
 elements.gatewayAccessClearAdminKey.addEventListener('click', clearGatewayAdminAPIKey);
+elements.gatewayGenerateAgentKey.addEventListener('click', () => rotateGatewayAPIKey('agent'));
+elements.gatewayCopyAgentKey.addEventListener('click', async () => { if (elements.gatewayAgentAPIKey.value) { await copyText(elements.gatewayAgentAPIKey.value); setStatus('Agent API Key 已复制。', 'success'); } });
 elements.gatewayAccessSetAgentKey.addEventListener('click', setGatewayAgentAPIKey);
 elements.gatewayAccessClearAgentKey.addEventListener('click', clearGatewayAgentAPIKey);
 elements.execAuthorizationSave.addEventListener('click', saveExecAuthorizationMode);

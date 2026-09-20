@@ -10,7 +10,8 @@ import (
 )
 
 const admBaseURLEnv = "ADM_V2_URL"
-const admAdminAPIKeyEnv = "ADM_V2_ADMIN_API_KEY"
+const admAdminAPIKeyEnv = "ADM_ADMIN_API_KEY"
+const admLegacyAdminAPIKeyEnv = "ADM_V2_ADMIN_API_KEY"
 
 func defaultADMBaseURL() string {
 	baseURL, err := gateway.HTTPBaseURL(gateway.DefaultHTTPListen)
@@ -69,7 +70,7 @@ func newCLIAdminClient(baseURL string) (*adminmcp.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return adminmcp.NewWithAPIKey(target.AdminMCPURL, strings.TrimSpace(os.Getenv(admAdminAPIKeyEnv))), nil
+	return adminmcp.NewWithAPIKey(target.AdminMCPURL, clientAdminAPIKey()), nil
 }
 
 func normalizeCLIADMBaseURL(raw string) (string, error) {
@@ -86,4 +87,11 @@ func withCLIAdmin(baseURL string, fn func(cliManagementBackend) error) error {
 		return err
 	}
 	return fn(client)
+}
+
+func clientAdminAPIKey() string {
+	if value := strings.TrimSpace(os.Getenv(admAdminAPIKeyEnv)); value != "" {
+		return value
+	}
+	return strings.TrimSpace(os.Getenv(admLegacyAdminAPIKeyEnv))
 }

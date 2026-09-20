@@ -129,12 +129,34 @@ func InspectHTTP(listen string) (HTTPStatus, error) {
 	if err != nil {
 		return HTTPStatus{}, err
 	}
-	status, err := InspectHTTPBaseURL(baseURL)
+	probeURL, err := HTTPProbeBaseURL(listen)
+	if err != nil {
+		return HTTPStatus{}, err
+	}
+	status, err := InspectHTTPBaseURL(probeURL)
 	if err != nil {
 		return HTTPStatus{}, err
 	}
 	status.Listen = listen
+	status.BaseURL = baseURL
+	status.MCPURL = baseURL + "/mcp"
+	status.AdminMCPURL = baseURL + "/admin/mcp"
 	return status, nil
+}
+
+func HTTPProbeBaseURL(listen string) (string, error) {
+	listen = strings.TrimSpace(listen)
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return "", fmt.Errorf("invalid Gateway listen address %q; expected host:port", listen)
+	}
+	switch strings.Trim(strings.ToLower(host), "[]") {
+	case "", "0.0.0.0":
+		host = "127.0.0.1"
+	case "::":
+		host = "::1"
+	}
+	return "http://" + net.JoinHostPort(host, port), nil
 }
 
 func InspectHTTPBaseURL(rawBaseURL string) (HTTPStatus, error) {

@@ -124,7 +124,7 @@ func connectGlobalMCP(ctx context.Context, service *app.Service, mcpID string) (
 			return nil, err
 		}
 		client := mcp.NewClient(&mcp.Implementation{Name: serverName + "-global", Version: serverVersion}, nil)
-		session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
+		session, err := client.Connect(ctx, service.TrackMCPCommandTransport(cmd, "", activation.Executable, "global_mcp"), nil)
 		if err != nil {
 			return nil, &app.MCPError{MCPID: mcpID, ErrorKind: app.ClassifyMCPError(err), Message: "global MCP stdio connection failed"}
 		}

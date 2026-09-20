@@ -69,6 +69,7 @@ type CommandResult struct {
 	ExitCode int    `json:"exit_code"`
 	Stdout   string `json:"stdout,omitempty"`
 	Stderr   string `json:"stderr,omitempty"`
+	Started  bool   `json:"-"`
 }
 
 type GitStatusEntry struct {
@@ -411,8 +412,15 @@ func (r *Runtime) Exec(ctx context.Context, executable string, args []string, cw
 	stderr := &limitedBuffer{limit: maxOutputBytes}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	err = cmd.Run()
+	err = cmd.Start()
 	result := CommandResult{ExitCode: 0, Stdout: stdout.String(), Stderr: stderr.String()}
+	if err != nil {
+		return result, err
+	}
+	result.Started = true
+	err = cmd.Wait()
+	result.Stdout = stdout.String()
+	result.Stderr = stderr.String()
 	if err == nil {
 		return result, nil
 	}

@@ -157,6 +157,23 @@ type ExecDenial struct {
 	LastReason        string    `json:"last_reason,omitempty"`
 }
 
+type ExecUsageHour struct {
+	Hour          time.Time      `json:"hour"`
+	Count         int            `json:"count"`
+	SurfaceCounts map[string]int `json:"surface_counts,omitempty"`
+}
+
+type ExecUsage struct {
+	Executable        string          `json:"executable"`
+	Count             int             `json:"count"`
+	FirstExecutedAt   time.Time       `json:"first_executed_at"`
+	LastExecutedAt    time.Time       `json:"last_executed_at"`
+	LastEnvironmentID string          `json:"last_environment_id,omitempty"`
+	LastSurface       string          `json:"last_surface,omitempty"`
+	SurfaceCounts     map[string]int  `json:"surface_counts,omitempty"`
+	HourlyCounts      []ExecUsageHour `json:"hourly_counts,omitempty"`
+}
+
 type State struct {
 	Version               int                   `json:"version"`
 	Workspaces            []Workspace           `json:"workspaces"`
@@ -168,6 +185,7 @@ type State struct {
 	BlockedExecutables    []string              `json:"blocked_executables,omitempty"`
 	ExecFullAuthorization bool                  `json:"exec_full_authorization,omitempty"`
 	ExecDenials           []ExecDenial          `json:"exec_denials,omitempty"`
+	ExecUsages            []ExecUsage           `json:"exec_usages,omitempty"`
 	MCPs                  []MCPDefinition       `json:"mcps,omitempty"`
 	SkillSources          []SkillSource         `json:"skill_sources,omitempty"`
 	Skills                []CatalogEntry        `json:"skills,omitempty"`

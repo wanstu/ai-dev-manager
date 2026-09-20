@@ -178,6 +178,7 @@ func (o *runtimeOwner) CancelAgentRun(environmentID, writerOwner, runID string) 
 func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 	err := cmd.Start()
 	if err == nil {
+		_ = o.service.RecordExecUsage(run.environmentID, run.executable, "run_start")
 		err = cmd.Wait()
 	}
 	now := time.Now().UTC()

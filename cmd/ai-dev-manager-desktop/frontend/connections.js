@@ -39,6 +39,7 @@ function renderConnectionProfiles() {
   for (const item of [elements.gatewayHealthURL, elements.gatewayURL, elements.gatewayAdminURL]) item.textContent = '—';
   elements.gatewayProcess.textContent = 'PID — · Version —';
   elements.gatewayDetail.textContent = '添加或选择一个 ADM 连接以管理。';
+   gatewayConnectionStatus = null; gatewayDiagnostics = null; renderGatewayDiagnostics(null);
   elements.gatewayStartButton.disabled = true; elements.gatewayStopButton.disabled = true;
  }
  elements.gatewayRefreshButton.disabled = !active;

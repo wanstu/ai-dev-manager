@@ -8,21 +8,29 @@ import (
 	"ai-dev-manager-v2/internal/app"
 )
 
+type gatewayAccessKeySetResult struct {
+	app.GatewayAccessStatus
+	GeneratedKey string `json:"generated_key,omitempty"`
+}
+
 func runGatewayAccess(service *app.Service, args []string) error {
 	if wantsHelp(args) {
 		fmt.Fprintln(os.Stdout, `用法：
   adm gateway access status
   adm gateway access set-hosts --hosts HOST1,HOST2
-  adm gateway access set-admin-key [--key KEY]
+  adm gateway access rotate-admin-key
+  adm gateway access rotate-agent-key
+  adm gateway access rotate --all
+  adm gateway access set-admin-key [--key KEY | --generate]
   adm gateway access clear-admin-key
-  adm gateway access set-agent-key [--key KEY]
+  adm gateway access set-agent-key [--key KEY | --generate]
   adm gateway access clear-agent-key
 
 远程 HTTP Gateway 必须同时配置 Host/IP 白名单、Admin API Key 与 Agent API Key。
 Host 白名单支持 *，表示不限制 Host/IP、但两类 API Key 鉴权仍然强制；0.0.0.0 不是通配符。
-set-admin-key 未提供 --key 时读取 ADM_V2_ADMIN_API_KEY。
-set-agent-key 未提供 --key 时读取 ADM_V2_AGENT_API_KEY。
-密钥不会写入命令输出。`)
+set-admin-key / set-agent-key 必须显式使用 --key 或 --generate；服务端 Key 不会从 .env 隐式初始化。
+--generate 使用加密安全随机源生成 256-bit Key，格式等价于 openssl rand -hex 32，并仅在本次命令结果中回显 generated_key。
+手工提供的密钥不会写入命令输出。`)
 		return nil
 	}
 	switch args[0] {
@@ -57,8 +65,45 @@ set-agent-key 未提供 --key 时读取 ADM_V2_AGENT_API_KEY。
 			return err
 		}
 		return writeJSON(status)
+	case "rotate-admin-key":
+		if len(args) != 1 {
+			return fmt.Errorf("gateway access rotate-admin-key 不接受额外参数")
+		}
+		result, err := service.RotateGatewayAdminAPIKey()
+		if err != nil {
+			return err
+		}
+		fmt.Println("Admin API Key 已轮换")
+		fmt.Println("新 Key：", result.AdminAPIKey)
+		fmt.Println("该 Key 仅显示此次；使用旧 Key 的 Desktop/CLI 将无法连接。")
+		return nil
+	case "rotate-agent-key":
+		if len(args) != 1 {
+			return fmt.Errorf("gateway access rotate-agent-key 不接受额外参数")
+		}
+		result, err := service.RotateGatewayAgentAPIKey()
+		if err != nil {
+			return err
+		}
+		fmt.Println("Agent API Key 已轮换")
+		fmt.Println("新 Key：", result.AgentAPIKey)
+		fmt.Println("该 Key 仅显示此次；使用旧 Key 的 Agent/MCP 客户端将无法连接。")
+		return nil
+	case "rotate":
+		if len(args) != 2 || args[1] != "--all" {
+			return fmt.Errorf("用法：adm gateway access rotate --all")
+		}
+		result, err := service.RotateGatewayAPIKeys()
+		if err != nil {
+			return err
+		}
+		fmt.Println("Admin / Agent API Key 已同时轮换")
+		fmt.Println("Admin Key：", result.AdminAPIKey)
+		fmt.Println("Agent Key：", result.AgentAPIKey)
+		fmt.Println("两把 Key 均仅显示此次；旧凭据已失效。")
+		return nil
 	case "set-admin-key":
-		value, err := gatewayAccessKeyArg("gateway access set-admin-key", "ADM_V2_ADMIN_API_KEY", args[1:])
+		value, generated, err := gatewayAccessKeyArg("gateway access set-admin-key", args[1:])
 		if err != nil {
 			return err
 		}
@@ -66,7 +111,7 @@ set-agent-key 未提供 --key 时读取 ADM_V2_AGENT_API_KEY。
 		if err != nil {
 			return err
 		}
-		return writeJSON(status)
+		return writeGatewayAccessKeyResult(status, value, generated)
 	case "clear-admin-key":
 		if len(args) != 1 {
 			return fmt.Errorf("gateway access clear-admin-key 不接受额外参数")
@@ -77,7 +122,7 @@ set-agent-key 未提供 --key 时读取 ADM_V2_AGENT_API_KEY。
 		}
 		return writeJSON(status)
 	case "set-agent-key":
-		value, err := gatewayAccessKeyArg("gateway access set-agent-key", "ADM_V2_AGENT_API_KEY", args[1:])
+		value, generated, err := gatewayAccessKeyArg("gateway access set-agent-key", args[1:])
 		if err != nil {
 			return err
 		}
@@ -85,7 +130,7 @@ set-agent-key 未提供 --key 时读取 ADM_V2_AGENT_API_KEY。
 		if err != nil {
 			return err
 		}
-		return writeJSON(status)
+		return writeGatewayAccessKeyResult(status, value, generated)
 	case "clear-agent-key":
 		if len(args) != 1 {
 			return fmt.Errorf("gateway access clear-agent-key 不接受额外参数")
@@ -100,24 +145,43 @@ set-agent-key 未提供 --key 时读取 ADM_V2_AGENT_API_KEY。
 	}
 }
 
-func gatewayAccessKeyArg(command, envName string, args []string) (string, error) {
-	fs := newFlagSet(command, func() {
-		fmt.Fprintf(os.Stdout, "用法：adm %s [--key KEY]\n", command)
-		fmt.Fprintf(os.Stdout, "未提供 --key 时读取 %s。\n", envName)
+func writeGatewayAccessKeyResult(status app.GatewayAccessStatus, value string, generated bool) error {
+	if !generated {
+		return writeJSON(status)
+	}
+	return writeJSON(gatewayAccessKeySetResult{
+		GatewayAccessStatus: status,
+		GeneratedKey:        value,
 	})
-	key := fs.String("key", "", "API Key（至少 16 字符；建议优先使用环境变量）")
+}
+
+func gatewayAccessKeyArg(command string, args []string) (string, bool, error) {
+	fs := newFlagSet(command, func() {
+		fmt.Fprintf(os.Stdout, "用法：adm %s [--key KEY | --generate]\n", command)
+		fmt.Fprintln(os.Stdout, "必须显式提供 --key 或 --generate；服务端不会从 .env 隐式读取 Key。")
+		fmt.Fprintln(os.Stdout, "--generate 生成 256-bit 随机 Key，格式等价于 openssl rand -hex 32。")
+	})
+	key := fs.String("key", "", "API Key（至少 16 字符；服务端设置不会隐式读取 .env）")
+	generate := fs.Bool("generate", false, "生成并设置 256-bit 安全随机 API Key；generated_key 仅在本次输出中回显")
 	if err := fs.Parse(args); err != nil {
-		return "", flagError(err)
+		return "", false, flagError(err)
 	}
 	if fs.NArg() != 0 {
-		return "", fmt.Errorf("%s 只接受 --key", command)
+		return "", false, fmt.Errorf("%s 只接受 --key 或 --generate", command)
 	}
 	value := strings.TrimSpace(*key)
-	if value == "" {
-		value = strings.TrimSpace(os.Getenv(envName))
+	if *generate {
+		if value != "" {
+			return "", false, fmt.Errorf("%s 的 --key 与 --generate 不能同时使用", command)
+		}
+		generated, err := app.GenerateGatewayAPIKey()
+		if err != nil {
+			return "", false, err
+		}
+		return generated, true, nil
 	}
 	if value == "" {
-		return "", fmt.Errorf("API Key 不能为空；使用 --key 或 %s", envName)
+		return "", false, fmt.Errorf("API Key 不能为空；使用 --key 或 --generate")
 	}
-	return value, nil
+	return value, false, nil
 }

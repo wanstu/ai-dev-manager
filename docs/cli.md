@@ -35,10 +35,10 @@ CLI 会同时读取用户级 `~/.config/adm/.env` 和 executable 同目录 `.env
 
 ```dotenv
 ADM_V2_URL=http://101.37.171.174:43137
-ADM_V2_ADMIN_API_KEY=你的客户端AdminKey
+ADM_ADMIN_API_KEY=你的客户端AdminKey
 ```
 
-这里的 `ADM_V2_ADMIN_API_KEY` 是 **CLI 作为客户端连接 `/admin/mcp` 时使用的 Key**；它必须与远端 ADM 服务端 Remote access 中配置的 Admin Key 一致。
+这里的 `ADM_ADMIN_API_KEY` 是 **CLI 作为客户端连接 `/admin/mcp` 时使用的 Key**；它必须与远端 ADM 服务端 Remote access 中配置的 Admin Key 一致。旧 `ADM_V2_ADMIN_API_KEY` 暂时只作为客户端兼容变量读取。服务端 Key 不再从 `.env` 隐式初始化。
 
 管理目标不可达时不会 fallback 到本地 writable `state.json`。
 
@@ -441,6 +441,21 @@ adm exec list
 
 列当前 allowlist。
 
+## `exec usage`
+
+```text
+adm exec usage
+adm exec usage --surface verifier
+adm exec usage --recent-hours 24
+adm exec usage --recent-hours 24 --surface exec
+```
+
+无参数时保持兼容，返回完整 executable usage 数组：累计次数、首次/最近执行时间、最近 Environment/surface、`surface_counts`，以及最多 48 小时的 `hourly_counts`。小时桶只保存计数和 surface 分布，不保存 args、命令正文、stdout/stderr。
+
+这里统计的是 Agent/Runtime 通过 ADM authority 实际启动的业务 executable，包括 Exec、Verifier、Dev Process、Run 和 stdio MCP/Probe 等 surface。ADM 自身为了管理服务或环境而启动的 `systemctl`、端口探测 `netstat/lsof`、managed-worktree 内部 Git 等基础设施子进程不计入这张 usage 表，避免把控制面内部行为混成用户命令。
+
+只传 `--surface` 时仍返回同样的 item 结构，只筛选累计上出现过该 surface 的 executable。传 `--recent-hours 1..48` 时返回精简近期报告，包含窗口执行次数、本小时次数、近期 surface 分布和 `current_hour_spike`。突增提示要求本小时至少 10 次且达到此前 23 小时均值的 3 倍，用于发现突然高频的 Runtime 调用，不代表命令本身异常。
+
 ## `exec blacklist`
 
 ```text
@@ -771,16 +786,22 @@ adm gateway start --detach
 
 ### 远程监听与双 API Key
 
-远程监听前必须同时配置 Host/IP 白名单、Admin API Key 和 Agent API Key：
+远程监听仍要求 Host/IP policy、Admin API Key 和 Agent API Key，但普通部署不再需要手工编排三条底层命令：
 
 ```powershell
-$env:ADM_V2_ADMIN_API_KEY = 'your-admin-key'
-$env:ADM_V2_AGENT_API_KEY = 'your-agent-key'
-adm gateway access set-admin-key
-adm gateway access set-agent-key
-adm gateway access set-hosts --hosts '101.37.171.174,adm.example.com'
-adm gateway start --listen 0.0.0.0:43137 -d
+adm gateway setup --remote --listen 0.0.0.0:8001 --hosts '101.37.171.174,adm.example.com'
+adm gateway start --listen 0.0.0.0:8001 -d
 ```
+
+首次 `setup` 会生成缺失的双 Key 并只显示一次；再次执行默认保留已有 Key。需要主动轮换时使用：
+
+```powershell
+adm gateway access rotate-admin-key
+adm gateway access rotate-agent-key
+adm gateway access rotate --all
+```
+
+`set-admin-key --key ...`、`set-agent-key --key ...` 和 `set-hosts` 继续作为高级底层原语，但服务端 Key 不再从 `.env` 隐式读取。
 
 `/admin/mcp` 只接受 Admin Key；`/mcp` 只接受 Agent Key，两把 Key 不能互换。
 
@@ -792,6 +813,40 @@ adm gateway access set-hosts --hosts '*'
 
 `*` 表示不限制 Host/IP，但双 Key 鉴权仍然强制；`0.0.0.0` 不是白名单通配符，它只表示监听所有网卡时常用的 listen 地址。完整说明见 [REMOTE_ACCESS.md](REMOTE_ACCESS.md)。
 
+### Linux 一键安装与后续升级
+
+首次安装：
+
+```bash
+sudo adm gateway install --remote --user admin --port 8001 --hosts '*'
+```
+
+该命令完成目标用户 remote setup、managed systemd unit 安装/启动和 `/healthz` ready 检查。后续替换 ADM 二进制后，可以先查看无副作用部署计划，再执行升级：
+
+```bash
+sudo adm gateway install --remote --dry-run
+sudo adm gateway install --remote
+```
+
+`--dry-run` 只输出 JSON 计划，不修改 Gateway state、不生成/轮换 Key、不重写或重启 system service。计划会标明 `admin_key_action` / `agent_key_action` 为 `preserve`、`generate` 或 `rotate`，同时返回 `service_enabled`，并列出 service/user/listen/hosts/unit-version 等变化。
+
+对已经由 ADM 管理的 service，省略 `--user`、`--listen/--port`、`--hosts` 时会分别保留原运行用户、监听地址和 Host 白名单；已有双 Key 和 systemd Enabled 状态也默认保留。只有显式 `--rotate-keys` 才会轮换 Key；需要改变开机启动时显式使用 `gateway service enable/disable`。若 unit 重配或 ready 检查失败，会尝试恢复之前的 service 配置和 Gateway access 状态。非 ADM managed unit 永远不会被覆盖。
+
+底层 `gateway service install` 也支持对 ADM managed service 重复执行；它不会负责生成远程访问 Key，因此首次部署仍优先使用 `gateway install --remote`。
+
+system service 生命周期也可以完全通过 ADM CLI 管理：
+
+```bash
+adm gateway service status
+sudo adm gateway service start
+sudo adm gateway service stop
+sudo adm gateway service restart
+sudo adm gateway service enable
+sudo adm gateway service disable
+```
+
+`start/restart` 会先读取 unit 中记录的目标 `state.json` 并检查远程 Host policy + Admin Key + Agent Key readiness，再调用 systemd，避免因缺配置进入失败重启循环。所有变更命令都拒绝操作没有 ADM managed marker 的同名 unit；`enable/disable` 只控制开机启动，不隐式 stop/start 当前进程。
+
 ## `gateway status`
 
 ```text
@@ -801,6 +856,16 @@ adm [--adm-url URL] gateway status [--listen HOST:PORT]
 显示状态、MCP URL、PID、version、Runtime Owner。
 
 `status` 可以检查自定义端口或远端 health；远端仅是查看，不获得 stop 权限。
+
+## `gateway diagnostics`
+
+```text
+adm [--adm-url URL] gateway diagnostics
+```
+
+通过目标 ADM 的 **Admin MCP** 返回运行时诊断 JSON，包括进程 PID/用户、平台、可执行文件、实际 `state.json`/客户端配置目录、Host/双 Key readiness，以及 Linux systemd service 元数据。该命令不会把这些本机路径放进公开 `/healthz`，也不会返回 Admin/Agent Key 原文。
+
+适合排查“连接到了错误用户状态”“systemd 使用了另一套 HOME/ADM_V2_HOME”“远程访问缺少某项配置”等问题。
 
 ## `gateway logs status`
 

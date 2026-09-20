@@ -615,6 +615,9 @@ func (s *Service) Exec(ctx context.Context, environmentID, owner, executable str
 	s.recordFullAuthorizationBypass(rt, environmentID, executable, "exec")
 	s.Log("info", "exec.start", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "exec"})
 	result, execErr := rt.Exec(commandCtx, executable, args, cwd, timeoutMS, maxOutputBytes)
+	if result.Started {
+		_ = s.RecordExecUsage(environmentID, executable, "exec")
+	}
 	if execErr != nil {
 		s.Log("error", "exec.failed", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "exec", "error": execErr.Error()})
 	} else {
@@ -686,6 +689,9 @@ func (s *Service) RunVerifier(ctx context.Context, environmentID, owner, verifie
 	// from verifierCtx rather than Runtime error text.
 	runtimeTimeoutMS := timeout.Milliseconds() + 1000
 	commandResult, execErr := rt.Exec(verifierCtx, definition.Executable, definition.Args, definition.Cwd, runtimeTimeoutMS, maxOutputBytes)
+	if commandResult.Started {
+		_ = s.RecordExecUsage(environmentID, definition.Executable, "verifier")
+	}
 	if isExecutableNotAllowedError(execErr) {
 		s.recordExecDenial(environmentID, definition.Executable, "verifier", execErr.Error())
 	}

@@ -381,7 +381,7 @@ func (s *Service) mcpTransport(ctx context.Context, environmentID string, activa
 			}
 			return nil, err
 		}
-		return &mcp.CommandTransport{Command: cmd}, nil
+		return s.TrackMCPCommandTransport(cmd, environmentID, activation.Executable, "mcp_probe"), nil
 	default:
 		return nil, fmt.Errorf("unsupported mcp transport %q", activation.Transport)
 	}

@@ -457,7 +457,7 @@ func isAdminOnlyTool(name string) bool {
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
 		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
-		"logging_status", "gateway_access_status", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_clear",
+		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
 		"mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
 		"environment_mcp_set",
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
@@ -518,6 +518,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			status, err := service.GatewayAccessStatus()
 			return toolResult(status, err)
 		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_diagnostics", Description: "Return admin-only Gateway runtime diagnostics including process identity, platform, state/config paths, remote-access readiness, and Linux systemd service metadata. No API key values are returned."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, management.GatewayDiagnostics, error) {
+			diagnostics, err := management.New(service).GatewayDiagnostics()
+			return nil, diagnostics, err
+		})
 	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_allowed_hosts_set", Description: "Replace the remote ADM Host/IP allowlist. Entries are DNS names or IP addresses without scheme or port; '*' allows any Host/IP while API-key authentication remains mandatory."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAllowedHostsInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetGatewayAllowedHosts(in.Hosts)
@@ -528,6 +533,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			status, err := service.SetGatewayAdminAPIKey(in.APIKey)
 			return toolResult(status, err)
 		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_rotate", Description: "Generate and atomically rotate the /admin/mcp API key using the server CSPRNG. The plaintext key is returned once in this response and is not persisted."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			result, err := service.RotateGatewayAdminAPIKey()
+			return toolResult(result, err)
+		})
 	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_clear", Description: "Clear the /admin/mcp API key. Remote Gateway listening remains refused until both Admin and Agent keys are configured."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.ClearGatewayAdminAPIKey()
@@ -537,6 +547,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAPIKeyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetGatewayAgentAPIKey(in.APIKey)
 			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_agent_api_key_rotate", Description: "Generate and atomically rotate the /mcp Agent API key using the server CSPRNG. The plaintext key is returned once in this response and is not persisted."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			result, err := service.RotateGatewayAgentAPIKey()
+			return toolResult(result, err)
 		})
 	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_agent_api_key_clear", Description: "Clear the /mcp API key. Remote Gateway listening remains refused until both Admin and Agent keys are configured."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
@@ -1603,7 +1618,7 @@ func connectStdioMCP(ctx, commandCtx context.Context, service *app.Service, envi
 		return nil, &app.MCPError{MCPID: activation.MCPID, ErrorKind: "executable_not_allowed", Message: "stdio MCP executable is unavailable under Environment authority"}
 	}
 	client := mcp.NewClient(&mcp.Implementation{Name: serverName + "-proxy", Version: serverVersion}, nil)
-	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
+	session, err := client.Connect(ctx, service.TrackMCPCommandTransport(cmd, environmentID, activation.Executable, "mcp_stdio"), nil)
 	if err != nil {
 		return nil, &app.MCPError{MCPID: activation.MCPID, ErrorKind: app.ClassifyMCPError(err), Message: "external MCP stdio connection failed"}
 	}
@@ -1723,8 +1738,12 @@ func RunHTTP(ctx context.Context, service *app.Service, listen string) error {
 	if host != "localhost" {
 		ip := net.ParseIP(host)
 		if ip == nil || !ip.IsLoopback() {
-			if !remoteGatewayListenAllowed(service) {
-				return fmt.Errorf("remote gateway listen %q requires at least one allowed host plus separate Admin MCP and Agent MCP API keys", listen)
+			readiness, readinessErr := service.GatewayRemoteReadiness()
+			if readinessErr != nil {
+				return fmt.Errorf("check remote gateway readiness: %w", readinessErr)
+			}
+			if !readiness.Ready {
+				return fmt.Errorf("remote gateway listen %q is not ready; missing: %s; run adm gateway setup --remote --listen %s", listen, strings.Join(readiness.Missing, ", "), listen)
 			}
 		}
 	}

@@ -73,6 +73,7 @@ type cliManagementBackend interface {
 	ExecAllow(string) ([]string, error)
 	ExecRemove(string) ([]string, error)
 	ExecList() ([]string, error)
+	ExecUsageList() ([]model.ExecUsage, error)
 	ExecBlock(string) ([]string, error)
 	ExecUnblock(string) ([]string, error)
 	ExecBlockList() ([]string, error)

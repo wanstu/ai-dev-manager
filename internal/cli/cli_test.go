@@ -60,6 +60,7 @@ func TestTopLevelHelpExplainsQuickStartAndGatewayLifecycle(t *testing.T) {
 		"连接失败不会回退到本地 state.json",
 		"adm gateway start",
 		"gateway status",
+		"gateway diagnostics",
 		"gateway stop",
 		"gateway restart",
 		"adm mcp -h",
@@ -86,6 +87,8 @@ func TestGatewayHelpExplainsForegroundHTTPAndClientOnlyStdio(t *testing.T) {
 		"--detach",
 		"Ctrl+C 停止",
 		"运行状态",
+		"gateway diagnostics",
+		"--dry-run",
 		"人不要手动运行",
 	} {
 		if !strings.Contains(output, required) {
@@ -141,6 +144,32 @@ func TestGatewayLifecycleUsesSelectedADMBaseURL(t *testing.T) {
 	}
 	if gotListen != "127.0.0.1:48001" {
 		t.Fatalf("gateway start listen=%q, want selected ADM port", gotListen)
+	}
+}
+
+func TestGatewayDiagnosticsUsesSelectedADMBaseURL(t *testing.T) {
+	t.Setenv("ADM_V2_HOME", t.TempDir())
+	remoteStatePath := filepath.Join(t.TempDir(), "remote-state.json")
+	service := app.New(remoteStatePath)
+	server := httptest.NewServer(gateway.NewHTTPHandler(service))
+	defer server.Close()
+
+	output := captureStdout(t, func() {
+		if err := run([]string{"gateway", "diagnostics", "--adm-url", server.URL}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	var diagnostics map[string]any
+	if err := json.Unmarshal([]byte(output), &diagnostics); err != nil {
+		t.Fatalf("decode gateway diagnostics: %v\n%s", err, output)
+	}
+	if got, _ := diagnostics["state_path"].(string); got != remoteStatePath {
+		t.Fatalf("gateway diagnostics state_path=%q, want %q\n%s", got, remoteStatePath, output)
+	}
+	for _, required := range []string{"process_pid", "readiness", "service"} {
+		if _, ok := diagnostics[required]; !ok {
+			t.Fatalf("gateway diagnostics missing %q:\n%s", required, output)
+		}
 	}
 }
 

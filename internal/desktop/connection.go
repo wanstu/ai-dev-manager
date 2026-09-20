@@ -164,6 +164,7 @@ func desktopConnectionStatus(status gateway.HTTPStatus) ADMConnectionStatus {
 	return ADMConnectionStatus{
 		State:                  status.State,
 		BaseURL:                status.BaseURL,
+		Listen:                 status.Listen,
 		HealthURL:              target.HealthURL,
 		AgentMCPURL:            status.MCPURL,
 		AdminMCPURL:            status.AdminMCPURL,

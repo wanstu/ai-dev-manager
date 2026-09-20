@@ -55,6 +55,7 @@ type ADMConnectionInput struct {
 type ADMConnectionStatus struct {
 	State                  string `json:"state"`
 	BaseURL                string `json:"base_url"`
+	Listen                 string `json:"listen,omitempty"`
 	HealthURL              string `json:"health_url"`
 	AgentMCPURL            string `json:"agent_mcp_url"`
 	AdminMCPURL            string `json:"admin_mcp_url"`

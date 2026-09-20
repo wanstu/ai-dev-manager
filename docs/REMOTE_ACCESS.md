@@ -84,18 +84,34 @@ ADM 允许监听非 loopback 地址之前，必须同时具备：
 2. Admin API Key
 3. Agent API Key
 
-例如：
+推荐直接使用部署工作流：
 
 ```powershell
-$env:ADM_V2_ADMIN_API_KEY = "admin-替换成你的长随机密钥"
-$env:ADM_V2_AGENT_API_KEY = "agent-替换成另一把长随机密钥"
-
-.\adm.exe gateway access set-admin-key
-.\adm.exe gateway access set-agent-key
-.\adm.exe gateway access set-hosts --hosts "101.37.171.174"
-
-.\adm.exe gateway start --listen 0.0.0.0:43137 -d
+.\adm.exe gateway setup --remote --listen 0.0.0.0:8001 --hosts "101.37.171.174"
+.\adm.exe gateway start --listen 0.0.0.0:8001 -d
 ```
+
+首次 setup 会自动生成缺失的 Admin/Agent Key，服务端只保存 hash，明文只在本次输出显示。再次执行 setup 默认同时保留已有 Host policy 和双 Key；只有显式 `--hosts` 才替换白名单，显式 `--rotate-keys` 才轮换 Key。
+
+Linux/systemd 部署更推荐直接使用一键工作流：
+
+```bash
+sudo adm gateway install --remote --user admin --port 8001 --hosts '*'
+```
+
+首次安装需要 `--user`。后续升级 ADM 二进制后建议先查看计划，再重复执行：
+
+```bash
+sudo adm gateway install --remote --dry-run
+sudo adm gateway install --remote
+```
+
+`--dry-run` 不写 state、不生成或轮换 Key，也不会修改/restart systemd unit；输出会明确 Key 的 preserve/generate/rotate 动作、`service_enabled` 和将发生的 service 配置变化。
+
+如果现有 unit 是 ADM managed service，省略 user/listen/hosts 会保留原值，双 Key 与 systemd Enabled 状态也默认保留；显式 `--rotate-keys` 才轮换 Key，需要改变开机启动时显式使用 `gateway service enable/disable`。ADM 不会覆盖没有 managed marker 的同名 systemd unit。升级中的 unit/ready 失败会尝试恢复旧 service 配置与原 Gateway access 状态。
+
+常规生命周期不需要再手工调用 `systemctl`：`gateway service start/stop/restart/enable/disable` 已覆盖这些操作。start/restart 会先检查 unit 指向的 Gateway state 是否满足远程启动条件；所有变更命令只允许操作 ADM managed unit。
+
 
 如果缺少其中任意一项，ADM 会拒绝远程监听。
 
@@ -125,11 +141,10 @@ ADM 服务端持久化的是 Key 的 SHA-256 hash，不会通过状态接口回�
 
 ## 4. CLI：设置 Admin Key
 
-推荐使用环境变量，避免把 Key 留在 shell history：
+普通初始化建议使用 `gateway setup --remote`。如确实需要手工指定服务端 Admin Key，必须显式传入；服务端不再从 `.env` 隐式读取：
 
 ```powershell
-$env:ADM_V2_ADMIN_API_KEY = "你的 Admin Key"
-.\adm.exe gateway access set-admin-key
+.\adm.exe gateway access set-admin-key --key "你的 Admin Key"
 ```
 
 也可以显式传：
@@ -148,18 +163,19 @@ $env:ADM_V2_ADMIN_API_KEY = "你的 Admin Key"
 
 ## 5. CLI：设置 Agent Key
 
-推荐：
+普通初始化建议由 `gateway setup --remote` 自动生成。主动换 Key 时优先使用：
 
 ```powershell
-$env:ADM_V2_AGENT_API_KEY = "你的 Agent Key"
-.\adm.exe gateway access set-agent-key
+.\adm.exe gateway access rotate-agent-key
 ```
 
-也可以：
+如确实需要手工指定服务端 Agent Key，必须显式传入：
 
 ```powershell
 .\adm.exe gateway access set-agent-key --key "你的 Agent Key"
 ```
+
+服务端不会从 `.env` 隐式读取 Agent Key。
 
 清除：
 
@@ -301,28 +317,24 @@ other.example.net
 ### 固定公网 IP / 域名
 
 ```powershell
-$env:ADM_V2_ADMIN_API_KEY = "你的 Admin Key"
-$env:ADM_V2_AGENT_API_KEY = "你的 Agent Key"
-
-.\adm.exe gateway access set-admin-key
-.\adm.exe gateway access set-agent-key
-.\adm.exe gateway access set-hosts --hosts "101.37.171.174,adm.example.com"
-
-.\adm.exe gateway access status
-.\adm.exe gateway start --listen 0.0.0.0:43137 -d
+.\adm.exe gateway setup --remote --listen 0.0.0.0:8001 --hosts "101.37.171.174,adm.example.com"
+.\adm.exe gateway start --listen 0.0.0.0:8001 -d
 ```
 
 ### Host 不固定
 
 ```powershell
-$env:ADM_V2_ADMIN_API_KEY = "你的 Admin Key"
-$env:ADM_V2_AGENT_API_KEY = "你的 Agent Key"
+.\adm.exe gateway setup --remote --listen 0.0.0.0:8001 --hosts "*"
+.\adm.exe gateway start --listen 0.0.0.0:8001 -d
+```
 
-.\adm.exe gateway access set-admin-key
-.\adm.exe gateway access set-agent-key
-.\adm.exe gateway access set-hosts --hosts "*"
+已有 Key 默认保留；显式轮换：
 
-.\adm.exe gateway start --listen 0.0.0.0:43137 -d
+```powershell
+.\adm.exe gateway access rotate-admin-key
+.\adm.exe gateway access rotate-agent-key
+# 或同时轮换
+.\adm.exe gateway access rotate --all
 ```
 
 ---
@@ -331,18 +343,18 @@ $env:ADM_V2_AGENT_API_KEY = "你的 Agent Key"
 
 ADM CLI 使用的是 `/admin/mcp`，所以只需要 **Admin Key**。这里使用的是**客户端 Admin Key**，值必须与远端 ADM 服务端 Remote access 中已经配置的 Admin Key 完全一致。
 
-ADM CLI 会读取 `~/.config/adm/.env` 和可执行文件同目录 `.env`；优先级是 **进程环境 > 应用目录 `.env` > 用户级 `.env`**。因此可以先写用户级配置：
+ADM CLI 会读取 `~/.config/adm/.env` 和可执行文件同目录 `.env`；优先级是 **进程环境 > 应用目录 `.env` > 用户级 `.env`**。`.env` 只用于客户端连接凭据，不再决定服务端保存的 Key hash。客户端 Admin Key 使用 `ADM_ADMIN_API_KEY`；旧 `ADM_V2_ADMIN_API_KEY` 暂时兼容读取。因此可以先写用户级配置：
 
 ```dotenv
 ADM_V2_URL=http://101.37.171.174:43137
-ADM_V2_ADMIN_API_KEY=服务端配置的AdminKey
+ADM_ADMIN_API_KEY=服务端配置的AdminKey
 ```
 
 也可以直接使用客户端 PowerShell：
 
 ```powershell
 $env:ADM_V2_URL = "http://101.37.171.174:43137"
-$env:ADM_V2_ADMIN_API_KEY = "服务端配置的 Admin Key"
+$env:ADM_ADMIN_API_KEY = "服务端配置的 Admin Key"
 
 .\adm.exe workspace list
 .\adm.exe environment list
@@ -352,7 +364,7 @@ $env:ADM_V2_ADMIN_API_KEY = "服务端配置的 Admin Key"
 也可以只给某条命令指定 URL：
 
 ```powershell
-$env:ADM_V2_ADMIN_API_KEY = "服务端配置的 Admin Key"
+$env:ADM_ADMIN_API_KEY = "服务端配置的 Admin Key"
 
 .\adm.exe --adm-url "http://101.37.171.174:43137" workspace list
 ```
@@ -574,18 +586,27 @@ Nginx 不需要根据 URL 注入 Key；Key 应由真正的 Desktop/CLI/Agent 客
 PowerShell：
 
 ```powershell
-$env:ADM_V2_ADMIN_API_KEY = "..."
-$env:ADM_V2_AGENT_API_KEY = "..."
-
-.\adm.exe gateway access set-admin-key
-.\adm.exe gateway access set-agent-key
-.\adm.exe gateway access set-hosts --hosts "*"
-.\adm.exe gateway start --listen 0.0.0.0:43137 -d
+.\adm.exe gateway setup --remote --listen 0.0.0.0:8001 --hosts "*"
+.\adm.exe gateway start --listen 0.0.0.0:8001 -d
 ```
 
 ---
 
-## 18. 安全建议
+## 18. 远程诊断
+
+已能连接 `/admin/mcp` 后，可直接读取服务端运维诊断：
+
+```bash
+adm --adm-url http://SERVER:8001 gateway diagnostics
+```
+
+Desktop 的 **ADM 连接 → Gateway 诊断** 显示同一类信息，并可一键复制诊断报告。内容包括运行用户、监听地址、实际 state/config 路径、远程访问 readiness 和 Linux systemd 状态；不会包含 Admin/Agent Key 原文。
+
+这组信息只通过 Admin MCP 返回，不加入公开 `/healthz`。
+
+---
+
+## 19. 安全建议
 
 如果使用 `*`：
 

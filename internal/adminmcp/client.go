@@ -197,6 +197,10 @@ func (c *Client) GatewayAccessStatus() (app.GatewayAccessStatus, error) {
 	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_access_status", map[string]any{})
 }
 
+func (c *Client) GatewayDiagnostics() (management.GatewayDiagnostics, error) {
+	return callAdmin[management.GatewayDiagnostics](c, context.Background(), "gateway_diagnostics", map[string]any{})
+}
+
 func (c *Client) GatewayAllowedHostsSet(hosts []string) (app.GatewayAccessStatus, error) {
 	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_allowed_hosts_set", map[string]any{"hosts": hosts})
 }
@@ -205,12 +209,20 @@ func (c *Client) GatewayAdminAPIKeySet(apiKey string) (app.GatewayAccessStatus, 
 	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_admin_api_key_set", map[string]any{"api_key": apiKey})
 }
 
+func (c *Client) GatewayAdminAPIKeyRotate() (app.GatewayKeyRotationResult, error) {
+	return callAdmin[app.GatewayKeyRotationResult](c, context.Background(), "gateway_admin_api_key_rotate", map[string]any{})
+}
+
 func (c *Client) GatewayAdminAPIKeyClear() (app.GatewayAccessStatus, error) {
 	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_admin_api_key_clear", map[string]any{})
 }
 
 func (c *Client) GatewayAgentAPIKeySet(apiKey string) (app.GatewayAccessStatus, error) {
 	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_agent_api_key_set", map[string]any{"api_key": apiKey})
+}
+
+func (c *Client) GatewayAgentAPIKeyRotate() (app.GatewayKeyRotationResult, error) {
+	return callAdmin[app.GatewayKeyRotationResult](c, context.Background(), "gateway_agent_api_key_rotate", map[string]any{})
 }
 
 func (c *Client) GatewayAgentAPIKeyClear() (app.GatewayAccessStatus, error) {
@@ -266,6 +278,11 @@ func (c *Client) EnvironmentList() ([]app.EnvironmentSummary, error) {
 func (c *Client) ExecList() ([]string, error) {
 	snapshot, err := c.Snapshot()
 	return snapshot.AllowedExecutables, err
+}
+
+func (c *Client) ExecUsageList() ([]model.ExecUsage, error) {
+	snapshot, err := c.Snapshot()
+	return snapshot.ExecUsages, err
 }
 
 func (c *Client) MCPList() ([]model.MCPDefinition, error) {

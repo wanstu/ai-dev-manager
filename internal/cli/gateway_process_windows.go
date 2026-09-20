@@ -16,7 +16,9 @@ import (
 )
 
 func findListeningProcess(listen string) (int, string, error) {
-	output, err := exec.Command("netstat", "-ano", "-p", "tcp").Output()
+	netstat := exec.Command("netstat", "-ano", "-p", "tcp")
+	netstat.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
+	output, err := netstat.Output()
 	if err != nil {
 		return 0, "", fmt.Errorf("执行 netstat 失败: %w", err)
 	}
@@ -91,7 +93,7 @@ func startDetachedGatewayProcess(listen string) (*os.Process, error) {
 	}
 	cmd := exec.Command(executable, "gateway", "start", "--listen", listen)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: 0x00000008 | 0x00000200, // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+		HideWindow: true, CreationFlags: 0x00000008 | 0x00000200 | 0x08000000, // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
 	}
 	if err := cmd.Start(); err != nil {
 		return nil, err

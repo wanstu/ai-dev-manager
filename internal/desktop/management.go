@@ -239,11 +239,22 @@ func (a *Adapter) GetGatewayAccessStatus() (app.GatewayAccessStatus, error) {
 	return a.management.GatewayAccessStatus()
 }
 
+func (a *Adapter) GetGatewayDiagnostics() (management.GatewayDiagnostics, error) {
+	if err := a.ready(); err != nil {
+		return management.GatewayDiagnostics{}, err
+	}
+	return a.management.GatewayDiagnostics()
+}
+
 func (a *Adapter) SetGatewayAllowedHosts(hosts []string) (app.GatewayAccessStatus, error) {
 	if err := a.ready(); err != nil {
 		return app.GatewayAccessStatus{}, err
 	}
 	return a.management.GatewayAllowedHostsSet(hosts)
+}
+
+func (a *Adapter) GenerateGatewayAPIKey() (string, error) {
+	return app.GenerateGatewayAPIKey()
 }
 
 func (a *Adapter) SetGatewayAdminAPIKey(apiKey string) (app.GatewayAccessStatus, error) {
