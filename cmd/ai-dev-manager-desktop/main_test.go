@@ -112,6 +112,7 @@ func TestDesktopKitAssetsAreMounted(t *testing.T) {
 		"desktopkit/components.css",
 		"desktopkit/navigation.css",
 		"desktopkit/theme.js",
+		"desktopkit/runtime.js",
 		"index.html",
 	} {
 		data, err := fs.ReadFile(mounted, path)

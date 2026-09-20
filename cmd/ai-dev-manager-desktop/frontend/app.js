@@ -330,16 +330,9 @@ function syncMCPAuthModeFromReferences() {
   syncMCPAuthForm();
 }
 async function writeClipboardText(text) {
-  const value = String(text ?? '');
-  if (window.runtime?.ClipboardSetText) {
-    const copied = await window.runtime.ClipboardSetText(value);
-    if (copied === false) throw new Error('系统剪贴板写入失败');
-    return;
-  }
-  if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); return; }
-  const field = document.createElement('textarea'); field.value = value; field.setAttribute('readonly', ''); field.style.position = 'fixed'; field.style.opacity = '0'; document.body.append(field); field.select();
-  const copied = typeof document.execCommand === 'function' && document.execCommand('copy'); field.remove();
-  if (!copied) throw new Error('当前 WebView 不支持写入剪贴板');
+  const clipboard = window.DesktopKit?.clipboard;
+  if (!clipboard?.writeText) throw new Error('Desktop Kit Clipboard runtime 未加载');
+  await clipboard.writeText(String(text ?? ''));
 }
 async function copyMCPConfig(entry) {
   const text = window.ADMMCPExport?.stringifyGenericConfig(entry);
