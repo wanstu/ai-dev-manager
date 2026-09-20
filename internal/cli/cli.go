@@ -1887,20 +1887,20 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 	case "stop":
 		fs := newFlagSet("gateway stop", func() {
 			fmt.Fprintln(os.Stdout, "用法：adm [--adm-url URL] gateway stop [--listen HOST:PORT]")
-			fmt.Fprintln(os.Stdout, "\n未显式提供 --listen 时，从当前 ADM Base URL 派生本机 Gateway；远端地址不会被停止。")
+			fmt.Fprintln(os.Stdout, "\n未显式提供 --listen 时强制停止当前 ADM Base URL 对应的已识别 Gateway；版本不兼容也允许停止。")
+			fmt.Fprintln(os.Stdout, "远端只使用 ADM owner-bound shutdown，不做 PID 推断；--listen 用于显式本机监听地址。")
 		})
-		listen := fs.String("listen", "", "Gateway 监听地址；显式值优先于 --adm-url/ADM_V2_URL")
+		listen := fs.String("listen", "", "本机 Gateway 监听地址；设置后优先于 --adm-url/ADM_V2_URL")
 		if err := fs.Parse(args[1:]); err != nil {
 			return flagError(err)
 		}
 		if fs.NArg() != 0 {
 			return fmt.Errorf("gateway stop 只接受 --flag 参数")
 		}
-		targetListen, err := resolveListen(fs, *listen)
-		if err != nil {
-			return err
+		if flagWasSet(fs, "listen") {
+			return stopHTTPGateway(strings.TrimSpace(*listen))
 		}
-		return stopHTTPGateway(targetListen)
+		return stopHTTPGatewayBaseURL(baseURL)
 	case "restart":
 		fs := newFlagSet("gateway restart", func() {
 			fmt.Fprintln(os.Stdout, "用法：adm [--adm-url URL] gateway restart [--listen HOST:PORT]")
@@ -2242,48 +2242,49 @@ func printGatewayStatus(listen string) error {
 	return nil
 }
 
+func stopHTTPGatewayBaseURL(rawBaseURL string) error {
+	status, err := gateway.ForceStopHTTPBaseURLWithAPIKey(rawBaseURL, clientAdminAPIKey())
+	if err != nil {
+		return err
+	}
+	if status.State == gateway.HTTPStateStopped {
+		fmt.Println("ADM V2 HTTP Gateway 已停止：", status.BaseURL+"/mcp")
+		return nil
+	}
+	return fmt.Errorf("Gateway %s 强制停止后仍处于 %s 状态", status.BaseURL, status.State)
+}
+
 func stopHTTPGateway(listen string) error {
 	baseURL, err := gatewayBaseURL(listen)
 	if err != nil {
 		return err
 	}
-	health, running, err := fetchGatewayHealth(listen)
-	if err != nil {
-		var incompatible *incompatibleGatewayError
-		if errors.As(err, &incompatible) {
-			pid, processPath, lookupErr := findListeningProcess(listen)
-			if lookupErr != nil {
-				return fmt.Errorf("检测到旧版或不兼容的 Gateway，但无法自动定位监听进程: %w", lookupErr)
-			}
-			currentExecutable, executableErr := os.Executable()
-			if executableErr != nil {
-				return fmt.Errorf("检测到监听进程 PID %d，但无法确认当前 ADM 可执行文件路径: %w", pid, executableErr)
-			}
-			if !matchesADMExecutable(processPath, currentExecutable) {
-				return fmt.Errorf("%s 被其他程序占用（PID %d，%s）；为了避免误杀，ADM 不会自动停止它", listen, pid, processPath)
-			}
-			fmt.Printf("检测到旧版 ADM V2 Gateway（PID %d），正在停止以完成升级重启。\n", pid)
-			return terminateGatewayProcess(pid, listen, baseURL)
+	status, forceErr := gateway.ForceStopHTTPBaseURLWithAPIKey(baseURL, clientAdminAPIKey())
+	if forceErr == nil {
+		if status.State == gateway.HTTPStateStopped {
+			fmt.Println("ADM V2 HTTP Gateway 已停止：", baseURL+"/mcp")
+			return nil
 		}
-		return err
+		return fmt.Errorf("Gateway %s 强制停止后仍处于 %s 状态", baseURL, status.State)
 	}
-	if !running {
-		fmt.Println("ADM V2 HTTP Gateway 已经停止：", baseURL+"/mcp")
-		return nil
-	}
-	if health.PID <= 0 {
-		return fmt.Errorf("Gateway %s 没有提供可用 PID，无法自动停止", baseURL)
-	}
-	if health.OwnerID != "" {
-		if _, err := gateway.StopHTTPWithAPIKey(listen, clientAdminAPIKey()); err != nil {
-			return err
-		}
-		fmt.Printf("ADM V2 HTTP Gateway 已停止（PID %d）。\n", health.PID)
-		return nil
-	}
-	return terminateGatewayProcess(health.PID, listen, baseURL)
-}
 
+	// Very old local Gateways may not expose enough health identity/owner data
+	// for the modern force-stop path. Keep the legacy local-only safety fallback:
+	// locate the listener PID and verify it is an ADM executable before killing it.
+	pid, processPath, lookupErr := findListeningProcess(listen)
+	if lookupErr != nil {
+		return forceErr
+	}
+	currentExecutable, executableErr := os.Executable()
+	if executableErr != nil {
+		return fmt.Errorf("检测到监听进程 PID %d，但无法确认当前 ADM 可执行文件路径: %w", pid, executableErr)
+	}
+	if !matchesADMExecutable(processPath, currentExecutable) {
+		return fmt.Errorf("%s 被其他程序占用（PID %d，%s）；为了避免误杀，ADM 不会自动停止它", listen, pid, processPath)
+	}
+	fmt.Printf("检测到旧版 ADM V2 Gateway（legacy，PID %d），正在强制停止。\n", pid)
+	return terminateGatewayProcess(pid, listen, baseURL)
+}
 func sameADMExecutable(targetPath, currentPath string) bool {
 	if !pathutil.Same(filepath.Dir(targetPath), filepath.Dir(currentPath)) {
 		return false
@@ -2418,7 +2419,7 @@ Gateway 常用命令：
   gateway start      启动本机 HTTP Gateway；未写 --listen 时使用当前 --adm-url / ADM_V2_URL（默认 127.0.0.1:43137）
   gateway status     查看当前 ADM Base URL，或用 --listen 显式检查一个本机监听地址
   gateway diagnostics 通过 Admin MCP 读取运行用户、状态路径、远程访问 readiness 与 systemd 元数据
-  gateway stop       停止当前本机 ADM Base URL 对应的 Gateway；远端 URL 不会被停止
+  gateway stop       强制停止当前 ADM Base URL 对应的已识别 Gateway；版本不兼容也允许停止
   gateway restart    重启当前本机 ADM Base URL 对应的 Gateway
   gateway access     配置远程 Host/IP 白名单、Admin API Key 与 Agent API Key\n  gateway logs       查看持久日志目录与轮转/保留策略\n  gateway stdio      仅供 MCP 客户端使用；不要在普通终端里手动运行
 

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -70,7 +71,17 @@ func newCLIAdminClient(baseURL string) (*adminmcp.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return adminmcp.NewWithAPIKey(target.AdminMCPURL, clientAdminAPIKey()), nil
+	client := adminmcp.NewWithAPIKey(target.AdminMCPURL, clientAdminAPIKey())
+	return client.WithBeforeCall(func(context.Context) error {
+		status, err := gateway.InspectHTTPBaseURL(target.BaseURL)
+		if err != nil {
+			return nil
+		}
+		if status.State == gateway.HTTPStateIncompatible && status.RecognizedADMGateway {
+			return fmt.Errorf("ADM Gateway %s is incompatible and cannot be managed: %s", status.BaseURL, status.Detail)
+		}
+		return nil
+	}), nil
 }
 
 func normalizeCLIADMBaseURL(raw string) (string, error) {

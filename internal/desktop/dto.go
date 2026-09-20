@@ -61,6 +61,8 @@ type ADMConnectionStatus struct {
 	AdminMCPURL            string `json:"admin_mcp_url"`
 	PID                    int    `json:"pid,omitempty"`
 	Version                string `json:"version,omitempty"`
+	ManagementAPIVersion   int    `json:"management_api_version,omitempty"`
+	RecognizedADMGateway   bool   `json:"recognized_adm_gateway,omitempty"`
 	OwnerID                string `json:"owner_id,omitempty"`
 	Detail                 string `json:"detail,omitempty"`
 	LocalBootstrapEligible bool   `json:"local_bootstrap_eligible"`

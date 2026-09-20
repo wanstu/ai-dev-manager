@@ -330,8 +330,14 @@ function syncMCPAuthModeFromReferences() {
   syncMCPAuthForm();
 }
 async function writeClipboardText(text) {
-  if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return; }
-  const field = document.createElement('textarea'); field.value = text; field.setAttribute('readonly', ''); field.style.position = 'fixed'; field.style.opacity = '0'; document.body.append(field); field.select();
+  const value = String(text ?? '');
+  if (window.runtime?.ClipboardSetText) {
+    const copied = await window.runtime.ClipboardSetText(value);
+    if (copied === false) throw new Error('系统剪贴板写入失败');
+    return;
+  }
+  if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(value); return; }
+  const field = document.createElement('textarea'); field.value = value; field.setAttribute('readonly', ''); field.style.position = 'fixed'; field.style.opacity = '0'; document.body.append(field); field.select();
   const copied = typeof document.execCommand === 'function' && document.execCommand('copy'); field.remove();
   if (!copied) throw new Error('当前 WebView 不支持写入剪贴板');
 }
@@ -786,7 +792,7 @@ function gatewayDiagnosticsReport() {
 }
 async function copyGatewayDiagnosticsReport() {
   if (!gatewayDiagnostics) return;
-  await copyText(gatewayDiagnosticsReport());
+  await writeClipboardText(gatewayDiagnosticsReport());
   setStatus('Gateway 诊断报告已复制；不包含 API Key 原文。', 'success');
 }
 
@@ -901,11 +907,12 @@ function renderGatewayStatus(status) {
   elements.gatewayBaseURL.value = baseURL; elements.gatewayHealthURL.textContent = status?.health_url || `${baseURL.replace(/\/$/, '')}/healthz`;
   elements.gatewayURL.textContent = status?.agent_mcp_url || status?.mcp_url || `${baseURL.replace(/\/$/, '')}/mcp`;
   elements.gatewayAdminURL.textContent = status?.admin_mcp_url || `${baseURL.replace(/\/$/, '')}/admin/mcp`;
-  elements.gatewayProcess.textContent = `PID ${status?.pid || '—'} · Version ${status?.version || '—'}`;
+  elements.gatewayProcess.textContent = `PID ${status?.pid || '—'} · Version ${status?.version || '—'} · Management API ${status?.management_api_version ?? '—'}`;
   const localEligible = Boolean(status?.local_bootstrap_eligible);
+  const recognized = Boolean(status?.recognized_adm_gateway);
   elements.gatewayDetail.textContent = status?.detail || (state === 'running' ? 'ADM health check 通过；Desktop 管理数据通过 Admin MCP 读取。' : 'ADM 未连接时 Desktop 不读取或修改本地 state。');
   elements.gatewayStartButton.disabled = !localEligible || state === 'running' || state === 'incompatible';
-  elements.gatewayStopButton.disabled = !localEligible || state === 'stopped' || state === 'incompatible' || state === 'unknown';
+  elements.gatewayStopButton.disabled = !recognized || state === 'stopped' || state === 'unknown';
   if (elements.gatewayDiagnosticListen) elements.gatewayDiagnosticListen.textContent = status?.listen || gatewayDiagnostics?.service?.listen || '—';
 
 }
@@ -2451,7 +2458,11 @@ async function refreshSnapshot(successMessage = '') {
 async function refreshConnectedADM(showConnectionMessage = false) {
   const status = await refreshGatewayStatus(showConnectionMessage);
   if (status?.state === 'running') await refreshSnapshot();
-  else { clearManagementData(); if (!showConnectionMessage) setStatus('ADM 未连接；管理数据未加载', 'error'); }
+  else {
+    clearManagementData();
+    if (status?.state === 'incompatible') setStatus('ADM 版本/管理协议不兼容；已禁止管理操作，仅允许强制停止 Gateway。', 'error');
+    else if (!showConnectionMessage) setStatus('ADM 未连接；管理数据未加载', 'error');
+  }
   return status;
 }
 async function runMutation(label, action, after) { setStatus(`${label}…`, 'loading'); try { await action(); await refreshSnapshot(`${label}完成`); if (after) await after(); } catch (error) { setStatus(`${label}失败：${error?.message || String(error)}`, 'error'); } }
@@ -3062,17 +3073,17 @@ window.addEventListener('keydown', (event) => { if (event.key !== 'Escape' || ac
 elements.gatewayAccessSaveHosts.addEventListener('click', saveGatewayAllowedHosts);
 elements.gatewayDiagnosticsCopyButton.addEventListener('click', copyGatewayDiagnosticsReport);
 elements.gatewayGenerateAdminKey.addEventListener('click', () => rotateGatewayAPIKey('admin'));
-elements.gatewayCopyAdminKey.addEventListener('click', async () => { if (elements.gatewayAdminAPIKey.value) { await copyText(elements.gatewayAdminAPIKey.value); setStatus('Admin API Key 已复制。', 'success'); } });
+elements.gatewayCopyAdminKey.addEventListener('click', async () => { if (elements.gatewayAdminAPIKey.value) { await writeClipboardText(elements.gatewayAdminAPIKey.value); setStatus('Admin API Key 已复制。', 'success'); } });
 elements.gatewayAccessSetAdminKey.addEventListener('click', setGatewayAdminAPIKey);
 elements.gatewayAccessClearAdminKey.addEventListener('click', clearGatewayAdminAPIKey);
 elements.gatewayGenerateAgentKey.addEventListener('click', () => rotateGatewayAPIKey('agent'));
-elements.gatewayCopyAgentKey.addEventListener('click', async () => { if (elements.gatewayAgentAPIKey.value) { await copyText(elements.gatewayAgentAPIKey.value); setStatus('Agent API Key 已复制。', 'success'); } });
+elements.gatewayCopyAgentKey.addEventListener('click', async () => { if (elements.gatewayAgentAPIKey.value) { await writeClipboardText(elements.gatewayAgentAPIKey.value); setStatus('Agent API Key 已复制。', 'success'); } });
 elements.gatewayAccessSetAgentKey.addEventListener('click', setGatewayAgentAPIKey);
 elements.gatewayAccessClearAgentKey.addEventListener('click', clearGatewayAgentAPIKey);
 elements.execAuthorizationSave.addEventListener('click', saveExecAuthorizationMode);
 elements.cleanupExpiredTemporaryEnvironmentsButton.addEventListener('click', cleanupExpiredTemporaryEnvironments);
 elements.gatewayRefreshButton.addEventListener('click', () => refreshConnectedADM(true).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));
 elements.gatewayStartButton.addEventListener('click', () => runGatewayAction('启动本地 ADM', (input) => desktopAdapter().StartLocalADM(input)));
-elements.gatewayStopButton.addEventListener('click', () => runGatewayAction('停止本地 ADM', (input) => desktopAdapter().StopLocalADM(input)));
+elements.gatewayStopButton.addEventListener('click', () => runGatewayAction('强制停止 ADM', (input) => desktopAdapter().StopLocalADM(input)));
 elements.refreshButton.addEventListener('click', () => refreshConnectedADM(false).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));
 window.addEventListener('DOMContentLoaded', () => { window.runtime?.EventsOn?.('desktop:preferences-changed', () => loadDesktopPreferences(false)); initializeManagementNavigation(); initializeConnectionProfiles(); syncMCPTransportForm(); clearManagementData(); loadDesktopPreferences(false); loadAboutInfo(); });

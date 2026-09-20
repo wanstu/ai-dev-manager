@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -173,11 +174,51 @@ func TestGatewayDiagnosticsUsesSelectedADMBaseURL(t *testing.T) {
 	}
 }
 
-func TestGatewayLifecycleRejectsRemoteMutationTarget(t *testing.T) {
+func TestGatewayStopAllowsRemoteIncompatibleADMButRejectsNonADM(t *testing.T) {
 	service := app.New(filepath.Join(t.TempDir(), "state.json"))
-	err := runGatewayForTarget(service, "https://adm.example.test:8443", []string{"stop"})
-	if err == nil || !strings.Contains(err.Error(), "local Gateway lifecycle") {
-		t.Fatalf("remote gateway stop should be rejected, got %v", err)
+
+	var admServer *httptest.Server
+	shutdownCalls := 0
+	admServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"name":"adm","version":"v1.2.2","status":"ok","pid":%d,"transport":"http","owner_id":"owner_old"}`, os.Getpid())
+		case "/shutdown":
+			shutdownCalls++
+			w.WriteHeader(http.StatusAccepted)
+			go func() {
+				time.Sleep(20 * time.Millisecond)
+				admServer.Close()
+			}()
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer admServer.Close()
+
+	_ = captureStdout(t, func() {
+		if err := runGatewayForTarget(service, admServer.URL, []string{"stop"}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if shutdownCalls != 1 {
+		t.Fatalf("remote ADM shutdown calls=%d want 1", shutdownCalls)
+	}
+
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"name":"other","version":"1","status":"ok","pid":1234,"transport":"http","owner_id":"foreign"}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer foreign.Close()
+
+	err := runGatewayForTarget(service, foreign.URL, []string{"stop"})
+	if err == nil || !strings.Contains(err.Error(), "not a recognized ADM Gateway") {
+		t.Fatalf("non-ADM remote stop error=%v", err)
 	}
 }
 
@@ -1074,7 +1115,7 @@ func TestGatewayStatusReportsRunningGatewayDetails(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"name":"adm","version":"test-version","status":"ok","pid":43210,"transport":"http"}`)
+		_, _ = io.WriteString(w, `{"name":"adm","version":"test-version","management_api_version":1,"status":"ok","pid":43210,"transport":"http"}`)
 	}))
 	defer server.Close()
 	listen := strings.TrimPrefix(server.URL, "http://")
@@ -1098,7 +1139,7 @@ func TestGatewayStatusReportsRuntimeOwner(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"name":"adm","version":"test-version","status":"ok","pid":43210,"transport":"http","owner_id":"owner_test"}`)
+		_, _ = io.WriteString(w, `{"name":"adm","version":"test-version","management_api_version":1,"status":"ok","pid":43210,"transport":"http","owner_id":"owner_test"}`)
 	}))
 	defer server.Close()
 	listen := strings.TrimPrefix(server.URL, "http://")

@@ -23,8 +23,9 @@ import (
 )
 
 type Client struct {
-	endpoint string
-	apiKey   string
+	endpoint   string
+	apiKey     string
+	beforeCall func(context.Context) error
 }
 
 type ProcessStatus struct {
@@ -71,10 +72,22 @@ func NewWithAPIKey(endpoint, apiKey string) *Client {
 	return &Client{endpoint: strings.TrimSpace(endpoint), apiKey: strings.TrimSpace(apiKey)}
 }
 
+func (c *Client) WithBeforeCall(fn func(context.Context) error) *Client {
+	if c != nil {
+		c.beforeCall = fn
+	}
+	return c
+}
+
 func callAdmin[T any](client *Client, ctx context.Context, tool string, arguments map[string]any) (T, error) {
 	var zero T
 	if client == nil || client.endpoint == "" {
 		return zero, fmt.Errorf("ADM Admin MCP is not connected")
+	}
+	if client.beforeCall != nil {
+		if err := client.beforeCall(ctx); err != nil {
+			return zero, err
+		}
 	}
 	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "adm-admin-client", Version: productversion.Current()}, nil)
 	transport := &mcp.StreamableClientTransport{Endpoint: client.endpoint}

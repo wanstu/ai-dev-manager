@@ -1685,7 +1685,7 @@ func newHTTPHandlerWithShutdown(service *app.Service, owner *runtimeOwner, shutd
 		if owner != nil {
 			ownerID = owner.Info().ID
 		}
-		_, _ = fmt.Fprintf(w, `{"name":%q,"version":%q,"status":"ok","pid":%d,"transport":"http","owner_id":%q}`, serverName, serverVersion, os.Getpid(), ownerID)
+		_, _ = fmt.Fprintf(w, `{"name":%q,"version":%q,"management_api_version":%d,"status":"ok","pid":%d,"transport":"http","owner_id":%q}`, serverName, serverVersion, ManagementAPIVersion, os.Getpid(), ownerID)
 	})
 	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

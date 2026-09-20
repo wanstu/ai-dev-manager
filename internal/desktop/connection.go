@@ -102,11 +102,7 @@ func (a *Adapter) StopLocalADM(input ADMConnectionInput) (ADMConnectionStatus, e
 	if err != nil {
 		return ADMConnectionStatus{}, err
 	}
-	listen, err := localBootstrapListen(status.BaseURL)
-	if err != nil {
-		return status, err
-	}
-	stopped, err := gateway.StopHTTPWithAPIKey(listen, a.connectionAPIKey(status.BaseURL, input.APIKey))
+	stopped, err := gateway.ForceStopHTTPBaseURLWithAPIKey(status.BaseURL, a.connectionAPIKey(status.BaseURL, input.APIKey))
 	if err != nil {
 		return status, err
 	}
@@ -170,6 +166,8 @@ func desktopConnectionStatus(status gateway.HTTPStatus) ADMConnectionStatus {
 		AdminMCPURL:            status.AdminMCPURL,
 		PID:                    status.PID,
 		Version:                status.Version,
+		ManagementAPIVersion:   status.ManagementAPIVersion,
+		RecognizedADMGateway:   status.RecognizedADMGateway,
 		OwnerID:                status.OwnerID,
 		Detail:                 status.Detail,
 		LocalBootstrapEligible: gateway.LocalHTTPLifecycleEligible(status.BaseURL),

@@ -606,7 +606,21 @@ Desktop 的 **ADM 连接 → Gateway 诊断** 显示同一类信息，并可一�
 
 ---
 
-## 19. 安全建议
+## 19. 管理协议兼容性
+
+Desktop/CLI 在真正执行 Admin MCP 管理操作前，会读取 `/healthz` 的 `management_api_version`。
+
+- 产品版本号可以不同；只要 `management_api_version` 相同，就允许继续管理。
+- 旧 Gateway 缺少该字段，或协议号与当前客户端不一致时，连接进入 `incompatible`：禁止管理快照、Key 轮换、Gateway diagnostics、执行授权和其他 Admin MCP 管理操作。
+- 版本不兼容时仍保留“强制停止 ADM”能力，便于停止旧 Gateway 后升级。
+- 强制停止只针对已经通过 ADM `name/status/transport` 身份校验的 Gateway；非 ADM 端点不会被停止。
+- 远端强制停止仅使用 owner-bound `/shutdown`，不会做 PID 推断；本机极旧版本才允许在确认监听进程属于 ADM 后按 PID 终止。
+
+因此推荐升级顺序是：新 Desktop/CLI 发现旧 Gateway 不兼容 → 强制停止旧 Gateway → 使用新版本启动 Gateway → 管理能力恢复。
+
+---
+
+## 20. 安全建议
 
 如果使用 `*`：
 

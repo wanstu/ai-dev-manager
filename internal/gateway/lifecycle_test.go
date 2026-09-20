@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ai-dev-manager-v2/internal/app"
 )
@@ -23,7 +24,7 @@ func TestInspectHTTPReportsRunningCompatibleGateway(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"name":%q,"version":"test","status":"ok","pid":%d,"transport":"http"}`, serverName, os.Getpid())
+		fmt.Fprintf(w, `{"name":%q,"version":"test","management_api_version":1,"status":"ok","pid":%d,"transport":"http"}`, serverName, os.Getpid())
 	}))
 	defer server.Close()
 
@@ -61,6 +62,9 @@ func TestHTTPHealthExposesStableRuntimeOwner(t *testing.T) {
 		if health.OwnerID == "" || health.OwnerID != owner.Info().ID {
 			t.Fatalf("health owner_id=%q want %q", health.OwnerID, owner.Info().ID)
 		}
+		if health.ManagementAPIVersion != ManagementAPIVersion {
+			t.Fatalf("health management_api_version=%d want %d", health.ManagementAPIVersion, ManagementAPIVersion)
+		}
 	}
 	listen := strings.TrimPrefix(server.URL, "http://")
 	status, err := InspectHTTP(listen)
@@ -69,6 +73,45 @@ func TestHTTPHealthExposesStableRuntimeOwner(t *testing.T) {
 	}
 	if status.OwnerID != owner.Info().ID {
 		t.Fatalf("InspectHTTP owner_id=%q want %q", status.OwnerID, owner.Info().ID)
+	}
+}
+
+func TestInspectHTTPRejectsOlderManagementAPIAndAllowsForceStop(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"name":%q,"version":"v1.2.2","status":"ok","pid":%d,"transport":"http","owner_id":"owner_old"}`, serverName, os.Getpid())
+		case "/shutdown":
+			w.WriteHeader(http.StatusAccepted)
+			go func() {
+				time.Sleep(20 * time.Millisecond)
+				server.Close()
+			}()
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	status, err := InspectHTTPBaseURL(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != HTTPStateIncompatible || !status.RecognizedADMGateway {
+		t.Fatalf("old Gateway status=%+v", status)
+	}
+	if status.ManagementAPIVersion != 0 || !strings.Contains(status.Detail, "management API 0") {
+		t.Fatalf("old Gateway compatibility detail=%+v", status)
+	}
+
+	stopped, err := ForceStopHTTPBaseURLWithAPIKey(server.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped.State != HTTPStateStopped {
+		t.Fatalf("force stop result=%+v", stopped)
 	}
 }
 
@@ -159,7 +202,7 @@ func TestInspectHTTPBaseURLSupportsBasePathAndAdminEndpoint(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"name":%q,"version":"test","status":"ok","pid":%d,"transport":"http"}`, serverName, os.Getpid())
+		fmt.Fprintf(w, `{"name":%q,"version":"test","management_api_version":1,"status":"ok","pid":%d,"transport":"http"}`, serverName, os.Getpid())
 	}))
 	defer server.Close()
 

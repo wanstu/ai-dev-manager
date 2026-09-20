@@ -14,6 +14,10 @@ import (
 
 const DefaultHTTPListen = "127.0.0.1:43137"
 
+// ManagementAPIVersion is the compatibility contract for Desktop/CLI management.
+// Increment it only when the Admin management surface is no longer backwards compatible.
+const ManagementAPIVersion = 1
+
 const (
 	HTTPStateStopped      = "stopped"
 	HTTPStateRunning      = "running"
@@ -21,24 +25,27 @@ const (
 )
 
 type HTTPHealth struct {
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	Status    string `json:"status"`
-	PID       int    `json:"pid"`
-	Transport string `json:"transport"`
-	OwnerID   string `json:"owner_id,omitempty"`
+	Name                 string `json:"name"`
+	Version              string `json:"version"`
+	ManagementAPIVersion int    `json:"management_api_version,omitempty"`
+	Status               string `json:"status"`
+	PID                  int    `json:"pid"`
+	Transport            string `json:"transport"`
+	OwnerID              string `json:"owner_id,omitempty"`
 }
 
 type HTTPStatus struct {
-	State       string `json:"state"`
-	Listen      string `json:"listen"`
-	BaseURL     string `json:"base_url"`
-	MCPURL      string `json:"mcp_url"`
-	AdminMCPURL string `json:"admin_mcp_url"`
-	PID         int    `json:"pid,omitempty"`
-	Version     string `json:"version,omitempty"`
-	OwnerID     string `json:"owner_id,omitempty"`
-	Detail      string `json:"detail,omitempty"`
+	State                string `json:"state"`
+	Listen               string `json:"listen"`
+	BaseURL              string `json:"base_url"`
+	MCPURL               string `json:"mcp_url"`
+	AdminMCPURL          string `json:"admin_mcp_url"`
+	PID                  int    `json:"pid,omitempty"`
+	Version              string `json:"version,omitempty"`
+	ManagementAPIVersion int    `json:"management_api_version,omitempty"`
+	RecognizedADMGateway bool   `json:"recognized_adm_gateway,omitempty"`
+	OwnerID              string `json:"owner_id,omitempty"`
+	Detail               string `json:"detail,omitempty"`
 }
 
 // HTTPTarget is the canonical ADM HTTP target shared by CLI and Desktop surfaces.
@@ -197,10 +204,20 @@ func InspectHTTPBaseURL(rawBaseURL string) (HTTPStatus, error) {
 		status.Detail = fmt.Sprintf("endpoint %s is not the expected ADM V2 HTTP Gateway", target.BaseURL)
 		return status, nil
 	}
-	status.State = HTTPStateRunning
+	status.RecognizedADMGateway = true
 	status.PID = health.PID
 	status.Version = health.Version
+	status.ManagementAPIVersion = health.ManagementAPIVersion
 	status.OwnerID = health.OwnerID
+	if health.ManagementAPIVersion != ManagementAPIVersion {
+		status.State = HTTPStateIncompatible
+		status.Detail = fmt.Sprintf(
+			"ADM Gateway version %s uses management API %d, but this client requires management API %d; management is disabled until the Gateway is upgraded. Forced stop remains available",
+			strings.TrimSpace(health.Version), health.ManagementAPIVersion, ManagementAPIVersion,
+		)
+		return status, nil
+	}
+	status.State = HTTPStateRunning
 	return status, nil
 }
 
@@ -262,7 +279,7 @@ func StopHTTPWithAPIKey(listen, apiKey string) (HTTPStatus, error) {
 	case HTTPStateStopped:
 		return status, nil
 	case HTTPStateIncompatible:
-		return status, fmt.Errorf("refusing to stop incompatible process on %s: %s", listen, status.Detail)
+		return status, fmt.Errorf("refusing to stop incompatible process on %s without force: %s", listen, status.Detail)
 	}
 	if status.PID <= 0 {
 		return status, fmt.Errorf("Gateway %s did not provide a usable PID", status.BaseURL)
@@ -277,6 +294,35 @@ func StopHTTPWithAPIKey(listen, apiKey string) (HTTPStatus, error) {
 		return status, err
 	}
 	return InspectHTTP(listen)
+}
+
+func ForceStopHTTPBaseURLWithAPIKey(rawBaseURL, apiKey string) (HTTPStatus, error) {
+	status, err := InspectHTTPBaseURL(rawBaseURL)
+	if err != nil {
+		return HTTPStatus{}, err
+	}
+	if status.State == HTTPStateStopped {
+		return status, nil
+	}
+	if !status.RecognizedADMGateway {
+		return status, fmt.Errorf("refusing to force-stop %s because it is not a recognized ADM Gateway", status.BaseURL)
+	}
+	if status.OwnerID != "" {
+		if err := requestHTTPShutdown(status, apiKey); err != nil {
+			return status, err
+		}
+		return InspectHTTPBaseURL(status.BaseURL)
+	}
+	if listen, localErr := LocalHTTPListenFromBaseURL(status.BaseURL); localErr == nil {
+		if status.PID <= 0 {
+			return status, fmt.Errorf("Gateway %s did not provide a usable PID", status.BaseURL)
+		}
+		if err := TerminateHTTPProcess(status.PID, listen); err != nil {
+			return status, err
+		}
+		return InspectHTTPBaseURL(status.BaseURL)
+	}
+	return status, fmt.Errorf("remote Gateway %s cannot be force-stopped because it does not expose runtime-owner shutdown support", status.BaseURL)
 }
 
 func requestHTTPShutdown(status HTTPStatus, apiKey string) error {
@@ -299,14 +345,14 @@ func requestHTTPShutdown(status HTTPStatus, apiKey string) error {
 	}
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		current, err := InspectHTTP(status.Listen)
+		current, err := InspectHTTPBaseURL(status.BaseURL)
 		if err != nil {
 			return err
 		}
 		if current.State == HTTPStateStopped {
 			return nil
 		}
-		if current.State != HTTPStateRunning || (current.OwnerID != "" && current.OwnerID != status.OwnerID) {
+		if !current.RecognizedADMGateway || (current.OwnerID != "" && current.OwnerID != status.OwnerID) {
 			return fmt.Errorf("Gateway runtime owner changed while waiting for graceful shutdown")
 		}
 		time.Sleep(100 * time.Millisecond)

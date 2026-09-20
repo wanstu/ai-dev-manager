@@ -2,12 +2,14 @@ package desktop
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ai-dev-manager-v2/internal/adminmcp"
 	"ai-dev-manager-v2/internal/app"
@@ -141,6 +143,47 @@ func TestClientAdapterUsesAdminMCPAndDoesNotFallbackAfterDisconnect(t *testing.T
 	}
 	if _, err := adapter.ListProcesses(environment.ID); err == nil || !strings.Contains(err.Error(), "not connected") {
 		t.Fatalf("disconnected runtime fallback error=%v", err)
+	}
+}
+
+func TestDesktopBlocksIncompatibleGatewayManagementButAllowsForceStop(t *testing.T) {
+	var server *httptest.Server
+	handler := http.NewServeMux()
+	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"name":"adm","version":"v1.2.2","status":"ok","pid":%d,"transport":"http","owner_id":"owner_old"}`, os.Getpid())
+	})
+	handler.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			server.Close()
+		}()
+	})
+	server = httptest.NewServer(http.StripPrefix("/control", handler))
+	defer server.Close()
+
+	adapter := NewClientAdapter()
+	status, err := adapter.ConnectADM(ADMConnectionInput{BaseURL: server.URL + "/control"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != gateway.HTTPStateIncompatible || !status.RecognizedADMGateway {
+		t.Fatalf("incompatible Gateway status=%+v", status)
+	}
+	if adapter.management != nil || adapter.runtime != nil {
+		t.Fatalf("incompatible Gateway installed management backends: management=%T runtime=%T", adapter.management, adapter.runtime)
+	}
+	if _, err := adapter.GetSnapshot(); err == nil || !strings.Contains(err.Error(), "not connected") {
+		t.Fatalf("incompatible Gateway management was not blocked: %v", err)
+	}
+
+	stopped, err := adapter.StopLocalADM(ADMConnectionInput{BaseURL: server.URL + "/control"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped.State != gateway.HTTPStateStopped {
+		t.Fatalf("force stop status=%+v", stopped)
 	}
 }
 
