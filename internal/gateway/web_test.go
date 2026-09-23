@@ -64,6 +64,25 @@ func TestWebManagementFirstAdminRequiresLoopbackAndCreatesSession(t *testing.T) 
 	if !strings.Contains(manageRec.Body.String(), `"result"`) {
 		t.Fatalf("management response missing result: %s", manageRec.Body.String())
 	}
+
+	setKeyReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:43137/api/web/manage", strings.NewReader(`{"method":"ConfigureGatewayAdminAPIKey","args":["1234567890abcdef"]}`))
+	setKeyReq.RemoteAddr = "127.0.0.1:55000"
+	setKeyReq.Host = "127.0.0.1:43137"
+	setKeyReq.Header.Set("Content-Type", "application/json")
+	setKeyReq.Header.Set("X-ADM-Web", "1")
+	setKeyReq.AddCookie(cookie)
+	setKeyRec := httptest.NewRecorder()
+	handler.ServeHTTP(setKeyRec, setKeyReq)
+	if setKeyRec.Code != http.StatusOK {
+		t.Fatalf("configure admin key code=%d body=%s", setKeyRec.Code, setKeyRec.Body.String())
+	}
+	accessStatus, err := service.GatewayAccessStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !accessStatus.AdminAPIKeyConfigured {
+		t.Fatal("ConfigureGatewayAdminAPIKey through Web did not persist the Admin API key")
+	}
 }
 
 func TestWebManagementRejectsRemoteFirstAdminRegistration(t *testing.T) {

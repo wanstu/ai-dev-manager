@@ -327,6 +327,11 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.management.GatewayAllowedHostsSet(hosts)
+	case "ConfigureGatewayAdminAPIKey":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.management.GatewayAdminAPIKeySet(s1)
 	case "RotateGatewayAdminAPIKey":
 		return h.management.GatewayAdminAPIKeyRotate()
 	case "RotateGatewayAgentAPIKey":

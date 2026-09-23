@@ -73,7 +73,15 @@
   adapter.SaveConnectionProfile = async () => { throw new Error('Web 管理台固定连接当前 Gateway，不需要保存连接配置'); };
   adapter.DeleteConnectionProfile = async () => { throw new Error('Web 管理台不能删除当前 Gateway 连接'); };
   adapter.DisconnectADM = async () => null;
-  adapter.ConfigureGatewayAdminAPIKey = async () => ({profiles: [profile()], active_id: 'web'});
+  adapter.ConfigureGatewayAdminAPIKey = async (apiKey) => call('ConfigureGatewayAdminAPIKey', apiKey);
+  adapter.RotateGatewayAdminAPIKey = async () => {
+    const result = await call('RotateGatewayAdminAPIKey');
+    return String(result?.admin_api_key || '').trim();
+  };
+  adapter.RotateGatewayAgentAPIKey = async () => {
+    const result = await call('RotateGatewayAgentAPIKey');
+    return String(result?.agent_api_key || '').trim();
+  };
 
   adapter.ConnectADM = async () => {
     const info = await health();
