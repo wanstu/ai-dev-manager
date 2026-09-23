@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AI Dev Manager</title>
+  <link rel="stylesheet" href="/desktopkit/tokens.css">
+  <link rel="stylesheet" href="/desktopkit/base.css">
+  <link rel="stylesheet" href="./web-auth.css">
+  <script src="/desktopkit/theme.js"></script>
+  <script src="./web-auth.js" defer></script>
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="brand">
+        <p class="eyebrow">AI DEV MANAGER</p>
+        <h1 id="authTitle">正在检查 ADM…</h1>
+        <p id="authDescription">正在读取 Web 管理状态。</p>
+      </div>
+      <div id="authBlocked" class="auth-blocked" hidden>
+        <strong>首次管理员只能从 localhost 初始化</strong>
+        <p>请在服务器本机访问，或通过 SSH 隧道把 Gateway 映射到本机后，用 localhost 打开。初始化完成后即可从允许的远程地址登录。</p>
+      </div>
+      <form id="authForm" hidden>
+        <label><span>用户名</span><input id="username" name="username" autocomplete="username" minlength="3" maxlength="64" required></label>
+        <label><span>密码</span><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required></label>
+        <button id="submitButton" type="submit">继续</button>
+      </form>
+      <p id="authMessage" class="auth-message" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+</body>
+</html>

@@ -128,8 +128,8 @@ let environmentTreeDigestReport = null;
 let environmentTreeDigestError = '';
 
 function desktopAdapter() {
-  const adapter = window.go?.desktop?.Adapter;
-  if (!adapter?.GetSnapshot) throw new Error('Wails desktop binding is not ready');
+  const adapter = window.go?.desktop?.Adapter || window.ADMWebAdapter;
+  if (!adapter?.GetSnapshot) throw new Error('ADM management adapter is not ready');
   return trackDesktopAdapter(adapter);
 }
 function safeArray(value) { return Array.isArray(value) ? value : []; }

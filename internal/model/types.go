@@ -26,6 +26,16 @@ type GatewayAccessSettings struct {
 	AgentAPIKeyHash string   `json:"agent_api_key_hash,omitempty"`
 }
 
+type WebAdminAccount struct {
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"password_hash"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type WebAccessSettings struct {
+	Admin *WebAdminAccount `json:"admin,omitempty"`
+}
+
 type EnvironmentWorkspaceOptions struct {
 	EnvironmentID          string      `json:"environment_id"`
 	CurrentWorkspaceID     string      `json:"current_workspace_id"`
@@ -181,6 +191,7 @@ type State struct {
 	ManagedWorktrees      []ManagedWorktree     `json:"managed_worktrees,omitempty"`
 	WorktreeSettings      WorktreeSettings      `json:"worktree_settings"`
 	GatewayAccess         GatewayAccessSettings `json:"gateway_access"`
+	WebAccess             WebAccessSettings     `json:"web_access,omitempty"`
 	AllowedExecutables    []string              `json:"allowed_executables,omitempty"`
 	BlockedExecutables    []string              `json:"blocked_executables,omitempty"`
 	ExecFullAuthorization bool                  `json:"exec_full_authorization,omitempty"`

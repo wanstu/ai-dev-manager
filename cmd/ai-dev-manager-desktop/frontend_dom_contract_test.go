@@ -3,49 +3,70 @@ package main
 import (
 	"io/fs"
 	"regexp"
-	"strings"
 	"testing"
 )
 
-func TestFrontendElementIDsExistInIndex(t *testing.T) {
+func TestFrontendElementIDsExistInHTMLSurface(t *testing.T) {
 	assets, err := frontendAssets()
-	if err != nil {
-		t.Fatal(err)
-	}
-	index, err := fs.ReadFile(assets, "index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	htmlIDPattern := regexp.MustCompile("\\bid=[\"']([^\"']+)[\"']")
-	htmlIDs := make(map[string]struct{})
-	for _, match := range htmlIDPattern.FindAllSubmatch(index, -1) {
-		id := string(match[1])
-		if _, exists := htmlIDs[id]; exists {
-			t.Errorf("desktop index contains duplicate element id %q", id)
-			continue
+	jsIDPattern := regexp.MustCompile("getElementById\\(\\s*[\"']([^\"']+)[\"']\\s*\\)")
+	assignedIDPattern := regexp.MustCompile("\\.id\\s*=\\s*[\"']([^\"']+)[\"']")
+
+	loadIDs := func(name string) map[string]struct{} {
+		data, err := fs.ReadFile(assets, name)
+		if err != nil {
+			t.Fatal(err)
 		}
-		htmlIDs[id] = struct{}{}
+		ids := make(map[string]struct{})
+		for _, match := range htmlIDPattern.FindAllSubmatch(data, -1) {
+			id := string(match[1])
+			if _, exists := ids[id]; exists {
+				t.Errorf("%s contains duplicate element id %q", name, id)
+				continue
+			}
+			ids[id] = struct{}{}
+		}
+		return ids
 	}
 
-	jsIDPattern := regexp.MustCompile("getElementById\\(\\s*[\"']([^\"']+)[\"']\\s*\\)")
+	surfaces := map[string]map[string]struct{}{
+		"index.html":    loadIDs("index.html"),
+		"web-auth.html": loadIDs("web-auth.html"),
+	}
+
 	entries, err := fs.ReadDir(assets, ".")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".js") {
+		if entry.IsDir() || len(entry.Name()) < 3 || entry.Name()[len(entry.Name())-3:] != ".js" {
 			continue
+		}
+		target := "index.html"
+		if entry.Name() == "web-auth.js" {
+			target = "web-auth.html"
 		}
 		data, err := fs.ReadFile(assets, entry.Name())
 		if err != nil {
 			t.Fatal(err)
 		}
+		dynamicIDs := make(map[string]struct{})
+		for _, match := range assignedIDPattern.FindAllSubmatch(data, -1) {
+			dynamicIDs[string(match[1])] = struct{}{}
+		}
 		for _, match := range jsIDPattern.FindAllSubmatch(data, -1) {
 			id := string(match[1])
-			if _, ok := htmlIDs[id]; !ok {
-				t.Errorf("%s references missing HTML element id %q", entry.Name(), id)
+			if _, ok := surfaces[target][id]; ok {
+				continue
 			}
+			if _, ok := dynamicIDs[id]; ok {
+				continue
+			}
+			t.Errorf("%s references missing %s element id %q", entry.Name(), target, id)
 		}
 	}
 }

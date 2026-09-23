@@ -1709,6 +1709,7 @@ func newHTTPHandlerWithShutdown(service *app.Service, owner *runtimeOwner, shutd
 		w.WriteHeader(http.StatusAccepted)
 		go shutdown()
 	})
+	mux.Handle("/", newWebManagementHandler(service, owner))
 	return mux
 }
 

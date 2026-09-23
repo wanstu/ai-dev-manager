@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"embed"
+	_ "embed"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"syscall"
 
+	desktopfrontend "ai-dev-manager-v2/cmd/ai-dev-manager-desktop/frontend"
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/desktop"
 	"ai-dev-manager-v2/internal/dotenv"
@@ -21,9 +22,6 @@ import (
 	desktopkit "github.com/wanstu/wails-desktop-kit"
 	kitui "github.com/wanstu/wails-desktop-kit/ui"
 )
-
-//go:embed all:frontend
-var embeddedFrontend embed.FS
 
 //go:embed assets/tray.png
 var trayIcon []byte
@@ -122,5 +120,5 @@ func desktopHidePolicy(goos string) desktopkit.HidePolicy {
 }
 
 func frontendAssets() (fs.FS, error) {
-	return fs.Sub(embeddedFrontend, "frontend")
+	return desktopfrontend.Assets()
 }
