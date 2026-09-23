@@ -220,7 +220,13 @@ func TestDesktopFrontendDoesNotCallAdminMCPDirectly(t *testing.T) {
 		if walkErr != nil {
 			return walkErr
 		}
-		if info.IsDir() || !strings.HasSuffix(strings.ToLower(info.Name()), ".js") {
+		name := strings.ToLower(info.Name())
+		if info.IsDir() || !strings.HasSuffix(name, ".js") {
+			return nil
+		}
+		// web-*.js is an explicit browser-only surface. The shared/Desktop
+		// frontend must still route management calls through the Wails adapter.
+		if strings.HasPrefix(name, "web-") {
 			return nil
 		}
 		data, readErr := os.ReadFile(path)
