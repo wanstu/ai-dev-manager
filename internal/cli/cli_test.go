@@ -1108,6 +1108,34 @@ func TestDoctorRunsWithoutArguments(t *testing.T) {
 	}
 }
 
+func TestDoctorAcceptsListenOverride(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"name":"adm","version":"doctor-test","management_api_version":1,"status":"ok","pid":43210,"transport":"http"}`)
+	}))
+	defer server.Close()
+	listen := strings.TrimPrefix(server.URL, "http://")
+
+	for _, args := range [][]string{{"--listen", listen}, {"--listen=" + listen}} {
+		statePath := filepath.Join(t.TempDir(), "state.json")
+		service := app.New(statePath)
+		output := captureStdout(t, func() {
+			if err := runDoctor(service, statePath, args); err != nil {
+				t.Fatal(err)
+			}
+		})
+		for _, required := range []string{"Gateway 状态", "当前 CLI state.json 数据", server.URL, "doctor-test", statePath} {
+			if !strings.Contains(output, required) {
+				t.Fatalf("doctor --listen output missing %q:\n%s", required, output)
+			}
+		}
+	}
+}
+
 func TestGatewayStatusReportsRunningGatewayDetails(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/healthz" {

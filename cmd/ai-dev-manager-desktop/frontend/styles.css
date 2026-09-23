@@ -372,6 +372,15 @@ body.has-editor-dialog { overflow: hidden; }
 .page-heading p { margin: 5px 0 0; color: #6b7280; font-size: 12px; }
 .overview-page { display: grid; gap: 14px; }
 .overview-page .metrics { margin-bottom: 0; }
+.overview-data-source { display: grid; gap: 10px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; }
+.overview-data-source-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.overview-data-source-heading h3 { margin: 2px 0 0; font-size: 15px; }
+.overview-data-source-heading .eyebrow { margin: 0; }
+.overview-data-source-note { margin: 0; color: #6b7280; font-size: 12px; line-height: 1.6; }
+.overview-data-source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.overview-data-source-grid > div { min-width: 0; display: grid; gap: 4px; padding: 10px 11px; border: 1px solid #e5e7eb; border-radius: 10px; }
+.overview-data-source-grid span { color: #6b7280; font-size: 11px; }
+.overview-data-source-grid code, .overview-data-source-grid strong { min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
 .overview-data-state { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; min-width: 0; padding: 11px 13px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; color: #6b7280; font-size: 12px; }
 .overview-data-state strong { color: #374151; font-size: 12px; }
 .overview-data-state > span:last-child { min-width: 0; flex: 1 1 280px; overflow-wrap: anywhere; }
@@ -619,6 +628,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .management-sidebar,
 .metric,
 .overview-data-state,
+.overview-data-source,
+.overview-data-source-grid > div,
 .editor-dialog,
 .dialog-heading,
 .credential-card,
@@ -636,6 +647,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .editor-dialog { border-radius: var(--dk-radius-lg); }
 .metric,
 .overview-data-state,
+.overview-data-source,
+.overview-data-source-grid > div,
 .credential-card,
 .auth-usage-card,
 .config-source-card,
@@ -654,6 +667,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .item-content small,
 .runtime-item small,
 .overview-data-state,
+.overview-data-source,
+.overview-data-source-grid > div,
 .auth-usage-grid small,
 .credential-heading small,
 .config-source-card span {

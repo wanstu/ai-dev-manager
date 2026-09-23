@@ -46,6 +46,25 @@ func TestDesktopKitTrayKeepsTwoExplicitLifecycleChoices(t *testing.T) {
 	}
 }
 
+func TestRemoteConnectionDoesNotBlockDesktopQuitDecision(t *testing.T) {
+	profile := desktop.ConnectionProfile{ID: "remote", BaseURL: "http://112.124.57.12:8001"}
+	status := desktop.ADMConnectionStatus{
+		State:                  "running",
+		BaseURL:                profile.BaseURL,
+		LocalBootstrapEligible: false,
+	}
+	if shouldStopActiveLocalBackground(profile, status) {
+		t.Fatal("remote connection must not be treated as a local background service that Desktop must stop before quitting")
+	}
+
+	local := desktop.ConnectionProfile{ID: "local", BaseURL: "http://127.0.0.1:43137"}
+	status.BaseURL = local.BaseURL
+	status.LocalBootstrapEligible = true
+	if !shouldStopActiveLocalBackground(local, status) {
+		t.Fatal("running Desktop-managed local ADM should still be stopped before quitting")
+	}
+}
+
 func TestStopAndExitUsesOnlySafeLocalADMPath(t *testing.T) {
 	source, err := os.ReadFile("desktop_runtime.go")
 	if err != nil {
@@ -53,8 +72,8 @@ func TestStopAndExitUsesOnlySafeLocalADMPath(t *testing.T) {
 	}
 	text := string(source)
 	for _, required := range []string{
-		`status.State != "running"`,
-		`!status.LocalBootstrapEligible`,
+		`shouldStopActiveLocalBackground(profile, status)`,
+		`status.LocalBootstrapEligible`,
 		`desktop.ADMConnectionInput{BaseURL: profile.BaseURL}`,
 		`Desktop 保持运行，后台服务没有被强制终止`,
 	} {

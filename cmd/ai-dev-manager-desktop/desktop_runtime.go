@@ -104,12 +104,8 @@ func quitAndStopLocalBackground(controller *desktopkit.Controller, adapter *desk
 		showTrayStopBlocked(controller, "无法安全确认当前后台服务状态；未停止任何服务。\n\n"+err.Error())
 		return
 	}
-	if status.State != "running" {
+	if !shouldStopActiveLocalBackground(profile, status) {
 		controller.Quit()
-		return
-	}
-	if profile.ID == "" || profile.BaseURL == "" || !status.LocalBootstrapEligible {
-		showTrayStopBlocked(controller, "当前活动连接不是 Desktop 可安全停止的本地 loopback ADM；未停止任何服务。")
 		return
 	}
 	if _, err := adapter.StopLocalADM(desktop.ADMConnectionInput{BaseURL: profile.BaseURL}); err != nil {
@@ -117,6 +113,13 @@ func quitAndStopLocalBackground(controller *desktopkit.Controller, adapter *desk
 		return
 	}
 	controller.Quit()
+}
+
+func shouldStopActiveLocalBackground(profile desktop.ConnectionProfile, status desktop.ADMConnectionStatus) bool {
+	return status.State == "running" &&
+		profile.ID != "" &&
+		profile.BaseURL != "" &&
+		status.LocalBootstrapEligible
 }
 
 func showTrayStopBlocked(controller *desktopkit.Controller, message string) {

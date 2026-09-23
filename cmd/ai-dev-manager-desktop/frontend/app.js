@@ -4,6 +4,7 @@ const elements = {
   worktreeSettingsForm: document.getElementById('worktreeSettingsForm'), worktreeRoot: document.getElementById('worktreeRoot'), worktreeBranchPrefix: document.getElementById('worktreeBranchPrefix'), worktreeSettingsSaveButton: document.getElementById('worktreeSettingsSaveButton'), worktreeSettingsHint: document.getElementById('worktreeSettingsHint'), hostEnvironmentSummary: document.getElementById('hostEnvironmentSummary'), hostEnvironmentRefreshButton: document.getElementById('hostEnvironmentRefreshButton'), loggingStatusSummary: document.getElementById('loggingStatusSummary'),
   statusPanel: document.getElementById('statusPanel'),
   dashboardDataState: document.getElementById('dashboardDataState'), dashboardLastSuccess: document.getElementById('dashboardLastSuccess'), dashboardDataDetail: document.getElementById('dashboardDataDetail'),
+  dataSourceState: document.getElementById('dataSourceState'), dataSourceConnection: document.getElementById('dataSourceConnection'), dataSourceStatePath: document.getElementById('dataSourceStatePath'), dataSourceUser: document.getElementById('dataSourceUser'), dataSourceGateway: document.getElementById('dataSourceGateway'),
   gatewayState: document.getElementById('gatewayState'),
   gatewayBaseURL: document.getElementById('gatewayBaseURL'),
   gatewayHealthURL: document.getElementById('gatewayHealthURL'),
@@ -699,6 +700,25 @@ function gatewayDiagnosticSuggestedActions(diagnostics) {
   return actions;
 }
 
+function renderDataSourceSummary() {
+  const status = gatewayConnectionStatus || {};
+  const diagnostics = gatewayDiagnostics || {};
+  const service = diagnostics?.service || {};
+  const connection = status?.base_url || currentADMBaseURL() || '—';
+  const statePath = diagnostics?.state_path || service?.state_path || '—';
+  const user = diagnostics?.process_user || service?.user || '—';
+  const gatewayParts = [];
+  if (status?.version) gatewayParts.push(status.version);
+  if (status?.management_api_version != null) gatewayParts.push('Management API ' + status.management_api_version);
+  elements.dataSourceConnection.textContent = connection;
+  elements.dataSourceStatePath.textContent = statePath;
+  elements.dataSourceUser.textContent = user;
+  elements.dataSourceGateway.textContent = gatewayParts.join(' / ') || '—';
+  const running = status?.state === 'running';
+  elements.dataSourceState.dataset.state = running ? 'success' : (status?.state ? 'stale' : 'unloaded');
+  elements.dataSourceState.textContent = running ? '已连接' : (status?.state ? '未连接' : '未读取');
+}
+
 function renderGatewayDiagnostics(diagnostics) {
   gatewayDiagnostics = diagnostics || null;
   const service = diagnostics?.service || {};
@@ -733,6 +753,7 @@ function renderGatewayDiagnostics(diagnostics) {
     : '运行时信息来自当前 ADM 服务进程；systemd 元数据仅 Linux 可用。');
   elements.gatewayDiagnosticServiceDetail.textContent = detail || '—';
   elements.gatewayDiagnosticsCopyButton.disabled = !diagnostics;
+  renderDataSourceSummary();
 }
 async function refreshGatewayDiagnostics() {
   try {
@@ -907,6 +928,7 @@ function renderGatewayStatus(status) {
   elements.gatewayStartButton.disabled = !localEligible || state === 'running' || state === 'incompatible';
   elements.gatewayStopButton.disabled = !recognized || state === 'stopped' || state === 'unknown';
   if (elements.gatewayDiagnosticListen) elements.gatewayDiagnosticListen.textContent = status?.listen || gatewayDiagnostics?.service?.listen || '—';
+  renderDataSourceSummary();
 
 }
 async function refreshGatewayStatus(showMessage = false) {

@@ -35,16 +35,16 @@
     <div class="management-layout">
       <nav class="management-sidebar" aria-label="管理导航">
         <div class="nav-group"><span class="nav-group-label">总览</span><a class="nav-link" href="#/overview" data-route-link="overview">概览</a></div>
-        <div class="nav-group"><span class="nav-group-label">开发</span><a class="nav-link" href="#/workspaces" data-route-link="workspaces">Workspaces</a><a class="nav-link" href="#/environments" data-route-link="environments">Environments</a><a class="nav-link" href="#/runtime" data-route-link="runtime">Runtime</a></div>
+        <div class="nav-group"><span class="nav-group-label">开发</span><a class="nav-link" href="#/workspaces" data-route-link="workspaces">工作区</a><a class="nav-link" href="#/environments" data-route-link="environments">环境</a><a class="nav-link" href="#/runtime" data-route-link="runtime">运行</a></div>
         <div class="nav-group"><span class="nav-group-label">能力</span><a class="nav-link" href="#/mcp" data-route-link="mcp">MCP</a><a class="nav-link" href="#/skills" data-route-link="skills">Skills</a><a class="nav-link" href="#/memory" data-route-link="memory">Memory</a></div>
-        <div class="nav-group"><span class="nav-group-label">系统</span><a class="nav-link" href="#/gateway" data-route-link="gateway">ADM 连接</a><a class="nav-link" href="#/exec-allowlist" data-route-link="exec-allowlist">执行许可</a><a class="nav-link" href="#/diagnostics" data-route-link="diagnostics">环境诊断</a><a class="nav-link" href="#/settings" data-route-link="settings">设置</a><a class="nav-link" href="#/about" data-route-link="about">关于</a></div>
+        <div class="nav-group"><span class="nav-group-label">系统</span><a class="nav-link" href="#/gateway" data-route-link="gateway">ADM 连接</a><a class="nav-link" href="#/exec-allowlist" data-route-link="exec-allowlist">执行权限</a><a class="nav-link" href="#/diagnostics" data-route-link="diagnostics">环境诊断</a><a class="nav-link" href="#/settings" data-route-link="settings">设置</a><a class="nav-link" href="#/about" data-route-link="about">关于</a></div>
       </nav>
       <div class="management-content" id="managementContent">
     <section id="managementContextPanel" class="panel management-context persistent-context">
       <div>
         <p class="eyebrow">MANAGEMENT CONTEXT</p>
-        <h2>当前 Environment</h2>
-        <p>全局定义与当前 Environment 的启用状态分开管理。切换这里不会修改任何选择。</p>
+        <h2>当前工作环境</h2>
+        <p>当前工作环境只决定运行、MCP、Skill、Memory 与诊断的作用域；不会过滤工作区/环境列表，也不会切换 Git 分支。</p>
       </div>
       <div class="management-context-controls">
         <label class="context-select"><span>Workspace</span><select id="managementWorkspace"><option value="">未选择 Workspace</option></select></label>
@@ -156,9 +156,22 @@
         <strong id="dashboardLastSuccess">尚无成功快照</strong>
         <span id="dashboardDataDetail">选择并连接 ADM 后读取管理数据。</span>
       </div>
+      <section class="overview-data-source" aria-label="当前数据来源">
+        <div class="overview-data-source-heading">
+          <div><p class="eyebrow">DATA SOURCE</p><h3>当前数据来源</h3></div>
+          <span id="dataSourceState" class="state-badge" data-state="unloaded">未读取</span>
+        </div>
+        <p class="overview-data-source-note">当前工作区、环境和执行配置来自这个 Gateway 使用的 state，而不是 Desktop 本机或当前 shell 中另一套 ADM state。</p>
+        <div class="overview-data-source-grid">
+          <div><span>管理连接</span><code id="dataSourceConnection">—</code></div>
+          <div><span>Gateway State</span><code id="dataSourceStatePath">—</code></div>
+          <div><span>运行用户</span><strong id="dataSourceUser">—</strong></div>
+          <div><span>Gateway</span><strong id="dataSourceGateway">—</strong></div>
+        </div>
+      </section>
       <div class="metrics" aria-label="ADM 状态统计">
-        <a class="metric metric-link" href="#/workspaces" data-route-link="workspaces"><span>Workspaces</span><strong id="workspaceCount">—</strong></a>
-        <a class="metric metric-link" href="#/environments" data-route-link="environments"><span>Environments</span><strong id="environmentCount">—</strong></a>
+        <a class="metric metric-link" href="#/workspaces" data-route-link="workspaces"><span>工作区</span><strong id="workspaceCount">—</strong></a>
+        <a class="metric metric-link" href="#/environments" data-route-link="environments"><span>环境</span><strong id="environmentCount">—</strong></a>
         <a class="metric metric-link" href="#/exec-allowlist" data-route-link="exec-allowlist"><span>Exec allowlist</span><strong id="execCount">—</strong></a>
         <a class="metric metric-link" href="#/mcp" data-route-link="mcp"><span>MCP definitions</span><strong id="mcpCount">—</strong></a>
         <a class="metric metric-link" href="#/skills" data-route-link="skills"><span>Skills</span><strong id="skillCount">—</strong></a>

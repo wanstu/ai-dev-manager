@@ -1944,14 +1944,23 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 }
 
 func runDoctor(service *app.Service, statePath string, args []string) error {
-	if len(args) == 1 && (args[0] == "-h" || args[0] == "--help" || args[0] == "help") {
-		fmt.Fprintln(os.Stdout, "用法：adm doctor")
-		fmt.Fprintln(os.Stdout, "\n一次查看当前 ADM 程序、状态文件、Gateway、Workspace、Environment、Writer 和执行白名单。")
-		return nil
+	fs := newFlagSet("doctor", func() {
+		fmt.Fprintln(os.Stdout, "用法：adm doctor [--listen HOST:PORT]")
+		fmt.Fprintln(os.Stdout, "\n一次查看当前 ADM 程序、本机 CLI state.json 数据，以及指定 Gateway 的运行状态。")
+		fmt.Fprintln(os.Stdout, "--listen 只决定检查哪个 Gateway，不会切换 Workspace / Environment 的数据来源。")
+	})
+	listen := fs.String("listen", defaultGatewayListen, "要检查的 Gateway 监听地址")
+	if err := fs.Parse(args); err != nil {
+		return flagError(err)
 	}
-	if len(args) != 0 {
-		return fmt.Errorf("doctor 不接受参数")
+	if fs.NArg() != 0 {
+		return fmt.Errorf("doctor 不接受位置参数")
 	}
+	baseURL, err := gatewayBaseURL(*listen)
+	if err != nil {
+		return err
+	}
+	mcpURL := strings.TrimRight(baseURL, "/") + "/mcp"
 
 	workspaces, err := service.Workspaces.List()
 	if err != nil {
@@ -1972,30 +1981,33 @@ func runDoctor(service *app.Service, statePath string, args []string) error {
 
 	fmt.Println("ADM V2 诊断")
 	fmt.Println("当前程序：", executable)
-	fmt.Println("状态文件：", statePath)
+	fmt.Println()
+	fmt.Println("当前 CLI state.json 数据")
+	fmt.Println("  状态文件：", statePath)
 	printGatewayIdentity(0)
 	fmt.Println()
 	printDotenvDiagnostics()
 	fmt.Println()
 
-	health, running, healthErr := fetchGatewayHealth(defaultGatewayListen)
-	fmt.Println("Gateway")
+	health, running, healthErr := fetchGatewayHealth(*listen)
+	fmt.Println("Gateway 状态")
+	fmt.Println("  检查目标：", baseURL)
 	switch {
 	case healthErr != nil:
 		var incompatible *incompatibleGatewayError
 		if errors.As(healthErr, &incompatible) {
 			fmt.Println("  状态：    版本不兼容")
-			fmt.Println("  MCP 地址：http://127.0.0.1:43137/mcp")
+			fmt.Println("  MCP 地址：", mcpURL)
 			fmt.Println("  详情：   ", incompatible)
 			fmt.Println("  处理：    adm gateway restart")
 		} else {
 			fmt.Println("  状态：    未知")
-			fmt.Println("  MCP 地址：http://127.0.0.1:43137/mcp")
+			fmt.Println("  MCP 地址：", mcpURL)
 			fmt.Println("  详情：   ", healthErr)
 		}
 	case running:
 		fmt.Println("  状态：    运行中")
-		fmt.Println("  MCP 地址：http://127.0.0.1:43137/mcp")
+		fmt.Println("  MCP 地址：", mcpURL)
 		if health.PID > 0 {
 			fmt.Println("  PID：    ", health.PID)
 		} else {
@@ -2007,7 +2019,7 @@ func runDoctor(service *app.Service, statePath string, args []string) error {
 		}
 	default:
 		fmt.Println("  状态：    已停止")
-		fmt.Println("  MCP 地址：http://127.0.0.1:43137/mcp")
+		fmt.Println("  MCP 地址：", mcpURL)
 		fmt.Println("  启动：    adm gateway start")
 	}
 	fmt.Println()
