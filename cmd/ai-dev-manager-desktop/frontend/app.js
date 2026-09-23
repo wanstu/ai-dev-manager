@@ -38,9 +38,10 @@ const elements = {
   skillFilter: document.getElementById('skillFilter'), skillSourceFilter: document.getElementById('skillSourceFilter'), skillStateFilter: document.getElementById('skillStateFilter'), skillSourceFilterInput: document.getElementById('skillSourceFilterInput'), skillSourceVisibleCount: document.getElementById('skillSourceVisibleCount'), skillSourceListTotalCount: document.getElementById('skillSourceListTotalCount'), skillVisibleCount: document.getElementById('skillVisibleCount'), skillListTotalCount: document.getElementById('skillListTotalCount'),
   skillProbeAllButton: document.getElementById('skillProbeAllButton'), skillSelectVisibleButton: document.getElementById('skillSelectVisibleButton'), skillClearSelectionButton: document.getElementById('skillClearSelectionButton'), skillSetVisibleDefaultButton: document.getElementById('skillSetVisibleDefaultButton'), skillUnsetVisibleDefaultButton: document.getElementById('skillUnsetVisibleDefaultButton'), skillEnableVisibleButton: document.getElementById('skillEnableVisibleButton'), skillDisableVisibleButton: document.getElementById('skillDisableVisibleButton'), skillSelectedCount: document.getElementById('skillSelectedCount'), skillAssignEnvironmentsButton: document.getElementById('skillAssignEnvironmentsButton'), skillClearMissingButton: document.getElementById('skillClearMissingButton'), skillDeleteSelectedButton: document.getElementById('skillDeleteSelectedButton'), skillClearUnavailableButton: document.getElementById('skillClearUnavailableButton'), skillBulkHint: document.getElementById('skillBulkHint'),
   capabilityAssignmentDialog: document.getElementById('capabilityAssignmentDialog'), capabilityAssignmentSummary: document.getElementById('capabilityAssignmentSummary'), capabilityAssignmentSelectAllButton: document.getElementById('capabilityAssignmentSelectAllButton'), capabilityAssignmentClearButton: document.getElementById('capabilityAssignmentClearButton'), capabilityAssignmentEnvironmentList: document.getElementById('capabilityAssignmentEnvironmentList'), capabilityAssignmentEnableButton: document.getElementById('capabilityAssignmentEnableButton'), capabilityAssignmentDisableButton: document.getElementById('capabilityAssignmentDisableButton'), capabilityAssignmentResult: document.getElementById('capabilityAssignmentResult'),
-  workspaceForm: document.getElementById('workspaceForm'), workspacePath: document.getElementById('workspacePath'), workspaceName: document.getElementById('workspaceName'), workspaceList: document.getElementById('workspaceList'), workspaceFilter: document.getElementById('workspaceFilter'), workspaceVisibleCount: document.getElementById('workspaceVisibleCount'), workspaceListTotalCount: document.getElementById('workspaceListTotalCount'),
+  workspaceForm: document.getElementById('workspaceForm'), workspacePath: document.getElementById('workspacePath'), workspaceName: document.getElementById('workspaceName'), workspaceBrowseButton: document.getElementById('workspaceBrowseButton'), workspaceList: document.getElementById('workspaceList'), workspaceFilter: document.getElementById('workspaceFilter'), workspaceVisibleCount: document.getElementById('workspaceVisibleCount'), workspaceListTotalCount: document.getElementById('workspaceListTotalCount'),
   workspaceDiscoveryDialog: document.getElementById('workspaceDiscoveryDialog'), workspaceDiscoveryTitle: document.getElementById('workspaceDiscoveryTitle'), workspaceDiscoveryForm: document.getElementById('workspaceDiscoveryForm'), workspaceDiscoveryPath: document.getElementById('workspaceDiscoveryPath'), workspaceDiscoveryQuery: document.getElementById('workspaceDiscoveryQuery'), workspaceDiscoveryMaxDepth: document.getElementById('workspaceDiscoveryMaxDepth'), workspaceDiscoveryMaxEntries: document.getElementById('workspaceDiscoveryMaxEntries'), workspaceDiscoveryMaxCandidates: document.getElementById('workspaceDiscoveryMaxCandidates'), workspaceDiscoveryMaxDigestEntries: document.getElementById('workspaceDiscoveryMaxDigestEntries'), workspaceDiscoveryMaxOutputBytes: document.getElementById('workspaceDiscoveryMaxOutputBytes'), workspaceDiscoveryScanButton: document.getElementById('workspaceDiscoveryScanButton'), workspaceDiscoveryFilter: document.getElementById('workspaceDiscoveryFilter'), workspaceDiscoverySummary: document.getElementById('workspaceDiscoverySummary'), workspaceDiscoveryResult: document.getElementById('workspaceDiscoveryResult'),
-  environmentForm: document.getElementById('environmentForm'), environmentWorkspace: document.getElementById('environmentWorkspace'), environmentName: document.getElementById('environmentName'), environmentRoot: document.getElementById('environmentRoot'), environmentList: document.getElementById('environmentList'), environmentFilter: document.getElementById('environmentFilter'), environmentWorkspaceFilter: document.getElementById('environmentWorkspaceFilter'), environmentVisibleCount: document.getElementById('environmentVisibleCount'), environmentListTotalCount: document.getElementById('environmentListTotalCount'), environmentFilterHint: document.getElementById('environmentFilterHint'),
+  environmentForm: document.getElementById('environmentForm'), environmentWorkspace: document.getElementById('environmentWorkspace'), environmentName: document.getElementById('environmentName'), environmentRoot: document.getElementById('environmentRoot'), environmentBrowseButton: document.getElementById('environmentBrowseButton'), environmentList: document.getElementById('environmentList'), environmentFilter: document.getElementById('environmentFilter'), environmentWorkspaceFilter: document.getElementById('environmentWorkspaceFilter'), environmentVisibleCount: document.getElementById('environmentVisibleCount'), environmentListTotalCount: document.getElementById('environmentListTotalCount'), environmentFilterHint: document.getElementById('environmentFilterHint'),
+  hostDirectoryDialog: document.getElementById('hostDirectoryDialog'), hostDirectoryRootsButton: document.getElementById('hostDirectoryRootsButton'), hostDirectoryParentButton: document.getElementById('hostDirectoryParentButton'), hostDirectoryRefreshButton: document.getElementById('hostDirectoryRefreshButton'), hostDirectoryCurrentPath: document.getElementById('hostDirectoryCurrentPath'), hostDirectoryList: document.getElementById('hostDirectoryList'), hostDirectoryHint: document.getElementById('hostDirectoryHint'), hostDirectorySelectButton: document.getElementById('hostDirectorySelectButton'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
   environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
   environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'),
@@ -113,6 +114,9 @@ let workspaceDiscoveryLoading = false;
 let workspaceDiscoveryReport = null;
 let workspaceDiscoveryError = '';
 let workspaceDiscoveryFingerprint = '';
+let hostDirectoryTargetInput = null;
+let hostDirectoryCurrentListing = null;
+let hostDirectoryLoading = false;
 let environmentWorkspaceEnvironmentID = '';
 let environmentWorkspaceOptions = null;
 let environmentWorkspaceGeneration = 0;
@@ -162,6 +166,71 @@ function environmentRootForCreate(workspaceID, root) {
   const value = String(root || '').trim(); if (!value || /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('/')) return value;
   const workspace = safeArray(currentSnapshot?.workspaces).find((item) => item.workspace_id === workspaceID);
   return workspace ? absoluteCandidateRoot(workspace, value) : value;
+}
+function hostDirectoryStartPath(input) {
+  const typed = String(input?.value || '').trim();
+  if (typed) return typed;
+  if (input === elements.environmentRoot) {
+    const workspace = safeArray(currentSnapshot?.workspaces).find((item) => item.workspace_id === elements.environmentWorkspace.value);
+    return workspace?.path || '';
+  }
+  return '';
+}
+function renderHostDirectoryListing(listing) {
+  hostDirectoryCurrentListing = listing || null;
+  const currentPath = String(listing?.path || '').trim();
+  const parentPath = String(listing?.parent || '').trim();
+  const directories = safeArray(listing?.directories);
+  elements.hostDirectoryCurrentPath.textContent = currentPath || '文件系统根目录';
+  elements.hostDirectoryParentButton.disabled = hostDirectoryLoading || !parentPath;
+  elements.hostDirectorySelectButton.disabled = hostDirectoryLoading || !currentPath;
+  elements.hostDirectoryList.replaceChildren();
+  if (!directories.length) {
+    emptyMessage(elements.hostDirectoryList, currentPath ? '当前目录没有可进入的子目录。' : '没有发现可浏览的文件系统根目录。');
+  } else {
+    elements.hostDirectoryList.classList.remove('empty');
+    for (const entry of directories) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'secondary-button host-directory-entry';
+      button.dataset.path = entry?.path || '';
+      button.textContent = entry?.name || entry?.path || '目录';
+      elements.hostDirectoryList.append(button);
+    }
+  }
+  elements.hostDirectoryHint.textContent = listing?.truncated
+    ? '目录较多，仅显示前 500 个目录。这里显示的是当前 ADM Gateway 所在主机的目录。'
+    : '这里显示的是当前 ADM Gateway 所在主机的目录，不是浏览器或 Desktop 所在电脑的目录。';
+}
+async function loadHostDirectory(path) {
+  if (hostDirectoryLoading) return;
+  hostDirectoryLoading = true;
+  elements.hostDirectoryRootsButton.disabled = true;
+  elements.hostDirectoryParentButton.disabled = true;
+  elements.hostDirectoryRefreshButton.disabled = true;
+  elements.hostDirectorySelectButton.disabled = true;
+  emptyMessage(elements.hostDirectoryList, '正在读取 ADM 主机目录…');
+  try {
+    const listing = await desktopAdapter().BrowseHostDirectories(String(path || '').trim());
+    renderHostDirectoryListing(listing);
+  } catch (error) {
+    hostDirectoryCurrentListing = null;
+    elements.hostDirectoryCurrentPath.textContent = String(path || '').trim() || '文件系统根目录';
+    emptyMessage(elements.hostDirectoryList, '目录读取失败：' + errorText(error));
+    elements.hostDirectoryHint.textContent = '可以返回根目录后重新选择。';
+  } finally {
+    hostDirectoryLoading = false;
+    elements.hostDirectoryRootsButton.disabled = false;
+    elements.hostDirectoryRefreshButton.disabled = false;
+    elements.hostDirectoryParentButton.disabled = !String(hostDirectoryCurrentListing?.parent || '').trim();
+    elements.hostDirectorySelectButton.disabled = !String(hostDirectoryCurrentListing?.path || '').trim();
+  }
+}
+async function openHostDirectoryPicker(input) {
+  hostDirectoryTargetInput = input || null;
+  hostDirectoryCurrentListing = null;
+  openEditorDialog('hostDirectoryDialog');
+  await loadHostDirectory(hostDirectoryStartPath(input));
 }
 function matchingCandidateEnvironments(workspace, candidate) {
   const target = normalizeFilesystemKey(absoluteCandidateRoot(workspace, candidate?.suggested_environment_root || candidate?.root));
@@ -2909,6 +2978,31 @@ elements.skillList.addEventListener('change', async (event) => {
 });
 elements.skillList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="remove-skill"]'); if (!button) return; if (window.confirm(`删除这个全局 Skill 条目？删除时会同时从所有 Workspace / Environment 选择中清除这个 Skill ID。Source-managed Skill 应通过 Source 管理。\n${button.dataset.id}`)) await runMutation('删除 Skill 条目', () => desktopAdapter().RemoveSkill(button.dataset.id)); });
 
+elements.workspaceBrowseButton.addEventListener('click', () => openHostDirectoryPicker(elements.workspacePath));
+elements.environmentBrowseButton.addEventListener('click', () => openHostDirectoryPicker(elements.environmentRoot));
+elements.hostDirectoryRootsButton.addEventListener('click', () => loadHostDirectory(''));
+elements.hostDirectoryParentButton.addEventListener('click', () => {
+  const parent = String(hostDirectoryCurrentListing?.parent || '').trim();
+  if (parent) loadHostDirectory(parent);
+});
+elements.hostDirectoryRefreshButton.addEventListener('click', () => loadHostDirectory(hostDirectoryCurrentListing?.path || ''));
+elements.hostDirectoryList.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-path]');
+  if (button?.dataset.path) loadHostDirectory(button.dataset.path);
+});
+elements.hostDirectorySelectButton.addEventListener('click', () => {
+  const path = String(hostDirectoryCurrentListing?.path || '').trim();
+  const target = hostDirectoryTargetInput;
+  if (!path || !target) return;
+  target.value = path;
+  elements.hostDirectoryDialog.close();
+  target.focus({preventScroll: true});
+});
+elements.hostDirectoryDialog.addEventListener('close', () => {
+  hostDirectoryTargetInput = null;
+  hostDirectoryCurrentListing = null;
+  hostDirectoryLoading = false;
+});
 elements.workspaceForm.addEventListener('submit', async (event) => { event.preventDefault(); const path = elements.workspacePath.value.trim(), name = elements.workspaceName.value.trim(); if (path) { const requestConnectionGeneration = connectionGeneration; let createdWorkspace = null; await runMutation('添加 Workspace', async () => { createdWorkspace = await desktopAdapter().AddWorkspace({path, name}); elements.workspaceForm.reset(); closeFormDialog(elements.workspaceForm); }, async () => promptWorkspaceRecommendationsAfterWorkspaceAdd(createdWorkspace, requestConnectionGeneration)); } });
 elements.workspaceDiscoveryForm.addEventListener('submit', async (event) => { event.preventDefault(); await scanWorkspaceDiscovery(); });
 elements.workspaceDiscoveryFilter.addEventListener('input', () => { if (workspaceDiscoveryReport && !workspaceDiscoveryLoading) renderWorkspaceDiscovery(); });

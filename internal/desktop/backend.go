@@ -22,6 +22,7 @@ type managementBackend interface {
 	HostEnvironmentRefresh() (hostenv.Status, error)
 	WorkspaceInspect(string) (model.Workspace, error)
 	WorkspaceDiscover(string, model.DiscoveryRequest) (model.DiscoveryReport, error)
+	HostDirectoryList(string) (management.HostDirectoryListing, error)
 	WorkspaceAdd(string, string) (model.Workspace, error)
 	WorkspaceRename(string, string) (model.Workspace, error)
 	WorkspaceRemove(string) (model.Workspace, error)

@@ -48,6 +48,10 @@ type WorkspaceAddInput struct {
 	Name string `json:"name,omitempty"`
 }
 
+type HostDirectoryListInput struct {
+	Path string `json:"path,omitempty"`
+}
+
 type WorkspaceInput struct {
 	WorkspaceID string `json:"workspace_id"`
 }
@@ -453,7 +457,7 @@ func addScopedTool[In, Out any](server *mcp.Server, surface serverSurface, tool 
 
 func isAdminOnlyTool(name string) bool {
 	switch name {
-	case "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh",
+	case "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
 		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
@@ -644,6 +648,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				return nil, ResourceRetentionUpdateOutput{}, err
 			}
 			return nil, result, nil
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "host_directory_list", Description: "List directories on the ADM Gateway host for authenticated management path selection. Empty path lists filesystem roots."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in HostDirectoryListInput) (*mcp.CallToolResult, management.HostDirectoryListing, error) {
+			listing, err := management.New(service).HostDirectoryList(in.Path)
+			return nil, listing, err
 		})
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_list", Description: "List local directories explicitly registered as ADM Workspaces."},

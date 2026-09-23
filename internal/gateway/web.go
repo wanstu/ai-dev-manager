@@ -356,6 +356,13 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 		return h.management.SkillSourceList()
 	case "ListSkillAvailability":
 		return h.management.SkillAvailabilityList()
+	case "BrowseHostDirectories":
+		if len(call.Args) > 0 {
+			if err := arg(0, &s1); err != nil {
+				return nil, err
+			}
+		}
+		return h.management.HostDirectoryList(s1)
 	case "AddWorkspace":
 		var input webWorkspaceInput
 		if err := arg(0, &input); err != nil {

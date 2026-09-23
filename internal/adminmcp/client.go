@@ -383,6 +383,9 @@ func (c *Client) WorkspaceInspect(id string) (model.Workspace, error) {
 func (c *Client) WorkspaceDiscover(id string, request model.DiscoveryRequest) (model.DiscoveryReport, error) {
 	return callAdmin[model.DiscoveryReport](c, context.Background(), "workspace_discover", discoveryArguments(map[string]any{"workspace_id": id}, request, true))
 }
+func (c *Client) HostDirectoryList(path string) (management.HostDirectoryListing, error) {
+	return callAdmin[management.HostDirectoryListing](c, context.Background(), "host_directory_list", map[string]any{"path": path})
+}
 func (c *Client) WorkspaceAdd(path, name string) (model.Workspace, error) {
 	return callAdmin[model.Workspace](c, context.Background(), "workspace_add", map[string]any{"path": path, "name": name})
 }

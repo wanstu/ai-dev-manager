@@ -62,6 +62,13 @@ func (a *Adapter) DiscoverWorkspace(id string, request model.DiscoveryRequest) (
 	return a.management.WorkspaceDiscover(id, request)
 }
 
+func (a *Adapter) BrowseHostDirectories(path string) (management.HostDirectoryListing, error) {
+	if err := a.ready(); err != nil {
+		return management.HostDirectoryListing{}, err
+	}
+	return a.management.HostDirectoryList(path)
+}
+
 func (a *Adapter) AddWorkspace(input WorkspaceInput) (model.Workspace, error) {
 	if err := a.ready(); err != nil {
 		return model.Workspace{}, err

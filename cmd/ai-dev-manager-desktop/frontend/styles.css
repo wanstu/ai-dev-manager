@@ -836,3 +836,30 @@ textarea:focus,
 @media (max-width: 720px) {
   .desktop-theme-controls { grid-template-columns: 1fr; }
 }
+
+.path-picker-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.path-picker-field input { min-width: 0; width: 100%; }
+.host-directory-dialog { width: min(720px, calc(100vw - 32px)); }
+.host-directory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.host-directory-current { margin: 0 0 10px; overflow-wrap: anywhere; }
+.host-directory-list {
+  display: grid;
+  gap: 6px;
+  max-height: 360px;
+  overflow: auto;
+  margin-bottom: 10px;
+}
+.host-directory-entry { width: 100%; text-align: left; justify-content: flex-start; }
+@media (max-width: 720px) {
+  .path-picker-field { grid-template-columns: 1fr; }
+}
