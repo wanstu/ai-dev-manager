@@ -342,6 +342,30 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 `start_line` / `end_line` 都是可选的；只给 `start_line` 时读取到 EOF，只给 `end_line` 时从第 1 行开始。范围读取只用 `max_bytes` 限制选中片段，因此可以从大文件中读取一个小片段，而不要求整个文件小于 `max_bytes`。完整读取保持原有行为。
 
+### `compare_files`
+
+对比两个文本文件片段，并返回 bounded unified line diff：
+
+```json
+{
+  "environment_id": "env_xxx",
+  "left": {
+    "path": "old/service.go",
+    "start_line": 120,
+    "end_line": 180
+  },
+  "right": {
+    "path": "new/service.go",
+    "start_line": 135,
+    "end_line": 205
+  },
+  "max_bytes": 262144,
+  "max_output_bytes": 262144
+}
+```
+
+`left` / `right` 可以是不同文件，也可以是同一个文件的不同区间。行号是 1-based 且首尾包含；省略 `end_line` 表示读取到 EOF。工具完全在 ADM 内部做文本行对比，不依赖系统额外安装 `diff`，也不需要 Writer。
+
 ### `search`
 
 ```json

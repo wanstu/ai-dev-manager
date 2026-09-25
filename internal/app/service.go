@@ -528,6 +528,14 @@ func (s *Service) ReadLines(environmentID, path string, startLine, endLine, maxB
 	return rt.ReadLines(path, startLine, endLine, maxBytes)
 }
 
+func (s *Service) CompareFiles(environmentID, leftPath string, leftStart, leftEnd int, rightPath string, rightStart, rightEnd int, maxBytes, maxOutputBytes int) (any, error) {
+	rt, _, err := s.Runtime(environmentID)
+	if err != nil {
+		return nil, err
+	}
+	return rt.CompareFiles(leftPath, leftStart, leftEnd, rightPath, rightStart, rightEnd, maxBytes, maxOutputBytes)
+}
+
 func (s *Service) Search(environmentID, path, query string, maxFiles, maxMatches, maxBytesPerFile int) (any, error) {
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {

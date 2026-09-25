@@ -331,6 +331,20 @@ type ReadInput struct {
 	MaxBytes      int    `json:"max_bytes,omitempty"`
 }
 
+type FileCompareRangeInput struct {
+	Path      string `json:"path"`
+	StartLine int    `json:"start_line,omitempty" jsonschema:"1-based inclusive start line; defaults to 1"`
+	EndLine   int    `json:"end_line,omitempty" jsonschema:"1-based inclusive end line; omit to read through EOF"`
+}
+
+type CompareFilesInput struct {
+	EnvironmentID  string                `json:"environment_id"`
+	Left           FileCompareRangeInput `json:"left"`
+	Right          FileCompareRangeInput `json:"right"`
+	MaxBytes       int                   `json:"max_bytes,omitempty" jsonschema:"maximum selected bytes per side; defaults to 262144"`
+	MaxOutputBytes int                   `json:"max_output_bytes,omitempty" jsonschema:"maximum unified diff output bytes; defaults to 262144"`
+}
+
 type SearchInput struct {
 	EnvironmentID   string `json:"environment_id"`
 	Path            string `json:"path,omitempty"`
@@ -1425,6 +1439,17 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				return toolResult(value, err)
 			}
 			value, err := service.Read(in.EnvironmentID, in.Path, in.MaxBytes)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "compare_files", Description: "Compare two text file ranges under one Environment and return a bounded unified line diff. left/right can select different files and 1-based inclusive line ranges. Read-only: no reader lease or writer lease is required."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in CompareFilesInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.CompareFiles(
+				in.EnvironmentID,
+				in.Left.Path, in.Left.StartLine, in.Left.EndLine,
+				in.Right.Path, in.Right.StartLine, in.Right.EndLine,
+				in.MaxBytes, in.MaxOutputBytes,
+			)
 			return toolResult(value, err)
 		})
 
