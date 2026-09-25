@@ -318,6 +318,8 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 ### `read`
 
+完整读取：
+
 ```json
 {
   "environment_id": "env_xxx",
@@ -326,7 +328,19 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 }
 ```
 
-只读文本文件；bounded output。
+按行读取（1-based，首尾都包含）：
+
+```json
+{
+  "environment_id": "env_xxx",
+  "path": "src/main.go",
+  "start_line": 120,
+  "end_line": 180,
+  "max_bytes": 65536
+}
+```
+
+`start_line` / `end_line` 都是可选的；只给 `start_line` 时读取到 EOF，只给 `end_line` 时从第 1 行开始。范围读取只用 `max_bytes` 限制选中片段，因此可以从大文件中读取一个小片段，而不要求整个文件小于 `max_bytes`。完整读取保持原有行为。
 
 ### `search`
 

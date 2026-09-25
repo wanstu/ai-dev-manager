@@ -107,6 +107,26 @@ func TestGatewayDevelopsPlainDirectoryWithoutGit(t *testing.T) {
 		t.Fatalf("unexpected read result: %s", toolText(t, read))
 	}
 
+	if err := os.WriteFile(filepath.Join(root, "lines.txt"), []byte("one\ntwo\nthree\nfour\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rangedRead, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "read",
+		Arguments: map[string]any{
+			"environment_id": envID,
+			"path":           "lines.txt",
+			"start_line":     2,
+			"end_line":       3,
+			"max_bytes":      64,
+		},
+	})
+	if err != nil || rangedRead.IsError {
+		t.Fatalf("ranged read failed: err=%v result=%+v", err, rangedRead)
+	}
+	if got := toolText(t, rangedRead); !strings.Contains(got, `two\nthree\n`) || strings.Contains(got, `one\n`) || strings.Contains(got, `four\n`) {
+		t.Fatalf("unexpected ranged read result: %q", got)
+	}
+
 	gitResult, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "git_status",
 		Arguments: map[string]any{"environment_id": envID},

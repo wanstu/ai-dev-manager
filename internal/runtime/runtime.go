@@ -228,6 +228,77 @@ func (r *Runtime) Read(path string, maxBytes int) (string, error) {
 	return string(data), nil
 }
 
+// ReadLines returns an exact 1-based inclusive line range while preserving the
+// original line endings. A zero endLine means read through EOF. maxBytes
+// limits only the selected output, so callers can inspect a small range from a
+// large source file without first loading the whole file.
+func (r *Runtime) ReadLines(path string, startLine, endLine, maxBytes int) (string, error) {
+	if startLine < 0 {
+		return "", fmt.Errorf("start_line must be positive when provided")
+	}
+	if startLine == 0 {
+		startLine = 1
+	}
+	if endLine < 0 {
+		return "", fmt.Errorf("end_line must be positive when provided")
+	}
+	if endLine > 0 && endLine < startLine {
+		return "", fmt.Errorf("end_line must be greater than or equal to start_line")
+	}
+	if maxBytes <= 0 {
+		maxBytes = 1 << 20
+	}
+	target, err := r.existing(path)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("read path is not a regular file")
+	}
+
+	file, err := os.Open(target)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	buffer := make([]byte, 32*1024)
+	selected := make([]byte, 0, min(maxBytes, 64*1024))
+	line := 1
+	for {
+		n, readErr := file.Read(buffer)
+		if n > 0 {
+			for _, b := range buffer[:n] {
+				if b == 0 {
+					return "", fmt.Errorf("binary file is not readable as text")
+				}
+				if line >= startLine && (endLine == 0 || line <= endLine) {
+					if len(selected) >= maxBytes {
+						return "", fmt.Errorf("selected line range exceeds max_bytes=%d", maxBytes)
+					}
+					selected = append(selected, b)
+				}
+				if b == '\n' {
+					line++
+					if endLine > 0 && line > endLine {
+						return string(selected), nil
+					}
+				}
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return string(selected), nil
+			}
+			return "", readErr
+		}
+	}
+}
+
 func (r *Runtime) Search(path, query string, maxFiles, maxMatches, maxBytesPerFile int) ([]SearchMatch, error) {
 	if query == "" {
 		return nil, fmt.Errorf("search query is required")

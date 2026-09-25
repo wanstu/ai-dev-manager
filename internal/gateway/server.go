@@ -326,6 +326,8 @@ type TreeInput struct {
 type ReadInput struct {
 	EnvironmentID string `json:"environment_id"`
 	Path          string `json:"path"`
+	StartLine     int    `json:"start_line,omitempty" jsonschema:"1-based inclusive start line; defaults to 1 when end_line is provided"`
+	EndLine       int    `json:"end_line,omitempty" jsonschema:"1-based inclusive end line; omit to read through EOF"`
 	MaxBytes      int    `json:"max_bytes,omitempty"`
 }
 
@@ -1416,8 +1418,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "read", Description: "Read a text file under an Environment root. Read-only: no reader lease or writer lease is required, and a writer must not be acquired solely for this operation."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "read", Description: "Read a text file or a 1-based inclusive line range under an Environment root. start_line/end_line are optional; range reads can inspect a small portion of a large file while max_bytes bounds selected output. Read-only: no reader lease or writer lease is required."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ReadInput) (*mcp.CallToolResult, any, error) {
+			if in.StartLine != 0 || in.EndLine != 0 {
+				value, err := service.ReadLines(in.EnvironmentID, in.Path, in.StartLine, in.EndLine, in.MaxBytes)
+				return toolResult(value, err)
+			}
 			value, err := service.Read(in.EnvironmentID, in.Path, in.MaxBytes)
 			return toolResult(value, err)
 		})

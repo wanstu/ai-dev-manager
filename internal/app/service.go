@@ -520,6 +520,14 @@ func (s *Service) Read(environmentID, path string, maxBytes int) (any, error) {
 	return rt.Read(path, maxBytes)
 }
 
+func (s *Service) ReadLines(environmentID, path string, startLine, endLine, maxBytes int) (any, error) {
+	rt, _, err := s.Runtime(environmentID)
+	if err != nil {
+		return nil, err
+	}
+	return rt.ReadLines(path, startLine, endLine, maxBytes)
+}
+
 func (s *Service) Search(environmentID, path, query string, maxFiles, maxMatches, maxBytesPerFile int) (any, error) {
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
