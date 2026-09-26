@@ -69,28 +69,29 @@ func TestVerifierRealHTTPAcceptanceNonGitRepositoryCopy(t *testing.T) {
 		t.Fatalf("V-R1 trivial verifier result = %+v", trivialResult)
 	}
 
-	// V-R2: the product capability invokes this repository's own go test ./... through the verifier.
-	// The copy assertion above runs before this call, so the inner suite cannot re-enter this acceptance test.
+	// V-R2: compile every package in this repository through the verifier without
+	// recursively executing the whole test suite from inside an outer go test ./....
+	// V-R3 below covers actual go test failure/timeout/output behavior.
 	fullSuite, err := service.AddVerifier(env.ID, model.VerifierDefinition{
-		Name:           "v2-go-test-all",
+		Name:           "v2-go-test-all-compile",
 		Kind:           verifier.KindTest,
 		Enabled:        true,
 		Executable:     "go",
-		Args:           []string{"test", "./..."},
-		TimeoutSeconds: 300,
+		Args:           []string{"test", "./...", "-run", "^$"},
+		TimeoutSeconds: 180,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	fullResult := callVerifierAcceptanceHTTP(t, ctx, session, env.ID, fullSuite.ID, 16384)
 	if fullResult.ID != fullSuite.ID || fullResult.Status != verifier.StatusPassed || fullResult.ExitCode != 0 || fullResult.TimedOut {
-		t.Fatalf("V-R2 go test ./... verifier result = %+v", fullResult)
+		t.Fatalf("V-R2 repository compile verifier result = %+v", fullResult)
 	}
 	if len(fullResult.Stdout) > 16384 || len(fullResult.Stderr) > 16384 {
 		t.Fatalf("V-R2 output exceeded bound: stdout=%d stderr=%d", len(fullResult.Stdout), len(fullResult.Stderr))
 	}
 
-	// V-R3 fixtures are created only after V-R2 succeeds so they do not alter the repository suite V-R2 proves.
+	// V-R3 fixtures are created only after V-R2 succeeds so they do not alter the repository-wide compile V-R2 proves.
 	failFixture := filepath.Join(copyRoot, "verifier_fail_fixture")
 	if err := os.MkdirAll(failFixture, 0o755); err != nil {
 		t.Fatal(err)
