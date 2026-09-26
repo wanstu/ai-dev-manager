@@ -43,7 +43,7 @@ const elements = {
   environmentForm: document.getElementById('environmentForm'), environmentWorkspace: document.getElementById('environmentWorkspace'), environmentName: document.getElementById('environmentName'), environmentRoot: document.getElementById('environmentRoot'), environmentBrowseButton: document.getElementById('environmentBrowseButton'), environmentList: document.getElementById('environmentList'), environmentFilter: document.getElementById('environmentFilter'), environmentWorkspaceFilter: document.getElementById('environmentWorkspaceFilter'), environmentVisibleCount: document.getElementById('environmentVisibleCount'), environmentListTotalCount: document.getElementById('environmentListTotalCount'), environmentFilterHint: document.getElementById('environmentFilterHint'),
   hostDirectoryDialog: document.getElementById('hostDirectoryDialog'), hostDirectoryRootsButton: document.getElementById('hostDirectoryRootsButton'), hostDirectoryParentButton: document.getElementById('hostDirectoryParentButton'), hostDirectoryRefreshButton: document.getElementById('hostDirectoryRefreshButton'), hostDirectoryCurrentPath: document.getElementById('hostDirectoryCurrentPath'), hostDirectoryList: document.getElementById('hostDirectoryList'), hostDirectoryHint: document.getElementById('hostDirectoryHint'), hostDirectorySelectButton: document.getElementById('hostDirectorySelectButton'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
-  environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
+  environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), cleanupStaleWorktreesButton: document.getElementById('cleanupStaleWorktreesButton'), staleWorktreeCleanupDialog: document.getElementById('staleWorktreeCleanupDialog'), staleWorktreeCleanupHours: document.getElementById('staleWorktreeCleanupHours'), staleWorktreeCleanupSummary: document.getElementById('staleWorktreeCleanupSummary'), staleWorktreeCleanupList: document.getElementById('staleWorktreeCleanupList'), staleWorktreeCleanupResult: document.getElementById('staleWorktreeCleanupResult'), staleWorktreeCleanupRefreshButton: document.getElementById('staleWorktreeCleanupRefreshButton'), staleWorktreeCleanupExecuteButton: document.getElementById('staleWorktreeCleanupExecuteButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
   environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'),
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
@@ -2581,6 +2581,112 @@ async function cleanupExpiredTemporaryEnvironments() {
     button.disabled = false;
   }
 }
+function staleWorktreeCleanupInactiveSeconds() {
+  const hours = Math.max(1, Number(elements.staleWorktreeCleanupHours?.value || 24));
+  return Math.round(hours * 3600);
+}
+function staleWorktreeBlockerText(blocker) {
+  const labels = {
+    recent_activity: '最近仍有活动',
+    active_writer: 'Writer 正在使用',
+    active_mcp_session: 'MCP session 正在使用',
+    mcp_operation_in_flight: 'MCP 操作进行中',
+    active_process: '进程仍在运行',
+    active_run: 'Run 仍在运行',
+    active_verifier_run: 'Verifier 仍在运行',
+    managed_worktree_dirty: '存在未提交文件变更',
+    managed_worktree_unpublished: '存在未发布提交',
+    managed_worktree_safety_check_failed: 'Git 安全检查失败',
+    candidate_inspection_failed: '候选检查失败',
+    managed_worktree_not_found: 'Worktree 已不存在',
+  };
+  return labels[blocker] || blocker;
+}
+function syncStaleWorktreeCleanupExecuteButton() {
+  if (!elements.staleWorktreeCleanupExecuteButton) return;
+  elements.staleWorktreeCleanupExecuteButton.disabled = !elements.staleWorktreeCleanupList?.querySelector('input[data-stale-worktree-id]:checked:not(:disabled)');
+}
+function renderStaleWorktreeCleanupPreview(result) {
+  const candidates = safeArray(result?.report?.candidates);
+  const eligible = candidates.filter((item) => item.cleanup_eligible);
+  const blocked = candidates.filter((item) => !item.cleanup_eligible);
+  elements.staleWorktreeCleanupSummary.textContent = candidates.length
+    ? `发现 ${candidates.length} 个 durable managed worktree：${eligible.length} 个可安全清理，${blocked.length} 个被保护。`
+    : '当前没有符合范围的 durable managed worktree。';
+  elements.staleWorktreeCleanupList.replaceChildren();
+  if (!candidates.length) {
+    emptyMessage(elements.staleWorktreeCleanupList, '没有可预览的 managed worktree。');
+    syncStaleWorktreeCleanupExecuteButton();
+    return;
+  }
+  elements.staleWorktreeCleanupList.classList.remove('empty');
+  for (const item of candidates) {
+    const row = document.createElement('label');
+    row.className = 'selection-row rich-selection';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.staleWorktreeId = item.environment_id || '';
+    checkbox.disabled = !item.cleanup_eligible;
+    checkbox.checked = Boolean(item.cleanup_eligible);
+    const body = document.createElement('span');
+    body.className = 'selection-copy';
+    const title = document.createElement('strong');
+    title.textContent = item.name || item.environment_id || 'Managed worktree';
+    const meta = document.createElement('span');
+    const inactiveHours = Math.floor(Number(item.inactive_seconds || 0) / 3600);
+    meta.textContent = `${item.branch || '—'} · 闲置约 ${inactiveHours} 小时`;
+    const reason = document.createElement('span');
+    reason.className = 'muted';
+    reason.textContent = item.cleanup_eligible
+      ? '通过安全检查；删除 worktree/Environment，分支保留。'
+      : safeArray(item.blockers).map(staleWorktreeBlockerText).join(' · ') || '当前不可清理';
+    body.append(title, meta, reason);
+    row.append(checkbox, body);
+    elements.staleWorktreeCleanupList.append(row);
+  }
+  syncStaleWorktreeCleanupExecuteButton();
+}
+async function previewStaleWorktreeCleanup({openDialog = false} = {}) {
+  if (!window.ADMWebSurface) return setStatus('闲置 Worktree 清理当前仅在 Web 管理台开放。', 'error');
+  if (openDialog) openEditorDialog('staleWorktreeCleanupDialog');
+  elements.staleWorktreeCleanupRefreshButton.disabled = true;
+  elements.staleWorktreeCleanupExecuteButton.disabled = true;
+  elements.staleWorktreeCleanupResult.textContent = '';
+  elements.staleWorktreeCleanupSummary.textContent = '正在检查 managed worktree…';
+  emptyMessage(elements.staleWorktreeCleanupList, '正在执行安全检查…');
+  try {
+    const preview = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), [], false);
+    renderStaleWorktreeCleanupPreview(preview);
+  } catch (error) {
+    emptyMessage(elements.staleWorktreeCleanupList, '预览失败：' + errorText(error));
+    elements.staleWorktreeCleanupSummary.textContent = '无法读取闲置 Worktree 状态。';
+  } finally {
+    elements.staleWorktreeCleanupRefreshButton.disabled = false;
+  }
+}
+async function executeStaleWorktreeCleanup() {
+  const selected = [...elements.staleWorktreeCleanupList.querySelectorAll('input[data-stale-worktree-id]:checked:not(:disabled)')]
+    .map((input) => input.dataset.staleWorktreeId).filter(Boolean);
+  if (!selected.length) return;
+  if (!window.confirm(`将安全清理已选的 ${selected.length} 个闲置 managed worktree。\n\n会删除对应 Worktree 目录和 Environment 记录，但保留 Git 分支；执行前会重新检查 dirty/unpublished/运行状态。继续？`)) return;
+  elements.staleWorktreeCleanupExecuteButton.disabled = true;
+  elements.staleWorktreeCleanupRefreshButton.disabled = true;
+  elements.staleWorktreeCleanupResult.textContent = '正在重新检查并清理…';
+  try {
+    const result = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), selected, true);
+    const removed = safeArray(result?.removed).length;
+    const skipped = safeArray(result?.skipped).length;
+    elements.staleWorktreeCleanupResult.textContent = `完成：清理 ${removed} 个，安全检查阻止 ${skipped} 个。`;
+    await refreshSnapshot();
+    const preview = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), [], false);
+    renderStaleWorktreeCleanupPreview(preview);
+  } catch (error) {
+    elements.staleWorktreeCleanupResult.textContent = '清理失败：' + errorText(error);
+  } finally {
+    elements.staleWorktreeCleanupRefreshButton.disabled = false;
+    syncStaleWorktreeCleanupExecuteButton();
+  }
+}
 function temporaryLifecycleOwner(environment) { return String(environment?.retention?.owner_id || temporaryLifecycleStatus(environment)?.retention?.owner_id || '').trim(); }
 function temporaryCleanupItem(result, environmentID) { return safeArray(result?.report?.resources).find((item) => item.kind === 'environment' && item.id === environmentID) || null; }
 function rerenderTemporaryLifecycle(environmentID) {
@@ -3192,6 +3298,10 @@ elements.gatewayAccessSetAgentKey.addEventListener('click', setGatewayAgentAPIKe
 elements.gatewayAccessClearAgentKey.addEventListener('click', clearGatewayAgentAPIKey);
 elements.execAuthorizationSave.addEventListener('click', saveExecAuthorizationMode);
 elements.cleanupExpiredTemporaryEnvironmentsButton.addEventListener('click', cleanupExpiredTemporaryEnvironments);
+elements.cleanupStaleWorktreesButton?.addEventListener('click', () => previewStaleWorktreeCleanup({openDialog: true}));
+elements.staleWorktreeCleanupRefreshButton?.addEventListener('click', () => previewStaleWorktreeCleanup());
+elements.staleWorktreeCleanupExecuteButton?.addEventListener('click', executeStaleWorktreeCleanup);
+elements.staleWorktreeCleanupList?.addEventListener('change', syncStaleWorktreeCleanupExecuteButton);
 elements.gatewayRefreshButton.addEventListener('click', () => refreshConnectedADM(true).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));
 elements.gatewayStartButton.addEventListener('click', () => runGatewayAction('启动本地 ADM', (input) => desktopAdapter().StartLocalADM(input)));
 elements.gatewayStopButton.addEventListener('click', () => runGatewayAction('强制停止 ADM', (input) => desktopAdapter().StopLocalADM(input)));

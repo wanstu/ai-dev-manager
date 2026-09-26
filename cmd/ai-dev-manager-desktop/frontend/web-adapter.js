@@ -23,7 +23,7 @@
     'DeleteEnvironmentMemory','AcquireRuntimeWriter','ReleaseRuntimeWriter','ListVerifiers',
     'RunVerifier','ListProcesses','GetProcessLogs','StopProcess','ListRuns','CancelRun',
     'GetTemporaryEnvironmentStatus','PromoteTemporaryEnvironment','CleanupTemporaryEnvironment',
-    'CleanupExpiredTemporaryEnvironments'
+    'CleanupExpiredTemporaryEnvironments','CleanupStaleManagedWorktrees'
   ];
 
   async function call(method, ...args) {
@@ -129,6 +129,8 @@
       const element = document.getElementById(id);
       if (element) element.hidden = true;
     }
+    const cleanupStaleWorktreesButton = document.getElementById('cleanupStaleWorktreesButton');
+    if (cleanupStaleWorktreesButton) cleanupStaleWorktreesButton.hidden = false;
     const launch = document.getElementById('launchAtLogin')?.closest('label');
     if (launch) launch.hidden = true;
     const actions = document.querySelector('.topbar-actions');
