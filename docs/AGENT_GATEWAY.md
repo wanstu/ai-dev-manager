@@ -1023,6 +1023,9 @@ Agent 的 Environment MCP runtime tools 只消费管理员已配置/选择的 ca
 - `resource_retention_cleanup`
 - `resource_retention_mark_temporary`
 - `resource_retention_promote`
+- `environment_worktree_cleanup_stale`
+
+`environment_worktree_cleanup_stale` 专门处理历史 durable managed worktree 堆积：默认只 preview；按 Environment `last_activity_at` 和 `inactive_seconds` 判断 stale，同时检查 active Writer / MCP / process / run / verifier、Git dirty、unpublished commit。`execute=true` 时必须显式传 `environment_ids`，并在真正删除前再次检查；没有 force 路径，删除 worktree 后 generated branch 仍保留。temporary managed worktree 不会被这条工具接管，继续走 owner-scoped temporary cleanup。
 
 Agent temporary Environment lifecycle 是更窄、owner-scoped、no-force 的 workflow。
 

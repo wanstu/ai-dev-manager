@@ -162,6 +162,12 @@ type EnvironmentWorktreeDestroyInput struct {
 	Force         bool   `json:"force,omitempty"`
 }
 
+type StaleManagedWorktreeCleanupInput struct {
+	InactiveSeconds int64    `json:"inactive_seconds,omitempty" jsonschema:"minimum inactivity age in seconds; defaults to 86400 (24h)"`
+	EnvironmentIDs  []string `json:"environment_ids,omitempty" jsonschema:"explicit managed Environment IDs to clean; required when execute=true"`
+	Execute         bool     `json:"execute,omitempty" jsonschema:"false or omitted previews only; true executes only explicitly selected safe candidates after fresh rechecks"`
+}
+
 type WriterAcquireInput struct {
 	EnvironmentID string `json:"environment_id"`
 	Owner         string `json:"owner" jsonschema:"stable agent/session owner identifier"`
@@ -482,7 +488,7 @@ func isAdminOnlyTool(name string) bool {
 	switch name {
 	case "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
-		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired",
+		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_worktree_cleanup_stale",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
 		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
 		"mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
@@ -881,6 +887,15 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.ManagedWorktrees()
 			return toolResult(items, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_cleanup_stale", Description: "Admin-only conservative cleanup for stale durable managed worktrees. Preview is the default. execute=true requires explicit environment_ids and only removes candidates that remain inactive, have no active writer/runtime blockers, are clean, and have no unpublished commits. There is no force path; retained branches are preserved."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in StaleManagedWorktreeCleanupInput) (*mcp.CallToolResult, any, error) {
+			if owner == nil {
+				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			value, err := owner.StaleManagedWorktreeCleanup(ctx, in.InactiveSeconds, in.EnvironmentIDs, in.Execute)
+			return toolResult(value, err)
 		})
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_destroy", Description: "Destroy one ADM-managed Git worktree Environment. Requires the matching writer_owner. Dirty or unpublished work is refused unless force=true; the managed branch is always retained."},
