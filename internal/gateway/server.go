@@ -345,6 +345,13 @@ type CompareFilesInput struct {
 	MaxOutputBytes int                   `json:"max_output_bytes,omitempty" jsonschema:"maximum unified diff output bytes; defaults to 262144"`
 }
 
+type ProjectAnalyzeInput struct {
+	EnvironmentID string `json:"environment_id"`
+	WriterOwner   string `json:"writer_owner"`
+	MaxFiles      int    `json:"max_files,omitempty" jsonschema:"maximum files inspected; defaults to 4000"`
+	MaxSymbols    int    `json:"max_symbols,omitempty" jsonschema:"maximum Go/PHP symbols recorded; defaults to 1200"`
+}
+
 type SearchInput struct {
 	EnvironmentID   string `json:"environment_id"`
 	Path            string `json:"path,omitempty"`
@@ -1450,6 +1457,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				in.Right.Path, in.Right.StartLine, in.Right.EndLine,
 				in.MaxBytes, in.MaxOutputBytes,
 			)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Statically analyze one Environment project and refresh .adm/project-overview.md with bounded Go/PHP structure and symbol outlines. Project code is never executed. Requires the matching writer_owner because the overview file is written under the Environment root."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectAnalyzeInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.AnalyzeProject(in.EnvironmentID, in.WriterOwner, in.MaxFiles, in.MaxSymbols)
 			return toolResult(value, err)
 		})
 

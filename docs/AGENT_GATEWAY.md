@@ -366,6 +366,23 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 `left` / `right` 可以是不同文件，也可以是同一个文件的不同区间。行号是 1-based 且首尾包含；省略 `end_line` 表示读取到 EOF。工具完全在 ADM 内部做文本行对比，不依赖系统额外安装 `diff`，也不需要 Writer。
 
+### `project_analyze`
+
+对当前 Environment 根目录做 bounded 静态项目分析，并刷新 `.adm/project-overview.md`：
+
+```json
+{
+  "environment_id": "env_xxx",
+  "writer_owner": "agent-session-42",
+  "max_files": 4000,
+  "max_symbols": 1200
+}
+```
+
+当前 MVP 重点支持 Go / PHP：识别 `go.mod` / `composer.json`、主要源码目录，以及 Go type/func/method 和 PHP class/interface/trait/enum/function 大纲。分析不会执行项目代码，并跳过 `.git`、`.adm`、`vendor`、`node_modules`、`dist`、`build` 等常见依赖或生成目录。
+
+因为会写入 `.adm/project-overview.md`，需要 matching Writer。返回结果只包含概要统计和 overview 路径，不把整份 Markdown 再塞进 MCP 响应；Agent 后续可直接用 `read` 读取该文件或指定行段。
+
 ### `search`
 
 ```json

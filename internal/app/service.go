@@ -15,6 +15,7 @@ import (
 	"ai-dev-manager-v2/internal/logging"
 	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
+	"ai-dev-manager-v2/internal/projectanalysis"
 	"ai-dev-manager-v2/internal/runtime"
 	skillruntime "ai-dev-manager-v2/internal/skill"
 	"ai-dev-manager-v2/internal/store"
@@ -534,6 +535,28 @@ func (s *Service) CompareFiles(environmentID, leftPath string, leftStart, leftEn
 		return nil, err
 	}
 	return rt.CompareFiles(leftPath, leftStart, leftEnd, rightPath, rightStart, rightEnd, maxBytes, maxOutputBytes)
+}
+
+func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbols int) (projectanalysis.Result, error) {
+	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+		return projectanalysis.Result{}, err
+	}
+	rt, _, err := s.Runtime(environmentID)
+	if err != nil {
+		return projectanalysis.Result{}, err
+	}
+	result, err := projectanalysis.Analyze(rt.Root(), projectanalysis.Options{MaxFiles: maxFiles, MaxSymbols: maxSymbols})
+	if err != nil {
+		return projectanalysis.Result{}, err
+	}
+	if _, err := rt.Write(projectanalysis.OverviewRelativePath, result.Markdown, true); err != nil {
+		return projectanalysis.Result{}, err
+	}
+	if err := s.Environments.Touch(environmentID, owner); err != nil {
+		return projectanalysis.Result{}, err
+	}
+	result.Markdown = ""
+	return result, nil
 }
 
 func (s *Service) Search(environmentID, path, query string, maxFiles, maxMatches, maxBytesPerFile int) (any, error) {
