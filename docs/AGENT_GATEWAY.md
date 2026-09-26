@@ -645,9 +645,12 @@ Git 是 optional capability。非 Git root 返回本地能力错误是正常情�
 
 ## 14. Managed worktree tools
 
-Agent 可以显式请求 optional Git isolation。
+Agent 的普通任务隔离应使用 `environment_temporary_create(mode=managed_worktree)`，让新 Environment / worktree 带 owner + TTL，并在任务结束后 cleanup；需要长期保留时再 promote。
 
-### `environment_worktree_create`
+### `environment_worktree_create`（Admin-only）
+
+这是显式创建 **durable** managed worktree 的管理工具，不再暴露给普通 Agent，避免每个开发任务都永久堆积 Environment / worktree。
+
 
 ```json
 {
@@ -716,6 +719,7 @@ managed worktree：
   "owner_id": "task-owner-43",
   "ttl_seconds": 7200,
   "mode": "managed_worktree",
+  "branch_name": "task/fix-example",
   "base_ref": "HEAD"
 }
 ```
@@ -969,6 +973,7 @@ Scope 必须显式。ADM 不会自动把 private Memory promotion 到 Global。
 - `workspace_rename`
 - `workspace_remove`
 - `environment_create`（durable generic create）
+- `environment_worktree_create`（durable managed-worktree create；Agent 应改用 temporary managed-worktree）
 - `environment_rename`
 - `environment_remove`
 - `environment_verifier_add`

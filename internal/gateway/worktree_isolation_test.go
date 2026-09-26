@@ -49,13 +49,23 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := toolNames(tools.Tools)
-	for _, required := range []string{"environment_worktree_create", "environment_worktree_list", "environment_worktree_destroy"} {
+	for _, required := range []string{"environment_worktree_list", "environment_worktree_destroy"} {
 		if !contains(names, required) {
 			t.Fatalf("missing managed worktree tool %q in %v", required, names)
 		}
 	}
+	if contains(names, "environment_worktree_create") {
+		t.Fatalf("durable environment_worktree_create must be Admin-only: %v", names)
+	}
+	adminTools, err := adminSession.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(toolNames(adminTools.Tools), "environment_worktree_create") {
+		t.Fatalf("Admin MCP missing durable environment_worktree_create")
+	}
 
-	createdResult, err := session.CallTool(ctx, &mcp.CallToolParams{
+	createdResult, err := adminSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "environment_worktree_create",
 		Arguments: map[string]any{"workspace_id": ws.ID, "name": "managed", "branch_name": "test/gateway-managed"},
 	})
@@ -131,7 +141,7 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fromEnvironment, err := session.CallTool(ctx, &mcp.CallToolParams{
+	fromEnvironment, err := adminSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "environment_worktree_create",
 		Arguments: map[string]any{
 			"source_environment_id": sourceEnvironment.ID,
@@ -163,7 +173,7 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unsupported, err := session.CallTool(ctx, &mcp.CallToolParams{
+	unsupported, err := adminSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "environment_worktree_create",
 		Arguments: map[string]any{"workspace_id": plainWS.ID, "name": "unsupported", "branch_name": "test/non-git"},
 	})

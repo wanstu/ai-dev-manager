@@ -488,7 +488,7 @@ func isAdminOnlyTool(name string) bool {
 	switch name {
 	case "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
-		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_worktree_cleanup_stale",
+		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_worktree_create", "environment_worktree_cleanup_stale",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
 		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
 		"mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
@@ -806,7 +806,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration. existing_root mode uses a registered Workspace. managed_worktree mode also requires branch_name, applies the configured ADM branch prefix/root, optionally migrates non-ignored uncommitted source changes, and never pulls/resets/reuses the source checkout."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. This is the preferred Agent path for ordinary task isolation, including mode=managed_worktree; promote only when the Environment must become durable. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration. existing_root mode uses a registered Workspace. managed_worktree mode also requires branch_name, applies the configured ADM branch prefix/root, optionally migrates non-ignored uncommitted source changes, and never pulls/resets/reuses the source checkout."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCreateInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.CreateTemporaryEnvironment(ctx, string(surface), model.TemporaryEnvironmentCreateRequest{
 				WorkspaceID:               in.WorkspaceID,
