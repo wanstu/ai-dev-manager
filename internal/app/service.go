@@ -575,6 +575,14 @@ func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbo
 	return result, nil
 }
 
+func (s *Service) ProjectIndexQuery(environmentID string, query projectanalysis.IndexQuery) (projectanalysis.IndexQueryResult, error) {
+	rt, _, err := s.Runtime(environmentID)
+	if err != nil {
+		return projectanalysis.IndexQueryResult{}, err
+	}
+	return projectanalysis.QueryIndex(rt.Root(), query)
+}
+
 func (s *Service) Search(environmentID, path, query string, maxFiles, maxMatches, maxBytesPerFile int) (any, error) {
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {

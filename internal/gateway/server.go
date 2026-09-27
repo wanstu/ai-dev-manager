@@ -15,6 +15,7 @@ import (
 	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/management"
 	"ai-dev-manager-v2/internal/model"
+	"ai-dev-manager-v2/internal/projectanalysis"
 	productversion "ai-dev-manager-v2/internal/version"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -356,6 +357,16 @@ type ProjectAnalyzeInput struct {
 	WriterOwner   string `json:"writer_owner"`
 	MaxFiles      int    `json:"max_files,omitempty" jsonschema:"maximum files inspected; defaults to 4000"`
 	MaxSymbols    int    `json:"max_symbols,omitempty" jsonschema:"maximum Go/PHP symbols recorded; defaults to 1200"`
+}
+
+type ProjectIndexQueryInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Query         string `json:"query,omitempty" jsonschema:"symbol name or qualified name; optional when another filter is provided"`
+	Path          string `json:"path,omitempty" jsonschema:"optional case-insensitive path substring filter"`
+	Kind          string `json:"kind,omitempty" jsonschema:"optional exact symbol kind filter such as type, method, func, class, interface, trait, enum, function"`
+	Language      string `json:"language,omitempty" jsonschema:"optional exact language filter such as Go or PHP"`
+	Exact         bool   `json:"exact,omitempty" jsonschema:"match query only against exact name or qualified_name"`
+	MaxResults    int    `json:"max_results,omitempty" jsonschema:"maximum returned matches; defaults to 50 and is capped at 200"`
 }
 
 type SearchInput struct {
@@ -1475,9 +1486,18 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Statically analyze one Environment project and refresh .adm/project-overview.md with bounded Go/PHP structure and symbol outlines. Project code is never executed. Requires the matching writer_owner because the overview file is written under the Environment root."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Statically analyze one Environment project and refresh .adm/project-overview.md plus .adm/index/{manifest.json,files.jsonl,symbols.jsonl}. Project code is never executed. Requires the matching writer_owner because generated index artifacts are written under the Environment root."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectAnalyzeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.AnalyzeProject(in.EnvironmentID, in.WriterOwner, in.MaxFiles, in.MaxSymbols)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_query", Description: "Query the generated .adm symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256 before returning matches. Run project_analyze first when the index is missing or stale."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexQueryInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.ProjectIndexQuery(in.EnvironmentID, projectanalysis.IndexQuery{
+				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
+				Exact: in.Exact, MaxResults: in.MaxResults,
+			})
 			return toolResult(value, err)
 		})
 

@@ -79,4 +79,14 @@ func TestAnalyzeProjectWritesOverviewAndMachineIndex(t *testing.T) {
 	if !strings.Contains(string(symbols), "\"qualified_name\":\"main.App.Run\"") {
 		t.Fatalf("symbol index missing method:\n%s", symbols)
 	}
+	if _, err := service.Environments.ReleaseWriter(environment.ID, writer, false); err != nil {
+		t.Fatal(err)
+	}
+	queried, err := service.ProjectIndexQuery(environment.ID, projectanalysis.IndexQuery{Query: "App.Run", MaxResults: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queried.Returned != 1 || queried.Matches[0].Path != "main.go" || queried.Matches[0].Line != 4 {
+		t.Fatalf("query result=%+v", queried)
+	}
 }

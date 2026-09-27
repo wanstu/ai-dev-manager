@@ -46,7 +46,7 @@ func TestGatewayDevelopsPlainDirectoryWithoutGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := toolNames(tools.Tools)
-	for _, required := range []string{"workspace_list", "workspace_inspect", "environment_list", "environment_inspect", "environment_capability_report", "environment_injection_plan", "environment_writer_acquire", "environment_writer_heartbeat", "environment_writer_release", "environment_verifier_list", "environment_verifier_run", "environment_mcp_inspect", "environment_mcp_refresh", "environment_mcp_status", "environment_mcp_tools", "environment_mcp_call", "environment_skill_list", "environment_skill_inspect", "environment_skill_files", "environment_skill_read", "memory_environment_write", "tree", "read", "compare_files", "project_analyze", "search", "write", "edit", "delete", "exec", "git_status"} {
+	for _, required := range []string{"workspace_list", "workspace_inspect", "environment_list", "environment_inspect", "environment_capability_report", "environment_injection_plan", "environment_writer_acquire", "environment_writer_heartbeat", "environment_writer_release", "environment_verifier_list", "environment_verifier_run", "environment_mcp_inspect", "environment_mcp_refresh", "environment_mcp_status", "environment_mcp_tools", "environment_mcp_call", "environment_skill_list", "environment_skill_inspect", "environment_skill_files", "environment_skill_read", "memory_environment_write", "tree", "read", "compare_files", "project_analyze", "project_index_query", "search", "write", "edit", "delete", "exec", "git_status"} {
 		if !contains(names, required) {
 			t.Fatalf("missing Agent gateway tool %q in %v", required, names)
 		}
@@ -192,6 +192,26 @@ func TestGatewayDevelopsPlainDirectoryWithoutGit(t *testing.T) {
 	for _, want := range []string{"# ADM Project Overview", "example.com/plain", "internal/demo/service.go", "Service.Run"} {
 		if !strings.Contains(string(overview), want) {
 			t.Fatalf("project overview missing %q:\n%s", want, overview)
+		}
+	}
+
+	indexQuery, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "project_index_query",
+		Arguments: map[string]any{
+			"environment_id": envID,
+			"query":          "Service.Run",
+			"kind":           "method",
+			"language":       "Go",
+			"max_results":    10,
+		},
+	})
+	if err != nil || indexQuery.IsError {
+		t.Fatalf("project_index_query failed: err=%v result=%+v", err, indexQuery)
+	}
+	indexText := toolText(t, indexQuery)
+	for _, want := range []string{`"artifact_verified":true`, `"qualified_name":"demo.Service.Run"`, `"path":"internal/demo/service.go"`, `"line":4`} {
+		if !strings.Contains(indexText, want) {
+			t.Fatalf("project_index_query result missing %q: %s", want, indexText)
 		}
 	}
 
@@ -1145,7 +1165,7 @@ func TestHTTPGatewaySeparatesAgentAndAdminMCPPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentNames := toolNames(agentTools.Tools)
-	for _, required := range []string{"gateway_info", "environment_inspect", "environment_injection_plan", "environment_writer_acquire", "read", "compare_files", "project_analyze", "write", "environment_mcp_tools", "environment_skill_read"} {
+	for _, required := range []string{"gateway_info", "environment_inspect", "environment_injection_plan", "environment_writer_acquire", "read", "compare_files", "project_analyze", "project_index_query", "write", "environment_mcp_tools", "environment_skill_read"} {
 		if !contains(agentNames, required) {
 			t.Fatalf("Agent MCP missing %q: %v", required, agentNames)
 		}
@@ -1167,7 +1187,7 @@ func TestHTTPGatewaySeparatesAgentAndAdminMCPPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	adminNames := toolNames(adminTools.Tools)
-	for _, required := range []string{"gateway_info", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "workspace_rename", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "memory_global_write", "memory_global_delete", "environment_inspect", "environment_injection_plan", "read", "compare_files", "project_analyze"} {
+	for _, required := range []string{"gateway_info", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "workspace_rename", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "memory_global_write", "memory_global_delete", "environment_inspect", "environment_injection_plan", "read", "compare_files", "project_analyze", "project_index_query"} {
 		if !contains(adminNames, required) {
 			t.Fatalf("Admin MCP missing %q: %v", required, adminNames)
 		}

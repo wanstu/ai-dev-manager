@@ -392,6 +392,27 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 因为会写入 `.adm`，需要 matching Writer。返回结果只包含概要统计和 artifact 路径，不把 Markdown / JSONL 正文塞进 MCP 响应；Agent 后续可用 `read` / `search` 对索引做 bounded 查询。
 
+
+### `project_index_query`
+
+只读查询由 `project_analyze` 生成的 `.adm/index/symbols.jsonl`。不需要 Writer；查询前会用 `manifest.json` 中的 SHA-256 校验 symbol index，避免读取半生成或被修改的索引。
+
+```json
+{
+  "environment_id": "env_xxx",
+  "query": "Service.Run",
+  "path": "internal/service",
+  "kind": "method",
+  "language": "Go",
+  "exact": false,
+  "max_results": 50
+}
+```
+
+`query` 会按 qualified-name exact、name exact、qualified suffix、prefix、contains 的顺序排序；`path` 是不区分大小写的子串过滤，`kind` / `language` 是精确过滤。`query` 可以省略，但至少要提供 `path` / `kind` / `language` 中一个。
+
+当前查询层只覆盖 symbol definitions。references / hierarchy 后续应作为 Code Intelligence Provider 能力扩展，这样 ADM 静态索引和未来 PhpStorm Provider 可以复用同一套上层接口。
+
 ### `search`
 
 ```json
