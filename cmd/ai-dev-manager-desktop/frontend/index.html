@@ -326,6 +326,10 @@
         <div class="subpanel-heading"><div><h3>Directory summary</h3><span>显式读取有界目录 metadata；打开详情不会自动扫描。</span></div><button id="environmentTreeDigestButton" type="button" class="secondary-button small-button">读取目录摘要</button></div>
         <div id="environmentTreeDigestResult" class="discovery-result empty">尚未读取目录摘要。</div>
       </section>
+      <section id="environmentProjectIndexSection" class="subpanel environment-project-index" data-environment-detail-panel="summary" hidden>
+        <div class="subpanel-heading"><div><h3>Project index</h3><span>`.adm` 项目总览 + files/symbols 机器索引；仅在 Web 管理台操作。</span></div><div class="gateway-actions"><button id="environmentProjectIndexStatusButton" type="button" class="secondary-button small-button">检查索引</button><button id="environmentProjectAnalyzeButton" type="button" class="small-button">分析 / 刷新索引</button></div></div>
+        <div id="environmentProjectIndexResult" class="discovery-result empty">尚未检查项目索引。</div>
+      </section>
       <div id="environmentDiagnostics" class="detail-content diagnostics-content" data-environment-detail-panel="diagnostics" hidden></div>
       <div id="environmentDetailRoutes" class="detail-route-actions" aria-label="Environment management shortcuts">
         <span>继续管理当前 Environment：</span>

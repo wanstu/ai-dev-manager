@@ -12,7 +12,7 @@
     'SetGatewayAgentAPIKey','ClearGatewayAgentAPIKey','GetExecAuthorizationStatus',
     'SetExecFullAuthorization','ListSkillSources','ListSkillAvailability','BrowseHostDirectories','AddWorkspace',
     'RenameWorkspace','RemoveWorkspace','DiscoverWorkspace','CreateEnvironment',
-    'RenameEnvironment','RemoveEnvironment','InspectEnvironment','EnvironmentTreeDigest',
+    'RenameEnvironment','RemoveEnvironment','InspectEnvironment','AnalyzeProject','ProjectIndexStatus','EnvironmentTreeDigest',
     'EnvironmentWorkspaceOptions','EnvironmentWorkspaceRecommendations','SetEnvironmentWorkspace',
     'AllowExecutable','RemoveExecutable','BlockExecutable','UnblockExecutable','ClearExecDenial',
     'ClearAllExecDenials','AddMCP','UpdateMCP','RemoveMCP','SetMCPDefault','ProbeMCPHealth',

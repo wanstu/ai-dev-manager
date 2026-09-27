@@ -415,6 +415,45 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.management.EnvironmentInspect(s1)
+	case "AnalyzeProject":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		var maxFiles, maxSymbols int
+		if len(call.Args) > 1 {
+			if err := arg(1, &maxFiles); err != nil {
+				return nil, err
+			}
+		}
+		if len(call.Args) > 2 {
+			if err := arg(2, &maxSymbols); err != nil {
+				return nil, err
+			}
+		}
+		writerOwner := fmt.Sprintf("web-project-analysis:%d", time.Now().UTC().UnixNano())
+		if _, err := h.app.Environments.AcquireWriter(s1, writerOwner); err != nil {
+			return nil, fmt.Errorf("project analysis requires an idle Environment writer: %w", err)
+		}
+		result, analyzeErr := h.app.AnalyzeProject(s1, writerOwner, maxFiles, maxSymbols)
+		_, releaseErr := h.app.Environments.ReleaseWriter(s1, writerOwner, false)
+		if analyzeErr != nil {
+			return nil, analyzeErr
+		}
+		if releaseErr != nil {
+			return nil, fmt.Errorf("release project analysis writer: %w", releaseErr)
+		}
+		return result, nil
+	case "ProjectIndexStatus":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		var maxChanges int
+		if len(call.Args) > 1 {
+			if err := arg(1, &maxChanges); err != nil {
+				return nil, err
+			}
+		}
+		return h.app.ProjectIndexStatus(s1, maxChanges)
 	case "CleanupStaleManagedWorktrees":
 		var inactiveSeconds int64
 		var environmentIDs []string
