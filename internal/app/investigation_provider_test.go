@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"ai-dev-manager-v2/internal/catalog"
@@ -75,6 +76,42 @@ func TestInvestigationProviderFailureIsLocalAndKeepsStaticEndpointFallback(t *te
 	}
 	if len(endpointReport.Evidence) == 0 || endpointReport.Confidence == "none" {
 		t.Fatalf("provider failure broke static endpoint fallback: %+v", endpointReport)
+	}
+}
+
+func TestPhpStormInvestigationProviderIsRecognized(t *testing.T) {
+	service, environmentID := endpointInvestigationService(t, map[string]string{
+		"app/Foo.php": "<?php\nclass Foo {}\n",
+	})
+	phpStorm, err := service.MCPs.AddMCPConfig("PhpStorm Code Intelligence", catalog.MCPConfig{
+		Transport:  catalog.MCPTransportStdio,
+		AuthMode:   catalog.MCPAuthNone,
+		Executable: "phpstorm-code-intelligence-mcp-not-allowlisted",
+		Args:       []string{"mcp"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetEnvironmentMCP(environmentID, phpStorm.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := service.InvestigationProviderReport(context.Background(), environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := requireInvestigationProviderFact(t, report, InvestigationProviderPhpStormKey)
+	if provider.State != model.CapabilityStateUnavailable || provider.ReasonCode != "executable_not_allowed" {
+		t.Fatalf("PhpStorm provider fact = %+v", provider)
+	}
+	if got := provider.Evidence[0].Details["provider"]; got != InvestigationProviderPhpStorm {
+		t.Fatalf("provider evidence = %q, want %q", got, InvestigationProviderPhpStorm)
+	}
+	tools := provider.Evidence[0].Details["read_only_provider_tools"]
+	for _, want := range []string{"code_intelligence_query", "code_intelligence_references", "code_intelligence_hierarchy"} {
+		if !strings.Contains(tools, want) {
+			t.Fatalf("PhpStorm provider tools missing %q: %s", want, tools)
+		}
 	}
 }
 

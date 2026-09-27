@@ -94,7 +94,11 @@ func (o *runtimeOwner) InvestigationProviderReport(ctx context.Context, environm
 }
 
 func (o *runtimeOwner) enrichInvestigationProviderFact(environmentID string, fact model.CapabilityFact, info runtimeOwnerInfo, now time.Time) model.CapabilityFact {
-	if fact.Kind != app.CapabilityKindCodeIntelligenceProvider || fact.Key != app.InvestigationProviderGitNexusKey {
+	if fact.Kind != app.CapabilityKindCodeIntelligenceProvider {
+		return fact
+	}
+	providerID := investigationProviderID(fact)
+	if providerID == "" {
 		return fact
 	}
 	if fact.State == model.CapabilityStateUnconfigured || fact.State == model.CapabilityStateDisabled || fact.State == model.CapabilityStateUnavailable {
@@ -129,13 +133,13 @@ func (o *runtimeOwner) enrichInvestigationProviderFact(environmentID string, fac
 
 	switch observation.State {
 	case app.MCPHealthHealthy:
-		availableTools := investigationProviderAvailableReadTools(observation.ToolInventory, app.InvestigationProviderReadOnlyTools(app.InvestigationProviderGitNexus))
+		availableTools := investigationProviderAvailableReadTools(observation.ToolInventory, app.InvestigationProviderReadOnlyTools(providerID))
 		fact.Evidence = append(fact.Evidence, model.CapabilityEvidence{
 			Kind:  "code_intelligence_provider_inventory",
 			ID:    mcpID,
 			State: "observed",
 			Details: compactGatewayCapabilityDetails(map[string]string{
-				"provider":             app.InvestigationProviderGitNexus,
+				"provider":             providerID,
 				"available_read_tools": strings.Join(availableTools, ","),
 				"read_tool_count":      strconv.Itoa(len(availableTools)),
 				"inventory_fetched_at": formatGatewayCapabilityTime(observation.InventoryFetchedAt),
@@ -152,7 +156,7 @@ func (o *runtimeOwner) enrichInvestigationProviderFact(environmentID string, fac
 		}
 		fact.State = model.CapabilityStateAvailable
 		fact.ReasonCode = ""
-		fact.Message = "Gateway owner observes the Environment-authorized GitNexus MCP as healthy with recognized read-only code intelligence tools."
+		fact.Message = "Gateway owner observes the Environment-authorized code intelligence provider MCP as healthy with recognized read-only tools."
 		fact.Confidence = "medium"
 	case app.MCPHealthError:
 		fact.State = model.CapabilityStateUnavailable
@@ -183,6 +187,28 @@ func (o *runtimeOwner) enrichInvestigationProviderFact(environmentID string, fac
 		fact.Uncertainties = uniqueGatewayStrings(append(fact.Uncertainties, "provider_health_uncertain", "provider_index_freshness_not_observed", "static_fallback_available"))
 	}
 	return fact
+}
+
+func investigationProviderID(fact model.CapabilityFact) string {
+	for _, evidence := range fact.Evidence {
+		if evidence.Kind != app.CapabilityKindCodeIntelligenceProvider {
+			continue
+		}
+		if evidence.Details != nil && strings.TrimSpace(evidence.Details["provider"]) != "" {
+			return strings.TrimSpace(evidence.Details["provider"])
+		}
+		if strings.TrimSpace(evidence.Name) != "" {
+			return strings.TrimSpace(evidence.Name)
+		}
+	}
+	switch fact.Key {
+	case app.InvestigationProviderGitNexusKey:
+		return app.InvestigationProviderGitNexus
+	case app.InvestigationProviderPhpStormKey:
+		return app.InvestigationProviderPhpStorm
+	default:
+		return ""
+	}
 }
 
 func investigationProviderMCPID(fact model.CapabilityFact) string {

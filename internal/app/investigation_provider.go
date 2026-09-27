@@ -14,9 +14,19 @@ const (
 	CapabilityKindCodeIntelligenceProvider = "code_intelligence_provider"
 	InvestigationProviderGitNexus          = "gitnexus"
 	InvestigationProviderGitNexusKey       = "code_intelligence.gitnexus"
+	InvestigationProviderPhpStorm          = "phpstorm"
+	InvestigationProviderPhpStormKey       = "code_intelligence.phpstorm"
 )
 
 var gitNexusReadOnlyTools = []string{"context", "detect_changes", "impact", "list_repos", "query"}
+
+var phpStormReadOnlyTools = []string{
+	"code_intelligence_info",
+	"code_intelligence_query",
+	"code_intelligence_status",
+	"code_intelligence_references",
+	"code_intelligence_hierarchy",
+}
 
 // InvestigationProvider describes one optional external source of code
 // intelligence. Providers are discovered from existing Environment-authorized
@@ -45,8 +55,26 @@ func (gitNexusInvestigationProvider) MatchMCP(entry model.MCPDefinition) bool {
 	return strings.Contains(joined, "gitnexus") && strings.Contains(joined, "mcp")
 }
 
+type phpStormInvestigationProvider struct{}
+
+func (phpStormInvestigationProvider) ID() string            { return InvestigationProviderPhpStorm }
+func (phpStormInvestigationProvider) CapabilityKey() string { return InvestigationProviderPhpStormKey }
+func (phpStormInvestigationProvider) ReadOnlyTools() []string {
+	return append([]string(nil), phpStormReadOnlyTools...)
+}
+
+func (phpStormInvestigationProvider) MatchMCP(entry model.MCPDefinition) bool {
+	token := compactProviderToken(entry.Name)
+	if token == "phpstorm" || token == "phpstormcodeintelligence" || token == "jetbrainscodeintelligence" {
+		return true
+	}
+	parts := append([]string{filepath.Base(strings.TrimSpace(entry.Executable))}, entry.Args...)
+	joined := strings.ToLower(strings.Join(parts, " "))
+	return strings.Contains(joined, "phpstorm") && (strings.Contains(joined, "mcp") || strings.Contains(joined, "code-intelligence") || strings.Contains(joined, "code_intelligence"))
+}
+
 func investigationProviders() []InvestigationProvider {
-	return []InvestigationProvider{gitNexusInvestigationProvider{}}
+	return []InvestigationProvider{gitNexusInvestigationProvider{}, phpStormInvestigationProvider{}}
 }
 
 // InvestigationProviderReadOnlyTools returns the provider capabilities ADM may
@@ -87,18 +115,23 @@ func InvestigationProviderReportFromCapabilityReport(report model.CapabilityRepo
 }
 
 func (s *Service) investigationProviderCapabilityFacts(env model.Environment, ws model.Workspace, mcpFacts []model.CapabilityFact) []model.CapabilityFact {
+	providers := investigationProviders()
 	entries, err := s.MCPs.List()
 	if err != nil {
-		return []model.CapabilityFact{investigationProviderFact(
-			InvestigationProviderGitNexusKey,
-			model.CapabilityStateUnavailable,
-			"provider_catalog_unavailable",
-			sanitizeCapabilityMessage(err.Error()),
-			nil,
-			"none",
-			"unknown",
-			[]string{"provider_catalog_unavailable", "static_fallback_available"},
-		)}
+		facts := make([]model.CapabilityFact, 0, len(providers))
+		for _, provider := range providers {
+			facts = append(facts, investigationProviderFact(
+				provider.CapabilityKey(),
+				model.CapabilityStateUnavailable,
+				"provider_catalog_unavailable",
+				sanitizeCapabilityMessage(err.Error()),
+				[]model.CapabilityEvidence{providerEvidence(env, ws, provider, model.MCPDefinition{}, false, 0)},
+				"none",
+				"unknown",
+				[]string{"provider_catalog_unavailable", "static_fallback_available"},
+			))
+		}
+		return facts
 	}
 
 	mcpByKey := make(map[string]model.CapabilityFact, len(mcpFacts))
@@ -110,7 +143,6 @@ func (s *Service) investigationProviderCapabilityFacts(env model.Environment, ws
 		enabled[id] = true
 	}
 
-	providers := investigationProviders()
 	facts := make([]model.CapabilityFact, 0, len(providers))
 	for _, provider := range providers {
 		matches := make([]model.MCPDefinition, 0)

@@ -91,6 +91,69 @@ func TestGatewayInvestigationProviderUsesExistingObservationWithoutConnecting(t 
 	}
 }
 
+func TestGatewayPhpStormProviderRecognizesReadOnlyInventory(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	workspace, err := service.Workspaces.Add(t.TempDir(), "phpstorm-provider")
+	if err != nil {
+		t.Fatal(err)
+	}
+	phpStorm, err := service.MCPs.AddMCP("PhpStorm Code Intelligence", "http://127.0.0.1:65533/mcp", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := service.Environments.Create(workspace.ID, "phpstorm-provider", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetEnvironmentMCP(environment.ID, phpStorm.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	observedAt := time.Now().UTC().Add(-time.Minute)
+	owner.mu.Lock()
+	owner.observations[runtimeOwnerKey{environmentID: environment.ID, mcpID: phpStorm.ID}] = app.MCPRuntimeObservation{
+		EnvironmentID:  environment.ID,
+		MCPID:          phpStorm.ID,
+		DesiredEnabled: true,
+		State:          app.MCPHealthHealthy,
+		LastCheckAt:    &observedAt,
+		LastHealthyAt:  &observedAt,
+		LastSuccessAt:  &observedAt,
+		ToolInventory: []app.MCPToolInventoryItem{
+			{Name: "code_intelligence_info"},
+			{Name: "code_intelligence_query"},
+			{Name: "code_intelligence_references"},
+			{Name: "code_intelligence_hierarchy"},
+			{Name: "mutating_refactor"},
+		},
+		InventoryFetchedAt: &observedAt,
+	}
+	owner.mu.Unlock()
+
+	report, err := owner.InvestigationProviderReport(context.Background(), environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := requireGatewayInvestigationProviderFact(t, report, app.InvestigationProviderPhpStormKey)
+	if provider.State != model.CapabilityStateAvailable || provider.Confidence != "medium" {
+		t.Fatalf("PhpStorm provider fact = %+v", provider)
+	}
+	if got := capabilityEvidenceDetail(provider, "code_intelligence_provider_inventory", "provider"); got != app.InvestigationProviderPhpStorm {
+		t.Fatalf("provider inventory id = %q", got)
+	}
+	availableTools := capabilityEvidenceDetail(provider, "code_intelligence_provider_inventory", "available_read_tools")
+	for _, want := range []string{"code_intelligence_hierarchy", "code_intelligence_info", "code_intelligence_query", "code_intelligence_references"} {
+		if !strings.Contains(availableTools, want) {
+			t.Fatalf("PhpStorm read inventory missing %q: %s", want, availableTools)
+		}
+	}
+	if strings.Contains(availableTools, "mutating_refactor") {
+		t.Fatalf("PhpStorm provider exposed unrecognized mutating tool: %s", availableTools)
+	}
+}
+
 func requireGatewayInvestigationProviderFact(t *testing.T, report model.InvestigationProviderReport, key string) model.CapabilityFact {
 	t.Helper()
 	for _, provider := range report.Providers {
