@@ -405,7 +405,38 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 当前默认 Provider 是 `adm_static_index`，能力为 definitions=true、references=false、hierarchy=false，数据来源 `.adm/index`。上层工具通过 Provider 接口调用；未来接入 PhpStorm/JetBrains Provider 时，可以在不改 Agent 查询流程的前提下增加 references / hierarchy 等能力。
 
-### `project_index_query`
+### `code_intelligence_query`
+
+Provider-neutral 的 symbol definition 查询。参数与 `project_index_query` 相同，但返回中额外包含当前 `provider`：
+
+```json
+{
+  "environment_id": "env_xxx",
+  "query": "Service.Run",
+  "path": "internal/service",
+  "kind": "method",
+  "language": "Go",
+  "exact": false,
+  "max_results": 50
+}
+```
+
+Agent 新代码优先调用这一工具。当前会路由到 `adm_static_index`；未来切到 PhpStorm/JetBrains Provider 时，Agent 不需要换工具名。
+
+### `code_intelligence_status`
+
+Provider-neutral 的 freshness / health 查询：
+
+```json
+{
+  "environment_id": "env_xxx",
+  "max_changes": 50
+}
+```
+
+返回当前 `provider` 以及 provider-specific `result`。对 `adm_static_index`，状态语义与 `project_index_status` 相同。
+
+### `project_index_query`（兼容别名）
 
 只读查询由 `project_analyze` 生成的 `.adm/index/symbols.jsonl`。不需要 Writer；查询前会用 `manifest.json` 中的 SHA-256 校验 symbol index，避免读取半生成或被修改的索引。
 
@@ -425,7 +456,7 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 当前查询层只覆盖 symbol definitions。references / hierarchy 后续应作为 Code Intelligence Provider 能力扩展，这样 ADM 静态索引和未来 PhpStorm Provider 可以复用同一套上层接口。
 
-### `project_index_status`
+### `project_index_status`（兼容别名）
 
 检查 `.adm/index` 是否仍然能代表当前源码，不需要 Writer：
 
