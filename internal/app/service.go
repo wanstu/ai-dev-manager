@@ -549,13 +549,29 @@ func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbo
 	if err != nil {
 		return projectanalysis.Result{}, err
 	}
-	if _, err := rt.Write(projectanalysis.OverviewRelativePath, result.Markdown, true); err != nil {
-		return projectanalysis.Result{}, err
+	artifacts := []struct {
+		path    string
+		content string
+	}{
+		{projectanalysis.OverviewRelativePath, result.Markdown},
+		{projectanalysis.IndexFilesRelativePath, result.FilesJSONL},
+		{projectanalysis.IndexSymbolsRelativePath, result.SymbolsJSONL},
+		// Write the manifest last. Its artifact hashes let consumers detect
+		// a partial/stale generation if an earlier write is interrupted.
+		{projectanalysis.IndexManifestRelativePath, result.ManifestJSON},
+	}
+	for _, artifact := range artifacts {
+		if _, err := rt.Write(artifact.path, artifact.content, true); err != nil {
+			return projectanalysis.Result{}, err
+		}
 	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return projectanalysis.Result{}, err
 	}
 	result.Markdown = ""
+	result.ManifestJSON = ""
+	result.FilesJSONL = ""
+	result.SymbolsJSONL = ""
 	return result, nil
 }
 

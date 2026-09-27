@@ -15,25 +15,30 @@ import (
 	"strings"
 )
 
-const OverviewRelativePath = ".adm/project-overview.md"
-
 type Options struct {
 	MaxFiles   int
 	MaxSymbols int
 }
 
 type Result struct {
-	OverviewPath    string   `json:"overview_path"`
-	Languages       []string `json:"languages"`
-	FilesScanned    int      `json:"files_scanned"`
-	GoFiles         int      `json:"go_files"`
-	PHPFiles        int      `json:"php_files"`
-	Symbols         int      `json:"symbols"`
-	GoModule        string   `json:"go_module,omitempty"`
-	ComposerPackage string   `json:"composer_package,omitempty"`
-	Truncated       bool     `json:"truncated,omitempty"`
-	ParseIssues     int      `json:"parse_issues,omitempty"`
-	Markdown        string   `json:"-"`
+	OverviewPath      string   `json:"overview_path"`
+	IndexManifestPath string   `json:"index_manifest_path"`
+	IndexFilesPath    string   `json:"index_files_path"`
+	IndexSymbolsPath  string   `json:"index_symbols_path"`
+	Languages         []string `json:"languages"`
+	FilesScanned      int      `json:"files_scanned"`
+	FilesIndexed      int      `json:"files_indexed"`
+	GoFiles           int      `json:"go_files"`
+	PHPFiles          int      `json:"php_files"`
+	Symbols           int      `json:"symbols"`
+	GoModule          string   `json:"go_module,omitempty"`
+	ComposerPackage   string   `json:"composer_package,omitempty"`
+	Truncated         bool     `json:"truncated,omitempty"`
+	ParseIssues       int      `json:"parse_issues,omitempty"`
+	Markdown          string   `json:"-"`
+	ManifestJSON      string   `json:"-"`
+	FilesJSONL        string   `json:"-"`
+	SymbolsJSONL      string   `json:"-"`
 }
 
 type fileOutline struct {
@@ -71,13 +76,18 @@ func Analyze(root string, options Options) (Result, error) {
 	}
 
 	result := Result{
-		OverviewPath:    OverviewRelativePath,
-		GoModule:        readGoModule(filepath.Join(root, "go.mod")),
-		ComposerPackage: readComposerPackage(filepath.Join(root, "composer.json")),
+		OverviewPath:      OverviewRelativePath,
+		IndexManifestPath: IndexManifestRelativePath,
+		IndexFilesPath:    IndexFilesRelativePath,
+		IndexSymbolsPath:  IndexSymbolsRelativePath,
+		GoModule:          readGoModule(filepath.Join(root, "go.mod")),
+		ComposerPackage:   readComposerPackage(filepath.Join(root, "composer.json")),
 	}
 	keyFiles := rootKeyFiles(root)
 	dirCounts := map[string]int{}
 	var outlines []fileOutline
+	var fileRecords []FileRecord
+	var symbolRecords []SymbolRecord
 	remainingSymbols := options.MaxSymbols
 
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -107,40 +117,56 @@ func Analyze(root string, options Options) (Result, error) {
 			return relErr
 		}
 		rel = filepath.ToSlash(rel)
-		switch strings.ToLower(filepath.Ext(path)) {
+		fileInfo, infoErr := entry.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+		ext := strings.ToLower(filepath.Ext(path))
+		record := newFileRecord(rel, ext, fileInfo)
+
+		switch ext {
 		case ".go":
 			result.GoFiles++
 			dirCounts[summaryDir(rel)]++
-			if remainingSymbols > 0 {
-				outline, parseIssue := analyzeGo(path, rel, remainingSymbols)
-				if parseIssue {
-					result.ParseIssues++
-				}
+			outline, parseIssue := analyzeGo(path, rel, max(remainingSymbols, 0))
+			if parseIssue {
+				result.ParseIssues++
+			}
+			record.Language = outline.Language
+			record.Namespace = outline.Namespace
+			record.SHA256 = sourceHash(path)
+			if remainingSymbols <= 0 {
+				result.Truncated = true
+			} else {
 				remainingSymbols -= len(outline.Symbols)
 				result.Symbols += len(outline.Symbols)
-				if len(outline.Symbols) > 0 {
-					outlines = append(outlines, outline)
-				}
-			} else {
-				result.Truncated = true
+				symbolRecords = append(symbolRecords, symbolRecordsForOutline(outline)...)
+			}
+			if len(outline.Symbols) > 0 {
+				outlines = append(outlines, outline)
 			}
 		case ".php":
 			result.PHPFiles++
 			dirCounts[summaryDir(rel)]++
-			if remainingSymbols > 0 {
-				outline, parseIssue := analyzePHP(path, rel, remainingSymbols)
-				if parseIssue {
-					result.ParseIssues++
-				}
+			outline, parseIssue := analyzePHP(path, rel, max(remainingSymbols, 0))
+			if parseIssue {
+				result.ParseIssues++
+			}
+			record.Language = outline.Language
+			record.Namespace = outline.Namespace
+			record.SHA256 = sourceHash(path)
+			if remainingSymbols <= 0 {
+				result.Truncated = true
+			} else {
 				remainingSymbols -= len(outline.Symbols)
 				result.Symbols += len(outline.Symbols)
-				if len(outline.Symbols) > 0 {
-					outlines = append(outlines, outline)
-				}
-			} else {
-				result.Truncated = true
+				symbolRecords = append(symbolRecords, symbolRecordsForOutline(outline)...)
+			}
+			if len(outline.Symbols) > 0 {
+				outlines = append(outlines, outline)
 			}
 		}
+		fileRecords = append(fileRecords, record)
 		return nil
 	})
 	if err != nil {
@@ -154,7 +180,12 @@ func Analyze(root string, options Options) (Result, error) {
 		result.Languages = append(result.Languages, "PHP")
 	}
 	sort.Slice(outlines, func(i, j int) bool { return outlines[i].Path < outlines[j].Path })
+	result.FilesIndexed = len(fileRecords)
 	result.Markdown = render(result, keyFiles, dirCounts, outlines)
+	result.ManifestJSON, result.FilesJSONL, result.SymbolsJSONL, err = buildIndexArtifacts(result, options, fileRecords, symbolRecords)
+	if err != nil {
+		return Result{}, err
+	}
 	return result, nil
 }
 
@@ -341,6 +372,9 @@ func lineAt(data []byte, offset int) int {
 }
 
 func render(result Result, keyFiles []string, dirCounts map[string]int, outlines []fileOutline) string {
+	const maxOverviewFiles = 120
+	const maxOverviewSymbols = 400
+
 	var out strings.Builder
 	out.WriteString("# ADM Project Overview\n\n")
 	out.WriteString("> Generated by ADM static project analysis. Project code was not executed.\n\n")
@@ -349,7 +383,7 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 	if len(result.Languages) > 0 {
 		languages = strings.Join(result.Languages, ", ")
 	}
-	fmt.Fprintf(&out, "- Root: .\n- Detected languages: %s\n- Files scanned: %d\n- Go files: %d\n- PHP files: %d\n- Symbols indexed: %d\n", languages, result.FilesScanned, result.GoFiles, result.PHPFiles, result.Symbols)
+	fmt.Fprintf(&out, "- Root: .\n- Detected languages: %s\n- Files scanned: %d\n- Files indexed: %d\n- Go files: %d\n- PHP files: %d\n- Symbols indexed: %d\n", languages, result.FilesScanned, result.FilesIndexed, result.GoFiles, result.PHPFiles, result.Symbols)
 	if result.GoModule != "" {
 		fmt.Fprintf(&out, "- Go module: %s\n", result.GoModule)
 	}
@@ -362,6 +396,10 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 	if result.Truncated {
 		out.WriteString("- Analysis bounded: yes\n")
 	}
+
+	out.WriteString("\n## Machine index\n\n")
+	fmt.Fprintf(&out, "- Manifest: %s\n- Files: %s\n- Symbols: %s\n", result.IndexManifestPath, result.IndexFilesPath, result.IndexSymbolsPath)
+	out.WriteString("- Use the overview for orientation; use the machine index for precise project lookup.\n")
 
 	out.WriteString("\n## Key files\n\n")
 	if len(keyFiles) == 0 {
@@ -390,7 +428,12 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 	if len(outlines) == 0 {
 		out.WriteString("No indexed Go/PHP declarations.\n")
 	} else {
+		renderedFiles := 0
+		renderedSymbols := 0
 		for _, file := range outlines {
+			if renderedFiles >= maxOverviewFiles || renderedSymbols >= maxOverviewSymbols {
+				break
+			}
 			fmt.Fprintf(&out, "### %s\n\n", file.Path)
 			if file.Namespace != "" {
 				label := "Package"
@@ -400,9 +443,17 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 				fmt.Fprintf(&out, "%s: %s\n\n", label, file.Namespace)
 			}
 			for _, item := range file.Symbols {
+				if renderedSymbols >= maxOverviewSymbols {
+					break
+				}
 				fmt.Fprintf(&out, "- L%d · %s · %s\n", item.Line, item.Kind, item.Name)
+				renderedSymbols++
 			}
 			out.WriteString("\n")
+			renderedFiles++
+		}
+		if renderedFiles < len(outlines) || renderedSymbols < result.Symbols {
+			fmt.Fprintf(&out, "_Overview source outline is bounded (%d files / %d symbols shown). Read %s for the full indexed symbol set._\n\n", renderedFiles, renderedSymbols, result.IndexSymbolsPath)
 		}
 	}
 
@@ -410,5 +461,6 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 	out.WriteString("- Static only: ADM does not execute project code during analysis.\n")
 	out.WriteString("- Common dependency/generated directories are skipped: .git, .adm, vendor, node_modules, dist, build and similar.\n")
 	out.WriteString("- Go declarations use the Go parser; PHP outline extraction is heuristic.\n")
+	out.WriteString("- The generated manifest includes artifact hashes so consumers can detect partial/stale index files.\n")
 	return out.String()
 }

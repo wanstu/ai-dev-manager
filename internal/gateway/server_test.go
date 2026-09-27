@@ -180,7 +180,7 @@ func TestGatewayDevelopsPlainDirectoryWithoutGit(t *testing.T) {
 		t.Fatalf("project_analyze failed: err=%v result=%+v", err, analyzed)
 	}
 	analyzedText := toolText(t, analyzed)
-	for _, want := range []string{`.adm/project-overview.md`, `example.com/plain`, `"go_files":1`} {
+	for _, want := range []string{`.adm/project-overview.md`, `.adm/index/manifest.json`, `.adm/index/files.jsonl`, `.adm/index/symbols.jsonl`, `example.com/plain`, `"go_files":1`} {
 		if !strings.Contains(analyzedText, want) {
 			t.Fatalf("project_analyze result missing %q: %s", want, analyzedText)
 		}

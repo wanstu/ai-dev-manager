@@ -368,7 +368,7 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 ### `project_analyze`
 
-对当前 Environment 根目录做 bounded 静态项目分析，并刷新 `.adm/project-overview.md`：
+对当前 Environment 根目录做 bounded 静态项目分析，并刷新项目总览和机器索引：
 
 ```json
 {
@@ -381,7 +381,16 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 当前 MVP 重点支持 Go / PHP：识别 `go.mod` / `composer.json`、主要源码目录，以及 Go type/func/method 和 PHP class/interface/trait/enum/function 大纲。分析不会执行项目代码，并跳过 `.git`、`.adm`、`vendor`、`node_modules`、`dist`、`build` 等常见依赖或生成目录。
 
-因为会写入 `.adm/project-overview.md`，需要 matching Writer。返回结果只包含概要统计和 overview 路径，不把整份 Markdown 再塞进 MCP 响应；Agent 后续可直接用 `read` 读取该文件或指定行段。
+生成：
+
+- `.adm/project-overview.md`：给人和 Agent 快速建立项目心智模型的 bounded 摘要。
+- `.adm/index/manifest.json`：索引 schema、统计、bounds、生成时间和 artifact SHA-256。
+- `.adm/index/files.jsonl`：项目文件清单；Go/PHP 源文件附 language / package-or-namespace / SHA-256。
+- `.adm/index/symbols.jsonl`：type/class/func/method 等定义到文件和行号的机器索引。
+
+`project-overview.md` 不再承担完整索引职责；精确查找应优先使用 `.adm/index`。manifest 最后写入，且记录 artifact hashes，消费者可以检测中途失败产生的 partial/stale index。
+
+因为会写入 `.adm`，需要 matching Writer。返回结果只包含概要统计和 artifact 路径，不把 Markdown / JSONL 正文塞进 MCP 响应；Agent 后续可用 `read` / `search` 对索引做 bounded 查询。
 
 ### `search`
 
