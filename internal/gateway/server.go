@@ -369,6 +369,11 @@ type ProjectIndexQueryInput struct {
 	MaxResults    int    `json:"max_results,omitempty" jsonschema:"maximum returned matches; defaults to 50 and is capped at 200"`
 }
 
+type ProjectIndexStatusInput struct {
+	EnvironmentID string `json:"environment_id"`
+	MaxChanges    int    `json:"max_changes,omitempty" jsonschema:"maximum changed paths returned; defaults to 50 and is capped at 200"`
+}
+
 type SearchInput struct {
 	EnvironmentID   string `json:"environment_id"`
 	Path            string `json:"path,omitempty"`
@@ -1498,6 +1503,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
 				Exact: in.Exact, MaxResults: in.MaxResults,
 			})
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_status", Description: "Check generated project-index integrity and freshness against current Environment files. Returns fresh, stale, partial, missing, or invalid with bounded changed paths. Read-only and does not require a writer."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.ProjectIndexStatus(in.EnvironmentID, in.MaxChanges)
 			return toolResult(value, err)
 		})
 

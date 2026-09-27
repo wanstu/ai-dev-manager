@@ -413,6 +413,27 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 当前查询层只覆盖 symbol definitions。references / hierarchy 后续应作为 Code Intelligence Provider 能力扩展，这样 ADM 静态索引和未来 PhpStorm Provider 可以复用同一套上层接口。
 
+### `project_index_status`
+
+检查 `.adm/index` 是否仍然能代表当前源码，不需要 Writer：
+
+```json
+{
+  "environment_id": "env_xxx",
+  "max_changes": 50
+}
+```
+
+状态：
+
+- `fresh`：artifact hash 正确，且当前项目文件与索引一致。
+- `stale`：检测到新增、删除或修改的项目文件；返回 bounded changed paths。
+- `partial`：索引生成或 freshness scan 触及 `max_files` 等 bounds，未发现变化但不能声称完整新鲜。
+- `missing`：尚未生成索引。
+- `invalid`：manifest/schema/artifact hash 等索引完整性检查失败。
+
+`project_index_query` 只做快速 symbol 查询和 artifact 完整性校验，不会每次重新扫描整个项目；需要判断源码是否变化时显式调用 `project_index_status`，`stale/partial/invalid` 时再运行 `project_analyze` 刷新索引。
+
 ### `search`
 
 ```json
