@@ -405,7 +405,9 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 当前默认 Provider 是 `adm_static_index`，能力为 definitions=true、references=false、hierarchy=false，数据来源 `.adm/index`。上层工具通过 Provider 接口调用；未来接入 PhpStorm/JetBrains Provider 时，可以在不改 Agent 查询流程的前提下增加 references / hierarchy 等能力。
 
-ADM 也会识别 Environment 已启用的 `PhpStorm` / `PhpStorm Code Intelligence` / `JetBrains Code Intelligence` MCP 作为可选 Code Intelligence Provider。当前识别的只读 Provider tool contract 为 `code_intelligence_info`、`code_intelligence_query`、`code_intelligence_status`、`code_intelligence_references`、`code_intelligence_hierarchy`；未知或 mutating tools 不会被当作可消费的 code intelligence 能力。此阶段仅做被动健康与 inventory 观测，不会为了检查 Provider 主动连接或执行项目代码。
+ADM 也会识别 Environment 已启用的 `PhpStorm` / `PhpStorm Code Intelligence` / `JetBrains Code Intelligence` MCP 作为可选 Code Intelligence Provider。当前识别的只读 Provider tool contract 为 `code_intelligence_info`、`code_intelligence_query`、`code_intelligence_status`、`code_intelligence_references`、`code_intelligence_hierarchy`；未知或 mutating tools 不会被当作可消费的 code intelligence 能力。
+
+Provider 选择保持保守：只有 Environment 已授权、Gateway 已观察为 healthy、且 tool inventory 明确包含本次所需只读 tool 时，generic `code_intelligence_*` 才会优先调用 PhpStorm MCP。Provider 调用失败、返回 tool error、缺失 structured content 或结构不兼容时，ADM 会回退 `adm_static_index`；返回中的 `provider` 表示实际使用者，`attempted_provider` / `fallback_reason` 说明发生过的回退。单纯查看 Provider 状态不会执行项目代码。
 
 ### `code_intelligence_query`
 
@@ -423,7 +425,7 @@ Provider-neutral 的 symbol definition 查询。参数与 `project_index_query` 
 }
 ```
 
-Agent 新代码优先调用这一工具。当前会路由到 `adm_static_index`；未来切到 PhpStorm/JetBrains Provider 时，Agent 不需要换工具名。
+Agent 新代码优先调用这一工具。默认使用 `adm_static_index`；若 healthy 的 Environment-authorized PhpStorm MCP 提供 `code_intelligence_query`，则自动路由到 PhpStorm。传给外部 Provider 的参数除查询条件外还包含 `environment_id` 和 `project_root`。外部 Provider 必须通过 MCP `structuredContent` 返回与 ADM symbol query result 兼容的结构；ADM 不依赖自由文本 JSON 猜测结果。
 
 ### `code_intelligence_status`
 
@@ -436,7 +438,7 @@ Provider-neutral 的 freshness / health 查询：
 }
 ```
 
-返回当前 `provider` 以及 provider-specific `result`。对 `adm_static_index`，状态语义与 `project_index_status` 相同。
+返回当前实际使用的 `provider` 以及 provider-specific `result`。对 `adm_static_index`，状态语义与 `project_index_status` 相同；healthy PhpStorm MCP 若提供 `code_intelligence_status`，则会优先调用它。外部 Provider 同样必须返回 structured result。
 
 ### `project_index_query`（兼容别名）
 

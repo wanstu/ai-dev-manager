@@ -380,13 +380,17 @@ type ProjectIndexStatusInput struct {
 }
 
 type CodeIntelligenceQueryResult struct {
-	Provider codeintel.ProviderInfo           `json:"provider"`
-	Result   projectanalysis.IndexQueryResult `json:"result"`
+	Provider          codeintel.ProviderInfo           `json:"provider"`
+	Result            projectanalysis.IndexQueryResult `json:"result"`
+	AttemptedProvider *codeintel.ProviderInfo          `json:"attempted_provider,omitempty"`
+	FallbackReason    string                           `json:"fallback_reason,omitempty"`
 }
 
 type CodeIntelligenceStatusResult struct {
-	Provider codeintel.ProviderInfo            `json:"provider"`
-	Result   projectanalysis.IndexStatusResult `json:"result"`
+	Provider          codeintel.ProviderInfo            `json:"provider"`
+	Result            projectanalysis.IndexStatusResult `json:"result"`
+	AttemptedProvider *codeintel.ProviderInfo           `json:"attempted_provider,omitempty"`
+	FallbackReason    string                            `json:"fallback_reason,omitempty"`
 }
 
 type SearchInput struct {
@@ -1512,39 +1516,46 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_info", Description: "Report the code-intelligence provider selected by ADM for this Environment and its capabilities such as definitions, references, and hierarchy. Read-only; provider-neutral so future PhpStorm or other providers can use the same upper-layer contract."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceInfoInput) (*mcp.CallToolResult, any, error) {
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_info", Description: "Report the code-intelligence provider currently preferred for this Environment and its capabilities such as definitions, references, and hierarchy. Read-only and provider-neutral."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceInfoInput) (*mcp.CallToolResult, any, error) {
+			if owner != nil {
+				value, err := owner.preferredCodeIntelligenceInfo(ctx, in.EnvironmentID)
+				return toolResult(value, err)
+			}
 			value, err := service.CodeIntelligenceInfo(in.EnvironmentID)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_query", Description: "Query symbol definitions through the active code-intelligence provider. Read-only and provider-neutral; current default provider is ADM static index, while future PhpStorm/JetBrains providers can satisfy the same contract."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexQueryInput) (*mcp.CallToolResult, any, error) {
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_query", Description: "Query symbol definitions through the preferred code-intelligence provider. A healthy Environment-authorized PhpStorm MCP is preferred when it exposes the required structured read-only tool; otherwise ADM static index is used. Provider failures fall back to static index and are reported in fallback_reason."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in ProjectIndexQueryInput) (*mcp.CallToolResult, any, error) {
+			query := projectanalysis.IndexQuery{
+				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
+				Exact: in.Exact, MaxResults: in.MaxResults,
+			}
+			if owner != nil {
+				value, err := owner.queryCodeIntelligence(ctx, in.EnvironmentID, query)
+				return toolResult(value, err)
+			}
 			provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
 			if err != nil {
 				return toolResult(nil, err)
 			}
-			value, err := service.ProjectIndexQuery(in.EnvironmentID, projectanalysis.IndexQuery{
-				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
-				Exact: in.Exact, MaxResults: in.MaxResults,
-			})
-			if err != nil {
-				return toolResult(nil, err)
-			}
-			return toolResult(CodeIntelligenceQueryResult{Provider: provider, Result: value}, nil)
+			value, err := service.ProjectIndexQuery(in.EnvironmentID, query)
+			return toolResult(CodeIntelligenceQueryResult{Provider: provider, Result: value}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_status", Description: "Check freshness/health through the active code-intelligence provider. Read-only and provider-neutral; returns provider identity together with provider-specific status."},
-		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_status", Description: "Check health/freshness through the preferred code-intelligence provider. A healthy Environment-authorized PhpStorm MCP is preferred when it exposes the required structured read-only tool; otherwise ADM static index is used."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
+			if owner != nil {
+				value, err := owner.statusCodeIntelligence(ctx, in.EnvironmentID, in.MaxChanges)
+				return toolResult(value, err)
+			}
 			provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
 			if err != nil {
 				return toolResult(nil, err)
 			}
 			value, err := service.ProjectIndexStatus(in.EnvironmentID, in.MaxChanges)
-			if err != nil {
-				return toolResult(nil, err)
-			}
-			return toolResult(CodeIntelligenceStatusResult{Provider: provider, Result: value}, nil)
+			return toolResult(CodeIntelligenceStatusResult{Provider: provider, Result: value}, err)
 		})
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_query", Description: "Query the generated .adm symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256 before returning matches. Run project_analyze first when the index is missing or stale."},
