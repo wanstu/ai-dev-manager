@@ -359,6 +359,10 @@ type ProjectAnalyzeInput struct {
 	MaxSymbols    int    `json:"max_symbols,omitempty" jsonschema:"maximum Go/PHP symbols recorded; defaults to 1200"`
 }
 
+type CodeIntelligenceInfoInput struct {
+	EnvironmentID string `json:"environment_id"`
+}
+
 type ProjectIndexQueryInput struct {
 	EnvironmentID string `json:"environment_id"`
 	Query         string `json:"query,omitempty" jsonschema:"symbol name or qualified name; optional when another filter is provided"`
@@ -1494,6 +1498,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Statically analyze one Environment project and refresh .adm/project-overview.md plus .adm/index/{manifest.json,files.jsonl,symbols.jsonl}. Project code is never executed. Requires the matching writer_owner because generated index artifacts are written under the Environment root."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectAnalyzeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.AnalyzeProject(in.EnvironmentID, in.WriterOwner, in.MaxFiles, in.MaxSymbols)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_info", Description: "Report the code-intelligence provider selected by ADM for this Environment and its capabilities such as definitions, references, and hierarchy. Read-only; provider-neutral so future PhpStorm or other providers can use the same upper-layer contract."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceInfoInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.CodeIntelligenceInfo(in.EnvironmentID)
 			return toolResult(value, err)
 		})
 

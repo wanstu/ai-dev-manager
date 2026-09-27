@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ai-dev-manager-v2/internal/catalog"
+	"ai-dev-manager-v2/internal/codeintel"
 	"ai-dev-manager-v2/internal/environment"
 	"ai-dev-manager-v2/internal/hostenv"
 	"ai-dev-manager-v2/internal/isolation"
@@ -34,6 +35,7 @@ type Service struct {
 	Memory                  *memory.Service
 	Logger                  *logging.Logger
 	Verifiers               *verifier.Service
+	CodeIntelligence        codeintel.Provider
 	writerHeartbeatInterval func(time.Duration) time.Duration
 }
 
@@ -68,6 +70,7 @@ func New(statePath string) *Service {
 		Memory:                  memory.New(s),
 		Logger:                  logging.New(filepath.Join(filepath.Dir(statePath), "logs"), 5*1024*1024, 7),
 		Verifiers:               verifier.New(s),
+		CodeIntelligence:        codeintel.NewStaticIndexProvider(),
 		writerHeartbeatInterval: defaultWriterHeartbeatInterval,
 	}
 }
@@ -575,12 +578,26 @@ func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbo
 	return result, nil
 }
 
+func (s *Service) codeIntelligenceProvider() codeintel.Provider {
+	if s.CodeIntelligence != nil {
+		return s.CodeIntelligence
+	}
+	return codeintel.NewStaticIndexProvider()
+}
+
+func (s *Service) CodeIntelligenceInfo(environmentID string) (codeintel.ProviderInfo, error) {
+	if _, _, err := s.Runtime(environmentID); err != nil {
+		return codeintel.ProviderInfo{}, err
+	}
+	return s.codeIntelligenceProvider().Info(), nil
+}
+
 func (s *Service) ProjectIndexQuery(environmentID string, query projectanalysis.IndexQuery) (projectanalysis.IndexQueryResult, error) {
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return projectanalysis.IndexQueryResult{}, err
 	}
-	return projectanalysis.QueryIndex(rt.Root(), query)
+	return s.codeIntelligenceProvider().QuerySymbols(rt.Root(), query)
 }
 
 func (s *Service) ProjectIndexStatus(environmentID string, maxChanges int) (projectanalysis.IndexStatusResult, error) {
@@ -588,7 +605,7 @@ func (s *Service) ProjectIndexStatus(environmentID string, maxChanges int) (proj
 	if err != nil {
 		return projectanalysis.IndexStatusResult{}, err
 	}
-	return projectanalysis.IndexStatus(rt.Root(), maxChanges)
+	return s.codeIntelligenceProvider().Status(rt.Root(), maxChanges)
 }
 
 func (s *Service) Search(environmentID, path, query string, maxFiles, maxMatches, maxBytesPerFile int) (any, error) {

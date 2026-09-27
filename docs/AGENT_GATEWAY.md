@@ -393,6 +393,18 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 因为会写入 `.adm`，需要 matching Writer。返回结果只包含概要统计和 artifact 路径，不把 Markdown / JSONL 正文塞进 MCP 响应；Agent 后续可用 `read` / `search` 对索引做 bounded 查询。
 
 
+### `code_intelligence_info`
+
+查看当前 Environment 使用的 Code Intelligence Provider 及能力，不需要 Writer：
+
+```json
+{
+  "environment_id": "env_xxx"
+}
+```
+
+当前默认 Provider 是 `adm_static_index`，能力为 definitions=true、references=false、hierarchy=false，数据来源 `.adm/index`。上层工具通过 Provider 接口调用；未来接入 PhpStorm/JetBrains Provider 时，可以在不改 Agent 查询流程的前提下增加 references / hierarchy 等能力。
+
 ### `project_index_query`
 
 只读查询由 `project_analyze` 生成的 `.adm/index/symbols.jsonl`。不需要 Writer；查询前会用 `manifest.json` 中的 SHA-256 校验 symbol index，避免读取半生成或被修改的索引。
