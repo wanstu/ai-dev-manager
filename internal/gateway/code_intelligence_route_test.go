@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"ai-dev-manager-v2/internal/app"
+	"ai-dev-manager-v2/internal/codeintel"
 	"ai-dev-manager-v2/internal/projectanalysis"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -60,6 +61,24 @@ func (s *codeIntelligenceRouteSession) CallTool(_ context.Context, params *mcp.C
 	case "code_intelligence_status":
 		return &mcp.CallToolResult{StructuredContent: projectanalysis.IndexStatusResult{
 			State: "fresh", Fresh: true, Complete: true,
+		}}, nil
+	case "code_intelligence_references":
+		return &mcp.CallToolResult{StructuredContent: codeintel.ReferencesResult{
+			References: []codeintel.Reference{{
+				Path: "src/Bar.php", Line: 31, Column: 9, Language: "PHP",
+				Kind: "call", Name: "Foo", QualifiedName: "App\\Foo", Context: "$foo = new Foo();",
+			}},
+			Returned: 1,
+		}}, nil
+	case "code_intelligence_hierarchy":
+		return &mcp.CallToolResult{StructuredContent: codeintel.HierarchyResult{
+			Direction: "both",
+			Nodes: []codeintel.HierarchyNode{
+				{ID: "foo", Path: "src/Foo.php", Line: 17, Language: "PHP", Kind: "class", Name: "Foo", QualifiedName: "App\\Foo"},
+				{ID: "base", Path: "src/Base.php", Line: 8, Language: "PHP", Kind: "class", Name: "Base", QualifiedName: "App\\Base"},
+			},
+			Edges:    []codeintel.HierarchyEdge{{From: "base", To: "foo", Kind: "extends"}},
+			Returned: 2,
 		}}, nil
 	default:
 		return &mcp.CallToolResult{IsError: true}, nil
@@ -143,6 +162,49 @@ func TestCodeIntelligenceGenericToolsRouteToHealthyPhpStormProvider(t *testing.T
 		}
 	}
 
+	references := callGatewayTool(t, ctx, session, "code_intelligence_references", map[string]any{
+		"environment_id": environment.ID,
+		"symbol": map[string]any{
+			"path":           "src/Foo.php",
+			"line":           17,
+			"name":           "Foo",
+			"qualified_name": "App\\Foo",
+			"kind":           "class",
+			"language":       "PHP",
+		},
+		"max_results": 25,
+	})
+	if references.IsError {
+		t.Fatalf("code_intelligence_references failed: %s", toolText(t, references))
+	}
+	referencesText := toolText(t, references)
+	for _, want := range []string{"\"provider_id\":\"phpstorm\"", "\"available\":true", "\"path\":\"src/Bar.php\"", "\"line\":31", "\"context\":\"$foo = new Foo();\""} {
+		if !strings.Contains(referencesText, want) {
+			t.Fatalf("code_intelligence_references missing %q: %s", want, referencesText)
+		}
+	}
+
+	hierarchy := callGatewayTool(t, ctx, session, "code_intelligence_hierarchy", map[string]any{
+		"environment_id": environment.ID,
+		"symbol": map[string]any{
+			"path":           "src/Foo.php",
+			"line":           17,
+			"qualified_name": "App\\Foo",
+		},
+		"direction":   "both",
+		"max_depth":   3,
+		"max_results": 30,
+	})
+	if hierarchy.IsError {
+		t.Fatalf("code_intelligence_hierarchy failed: %s", toolText(t, hierarchy))
+	}
+	hierarchyText := toolText(t, hierarchy)
+	for _, want := range []string{"\"provider_id\":\"phpstorm\"", "\"available\":true", "\"qualified_name\":\"App\\\\Base\"", "\"kind\":\"extends\"", "\"returned\":2"} {
+		if !strings.Contains(hierarchyText, want) {
+			t.Fatalf("code_intelligence_hierarchy missing %q: %s", want, hierarchyText)
+		}
+	}
+
 	fake.mu.Lock()
 	queryArgs := fake.arguments["code_intelligence_query"]
 	statusArgs := fake.arguments["code_intelligence_status"]
@@ -152,6 +214,55 @@ func TestCodeIntelligenceGenericToolsRouteToHealthyPhpStormProvider(t *testing.T
 	}
 	if queryArgs["environment_id"] != environment.ID {
 		t.Fatalf("provider environment_id=%v want=%s", queryArgs["environment_id"], environment.ID)
+	}
+}
+
+func TestCodeIntelligenceRelationsReportUnavailableWithoutCapableProvider(t *testing.T) {
+	ctx := context.Background()
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	root := t.TempDir()
+	workspace, err := service.Workspaces.Add(root, "static-relations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := service.Environments.Create(workspace.ID, "static-relations", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	session := connectInMemory(t, ctx, newServer(service, owner))
+	defer session.Close()
+
+	for _, call := range []struct {
+		name string
+		args map[string]any
+	}{
+		{
+			name: "code_intelligence_references",
+			args: map[string]any{
+				"environment_id": environment.ID,
+				"symbol":         map[string]any{"path": "service.go", "name": "Run"},
+			},
+		},
+		{
+			name: "code_intelligence_hierarchy",
+			args: map[string]any{
+				"environment_id": environment.ID,
+				"symbol":         map[string]any{"path": "service.go", "name": "Service"},
+			},
+		},
+	} {
+		result := callGatewayTool(t, ctx, session, call.name, call.args)
+		if result.IsError {
+			t.Fatalf("%s failed: %s", call.name, toolText(t, result))
+		}
+		got := toolText(t, result)
+		for _, want := range []string{"\"provider_id\":\"adm_static_index\"", "\"available\":false", "\"reason\":\"provider_capability_unavailable\""} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("%s missing %q: %s", call.name, want, got)
+			}
+		}
 	}
 }
 

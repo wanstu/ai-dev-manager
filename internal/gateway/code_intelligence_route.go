@@ -202,6 +202,156 @@ func (o *runtimeOwner) statusCodeIntelligence(ctx context.Context, environmentID
 	}, nil
 }
 
+func (o *runtimeOwner) referencesCodeIntelligence(ctx context.Context, environmentID string, symbol codeintel.SymbolLocator, maxResults int) (CodeIntelligenceReferencesResult, error) {
+	symbol = normalizeCodeIntelligenceSymbol(symbol)
+	if !symbol.Valid() {
+		return CodeIntelligenceReferencesResult{}, fmt.Errorf("symbol path, name, or qualified_name is required")
+	}
+	if maxResults <= 0 {
+		maxResults = 100
+	}
+	if maxResults > 500 {
+		maxResults = 500
+	}
+	staticInfo, err := o.service.CodeIntelligenceInfo(environmentID)
+	if err != nil {
+		return CodeIntelligenceReferencesResult{}, err
+	}
+	route, ok := o.preferredCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_references")
+	if !ok {
+		return CodeIntelligenceReferencesResult{
+			Provider:  staticInfo,
+			Available: false,
+			Reason:    "provider_capability_unavailable",
+		}, nil
+	}
+	rt, _, err := o.service.Runtime(environmentID)
+	if err != nil {
+		return CodeIntelligenceReferencesResult{}, err
+	}
+	external, callErr := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_references", map[string]any{
+		"environment_id": environmentID,
+		"project_root":   rt.Root(),
+		"symbol":         symbol,
+		"max_results":    maxResults,
+	})
+	if callErr != nil {
+		return CodeIntelligenceReferencesResult{
+			Provider:          staticInfo,
+			Available:         false,
+			AttemptedProvider: &route.Provider,
+			Reason:            "external_provider_call_failed",
+		}, nil
+	}
+	var value codeintel.ReferencesResult
+	if decodeErr := decodeProviderStructuredResult(external, &value); decodeErr != nil {
+		return CodeIntelligenceReferencesResult{
+			Provider:          staticInfo,
+			Available:         false,
+			AttemptedProvider: &route.Provider,
+			Reason:            "external_provider_invalid_result",
+		}, nil
+	}
+	if value.Returned == 0 && len(value.References) > 0 {
+		value.Returned = len(value.References)
+	}
+	if !value.Symbol.Valid() {
+		value.Symbol = symbol
+	}
+	return CodeIntelligenceReferencesResult{Provider: route.Provider, Available: true, Result: &value}, nil
+}
+
+func (o *runtimeOwner) hierarchyCodeIntelligence(ctx context.Context, environmentID string, symbol codeintel.SymbolLocator, direction string, maxDepth, maxResults int) (CodeIntelligenceHierarchyResult, error) {
+	symbol = normalizeCodeIntelligenceSymbol(symbol)
+	if !symbol.Valid() {
+		return CodeIntelligenceHierarchyResult{}, fmt.Errorf("symbol path, name, or qualified_name is required")
+	}
+	direction = strings.ToLower(strings.TrimSpace(direction))
+	if direction == "" {
+		direction = "both"
+	}
+	switch direction {
+	case "parents", "children", "both":
+	default:
+		return CodeIntelligenceHierarchyResult{}, fmt.Errorf("direction must be parents, children, or both")
+	}
+	if maxDepth <= 0 {
+		maxDepth = 2
+	}
+	if maxDepth > 8 {
+		maxDepth = 8
+	}
+	if maxResults <= 0 {
+		maxResults = 100
+	}
+	if maxResults > 500 {
+		maxResults = 500
+	}
+	staticInfo, err := o.service.CodeIntelligenceInfo(environmentID)
+	if err != nil {
+		return CodeIntelligenceHierarchyResult{}, err
+	}
+	route, ok := o.preferredCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_hierarchy")
+	if !ok {
+		return CodeIntelligenceHierarchyResult{
+			Provider:  staticInfo,
+			Available: false,
+			Reason:    "provider_capability_unavailable",
+		}, nil
+	}
+	rt, _, err := o.service.Runtime(environmentID)
+	if err != nil {
+		return CodeIntelligenceHierarchyResult{}, err
+	}
+	external, callErr := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_hierarchy", map[string]any{
+		"environment_id": environmentID,
+		"project_root":   rt.Root(),
+		"symbol":         symbol,
+		"direction":      direction,
+		"max_depth":      maxDepth,
+		"max_results":    maxResults,
+	})
+	if callErr != nil {
+		return CodeIntelligenceHierarchyResult{
+			Provider:          staticInfo,
+			Available:         false,
+			AttemptedProvider: &route.Provider,
+			Reason:            "external_provider_call_failed",
+		}, nil
+	}
+	var value codeintel.HierarchyResult
+	if decodeErr := decodeProviderStructuredResult(external, &value); decodeErr != nil {
+		return CodeIntelligenceHierarchyResult{
+			Provider:          staticInfo,
+			Available:         false,
+			AttemptedProvider: &route.Provider,
+			Reason:            "external_provider_invalid_result",
+		}, nil
+	}
+	if value.Returned == 0 && len(value.Nodes) > 0 {
+		value.Returned = len(value.Nodes)
+	}
+	if !value.Symbol.Valid() {
+		value.Symbol = symbol
+	}
+	if strings.TrimSpace(value.Direction) == "" {
+		value.Direction = direction
+	}
+	return CodeIntelligenceHierarchyResult{Provider: route.Provider, Available: true, Result: &value}, nil
+}
+
+func normalizeCodeIntelligenceSymbol(symbol codeintel.SymbolLocator) codeintel.SymbolLocator {
+	symbol.Path = strings.TrimSpace(symbol.Path)
+	symbol.Name = strings.TrimSpace(symbol.Name)
+	symbol.QualifiedName = strings.TrimSpace(symbol.QualifiedName)
+	symbol.Kind = strings.TrimSpace(symbol.Kind)
+	symbol.Language = strings.TrimSpace(symbol.Language)
+	if symbol.Line < 0 {
+		symbol.Line = 0
+	}
+	return symbol
+}
+
 func decodeProviderStructuredResult(result *mcp.CallToolResult, target any) error {
 	if result == nil {
 		return fmt.Errorf("provider returned no result")

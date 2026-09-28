@@ -440,6 +440,59 @@ Provider-neutral 的 freshness / health 查询：
 
 返回当前实际使用的 `provider` 以及 provider-specific `result`。对 `adm_static_index`，状态语义与 `project_index_status` 相同；healthy PhpStorm MCP 若提供 `code_intelligence_status`，则会优先调用它。外部 Provider 同样必须返回 structured result。
 
+### `code_intelligence_references`
+
+查询某个符号的引用位置。输入使用稳定的 symbol locator，而不是只传一个自由文本名称：
+
+```json
+{
+  "environment_id": "env_xxx",
+  "symbol": {
+    "path": "src/Foo.php",
+    "line": 17,
+    "name": "Foo",
+    "qualified_name": "App\\Foo",
+    "kind": "class",
+    "language": "PHP"
+  },
+  "max_results": 100
+}
+```
+
+`symbol` 至少需要 `path` / `name` / `qualified_name` 之一；`max_results` 默认 100、上限 500。外部 Provider 会额外收到 `project_root`，结果必须通过 MCP `structuredContent` 返回 references 数组，每项可包含 path、line、column、kind、qualified_name 和 bounded context。
+
+当前 `adm_static_index` 明确标记 `references=false`，因此没有可用外部 Provider 时不会伪造静态引用结果，而是返回：
+
+```json
+{
+  "provider": {"provider_id": "adm_static_index"},
+  "available": false,
+  "reason": "provider_capability_unavailable"
+}
+```
+
+### `code_intelligence_hierarchy`
+
+查询类型/符号的父子层级：
+
+```json
+{
+  "environment_id": "env_xxx",
+  "symbol": {
+    "path": "src/Foo.php",
+    "line": 17,
+    "qualified_name": "App\\Foo"
+  },
+  "direction": "both",
+  "max_depth": 2,
+  "max_results": 100
+}
+```
+
+`direction` 仅允许 `parents` / `children` / `both`，默认 `both`；`max_depth` 默认 2、上限 8；`max_results` 默认 100、上限 500。structured result 使用 nodes + edges 表达层级，edge kind 由 Provider 返回，例如 `extends` / `implements`。
+
+当前 `adm_static_index` 明确标记 `hierarchy=false`。没有 capable Provider 时同样返回 `available=false`；如果已尝试 PhpStorm Provider 但调用失败或返回结构不兼容，会额外返回 `attempted_provider` 和对应 `reason`。
+
 ### `project_index_query`（兼容别名）
 
 只读查询由 `project_analyze` 生成的 `.adm/index/symbols.jsonl`。不需要 Writer；查询前会用 `manifest.json` 中的 SHA-256 校验 symbol index，避免读取半生成或被修改的索引。
@@ -458,7 +511,7 @@ Provider-neutral 的 freshness / health 查询：
 
 `query` 会按 qualified-name exact、name exact、qualified suffix、prefix、contains 的顺序排序；`path` 是不区分大小写的子串过滤，`kind` / `language` 是精确过滤。`query` 可以省略，但至少要提供 `path` / `kind` / `language` 中一个。
 
-当前查询层只覆盖 symbol definitions。references / hierarchy 后续应作为 Code Intelligence Provider 能力扩展，这样 ADM 静态索引和未来 PhpStorm Provider 可以复用同一套上层接口。
+`project_index_query` 仍只覆盖 built-in static symbol definitions；references / hierarchy 统一走上面的 provider-neutral `code_intelligence_*` 工具。
 
 ### `project_index_status`（兼容别名）
 

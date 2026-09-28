@@ -379,6 +379,20 @@ type ProjectIndexStatusInput struct {
 	MaxChanges    int    `json:"max_changes,omitempty" jsonschema:"maximum changed paths returned; defaults to 50 and is capped at 200"`
 }
 
+type CodeIntelligenceReferencesInput struct {
+	EnvironmentID string                  `json:"environment_id"`
+	Symbol        codeintel.SymbolLocator `json:"symbol"`
+	MaxResults    int                     `json:"max_results,omitempty" jsonschema:"maximum returned references; defaults to 100 and is capped at 500"`
+}
+
+type CodeIntelligenceHierarchyInput struct {
+	EnvironmentID string                  `json:"environment_id"`
+	Symbol        codeintel.SymbolLocator `json:"symbol"`
+	Direction     string                  `json:"direction,omitempty" jsonschema:"parents, children, or both; defaults to both"`
+	MaxDepth      int                     `json:"max_depth,omitempty" jsonschema:"maximum hierarchy depth; defaults to 2 and is capped at 8"`
+	MaxResults    int                     `json:"max_results,omitempty" jsonschema:"maximum returned hierarchy nodes; defaults to 100 and is capped at 500"`
+}
+
 type CodeIntelligenceQueryResult struct {
 	Provider          codeintel.ProviderInfo           `json:"provider"`
 	Result            projectanalysis.IndexQueryResult `json:"result"`
@@ -391,6 +405,22 @@ type CodeIntelligenceStatusResult struct {
 	Result            projectanalysis.IndexStatusResult `json:"result"`
 	AttemptedProvider *codeintel.ProviderInfo           `json:"attempted_provider,omitempty"`
 	FallbackReason    string                            `json:"fallback_reason,omitempty"`
+}
+
+type CodeIntelligenceReferencesResult struct {
+	Provider          codeintel.ProviderInfo      `json:"provider"`
+	Available         bool                        `json:"available"`
+	Result            *codeintel.ReferencesResult `json:"result,omitempty"`
+	AttemptedProvider *codeintel.ProviderInfo     `json:"attempted_provider,omitempty"`
+	Reason            string                      `json:"reason,omitempty"`
+}
+
+type CodeIntelligenceHierarchyResult struct {
+	Provider          codeintel.ProviderInfo     `json:"provider"`
+	Available         bool                       `json:"available"`
+	Result            *codeintel.HierarchyResult `json:"result,omitempty"`
+	AttemptedProvider *codeintel.ProviderInfo    `json:"attempted_provider,omitempty"`
+	Reason            string                     `json:"reason,omitempty"`
 }
 
 type SearchInput struct {
@@ -1556,6 +1586,32 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			}
 			value, err := service.ProjectIndexStatus(in.EnvironmentID, in.MaxChanges)
 			return toolResult(CodeIntelligenceStatusResult{Provider: provider, Result: value}, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol through the preferred code-intelligence provider. The built-in static index currently does not support references; without a capable external provider the tool returns available=false with reason=provider_capability_unavailable."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceReferencesInput) (*mcp.CallToolResult, any, error) {
+			if owner == nil {
+				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
+				if err != nil {
+					return toolResult(nil, err)
+				}
+				return toolResult(CodeIntelligenceReferencesResult{Provider: provider, Available: false, Reason: "provider_capability_unavailable"}, nil)
+			}
+			value, err := owner.referencesCodeIntelligence(ctx, in.EnvironmentID, in.Symbol, in.MaxResults)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_hierarchy", Description: "Inspect parent/child/both symbol hierarchy through the preferred code-intelligence provider. The built-in static index currently does not support hierarchy; without a capable external provider the tool returns available=false with reason=provider_capability_unavailable."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceHierarchyInput) (*mcp.CallToolResult, any, error) {
+			if owner == nil {
+				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
+				if err != nil {
+					return toolResult(nil, err)
+				}
+				return toolResult(CodeIntelligenceHierarchyResult{Provider: provider, Available: false, Reason: "provider_capability_unavailable"}, nil)
+			}
+			value, err := owner.hierarchyCodeIntelligence(ctx, in.EnvironmentID, in.Symbol, in.Direction, in.MaxDepth, in.MaxResults)
+			return toolResult(value, err)
 		})
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_query", Description: "Query the generated .adm symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256 before returning matches. Run project_analyze first when the index is missing or stale."},
