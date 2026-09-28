@@ -149,9 +149,16 @@ func (o *runtimeOwner) enrichInvestigationProviderFact(environmentID string, fac
 		fact.Uncertainties = uniqueGatewayStrings(append(fact.Uncertainties, "provider_index_freshness_not_observed", "static_fallback_available"))
 		if len(availableTools) == 0 {
 			fact.State = model.CapabilityStateDegraded
+			fact.Confidence = "low"
+			if providerID == app.InvestigationProviderJetBrainsNative &&
+				mcpInventoryHasTool(observation.ToolInventory, "execute_tool") &&
+				!mcpInventoryHasTool(observation.ToolInventory, "search_symbol") {
+				fact.ReasonCode = "jetbrains_direct_tools_not_exposed"
+				fact.Message = "JetBrains MCP is healthy but exposes only its router surface; start/configure it with direct invocation mode so read-only tools such as search_symbol are listed explicitly."
+				return fact
+			}
 			fact.ReasonCode = "provider_read_capabilities_not_observed"
 			fact.Message = "Gateway owner observes the provider MCP as healthy, but its current inventory exposes none of the recognized read-only code intelligence tools."
-			fact.Confidence = "low"
 			return fact
 		}
 		fact.State = model.CapabilityStateAvailable
@@ -226,6 +233,16 @@ func investigationProviderMCPID(fact model.CapabilityFact) string {
 		}
 	}
 	return ""
+}
+
+func mcpInventoryHasTool(inventory []app.MCPToolInventoryItem, name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, item := range inventory {
+		if strings.ToLower(strings.TrimSpace(item.Name)) == name {
+			return true
+		}
+	}
+	return false
 }
 
 func investigationProviderAvailableReadTools(inventory []app.MCPToolInventoryItem, expected []string) []string {

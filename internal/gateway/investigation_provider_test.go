@@ -224,6 +224,54 @@ func TestGatewayJetBrainsNativeProviderRecognizesIDEInventory(t *testing.T) {
 	}
 }
 
+func TestGatewayJetBrainsNativeProviderExplainsRouterMode(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	workspace, err := service.Workspaces.Add(t.TempDir(), "jetbrains-router-provider")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jetBrains, err := service.MCPs.AddMCP("PhpStorm", "http://127.0.0.1:65528/mcp", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := service.Environments.Create(workspace.ID, "jetbrains-router-provider", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetEnvironmentMCP(environment.ID, jetBrains.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	observedAt := time.Now().UTC().Add(-time.Minute)
+	owner.mu.Lock()
+	owner.observations[runtimeOwnerKey{environmentID: environment.ID, mcpID: jetBrains.ID}] = app.MCPRuntimeObservation{
+		EnvironmentID:      environment.ID,
+		MCPID:              jetBrains.ID,
+		DesiredEnabled:     true,
+		State:              app.MCPHealthHealthy,
+		LastCheckAt:        &observedAt,
+		LastHealthyAt:      &observedAt,
+		LastSuccessAt:      &observedAt,
+		ToolInventory:      []app.MCPToolInventoryItem{{Name: "execute_tool"}},
+		InventoryFetchedAt: &observedAt,
+	}
+	owner.mu.Unlock()
+
+	report, err := owner.InvestigationProviderReport(context.Background(), environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := requireGatewayInvestigationProviderFact(t, report, app.InvestigationProviderJetBrainsNativeKey)
+	if provider.State != model.CapabilityStateDegraded || provider.ReasonCode != "jetbrains_direct_tools_not_exposed" {
+		t.Fatalf("JetBrains router provider fact = %+v", provider)
+	}
+	if !strings.Contains(provider.Message, "direct invocation mode") || !strings.Contains(provider.Message, "search_symbol") {
+		t.Fatalf("JetBrains router provider message = %q", provider.Message)
+	}
+}
+
 func requireGatewayInvestigationProviderFact(t *testing.T, report model.InvestigationProviderReport, key string) model.CapabilityFact {
 	t.Helper()
 	for _, provider := range report.Providers {

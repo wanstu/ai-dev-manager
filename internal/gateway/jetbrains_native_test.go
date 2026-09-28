@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -91,6 +92,47 @@ func TestJetBrainsNativeSearchSymbolSchemaGate(t *testing.T) {
 							},
 						},
 					},
+				},
+			},
+			wantInputCompatible:  true,
+			wantOutputSchema:     true,
+			wantOutputCompatible: true,
+			wantAutoRoute:        true,
+			wantReason:           "search_symbol_schema_ready",
+			wantInputFields:      []string{"include_external", "limit", "paths", "projectPath", "q"},
+		},
+		{
+			name: "jetbrains 2026.2 coordinate output",
+			inputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"q":                map[string]any{"type": "string"},
+					"projectPath":      map[string]any{"type": "string"},
+					"limit":            map[string]any{"type": "integer"},
+					"paths":            map[string]any{"type": "array"},
+					"include_external": map[string]any{"type": "boolean"},
+				},
+				"required": []any{"q"},
+			},
+			outputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"items": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type":     "object",
+							"required": []any{"filePath"},
+							"properties": map[string]any{
+								"filePath":    map[string]any{"type": "string"},
+								"startLine":   map[string]any{"type": []any{"integer", "null"}},
+								"startColumn": map[string]any{"type": []any{"integer", "null"}},
+								"endLine":     map[string]any{"type": []any{"integer", "null"}},
+								"endColumn":   map[string]any{"type": []any{"integer", "null"}},
+							},
+						},
+					},
+					"more":                map[string]any{"type": "boolean"},
+					"partialResultReason": map[string]any{"type": []any{"string", "null"}},
 				},
 			},
 			wantInputCompatible:  true,
@@ -305,32 +347,54 @@ func compatibleJetBrainsSearchTool() *mcp.Tool {
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"q":           map[string]any{"type": "string"},
-				"projectPath": map[string]any{"type": "string"},
-				"limit":       map[string]any{"type": "integer"},
+				"q":                map[string]any{"type": "string"},
+				"paths":            map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				"include_external": map[string]any{"type": "boolean"},
+				"limit":            map[string]any{"type": "integer"},
+				"projectPath":      map[string]any{"type": "string"},
 			},
 			"required": []any{"q"},
 		},
 		OutputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"results": map[string]any{
+				"items": map[string]any{
 					"type": "array",
 					"items": map[string]any{
-						"type": "object",
+						"type":     "object",
+						"required": []any{"filePath"},
 						"properties": map[string]any{
-							"name":          map[string]any{"type": "string"},
-							"filePath":      map[string]any{"type": "string"},
-							"line":          map[string]any{"type": "integer"},
-							"column":        map[string]any{"type": "integer"},
-							"kind":          map[string]any{"type": "string"},
-							"qualifiedName": map[string]any{"type": "string"},
-							"language":      map[string]any{"type": "string"},
+							"filePath":    map[string]any{"type": "string"},
+							"startLine":   map[string]any{"type": []any{"integer", "null"}},
+							"startColumn": map[string]any{"type": []any{"integer", "null"}},
+							"endLine":     map[string]any{"type": []any{"integer", "null"}},
+							"endColumn":   map[string]any{"type": []any{"integer", "null"}},
 						},
 					},
 				},
+				"more":                map[string]any{"type": "boolean"},
+				"partialResultReason": map[string]any{"type": []any{"string", "null"}},
 			},
 		},
+	}
+}
+
+func TestJetBrainsNativeExactQueryRejectsCoordinateOnlyNames(t *testing.T) {
+	root := t.TempDir()
+	_, err := decodeJetBrainsNativeSearchResult(root, projectanalysis.IndexQuery{
+		Query:      "Foo",
+		Exact:      true,
+		MaxResults: 10,
+	}, 10, &mcp.CallToolResult{
+		StructuredContent: map[string]any{
+			"items": []any{map[string]any{
+				"filePath":  "src/Foo.php",
+				"startLine": 17,
+			}},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "no mappable symbol rows") {
+		t.Fatalf("exact coordinate-only result error = %v", err)
 	}
 }
 
@@ -359,21 +423,20 @@ func TestJetBrainsNativeGenericQueryUsesCompatibleIDEIndex(t *testing.T) {
 		tools: []*mcp.Tool{compatibleJetBrainsSearchTool()},
 		callResult: &mcp.CallToolResult{
 			StructuredContent: map[string]any{
-				"results": []any{
+				"items": []any{
 					map[string]any{
-						"name":          "Foo",
-						"filePath":      "src/Foo.php",
-						"line":          17,
-						"kind":          "class",
-						"qualifiedName": "App\\Foo",
-						"language":      "PHP",
+						"filePath":    "src/Foo.php",
+						"startLine":   17,
+						"startColumn": 7,
+						"endLine":     17,
+						"endColumn":   10,
 					},
 					map[string]any{
-						"name":     "External",
-						"filePath": outside,
-						"line":     4,
+						"filePath":  outside,
+						"startLine": 4,
 					},
 				},
+				"more": false,
 			},
 		},
 	}
@@ -409,7 +472,7 @@ func TestJetBrainsNativeGenericQueryUsesCompatibleIDEIndex(t *testing.T) {
 		t.Fatalf("query result=%+v", result.Result)
 	}
 	match := result.Result.Matches[0]
-	if match.Path != "src/Foo.php" || match.Name != "Foo" || match.QualifiedName != "App\\Foo" || match.Line != 17 || match.Kind != "class" || match.Language != "PHP" {
+	if match.Path != "src/Foo.php" || match.Name != "Foo" || match.QualifiedName != "" || match.Line != 17 || match.Kind != "" || match.Language != "" {
 		t.Fatalf("match=%+v", match)
 	}
 
@@ -423,11 +486,8 @@ func TestJetBrainsNativeGenericQueryUsesCompatibleIDEIndex(t *testing.T) {
 	if !ok {
 		t.Fatalf("arguments type=%T", call.Arguments)
 	}
-	if args["q"] != "Foo" || args["projectPath"] != root || args["limit"] != 10 {
+	if args["q"] != "Foo" || args["projectPath"] != root || args["limit"] != 10 || args["include_external"] != false {
 		t.Fatalf("arguments=%+v", args)
-	}
-	if _, ok := args["include_external"]; ok {
-		t.Fatalf("unexpected include_external for schema without that property: %+v", args)
 	}
 }
 

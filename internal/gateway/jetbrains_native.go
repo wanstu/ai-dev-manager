@@ -319,10 +319,14 @@ func decodeJetBrainsNativeSearchResult(root string, query projectanalysis.IndexQ
 			continue
 		}
 		name := firstStringValue(row, "name", "symbolName", "displayName")
+		nameProvided := name != ""
 		pathValue := firstStringValue(row, "filePath", "path", "pathInProject", "relativePath")
-		if name == "" || pathValue == "" {
+		if pathValue == "" {
 			unusableRows++
 			continue
+		}
+		if name == "" {
+			name = strings.TrimSpace(query.Query)
 		}
 		relativePath, ok := normalizeJetBrainsNativePath(root, pathValue)
 		if !ok {
@@ -333,8 +337,14 @@ func decodeJetBrainsNativeSearchResult(root string, query projectanalysis.IndexQ
 			continue
 		}
 		qualifiedName := firstStringValue(row, "qualifiedName", "qualified_name", "fqn")
-		if query.Exact && !strings.EqualFold(name, queryText) && !strings.EqualFold(qualifiedName, queryText) {
-			continue
+		if query.Exact {
+			if !nameProvided && qualifiedName == "" {
+				unusableRows++
+				continue
+			}
+			if !strings.EqualFold(name, queryText) && !strings.EqualFold(qualifiedName, queryText) {
+				continue
+			}
 		}
 		line := firstIntValue(row, "line", "startLine", "start_line")
 		if line < 0 {
@@ -355,7 +365,10 @@ func decodeJetBrainsNativeSearchResult(root string, query projectanalysis.IndexQ
 		return projectanalysis.IndexQueryResult{}, fmt.Errorf("JetBrains results contain no mappable symbol rows")
 	}
 
-	truncated := firstBoolValue(payload, "truncated", "incomplete")
+	truncated := firstBoolValue(payload, "truncated", "incomplete", "more")
+	if strings.TrimSpace(firstStringValue(payload, "partialResultReason")) != "" {
+		truncated = true
+	}
 	for _, content := range result.Content {
 		if item, ok := content.(*mcp.TextContent); ok && strings.Contains(strings.ToUpper(item.Text), "INCOMPLETE RESULTS") {
 			truncated = true
@@ -563,12 +576,12 @@ func jetBrainsSearchSymbolOutputCompatible(schema map[string]any) bool {
 	if len(itemProperties) == 0 {
 		return false
 	}
-	nameValue, ok := firstSchemaProperty(itemProperties, "name", "symbolName", "displayName")
-	if !ok || !schemaPropertyAllowsType(nameValue, map[string]bool{"string": true}) {
-		return false
-	}
 	pathValue, ok := firstSchemaProperty(itemProperties, "filePath", "path", "pathInProject", "relativePath")
 	if !ok || !schemaPropertyAllowsType(pathValue, map[string]bool{"string": true}) {
+		return false
+	}
+	if nameValue, hasName := firstSchemaProperty(itemProperties, "name", "symbolName", "displayName"); hasName &&
+		!schemaPropertyAllowsType(nameValue, map[string]bool{"string": true}) {
 		return false
 	}
 	return true
