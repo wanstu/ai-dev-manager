@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/model"
@@ -105,6 +106,107 @@ func (o *runtimeOwner) inspectJetBrainsNativeCompatibility(ctx context.Context, 
 	result.OutputFields = toolSchemaPropertyNames(outputSchema)
 	result.Reason = "search_symbol_schema_ready"
 	return result
+}
+
+const jetBrainsNativeProbeMaxOutputBytes = 64 * 1024
+
+type jetBrainsNativeSearchProbeResult struct {
+	ProviderID            string `json:"provider_id"`
+	MCPID                 string `json:"mcp_id"`
+	Tool                  string `json:"tool"`
+	Query                 string `json:"query"`
+	ProjectPath           string `json:"project_path"`
+	Limit                 int    `json:"limit"`
+	IncludeExternal       bool   `json:"include_external"`
+	IsError               bool   `json:"is_error"`
+	TextPreview           string `json:"text_preview,omitempty"`
+	StructuredJSONPreview string `json:"structured_json_preview,omitempty"`
+	Truncated             bool   `json:"truncated"`
+}
+
+func (o *runtimeOwner) probeJetBrainsNativeSearch(ctx context.Context, environmentID, query string, limit int) (jetBrainsNativeSearchProbeResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return jetBrainsNativeSearchProbeResult{}, fmt.Errorf("query is required")
+	}
+	if utf8.RuneCountInString(query) > 256 {
+		return jetBrainsNativeSearchProbeResult{}, fmt.Errorf("query is too long")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	compatibility := o.inspectJetBrainsNativeCompatibility(ctx, environmentID)
+	if compatibility.MCPID == "" {
+		return jetBrainsNativeSearchProbeResult{}, fmt.Errorf("JetBrains native provider is unavailable: %s", compatibility.Reason)
+	}
+	if !compatibility.InputCompatible {
+		return jetBrainsNativeSearchProbeResult{}, fmt.Errorf("JetBrains search_symbol input schema is incompatible: %s", compatibility.Reason)
+	}
+
+	rt, _, err := o.service.Runtime(environmentID)
+	if err != nil {
+		return jetBrainsNativeSearchProbeResult{}, err
+	}
+	projectPath := rt.Root()
+	result := jetBrainsNativeSearchProbeResult{
+		ProviderID:      app.InvestigationProviderJetBrainsNative,
+		MCPID:           compatibility.MCPID,
+		Tool:            "search_symbol",
+		Query:           query,
+		ProjectPath:     projectPath,
+		Limit:           limit,
+		IncludeExternal: false,
+	}
+	callResult, err := o.CallTool(ctx, environmentID, compatibility.MCPID, "search_symbol", map[string]any{
+		"q":                query,
+		"projectPath":      projectPath,
+		"limit":            limit,
+		"include_external": false,
+	})
+	if err != nil {
+		return result, err
+	}
+	if callResult == nil {
+		return result, fmt.Errorf("JetBrains search_symbol returned no result")
+	}
+	result.IsError = callResult.IsError
+
+	var textParts []string
+	for _, content := range callResult.Content {
+		if item, ok := content.(*mcp.TextContent); ok && strings.TrimSpace(item.Text) != "" {
+			textParts = append(textParts, item.Text)
+		}
+	}
+	if len(textParts) > 0 {
+		result.TextPreview, result.Truncated = truncateUTF8Preview(strings.Join(textParts, "\n"), jetBrainsNativeProbeMaxOutputBytes)
+	}
+	if callResult.StructuredContent != nil {
+		raw, marshalErr := json.Marshal(callResult.StructuredContent)
+		if marshalErr == nil {
+			preview, truncated := truncateUTF8Preview(string(raw), jetBrainsNativeProbeMaxOutputBytes)
+			result.StructuredJSONPreview = preview
+			result.Truncated = result.Truncated || truncated
+		}
+	}
+	return result, nil
+}
+
+func truncateUTF8Preview(value string, maxBytes int) (string, bool) {
+	if maxBytes <= 0 || len(value) <= maxBytes {
+		return value, false
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.ValidString(value[:cut]) {
+		cut--
+	}
+	if cut <= 0 {
+		return "", true
+	}
+	return value[:cut], true
 }
 
 func toolSchemaObject(value any) (map[string]any, error) {

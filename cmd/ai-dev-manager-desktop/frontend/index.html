@@ -333,6 +333,11 @@
       <section id="environmentCodeIntelligenceSection" class="subpanel environment-code-intelligence" data-environment-detail-panel="summary" hidden>
         <div class="subpanel-heading"><div><h3>Code Intelligence</h3><span>实际 Provider、Contract 版本与 definitions / references / hierarchy 能力。</span></div><button id="environmentCodeIntelligenceButton" type="button" class="secondary-button small-button">检查 Provider</button></div>
         <div id="environmentCodeIntelligenceResult" class="discovery-result empty">尚未检查 Code Intelligence Provider。</div>
+        <div class="gateway-actions environment-code-intelligence-probe">
+          <input id="environmentJetBrainsSearchInput" type="text" maxlength="256" placeholder="输入符号名，例如 Service.Run" autocomplete="off">
+          <button id="environmentJetBrainsSearchButton" type="button" class="secondary-button small-button">测试 JetBrains 索引</button>
+        </div>
+        <div id="environmentJetBrainsSearchResult" class="discovery-result empty">尚未测试 JetBrains search_symbol。</div>
       </section>
       <div id="environmentDiagnostics" class="detail-content diagnostics-content" data-environment-detail-panel="diagnostics" hidden></div>
       <div id="environmentDetailRoutes" class="detail-route-actions" aria-label="Environment management shortcuts">

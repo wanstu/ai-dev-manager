@@ -13,9 +13,11 @@ import (
 )
 
 type jetBrainsSchemaSession struct {
-	mu        sync.Mutex
-	tools     []*mcp.Tool
-	callCount int
+	mu         sync.Mutex
+	tools      []*mcp.Tool
+	callCount  int
+	callResult *mcp.CallToolResult
+	lastCall   *mcp.CallToolParams
 }
 
 func (s *jetBrainsSchemaSession) Ping(context.Context, *mcp.PingParams) error { return nil }
@@ -26,10 +28,14 @@ func (s *jetBrainsSchemaSession) ListTools(context.Context, *mcp.ListToolsParams
 	return &mcp.ListToolsResult{Tools: s.tools}, nil
 }
 
-func (s *jetBrainsSchemaSession) CallTool(context.Context, *mcp.CallToolParams) (*mcp.CallToolResult, error) {
+func (s *jetBrainsSchemaSession) CallTool(_ context.Context, params *mcp.CallToolParams) (*mcp.CallToolResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.callCount++
+	s.lastCall = params
+	if s.callResult != nil {
+		return s.callResult, nil
+	}
 	return &mcp.CallToolResult{}, nil
 }
 
@@ -156,5 +162,88 @@ func TestJetBrainsNativeSearchSymbolSchemaGate(t *testing.T) {
 				t.Fatalf("schema inspection called a business tool %d times", fake.calls())
 			}
 		})
+	}
+}
+
+func TestJetBrainsNativeSearchProbeUsesBoundedEnvironmentScopedArguments(t *testing.T) {
+	ctx := context.Background()
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	root := t.TempDir()
+	workspace, err := service.Workspaces.Add(root, "jetbrains-probe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := service.Environments.Create(workspace.ID, "jetbrains-probe", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := service.MCPs.AddMCP("PhpStorm", "http://127.0.0.1:65524/mcp", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetEnvironmentMCP(environment.ID, entry.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	fake := &jetBrainsSchemaSession{
+		tools: []*mcp.Tool{
+			{
+				Name: "search_symbol",
+				InputSchema: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"q":                map[string]any{"type": "string"},
+						"projectPath":      map[string]any{"type": "string"},
+						"limit":            map[string]any{"type": "integer"},
+						"include_external": map[string]any{"type": "boolean"},
+					},
+					"required": []any{"q"},
+				},
+			},
+		},
+		callResult: &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: "Foo src/Foo.php:17:1"}},
+			StructuredContent: map[string]any{
+				"results": []any{map[string]any{"name": "Foo", "filePath": "src/Foo.php", "line": 17}},
+			},
+		},
+	}
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	owner.connect = func(context.Context, string, string, map[string]string) (ownedMCPSession, error) {
+		return fake, nil
+	}
+	status, err := owner.Status(ctx, environment.ID, entry.ID)
+	if err != nil || status.State != app.MCPHealthHealthy {
+		t.Fatalf("prime JetBrains MCP: status=%+v err=%v", status, err)
+	}
+
+	result, err := owner.probeJetBrainsNativeSearch(ctx, environment.ID, " Foo ", 999)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ProviderID != app.InvestigationProviderJetBrainsNative || result.MCPID != entry.ID || result.Tool != "search_symbol" {
+		t.Fatalf("probe identity=%+v", result)
+	}
+	if result.Query != "Foo" || result.ProjectPath != root || result.Limit != 50 || result.IncludeExternal {
+		t.Fatalf("probe scope=%+v", result)
+	}
+	if result.TextPreview != "Foo src/Foo.php:17:1" || result.StructuredJSONPreview == "" || result.Truncated {
+		t.Fatalf("probe output=%+v", result)
+	}
+
+	fake.mu.Lock()
+	call := fake.lastCall
+	callCount := fake.callCount
+	fake.mu.Unlock()
+	if callCount != 1 || call == nil || call.Name != "search_symbol" {
+		t.Fatalf("search_symbol calls=%d params=%+v", callCount, call)
+	}
+	args, ok := call.Arguments.(map[string]any)
+	if !ok {
+		t.Fatalf("arguments type=%T", call.Arguments)
+	}
+	if args["q"] != "Foo" || args["projectPath"] != root || args["limit"] != 50 || args["include_external"] != false {
+		t.Fatalf("arguments=%+v", args)
 	}
 }

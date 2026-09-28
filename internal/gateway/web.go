@@ -495,6 +495,23 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			overview.Providers = report.Providers
 		}
 		return overview, nil
+	case "ProbeJetBrainsNativeSearch":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		var limit int
+		if len(call.Args) > 2 {
+			if err := arg(2, &limit); err != nil {
+				return nil, err
+			}
+		}
+		if h.owner == nil {
+			return nil, fmt.Errorf("persistent runtime owner is unavailable")
+		}
+		return h.owner.probeJetBrainsNativeSearch(ctx, s1, s2, limit)
 	case "CleanupStaleManagedWorktrees":
 		var inactiveSeconds int64
 		var environmentIDs []string

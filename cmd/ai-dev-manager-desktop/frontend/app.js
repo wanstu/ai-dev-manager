@@ -44,7 +44,7 @@ const elements = {
   hostDirectoryDialog: document.getElementById('hostDirectoryDialog'), hostDirectoryRootsButton: document.getElementById('hostDirectoryRootsButton'), hostDirectoryParentButton: document.getElementById('hostDirectoryParentButton'), hostDirectoryRefreshButton: document.getElementById('hostDirectoryRefreshButton'), hostDirectoryCurrentPath: document.getElementById('hostDirectoryCurrentPath'), hostDirectoryList: document.getElementById('hostDirectoryList'), hostDirectoryHint: document.getElementById('hostDirectoryHint'), hostDirectorySelectButton: document.getElementById('hostDirectorySelectButton'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
   environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), cleanupStaleWorktreesButton: document.getElementById('cleanupStaleWorktreesButton'), staleWorktreeCleanupDialog: document.getElementById('staleWorktreeCleanupDialog'), staleWorktreeCleanupHours: document.getElementById('staleWorktreeCleanupHours'), staleWorktreeCleanupSummary: document.getElementById('staleWorktreeCleanupSummary'), staleWorktreeCleanupList: document.getElementById('staleWorktreeCleanupList'), staleWorktreeCleanupResult: document.getElementById('staleWorktreeCleanupResult'), staleWorktreeCleanupRefreshButton: document.getElementById('staleWorktreeCleanupRefreshButton'), staleWorktreeCleanupExecuteButton: document.getElementById('staleWorktreeCleanupExecuteButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
-  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'),
+  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'), environmentJetBrainsSearchInput: document.getElementById('environmentJetBrainsSearchInput'), environmentJetBrainsSearchButton: document.getElementById('environmentJetBrainsSearchButton'), environmentJetBrainsSearchResult: document.getElementById('environmentJetBrainsSearchResult'),
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
@@ -139,6 +139,10 @@ let environmentCodeIntelligenceGeneration = 0;
 let environmentCodeIntelligenceLoading = false;
 let environmentCodeIntelligenceOverview = null;
 let environmentCodeIntelligenceError = '';
+let environmentJetBrainsSearchGeneration = 0;
+let environmentJetBrainsSearchLoading = false;
+let environmentJetBrainsSearchProbe = null;
+let environmentJetBrainsSearchError = '';
 
 function desktopAdapter() {
   const adapter = window.go?.desktop?.Adapter || window.ADMWebAdapter;
@@ -492,6 +496,13 @@ function resetEnvironmentCodeIntelligence(message = '尚未检查 Code Intellige
   environmentCodeIntelligenceLoading = false;
   environmentCodeIntelligenceOverview = null;
   environmentCodeIntelligenceError = '';
+  environmentJetBrainsSearchGeneration++;
+  environmentJetBrainsSearchLoading = false;
+  environmentJetBrainsSearchProbe = null;
+  environmentJetBrainsSearchError = '';
+  if (elements.environmentJetBrainsSearchInput) elements.environmentJetBrainsSearchInput.value = '';
+  if (elements.environmentJetBrainsSearchButton) elements.environmentJetBrainsSearchButton.disabled = true;
+  if (elements.environmentJetBrainsSearchResult) emptyMessage(elements.environmentJetBrainsSearchResult, '尚未测试 JetBrains search_symbol。');
   if (elements.environmentCodeIntelligenceButton) elements.environmentCodeIntelligenceButton.disabled = !window.ADMWebSurface || !selectedEnvironmentID;
   if (elements.environmentCodeIntelligenceResult) emptyMessage(elements.environmentCodeIntelligenceResult, message);
 }
@@ -596,6 +607,91 @@ async function loadEnvironmentCodeIntelligence() {
     if (environmentCodeIntelligenceScopeCurrent(identity)) {
       environmentCodeIntelligenceLoading = false;
       renderEnvironmentCodeIntelligence();
+    }
+  }
+}
+function syncEnvironmentJetBrainsSearchButton() {
+  if (!elements.environmentJetBrainsSearchButton) return;
+  const query = String(elements.environmentJetBrainsSearchInput?.value || '').trim();
+  elements.environmentJetBrainsSearchButton.disabled = !window.ADMWebSurface || !selectedEnvironmentID || environmentJetBrainsSearchLoading || !query;
+}
+function environmentJetBrainsSearchScopeCurrent(identity) {
+  return Boolean(identity &&
+    identity.connectionGeneration === connectionGeneration &&
+    identity.detailGeneration === detailGeneration &&
+    identity.environmentID === selectedEnvironmentID &&
+    identity.searchGeneration === environmentJetBrainsSearchGeneration &&
+    !elements.environmentDetailPanel.hidden);
+}
+function renderEnvironmentJetBrainsSearch() {
+  if (!elements.environmentJetBrainsSearchResult) return;
+  syncEnvironmentJetBrainsSearchButton();
+  if (environmentJetBrainsSearchLoading) return emptyMessage(elements.environmentJetBrainsSearchResult, '正在调用 JetBrains search_symbol…');
+  if (environmentJetBrainsSearchError) return emptyMessage(elements.environmentJetBrainsSearchResult, environmentJetBrainsSearchError);
+  const probe = environmentJetBrainsSearchProbe;
+  if (!probe) return emptyMessage(elements.environmentJetBrainsSearchResult, '尚未测试 JetBrains search_symbol。');
+
+  elements.environmentJetBrainsSearchResult.replaceChildren();
+  elements.environmentJetBrainsSearchResult.classList.remove('empty');
+  elements.environmentJetBrainsSearchResult.append(
+    detailRow('Provider', probe.provider_id || '—'),
+    detailRow('Tool', probe.tool || 'search_symbol'),
+    detailRow('Query', probe.query || '—'),
+    detailRow('Project root', probe.project_path || '—'),
+    detailRow('Limit', String(probe.limit ?? '—')),
+    detailRow('External symbols', probe.include_external ? 'Included' : 'Excluded'),
+    detailRow('Tool result', probe.is_error ? 'Error' : 'Success')
+  );
+  const appendPreview = (title, value) => {
+    if (!value) return;
+    const label = document.createElement('strong');
+    label.textContent = title;
+    const pre = document.createElement('pre');
+    pre.className = 'code-preview';
+    pre.textContent = value;
+    elements.environmentJetBrainsSearchResult.append(label, pre);
+  };
+  appendPreview('Text preview', probe.text_preview);
+  if (probe.structured_json_preview) {
+    let formatted = probe.structured_json_preview;
+    try { formatted = JSON.stringify(JSON.parse(formatted), null, 2); } catch (_) {}
+    appendPreview('Structured preview', formatted);
+  }
+  if (probe.truncated) {
+    const note = document.createElement('small');
+    note.textContent = '结果已按 64 KiB 安全上限截断。';
+    elements.environmentJetBrainsSearchResult.append(note);
+  }
+}
+async function probeEnvironmentJetBrainsSearch() {
+  if (!window.ADMWebSurface || environmentJetBrainsSearchLoading || !selectedEnvironmentID) return;
+  const query = String(elements.environmentJetBrainsSearchInput?.value || '').trim();
+  if (!query) {
+    environmentJetBrainsSearchError = '请输入要查询的符号名。';
+    renderEnvironmentJetBrainsSearch();
+    return;
+  }
+  const identity = {
+    connectionGeneration,
+    detailGeneration,
+    environmentID: selectedEnvironmentID,
+    searchGeneration: ++environmentJetBrainsSearchGeneration,
+  };
+  environmentJetBrainsSearchLoading = true;
+  environmentJetBrainsSearchProbe = null;
+  environmentJetBrainsSearchError = '';
+  renderEnvironmentJetBrainsSearch();
+  try {
+    const result = await desktopAdapter().ProbeJetBrainsNativeSearch(identity.environmentID, query, 20);
+    if (!environmentJetBrainsSearchScopeCurrent(identity)) return;
+    environmentJetBrainsSearchProbe = result;
+  } catch (error) {
+    if (!environmentJetBrainsSearchScopeCurrent(identity)) return;
+    environmentJetBrainsSearchError = 'JetBrains search_symbol 测试失败：' + errorText(error);
+  } finally {
+    if (environmentJetBrainsSearchScopeCurrent(identity)) {
+      environmentJetBrainsSearchLoading = false;
+      renderEnvironmentJetBrainsSearch();
     }
   }
 }
@@ -3384,6 +3480,9 @@ elements.environmentTreeDigestButton.addEventListener('click', () => loadEnviron
 elements.environmentProjectIndexStatusButton?.addEventListener('click', () => loadEnvironmentProjectIndexStatus());
 elements.environmentProjectAnalyzeButton?.addEventListener('click', () => analyzeEnvironmentProject());
 elements.environmentCodeIntelligenceButton?.addEventListener('click', () => loadEnvironmentCodeIntelligence());
+elements.environmentJetBrainsSearchButton?.addEventListener('click', () => probeEnvironmentJetBrainsSearch());
+elements.environmentJetBrainsSearchInput?.addEventListener('input', () => syncEnvironmentJetBrainsSearchButton());
+elements.environmentJetBrainsSearchInput?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); probeEnvironmentJetBrainsSearch(); } });
 elements.environmentForm.addEventListener('submit', async (event) => { event.preventDefault(); const workspaceID = elements.environmentWorkspace.value, name = elements.environmentName.value.trim(), root = elements.environmentRoot.value.trim(); if (workspaceID && name) { const requestConnectionGeneration = connectionGeneration; let createdEnvironment = null; await runMutation('创建 Environment', async () => { createdEnvironment = await desktopAdapter().CreateEnvironment({workspace_id: workspaceID, name, root: environmentRootForCreate(workspaceID, root)}); elements.environmentName.value = ''; elements.environmentRoot.value = ''; closeFormDialog(elements.environmentForm); }, async () => promptRecommendedWorkspaceAfterCreate(createdEnvironment, requestConnectionGeneration)); } });
 elements.environmentWorkspaceTarget.addEventListener('change', () => {
   const currentWorkspaceID = environmentWorkspaceOptions?.current_workspace_id || '';
