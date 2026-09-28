@@ -530,6 +530,16 @@ function renderEnvironmentCodeIntelligence() {
   }
 
   const candidates = safeArray(overview.providers).filter((fact) => String(fact?.state || '').toLowerCase() !== 'unconfigured');
+  const nativeCandidate = candidates.find((fact) => fact?.key === 'code_intelligence.jetbrains_native');
+  if (nativeCandidate && provider.provider_id !== 'jetbrains_native') {
+    const nativeNote = document.createElement('div');
+    nativeNote.className = 'detail-note';
+    const nativeState = humanRuntimeState(nativeCandidate.state);
+    nativeNote.textContent = String(nativeCandidate.state || '').toLowerCase() === 'available'
+      ? '已识别 JetBrains 原生 IDE MCP（search_symbol / get_symbol_info / analyze_calls），但当前 generic code_intelligence_query 尚未路由到它；实际仍使用 ' + (provider.provider_id || 'fallback provider') + '。'
+      : '检测到 JetBrains 原生 IDE MCP 候选，但当前状态为 ' + nativeState + (nativeCandidate.reason_code ? ' · ' + nativeCandidate.reason_code : '') + '；实际仍使用 ' + (provider.provider_id || 'fallback provider') + '。';
+    elements.environmentCodeIntelligenceResult.append(nativeNote);
+  }
   if (candidates.length) {
     const title = document.createElement('strong');
     title.textContent = 'Observed external providers';
@@ -542,7 +552,7 @@ function renderEnvironmentCodeIntelligence() {
     }
   } else {
     const note = document.createElement('small');
-    note.textContent = '当前没有已配置并可观察的外部 Code Intelligence Provider。';
+    note.textContent = '当前没有已配置并可观察的外部 Code Intelligence Provider。可在 PhpStorm 的 Settings > Tools > MCP Server 开启官方 MCP，然后在 ADM 的 MCP 页面配置并为当前 Environment 启用。';
     elements.environmentCodeIntelligenceResult.append(note);
   }
 }
