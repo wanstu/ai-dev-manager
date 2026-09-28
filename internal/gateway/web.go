@@ -19,6 +19,7 @@ import (
 	desktopfrontend "ai-dev-manager-v2/cmd/ai-dev-manager-desktop/frontend"
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
+	"ai-dev-manager-v2/internal/codeintel"
 	"ai-dev-manager-v2/internal/management"
 	"ai-dev-manager-v2/internal/model"
 
@@ -103,6 +104,13 @@ type webSkillSourceInput struct {
 	Root           string   `json:"root"`
 	SupportRoots   []string `json:"support_roots,omitempty"`
 	DefaultInclude bool     `json:"default_include_in_environment,omitempty"`
+}
+
+type webCodeIntelligenceOverview struct {
+	Provider          codeintel.ProviderInfo  `json:"provider"`
+	AttemptedProvider *codeintel.ProviderInfo `json:"attempted_provider,omitempty"`
+	FallbackReason    string                  `json:"fallback_reason,omitempty"`
+	Providers         []model.CapabilityFact  `json:"providers,omitempty"`
 }
 
 func newWebManagementHandler(service *app.Service, owner *runtimeOwner) http.Handler {
@@ -454,6 +462,36 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			}
 		}
 		return h.app.ProjectIndexStatus(s1, maxChanges)
+	case "CodeIntelligenceOverview":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		staticProvider, err := h.app.CodeIntelligenceInfo(s1)
+		if err != nil {
+			return nil, err
+		}
+		overview := webCodeIntelligenceOverview{Provider: staticProvider}
+		if h.owner != nil {
+			report, reportErr := h.owner.InvestigationProviderReport(ctx, s1)
+			if reportErr != nil {
+				return nil, reportErr
+			}
+			overview.Providers = report.Providers
+			route, reason, ok := h.owner.negotiateCodeIntelligenceRoute(ctx, s1, "")
+			if ok {
+				overview.Provider = route.Provider
+			} else if route.Provider.ID != "" && reason != "provider_capability_unavailable" {
+				overview.AttemptedProvider = &route.Provider
+				overview.FallbackReason = reason
+			}
+		} else {
+			report, reportErr := h.app.InvestigationProviderReport(ctx, s1)
+			if reportErr != nil {
+				return nil, reportErr
+			}
+			overview.Providers = report.Providers
+		}
+		return overview, nil
 	case "CleanupStaleManagedWorktrees":
 		var inactiveSeconds int64
 		var environmentIDs []string

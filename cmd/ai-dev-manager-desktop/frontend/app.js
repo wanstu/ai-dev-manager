@@ -44,7 +44,7 @@ const elements = {
   hostDirectoryDialog: document.getElementById('hostDirectoryDialog'), hostDirectoryRootsButton: document.getElementById('hostDirectoryRootsButton'), hostDirectoryParentButton: document.getElementById('hostDirectoryParentButton'), hostDirectoryRefreshButton: document.getElementById('hostDirectoryRefreshButton'), hostDirectoryCurrentPath: document.getElementById('hostDirectoryCurrentPath'), hostDirectoryList: document.getElementById('hostDirectoryList'), hostDirectoryHint: document.getElementById('hostDirectoryHint'), hostDirectorySelectButton: document.getElementById('hostDirectorySelectButton'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
   environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), cleanupStaleWorktreesButton: document.getElementById('cleanupStaleWorktreesButton'), staleWorktreeCleanupDialog: document.getElementById('staleWorktreeCleanupDialog'), staleWorktreeCleanupHours: document.getElementById('staleWorktreeCleanupHours'), staleWorktreeCleanupSummary: document.getElementById('staleWorktreeCleanupSummary'), staleWorktreeCleanupList: document.getElementById('staleWorktreeCleanupList'), staleWorktreeCleanupResult: document.getElementById('staleWorktreeCleanupResult'), staleWorktreeCleanupRefreshButton: document.getElementById('staleWorktreeCleanupRefreshButton'), staleWorktreeCleanupExecuteButton: document.getElementById('staleWorktreeCleanupExecuteButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
-  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'),
+  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'),
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
@@ -135,6 +135,10 @@ let environmentProjectIndexLoading = false;
 let environmentProjectIndexStatus = null;
 let environmentProjectIndexAnalysis = null;
 let environmentProjectIndexError = '';
+let environmentCodeIntelligenceGeneration = 0;
+let environmentCodeIntelligenceLoading = false;
+let environmentCodeIntelligenceOverview = null;
+let environmentCodeIntelligenceError = '';
 
 function desktopAdapter() {
   const adapter = window.go?.desktop?.Adapter || window.ADMWebAdapter;
@@ -480,6 +484,93 @@ async function analyzeEnvironmentProject() {
     if (environmentProjectIndexScopeCurrent(identity)) {
       environmentProjectIndexLoading = false;
       renderEnvironmentProjectIndex();
+    }
+  }
+}
+function resetEnvironmentCodeIntelligence(message = '尚未检查 Code Intelligence Provider。') {
+  environmentCodeIntelligenceGeneration++;
+  environmentCodeIntelligenceLoading = false;
+  environmentCodeIntelligenceOverview = null;
+  environmentCodeIntelligenceError = '';
+  if (elements.environmentCodeIntelligenceButton) elements.environmentCodeIntelligenceButton.disabled = !window.ADMWebSurface || !selectedEnvironmentID;
+  if (elements.environmentCodeIntelligenceResult) emptyMessage(elements.environmentCodeIntelligenceResult, message);
+}
+function renderEnvironmentCodeIntelligence() {
+  if (!elements.environmentCodeIntelligenceResult) return;
+  const enabled = Boolean(window.ADMWebSurface && selectedEnvironmentID);
+  if (elements.environmentCodeIntelligenceButton) elements.environmentCodeIntelligenceButton.disabled = !enabled || environmentCodeIntelligenceLoading;
+  if (environmentCodeIntelligenceLoading) return emptyMessage(elements.environmentCodeIntelligenceResult, '正在检查 Code Intelligence Provider…');
+  if (environmentCodeIntelligenceError) return emptyMessage(elements.environmentCodeIntelligenceResult, environmentCodeIntelligenceError);
+  const overview = environmentCodeIntelligenceOverview;
+  if (!overview) return emptyMessage(elements.environmentCodeIntelligenceResult, '尚未检查 Code Intelligence Provider。');
+
+  const provider = overview.provider || {};
+  const capabilities = provider.capabilities || {};
+  elements.environmentCodeIntelligenceResult.replaceChildren();
+  elements.environmentCodeIntelligenceResult.classList.remove('empty');
+
+  const summary = document.createElement('div');
+  summary.className = 'preview-summary';
+  summary.textContent = (provider.name || provider.provider_id || 'Unknown provider') + ' · ' + (provider.provider_id || '—') + ' · ' + (provider.contract || '—') + ' v' + (provider.protocol_version ?? '—');
+  elements.environmentCodeIntelligenceResult.append(summary);
+  elements.environmentCodeIntelligenceResult.append(
+    detailRow('Source', provider.source || '—'),
+    detailRow('Provider version', provider.provider_version || '—'),
+    detailRow('Definitions', capabilities.definitions ? 'Available' : 'Unavailable'),
+    detailRow('References', capabilities.references ? 'Available' : 'Unavailable'),
+    detailRow('Hierarchy', capabilities.hierarchy ? 'Available' : 'Unavailable')
+  );
+
+  if (overview.attempted_provider) {
+    const attempted = overview.attempted_provider;
+    const note = document.createElement('div');
+    note.className = 'detail-note';
+    note.textContent = '外部 Provider ' + (attempted.name || attempted.provider_id || 'unknown') + ' 未被采用：' + (overview.fallback_reason || 'unknown reason') + '；当前使用 ' + (provider.provider_id || 'fallback provider') + '。';
+    elements.environmentCodeIntelligenceResult.append(note);
+  }
+
+  const candidates = safeArray(overview.providers).filter((fact) => String(fact?.state || '').toLowerCase() !== 'unconfigured');
+  if (candidates.length) {
+    const title = document.createElement('strong');
+    title.textContent = 'Observed external providers';
+    elements.environmentCodeIntelligenceResult.append(title);
+    for (const fact of candidates) {
+      elements.environmentCodeIntelligenceResult.append(detailRow(
+        fact.key || fact.kind || 'provider',
+        humanRuntimeState(fact.state) + (fact.reason_code ? ' · ' + fact.reason_code : '')
+      ));
+    }
+  } else {
+    const note = document.createElement('small');
+    note.textContent = '当前没有已配置并可观察的外部 Code Intelligence Provider。';
+    elements.environmentCodeIntelligenceResult.append(note);
+  }
+}
+function environmentCodeIntelligenceScopeCurrent(identity) {
+  return Boolean(identity &&
+    identity.connectionGeneration === connectionGeneration &&
+    identity.detailGeneration === detailGeneration &&
+    identity.environmentID === selectedEnvironmentID &&
+    identity.codeIntelligenceGeneration === environmentCodeIntelligenceGeneration &&
+    !elements.environmentDetailPanel.hidden);
+}
+async function loadEnvironmentCodeIntelligence() {
+  if (!window.ADMWebSurface || environmentCodeIntelligenceLoading || !selectedEnvironmentID) return;
+  const identity = {connectionGeneration, detailGeneration, environmentID: selectedEnvironmentID, codeIntelligenceGeneration: ++environmentCodeIntelligenceGeneration};
+  environmentCodeIntelligenceLoading = true;
+  environmentCodeIntelligenceError = '';
+  renderEnvironmentCodeIntelligence();
+  try {
+    const overview = await desktopAdapter().CodeIntelligenceOverview(identity.environmentID);
+    if (!environmentCodeIntelligenceScopeCurrent(identity)) return;
+    environmentCodeIntelligenceOverview = overview;
+  } catch (error) {
+    if (!environmentCodeIntelligenceScopeCurrent(identity)) return;
+    environmentCodeIntelligenceError = 'Code Intelligence 检查失败：' + errorText(error);
+  } finally {
+    if (environmentCodeIntelligenceScopeCurrent(identity)) {
+      environmentCodeIntelligenceLoading = false;
+      renderEnvironmentCodeIntelligence();
     }
   }
 }
@@ -2411,6 +2502,7 @@ function syncEnvironmentDetailSubviewUI() {
   elements.environmentDetail.hidden = environmentDetailSubview !== 'summary';
   elements.environmentTreeDigestSection.hidden = environmentDetailSubview !== 'summary';
   elements.environmentProjectIndexSection.hidden = environmentDetailSubview !== 'summary' || !window.ADMWebSurface;
+  if (elements.environmentCodeIntelligenceSection) elements.environmentCodeIntelligenceSection.hidden = environmentDetailSubview !== 'summary' || !window.ADMWebSurface;
   elements.environmentDiagnostics.hidden = environmentDetailSubview !== 'diagnostics';
 }
 function diagnosticFactText(fact) {
@@ -2547,7 +2639,7 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
 }
 function closeEnvironmentDetail() {
   const wasOpen = !elements.environmentDetailPanel.hidden; const opener = environmentDetailOpener;
-  detailGeneration++; selectedEnvironmentID = ''; environmentDetailOpener = null; environmentDetailSubview = 'summary'; resetEnvironmentTreeDigest('尚未读取目录摘要。'); resetEnvironmentProjectIndex('尚未检查项目索引。'); syncEnvironmentDetailSubviewUI(); elements.environmentDetailBackdrop.hidden = true; elements.environmentDetailPanel.hidden = true; elements.environmentDetail.replaceChildren(); elements.environmentDiagnostics.replaceChildren();
+  detailGeneration++; selectedEnvironmentID = ''; environmentDetailOpener = null; environmentDetailSubview = 'summary'; resetEnvironmentTreeDigest('尚未读取目录摘要。'); resetEnvironmentProjectIndex('尚未检查项目索引。'); resetEnvironmentCodeIntelligence('尚未检查 Code Intelligence Provider。'); syncEnvironmentDetailSubviewUI(); elements.environmentDetailBackdrop.hidden = true; elements.environmentDetailPanel.hidden = true; elements.environmentDetail.replaceChildren(); elements.environmentDiagnostics.replaceChildren();
   if (!wasOpen) return;
   updateEnvironmentContextMarkers();
   if (opener?.isConnected && !opener.closest('[hidden]')) opener.focus({preventScroll: true}); else document.querySelector('[data-management-page]:not([hidden]) [data-page-heading]')?.focus({preventScroll: true});
@@ -3266,6 +3358,7 @@ elements.environmentWorkspaceRecommendationsDialog.addEventListener('close', () 
 elements.environmentTreeDigestButton.addEventListener('click', () => loadEnvironmentTreeDigest());
 elements.environmentProjectIndexStatusButton?.addEventListener('click', () => loadEnvironmentProjectIndexStatus());
 elements.environmentProjectAnalyzeButton?.addEventListener('click', () => analyzeEnvironmentProject());
+elements.environmentCodeIntelligenceButton?.addEventListener('click', () => loadEnvironmentCodeIntelligence());
 elements.environmentForm.addEventListener('submit', async (event) => { event.preventDefault(); const workspaceID = elements.environmentWorkspace.value, name = elements.environmentName.value.trim(), root = elements.environmentRoot.value.trim(); if (workspaceID && name) { const requestConnectionGeneration = connectionGeneration; let createdEnvironment = null; await runMutation('创建 Environment', async () => { createdEnvironment = await desktopAdapter().CreateEnvironment({workspace_id: workspaceID, name, root: environmentRootForCreate(workspaceID, root)}); elements.environmentName.value = ''; elements.environmentRoot.value = ''; closeFormDialog(elements.environmentForm); }, async () => promptRecommendedWorkspaceAfterCreate(createdEnvironment, requestConnectionGeneration)); } });
 elements.environmentWorkspaceTarget.addEventListener('change', () => {
   const currentWorkspaceID = environmentWorkspaceOptions?.current_workspace_id || '';
@@ -3329,7 +3422,7 @@ elements.environmentList.addEventListener('click', async (event) => {
   }
   if (button.dataset.action === 'inspect-environment') {
     environmentDetailSubview = 'summary';
-    environmentDetailOpener = button; const token = ++detailGeneration; selectedEnvironmentID = id; resetEnvironmentTreeDigest(); resetEnvironmentProjectIndex();
+    environmentDetailOpener = button; const token = ++detailGeneration; selectedEnvironmentID = id; resetEnvironmentTreeDigest(); resetEnvironmentProjectIndex(); resetEnvironmentCodeIntelligence();
     if (managementEnvironmentID !== id || managementWorkspaceID !== (environment?.workspace_id || '')) environmentGeneration++;
     managementWorkspaceID = environment?.workspace_id || ''; managementEnvironmentID = id; renderManagementEnvironmentOptions(safeArray(currentSnapshot?.workspaces), safeArray(currentSnapshot?.environments)); managementContextError = ''; managementSkillAvailabilityError = ''; updateSkillBulkControls(); updateEnvironmentContextMarkers(); setStatus('读取 Environment 详情…', 'loading');
     try {
