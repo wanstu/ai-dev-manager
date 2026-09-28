@@ -143,6 +143,10 @@ func (o *runtimeOwner) preferredCodeIntelligenceInfo(ctx context.Context, enviro
 	if route, _, ok := o.negotiateCodeIntelligenceRoute(ctx, environmentID, ""); ok {
 		return route.Provider, nil
 	}
+	native := o.inspectJetBrainsNativeCompatibility(ctx, environmentID)
+	if native.AutoRouteEnabled && native.MCPID != "" {
+		return jetBrainsNativeProviderInfo(native.MCPID), nil
+	}
 	return o.service.CodeIntelligenceInfo(environmentID)
 }
 
@@ -160,66 +164,72 @@ func (o *runtimeOwner) queryCodeIntelligence(ctx context.Context, environmentID 
 	if query.MaxResults > 200 {
 		query.MaxResults = 200
 	}
+
 	staticInfo, infoErr := o.service.CodeIntelligenceInfo(environmentID)
 	if infoErr != nil {
 		return CodeIntelligenceQueryResult{}, infoErr
 	}
-	route, routeReason, ok := o.negotiateCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_query")
-	if !ok {
-		value, err := o.service.ProjectIndexQuery(environmentID, query)
-		result := CodeIntelligenceQueryResult{Provider: staticInfo, Result: value}
-		if route.Provider.ID != "" && routeReason != "provider_capability_unavailable" {
-			result.AttemptedProvider = &route.Provider
-			result.FallbackReason = routeReason
+	var attempted *codeintel.ProviderInfo
+	fallbackReason := ""
+
+	route, routeReason, contractReady := o.negotiateCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_query")
+	if contractReady {
+		rt, _, err := o.service.Runtime(environmentID)
+		if err != nil {
+			return CodeIntelligenceQueryResult{}, err
 		}
-		return result, err
+		external, callErr := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_query", map[string]any{
+			"environment_id":   environmentID,
+			"project_root":     rt.Root(),
+			"contract":         codeintel.ContractName,
+			"protocol_version": codeintel.ContractProtocolVersion,
+			"query":            query.Query,
+			"path":             query.Path,
+			"kind":             query.Kind,
+			"language":         query.Language,
+			"exact":            query.Exact,
+			"max_results":      query.MaxResults,
+		})
+		if callErr == nil {
+			var value projectanalysis.IndexQueryResult
+			if decodeErr := decodeProviderStructuredResult(external, &value); decodeErr == nil {
+				if value.Returned == 0 && len(value.Matches) > 0 {
+					value.Returned = len(value.Matches)
+				}
+				if value.IndexPath == "" {
+					value.IndexPath = "provider://phpstorm"
+				}
+				return CodeIntelligenceQueryResult{Provider: route.Provider, Result: value}, nil
+			}
+			attempted = &route.Provider
+			fallbackReason = "external_provider_invalid_result"
+		} else {
+			attempted = &route.Provider
+			fallbackReason = "external_provider_call_failed"
+		}
+	} else if route.Provider.ID != "" && routeReason != "provider_capability_unavailable" {
+		attempted = &route.Provider
+		fallbackReason = routeReason
 	}
 
-	rt, _, err := o.service.Runtime(environmentID)
-	if err != nil {
-		return CodeIntelligenceQueryResult{}, err
+	nativeProvider, nativeValue, nativeReason, nativeOK := o.queryJetBrainsNativeCodeIntelligence(ctx, environmentID, query)
+	if nativeOK {
+		return CodeIntelligenceQueryResult{Provider: nativeProvider, Result: nativeValue}, nil
 	}
-	external, callErr := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_query", map[string]any{
-		"environment_id":   environmentID,
-		"project_root":     rt.Root(),
-		"contract":         codeintel.ContractName,
-		"protocol_version": codeintel.ContractProtocolVersion,
-		"query":            query.Query,
-		"path":             query.Path,
-		"kind":             query.Kind,
-		"language":         query.Language,
-		"exact":            query.Exact,
-		"max_results":      query.MaxResults,
-	})
-	if callErr == nil {
-		var value projectanalysis.IndexQueryResult
-		if decodeErr := decodeProviderStructuredResult(external, &value); decodeErr == nil {
-			if value.Returned == 0 && len(value.Matches) > 0 {
-				value.Returned = len(value.Matches)
-			}
-			if value.IndexPath == "" {
-				value.IndexPath = "provider://phpstorm"
-			}
-			return CodeIntelligenceQueryResult{Provider: route.Provider, Result: value}, nil
-		}
+	if nativeProvider.ID != "" && nativeReason != "" && nativeReason != "provider_not_configured" {
+		attempted = &nativeProvider
+		fallbackReason = nativeReason
 	}
 
 	value, staticErr := o.service.ProjectIndexQuery(environmentID, query)
 	if staticErr != nil {
-		if callErr != nil {
-			return CodeIntelligenceQueryResult{}, fmt.Errorf("phpstorm provider failed and static fallback failed: %w", errors.Join(callErr, staticErr))
-		}
-		return CodeIntelligenceQueryResult{}, fmt.Errorf("phpstorm provider returned invalid structured result and static fallback failed: %w", staticErr)
-	}
-	reason := "external_provider_invalid_result"
-	if callErr != nil {
-		reason = "external_provider_call_failed"
+		return CodeIntelligenceQueryResult{}, fmt.Errorf("code intelligence providers unavailable and static fallback failed: %w", staticErr)
 	}
 	return CodeIntelligenceQueryResult{
 		Provider:          staticInfo,
 		Result:            value,
-		AttemptedProvider: &route.Provider,
-		FallbackReason:    reason,
+		AttemptedProvider: attempted,
+		FallbackReason:    fallbackReason,
 	}, nil
 }
 

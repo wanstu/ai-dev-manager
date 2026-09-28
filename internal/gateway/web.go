@@ -480,10 +480,13 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			overview.Providers = report.Providers
 			nativeCompatibility := h.owner.inspectJetBrainsNativeCompatibility(ctx, s1)
 			overview.JetBrainsNativeCompatibility = &nativeCompatibility
+			preferred, preferredErr := h.owner.preferredCodeIntelligenceInfo(ctx, s1)
+			if preferredErr != nil {
+				return nil, preferredErr
+			}
+			overview.Provider = preferred
 			route, reason, ok := h.owner.negotiateCodeIntelligenceRoute(ctx, s1, "")
-			if ok {
-				overview.Provider = route.Provider
-			} else if route.Provider.ID != "" && reason != "provider_capability_unavailable" {
+			if !ok && route.Provider.ID != "" && reason != "provider_capability_unavailable" {
 				overview.AttemptedProvider = &route.Provider
 				overview.FallbackReason = reason
 			}

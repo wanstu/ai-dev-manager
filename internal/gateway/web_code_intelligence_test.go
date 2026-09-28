@@ -140,24 +140,7 @@ func TestWebCodeIntelligenceOverviewReportsJetBrainsNativeSchemaGate(t *testing.
 	}
 
 	fake := &jetBrainsSchemaSession{tools: []*mcp.Tool{
-		{
-			Name: "search_symbol",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"q":                map[string]any{"type": "string"},
-					"projectPath":      map[string]any{"type": "string"},
-					"limit":            map[string]any{"type": "integer"},
-					"paths":            map[string]any{"type": "array"},
-					"include_external": map[string]any{"type": "boolean"},
-				},
-				"required": []any{"q"},
-			},
-			OutputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{"results": map[string]any{"type": "array"}},
-			},
-		},
+		compatibleJetBrainsSearchTool(),
 		{Name: "get_symbol_info"},
 		{Name: "analyze_calls"},
 	}}
@@ -190,14 +173,14 @@ func TestWebCodeIntelligenceOverviewReportsJetBrainsNativeSchemaGate(t *testing.
 	if !ok {
 		t.Fatalf("overview type=%T value=%+v", value, value)
 	}
-	if overview.Provider.ID != "adm_static_index" {
-		t.Fatalf("native candidate must not replace active provider yet: %+v", overview.Provider)
+	if overview.Provider.ID != app.InvestigationProviderJetBrainsNative {
+		t.Fatalf("compatible native provider should become active: %+v", overview.Provider)
 	}
 	compatibility := overview.JetBrainsNativeCompatibility
-	if compatibility == nil || !compatibility.InputCompatible || !compatibility.OutputSchemaAvailable {
+	if compatibility == nil || !compatibility.InputCompatible || !compatibility.OutputSchemaAvailable || !compatibility.OutputCompatible {
 		t.Fatalf("native compatibility=%+v", compatibility)
 	}
-	if compatibility.AutoRouteEnabled || compatibility.Reason != "search_symbol_schema_ready" {
+	if !compatibility.AutoRouteEnabled || compatibility.Reason != "search_symbol_schema_ready" {
 		t.Fatalf("native route state=%+v", compatibility)
 	}
 	if fake.calls() != 0 {

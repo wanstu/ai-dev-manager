@@ -546,7 +546,8 @@ function renderEnvironmentCodeIntelligence() {
   if (nativeCompatibility && nativeCompatibility.reason !== 'provider_not_configured') {
     elements.environmentCodeIntelligenceResult.append(
       detailRow('JetBrains search_symbol input', nativeCompatibility.input_compatible ? 'Compatible' : 'Not compatible'),
-      detailRow('JetBrains structured output', nativeCompatibility.output_schema_available ? 'Schema available' : 'Schema unavailable'),
+      detailRow('JetBrains output schema', nativeCompatibility.output_schema_available ? 'Schema available' : 'Schema unavailable'),
+      detailRow('JetBrains output mapping', nativeCompatibility.output_compatible ? 'Compatible' : 'Not compatible'),
       detailRow('JetBrains auto route', nativeCompatibility.auto_route_enabled ? 'Enabled' : 'Disabled'),
       detailRow('JetBrains schema gate', nativeCompatibility.reason || '—')
     );

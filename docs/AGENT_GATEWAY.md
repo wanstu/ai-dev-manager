@@ -405,11 +405,11 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 当前默认 Provider 是 `adm_static_index`，能力为 definitions=true、references=false、hierarchy=false，数据来源 `.adm/index`。上层工具通过 Provider 接口调用；未来接入 PhpStorm/JetBrains Provider 时，可以在不改 Agent 查询流程的前提下增加 references / hierarchy 等能力。
 
-ADM 将两类 JetBrains 能力分开识别：`PhpStorm Code Intelligence` / `JetBrains Code Intelligence` 表示实现 ADM Contract v1 的外部 Provider；官方 JetBrains IDE 自带 MCP（例如 `PhpStorm` / `JetBrains` / `IDEA` / `WebStorm` / `GoLand` / `Rider`）单独标记为 `jetbrains_native`。Contract-v1 Provider 识别 `code_intelligence_info/query/status/references/hierarchy`；JetBrains native 当前只识别官方只读语义工具 `search_symbol`、`get_symbol_info`、`analyze_calls`，不会把 rename/build/terminal 等工具算作 Code Intelligence 能力。当前自动 `code_intelligence_*` 路由仍只消费 Contract v1；`jetbrains_native` 先作为可观测候选 Provider 展示，待真实 IDE 返回结构适配完成后再接入 generic query。
+ADM 将两类 JetBrains 能力分开识别：`PhpStorm Code Intelligence` / `JetBrains Code Intelligence` 表示实现 ADM Contract v1 的外部 Provider；官方 JetBrains IDE 自带 MCP（例如 `PhpStorm` / `JetBrains` / `IDEA` / `WebStorm` / `GoLand` / `Rider`）单独标记为 `jetbrains_native`。Contract-v1 Provider 识别 `code_intelligence_info/query/status/references/hierarchy`；JetBrains native 当前只消费官方只读语义工具 `search_symbol` 来提供 definitions，`get_symbol_info` / `analyze_calls` 仍只作为可观测能力，不会把 rename/build/terminal 等 mutating tools 算作 Code Intelligence 能力。
 
-JetBrains native 适配还会在显式 Provider 检查时通过现有 `tools/list` 按需读取完整 schema，不把 schema 持久化进 Gateway observation。当前 `search_symbol` gate 要求 input schema 至少包含 `q`、`projectPath`、`limit`，且 `q` 为 required；同时单独记录是否存在 MCP `OutputSchema`。即使 input/output schema 都满足检查，当前 `auto_route_enabled` 仍为 false，因此 schema 检查不会调用 `search_symbol`，也不会改变实际 Provider。
+JetBrains native 适配在显式 Provider 检查或 definition query 前通过现有 `tools/list` 按需读取完整 schema，不把 schema 持久化进 Gateway observation。自动路由要求 `search_symbol` input schema 至少包含 `q`、`projectPath`、`limit`，且 `q` 为 required；output schema 必须明确包含可映射的结果数组，并且每个 symbol item 至少声明名称字段与文件路径字段。只有 input/output 都兼容时 `auto_route_enabled=true`。运行时仍会再次校验 structured result、把绝对路径限制在当前 Environment root、过滤越界结果，并固定 `include_external=false`；任何结构或边界检查失败都会退回 `.adm/index`。
 
-Provider 选择保持保守：只有 Environment 已授权、Gateway 已观察为 healthy、tool inventory 明确包含本次所需只读 tool，并且 `code_intelligence_info` 的 `adm.code_intelligence` Contract v1 negotiation 成功时，generic `code_intelligence_*` 才会调用 PhpStorm MCP。Provider 调用失败、返回 tool error、缺失 structured content、结构不兼容或协议版本不匹配时，ADM 会回退 `adm_static_index`；返回中的 `provider` 表示实际使用者，`attempted_provider` / `fallback_reason` 说明发生过的回退。单纯查看 capability report 不会执行项目代码。外部 Provider 的完整实现契约见 `docs/CODE_INTELLIGENCE_PROVIDER.md`。
+definition query 的实际优先级为：**ADM Contract v1 Provider → JetBrains native `search_symbol` → `adm_static_index`**。native 路由当前只承接带文本 `query`、且不带 `kind/language` 过滤的 definitions 查询；其他过滤条件继续由 Contract-v1 Provider 或静态索引处理。status / references / hierarchy 暂不映射 JetBrains native。外部 Provider 调用失败、返回 tool error、缺失 structured content、结构不兼容或协议版本不匹配时，返回中的 `provider` 表示实际使用者，`attempted_provider` / `fallback_reason` 说明发生过的回退。单纯查看 capability report 不会执行项目代码。Contract-v1 外部 Provider 的完整实现契约见 `docs/CODE_INTELLIGENCE_PROVIDER.md`。
 
 ### `code_intelligence_query`
 
@@ -427,7 +427,7 @@ Provider-neutral 的 symbol definition 查询。参数与 `project_index_query` 
 }
 ```
 
-Agent 新代码优先调用这一工具。默认使用 `adm_static_index`；若 healthy 的 Environment-authorized PhpStorm MCP 提供 `code_intelligence_query`，则自动路由到 PhpStorm。传给外部 Provider 的参数除查询条件外还包含 `environment_id` 和 `project_root`。外部 Provider 必须通过 MCP `structuredContent` 返回与 ADM symbol query result 兼容的结构；ADM 不依赖自由文本 JSON 猜测结果。
+Agent 新代码优先调用这一工具。definitions 查询优先使用 healthy 的 ADM Contract-v1 Provider；否则在 JetBrains native `search_symbol` schema 可安全映射时复用 IDE 索引；最后回退 `adm_static_index`。Contract-v1 Provider 会收到 `environment_id` / `project_root` 和查询条件；JetBrains native adapter 固定使用当前 Environment root、`include_external=false` 和 bounded `limit`。两类外部结果都只接受 MCP `structuredContent`，ADM 不依赖自由文本 JSON 猜测结果。
 
 ### `code_intelligence_status`
 
