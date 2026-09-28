@@ -19,16 +19,17 @@ import (
 )
 
 type jetBrainsNativeCompatibility struct {
-	ProviderID            string   `json:"provider_id"`
-	MCPID                 string   `json:"mcp_id,omitempty"`
-	Tool                  string   `json:"tool,omitempty"`
-	InputCompatible       bool     `json:"input_compatible"`
-	OutputSchemaAvailable bool     `json:"output_schema_available"`
-	OutputCompatible      bool     `json:"output_compatible"`
-	AutoRouteEnabled      bool     `json:"auto_route_enabled"`
-	InputFields           []string `json:"input_fields,omitempty"`
-	OutputFields          []string `json:"output_fields,omitempty"`
-	Reason                string   `json:"reason,omitempty"`
+	ProviderID             string   `json:"provider_id"`
+	MCPID                  string   `json:"mcp_id,omitempty"`
+	Tool                   string   `json:"tool,omitempty"`
+	InputCompatible        bool     `json:"input_compatible"`
+	OutputSchemaAvailable  bool     `json:"output_schema_available"`
+	OutputCompatible       bool     `json:"output_compatible"`
+	AutoRouteEnabled       bool     `json:"auto_route_enabled"`
+	ExactSymbolInfoEnabled bool     `json:"exact_symbol_info_enabled"`
+	InputFields            []string `json:"input_fields,omitempty"`
+	OutputFields           []string `json:"output_fields,omitempty"`
+	Reason                 string   `json:"reason,omitempty"`
 }
 
 func (o *runtimeOwner) inspectJetBrainsNativeCompatibility(ctx context.Context, environmentID string) jetBrainsNativeCompatibility {
@@ -75,10 +76,16 @@ func (o *runtimeOwner) inspectJetBrainsNativeCompatibility(ctx context.Context, 
 		return result
 	}
 	var searchSymbol *mcp.Tool
+	var getSymbolInfo *mcp.Tool
 	for _, tool := range tools {
-		if tool != nil && strings.EqualFold(strings.TrimSpace(tool.Name), "search_symbol") {
+		if tool == nil {
+			continue
+		}
+		switch {
+		case strings.EqualFold(strings.TrimSpace(tool.Name), "search_symbol"):
 			searchSymbol = tool
-			break
+		case strings.EqualFold(strings.TrimSpace(tool.Name), "get_symbol_info"):
+			getSymbolInfo = tool
 		}
 	}
 	if searchSymbol == nil {
@@ -115,6 +122,7 @@ func (o *runtimeOwner) inspectJetBrainsNativeCompatibility(ctx context.Context, 
 	}
 	result.OutputCompatible = true
 	result.AutoRouteEnabled = true
+	result.ExactSymbolInfoEnabled = jetBrainsGetSymbolInfoToolCompatible(getSymbolInfo)
 	result.Reason = "search_symbol_schema_ready"
 	return result
 }
@@ -273,11 +281,144 @@ func (o *runtimeOwner) queryJetBrainsNativeCodeIntelligence(ctx context.Context,
 	if err != nil {
 		return provider, projectanalysis.IndexQueryResult{}, "jetbrains_native_call_failed", false
 	}
+	if query.Exact && compatibility.ExactSymbolInfoEnabled {
+		callResult, err = o.enrichJetBrainsNativeExactSearchResult(ctx, environmentID, compatibility.MCPID, rt.Root(), callResult)
+		if err != nil {
+			return provider, projectanalysis.IndexQueryResult{}, "jetbrains_native_exact_symbol_info_failed", false
+		}
+	}
 	value, err := decodeJetBrainsNativeSearchResult(rt.Root(), query, limit, callResult)
 	if err != nil {
 		return provider, projectanalysis.IndexQueryResult{}, "jetbrains_native_invalid_result", false
 	}
 	return provider, value, "", true
+}
+
+const jetBrainsNativeExactSymbolInfoMaxCalls = 8
+
+func (o *runtimeOwner) enrichJetBrainsNativeExactSearchResult(ctx context.Context, environmentID, mcpID, root string, result *mcp.CallToolResult) (*mcp.CallToolResult, error) {
+	if result == nil || result.IsError || result.StructuredContent == nil {
+		return result, nil
+	}
+	raw, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		return nil, fmt.Errorf("encode JetBrains search result for exact enrichment: %w", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, fmt.Errorf("decode JetBrains search result for exact enrichment: %w", err)
+	}
+
+	rowsKey := ""
+	var rowsValue any
+	for _, name := range []string{"results", "matches", "items"} {
+		if value, ok := payload[name]; ok {
+			rowsKey = name
+			rowsValue = value
+			break
+		}
+	}
+	if rowsKey == "" {
+		return result, nil
+	}
+	rows, ok := rowsValue.([]any)
+	if !ok {
+		return nil, fmt.Errorf("JetBrains exact enrichment results is not an array")
+	}
+
+	type candidate struct {
+		index  int
+		row    map[string]any
+		path   string
+		line   int
+		column int
+	}
+	candidates := make([]candidate, 0)
+	for index, rowValue := range rows {
+		row, ok := schemaMap(rowValue)
+		if !ok {
+			continue
+		}
+		if firstStringValue(row, "name", "symbolName", "displayName") != "" ||
+			firstStringValue(row, "qualifiedName", "qualified_name", "fqn") != "" {
+			continue
+		}
+		pathValue := firstStringValue(row, "filePath", "path", "pathInProject", "relativePath")
+		relativePath, ok := normalizeJetBrainsNativePath(root, pathValue)
+		if !ok {
+			return nil, fmt.Errorf("JetBrains exact enrichment path is outside Environment root")
+		}
+		line := firstIntValue(row, "line", "startLine", "start_line")
+		column := firstIntValue(row, "column", "startColumn", "start_column")
+		if line <= 0 || column <= 0 {
+			return nil, fmt.Errorf("JetBrains exact enrichment requires line and column")
+		}
+		candidates = append(candidates, candidate{index: index, row: row, path: relativePath, line: line, column: column})
+	}
+	if len(candidates) == 0 {
+		return result, nil
+	}
+	if len(candidates) > jetBrainsNativeExactSymbolInfoMaxCalls {
+		return nil, fmt.Errorf("JetBrains exact enrichment candidate count %d exceeds limit %d", len(candidates), jetBrainsNativeExactSymbolInfoMaxCalls)
+	}
+
+	for _, item := range candidates {
+		infoResult, err := o.CallTool(ctx, environmentID, mcpID, "get_symbol_info", map[string]any{
+			"filePath":    item.path,
+			"line":        item.line,
+			"column":      item.column,
+			"projectPath": root,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("JetBrains get_symbol_info call failed: %w", err)
+		}
+		name, language, err := decodeJetBrainsNativeSymbolInfo(infoResult)
+		if err != nil {
+			return nil, err
+		}
+		item.row["name"] = name
+		if language != "" {
+			item.row["language"] = language
+		}
+		rows[item.index] = item.row
+	}
+	payload[rowsKey] = rows
+	enriched := *result
+	enriched.StructuredContent = payload
+	return &enriched, nil
+}
+
+func decodeJetBrainsNativeSymbolInfo(result *mcp.CallToolResult) (string, string, error) {
+	if result == nil {
+		return "", "", fmt.Errorf("JetBrains get_symbol_info returned no result")
+	}
+	if result.IsError {
+		return "", "", fmt.Errorf("JetBrains get_symbol_info returned tool error")
+	}
+	if result.StructuredContent == nil {
+		return "", "", fmt.Errorf("JetBrains get_symbol_info returned no structured content")
+	}
+	raw, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		return "", "", fmt.Errorf("encode JetBrains get_symbol_info result: %w", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return "", "", fmt.Errorf("decode JetBrains get_symbol_info result: %w", err)
+	}
+	symbolInfoValue, ok := payload["symbolInfo"]
+	if !ok || symbolInfoValue == nil {
+		return "", "", fmt.Errorf("JetBrains get_symbol_info returned no symbolInfo")
+	}
+	symbolInfo, ok := schemaMap(symbolInfoValue)
+	if !ok {
+		return "", "", fmt.Errorf("JetBrains get_symbol_info symbolInfo is invalid")
+	}
+	name := firstStringValue(symbolInfo, "name")
+	if name == "" {
+		return "", "", fmt.Errorf("JetBrains get_symbol_info returned no symbol name")
+	}
+	return name, firstStringValue(symbolInfo, "language"), nil
 }
 
 func decodeJetBrainsNativeSearchResult(root string, query projectanalysis.IndexQuery, nativeLimit int, result *mcp.CallToolResult) (projectanalysis.IndexQueryResult, error) {
@@ -549,6 +690,57 @@ func jetBrainsSearchSymbolInputCompatible(schema map[string]any) bool {
 
 	required := schemaRequiredNames(schema)
 	return required["q"]
+}
+
+func jetBrainsGetSymbolInfoToolCompatible(tool *mcp.Tool) bool {
+	if tool == nil {
+		return false
+	}
+	inputSchema, err := toolSchemaObject(tool.InputSchema)
+	if err != nil {
+		return false
+	}
+	inputProperties := schemaObjectProperties(inputSchema)
+	for _, name := range []string{"filePath", "line", "column"} {
+		value, ok := inputProperties[name]
+		if !ok {
+			return false
+		}
+		allowed := map[string]bool{"string": name == "filePath", "integer": name != "filePath", "number": name != "filePath"}
+		if !schemaPropertyAllowsType(value, allowed) {
+			return false
+		}
+	}
+	required := schemaRequiredNames(inputSchema)
+	for _, name := range []string{"filePath", "line", "column"} {
+		if !required[name] {
+			return false
+		}
+	}
+	projectPath, ok := inputProperties["projectPath"]
+	if !ok || !schemaPropertyAllowsType(projectPath, map[string]bool{"string": true}) {
+		return false
+	}
+
+	if tool.OutputSchema == nil {
+		return false
+	}
+	outputSchema, err := toolSchemaObject(tool.OutputSchema)
+	if err != nil {
+		return false
+	}
+	outputProperties := schemaObjectProperties(outputSchema)
+	symbolInfoValue, ok := outputProperties["symbolInfo"]
+	if !ok || !schemaPropertyAllowsType(symbolInfoValue, map[string]bool{"object": true}) {
+		return false
+	}
+	symbolInfoSchema, ok := schemaMap(symbolInfoValue)
+	if !ok {
+		return false
+	}
+	symbolInfoProperties := schemaObjectProperties(symbolInfoSchema)
+	nameValue, ok := symbolInfoProperties["name"]
+	return ok && schemaPropertyAllowsType(nameValue, map[string]bool{"string": true})
 }
 
 func jetBrainsSearchSymbolOutputCompatible(schema map[string]any) bool {

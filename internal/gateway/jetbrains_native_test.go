@@ -16,11 +16,13 @@ import (
 )
 
 type jetBrainsSchemaSession struct {
-	mu         sync.Mutex
-	tools      []*mcp.Tool
-	callCount  int
-	callResult *mcp.CallToolResult
-	lastCall   *mcp.CallToolParams
+	mu          sync.Mutex
+	tools       []*mcp.Tool
+	callCount   int
+	callResult  *mcp.CallToolResult
+	callResults map[string]*mcp.CallToolResult
+	callsByTool map[string][]*mcp.CallToolParams
+	lastCall    *mcp.CallToolParams
 }
 
 func (s *jetBrainsSchemaSession) Ping(context.Context, *mcp.PingParams) error { return nil }
@@ -36,6 +38,13 @@ func (s *jetBrainsSchemaSession) CallTool(_ context.Context, params *mcp.CallToo
 	defer s.mu.Unlock()
 	s.callCount++
 	s.lastCall = params
+	if s.callsByTool == nil {
+		s.callsByTool = map[string][]*mcp.CallToolParams{}
+	}
+	s.callsByTool[params.Name] = append(s.callsByTool[params.Name], params)
+	if result := s.callResults[params.Name]; result != nil {
+		return result, nil
+	}
 	if s.callResult != nil {
 		return s.callResult, nil
 	}
@@ -48,6 +57,12 @@ func (s *jetBrainsSchemaSession) calls() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.callCount
+}
+
+func (s *jetBrainsSchemaSession) toolCalls(name string) []*mcp.CallToolParams {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]*mcp.CallToolParams(nil), s.callsByTool[name]...)
 }
 
 func TestJetBrainsNativeSearchSymbolSchemaGate(t *testing.T) {
@@ -379,6 +394,57 @@ func compatibleJetBrainsSearchTool() *mcp.Tool {
 	}
 }
 
+func compatibleJetBrainsGetSymbolInfoTool() *mcp.Tool {
+	return &mcp.Tool{
+		Name: "get_symbol_info",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"filePath":    map[string]any{"type": "string"},
+				"line":        map[string]any{"type": "integer"},
+				"column":      map[string]any{"type": "integer"},
+				"projectPath": map[string]any{"type": "string"},
+			},
+			"required": []any{"filePath", "line", "column"},
+		},
+		OutputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"symbolInfo": map[string]any{
+					"type":     []any{"object", "null"},
+					"required": []any{"declarationText"},
+					"properties": map[string]any{
+						"name":            map[string]any{"type": []any{"string", "null"}},
+						"declarationText": map[string]any{"type": "string"},
+						"declarationFile": map[string]any{"type": []any{"string", "null"}},
+						"declarationLine": map[string]any{"type": []any{"integer", "null"}},
+						"language":        map[string]any{"type": []any{"string", "null"}},
+					},
+				},
+				"documentation":       map[string]any{"type": "string"},
+				"partialResultReason": map[string]any{"type": []any{"string", "null"}},
+			},
+			"required": []any{"documentation"},
+		},
+	}
+}
+
+func TestJetBrainsGetSymbolInfoSchemaGate(t *testing.T) {
+	if !jetBrainsGetSymbolInfoToolCompatible(compatibleJetBrainsGetSymbolInfoTool()) {
+		t.Fatal("official get_symbol_info schema should be compatible")
+	}
+	incompatible := compatibleJetBrainsGetSymbolInfoTool()
+	incompatible.OutputSchema = map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"documentation": map[string]any{"type": "string"},
+		},
+	}
+	if jetBrainsGetSymbolInfoToolCompatible(incompatible) {
+		t.Fatal("get_symbol_info without structured symbolInfo.name should be incompatible")
+	}
+}
+
 func TestJetBrainsNativeExactQueryRejectsCoordinateOnlyNames(t *testing.T) {
 	root := t.TempDir()
 	_, err := decodeJetBrainsNativeSearchResult(root, projectanalysis.IndexQuery{
@@ -395,6 +461,110 @@ func TestJetBrainsNativeExactQueryRejectsCoordinateOnlyNames(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "no mappable symbol rows") {
 		t.Fatalf("exact coordinate-only result error = %v", err)
+	}
+}
+
+func TestJetBrainsNativeSymbolInfoRequiresStructuredName(t *testing.T) {
+	_, _, err := decodeJetBrainsNativeSymbolInfo(&mcp.CallToolResult{
+		StructuredContent: map[string]any{
+			"documentation": "function Foo(): void",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "no symbolInfo") {
+		t.Fatalf("documentation-only symbol info error = %v", err)
+	}
+}
+
+func TestJetBrainsNativeExactQueryUsesStructuredSymbolInfo(t *testing.T) {
+	ctx := context.Background()
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	root := t.TempDir()
+	workspace, err := service.Workspaces.Add(root, "jetbrains-native-exact")
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := service.Environments.Create(workspace.ID, "jetbrains-native-exact", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := service.MCPs.AddMCP("PhpStorm", "http://127.0.0.1:65521/mcp", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetEnvironmentMCP(environment.ID, entry.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	fake := &jetBrainsSchemaSession{
+		tools: []*mcp.Tool{compatibleJetBrainsSearchTool(), compatibleJetBrainsGetSymbolInfoTool()},
+		callResults: map[string]*mcp.CallToolResult{
+			"search_symbol": {
+				StructuredContent: map[string]any{
+					"items": []any{map[string]any{
+						"filePath":    "src/Foo.js",
+						"startLine":   17,
+						"startColumn": 7,
+						"endLine":     17,
+						"endColumn":   10,
+					}},
+					"more": false,
+				},
+			},
+			"get_symbol_info": {
+				StructuredContent: map[string]any{
+					"symbolInfo": map[string]any{
+						"name":            "Foo",
+						"declarationText": "function Foo() {}",
+						"declarationFile": "src/Foo.js",
+						"declarationLine": 17,
+						"language":        "JavaScript",
+					},
+					"documentation": "function Foo(): void",
+				},
+			},
+		},
+	}
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	owner.connect = func(context.Context, string, string, map[string]string) (ownedMCPSession, error) {
+		return fake, nil
+	}
+	status, err := owner.Status(ctx, environment.ID, entry.ID)
+	if err != nil || status.State != app.MCPHealthHealthy {
+		t.Fatalf("prime JetBrains MCP: status=%+v err=%v", status, err)
+	}
+	compatibility := owner.inspectJetBrainsNativeCompatibility(ctx, environment.ID)
+	if !compatibility.AutoRouteEnabled || !compatibility.ExactSymbolInfoEnabled {
+		t.Fatalf("compatibility=%+v", compatibility)
+	}
+
+	result, err := owner.queryCodeIntelligence(ctx, environment.ID, projectanalysis.IndexQuery{
+		Query:      "Foo",
+		Exact:      true,
+		MaxResults: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Provider.ID != app.InvestigationProviderJetBrainsNative || result.Result.Returned != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	match := result.Result.Matches[0]
+	if match.Path != "src/Foo.js" || match.Name != "Foo" || match.Language != "JavaScript" || match.Line != 17 {
+		t.Fatalf("match=%+v", match)
+	}
+
+	searchCalls := fake.toolCalls("search_symbol")
+	infoCalls := fake.toolCalls("get_symbol_info")
+	if len(searchCalls) != 1 || len(infoCalls) != 1 {
+		t.Fatalf("search calls=%d info calls=%d", len(searchCalls), len(infoCalls))
+	}
+	infoArgs, ok := infoCalls[0].Arguments.(map[string]any)
+	if !ok {
+		t.Fatalf("get_symbol_info arguments type=%T", infoCalls[0].Arguments)
+	}
+	if infoArgs["filePath"] != "src/Foo.js" || infoArgs["line"] != 17 || infoArgs["column"] != 7 || infoArgs["projectPath"] != root {
+		t.Fatalf("get_symbol_info arguments=%+v", infoArgs)
 	}
 }
 
