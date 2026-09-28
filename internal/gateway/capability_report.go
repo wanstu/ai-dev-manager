@@ -206,6 +206,8 @@ func investigationProviderID(fact model.CapabilityFact) string {
 		return app.InvestigationProviderGitNexus
 	case app.InvestigationProviderPhpStormKey:
 		return app.InvestigationProviderPhpStorm
+	case app.InvestigationProviderJetBrainsNativeKey:
+		return app.InvestigationProviderJetBrainsNative
 	default:
 		return ""
 	}

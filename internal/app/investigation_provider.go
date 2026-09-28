@@ -11,11 +11,13 @@ import (
 )
 
 const (
-	CapabilityKindCodeIntelligenceProvider = "code_intelligence_provider"
-	InvestigationProviderGitNexus          = "gitnexus"
-	InvestigationProviderGitNexusKey       = "code_intelligence.gitnexus"
-	InvestigationProviderPhpStorm          = "phpstorm"
-	InvestigationProviderPhpStormKey       = "code_intelligence.phpstorm"
+	CapabilityKindCodeIntelligenceProvider  = "code_intelligence_provider"
+	InvestigationProviderGitNexus           = "gitnexus"
+	InvestigationProviderGitNexusKey        = "code_intelligence.gitnexus"
+	InvestigationProviderPhpStorm           = "phpstorm"
+	InvestigationProviderPhpStormKey        = "code_intelligence.phpstorm"
+	InvestigationProviderJetBrainsNative    = "jetbrains_native"
+	InvestigationProviderJetBrainsNativeKey = "code_intelligence.jetbrains_native"
 )
 
 var gitNexusReadOnlyTools = []string{"context", "detect_changes", "impact", "list_repos", "query"}
@@ -26,6 +28,12 @@ var phpStormReadOnlyTools = []string{
 	"code_intelligence_status",
 	"code_intelligence_references",
 	"code_intelligence_hierarchy",
+}
+
+var jetBrainsNativeReadOnlyTools = []string{
+	"search_symbol",
+	"get_symbol_info",
+	"analyze_calls",
 }
 
 // InvestigationProvider describes one optional external source of code
@@ -65,7 +73,7 @@ func (phpStormInvestigationProvider) ReadOnlyTools() []string {
 
 func (phpStormInvestigationProvider) MatchMCP(entry model.MCPDefinition) bool {
 	token := compactProviderToken(entry.Name)
-	if token == "phpstorm" || token == "phpstormcodeintelligence" || token == "jetbrainscodeintelligence" {
+	if token == "phpstormcodeintelligence" || token == "jetbrainscodeintelligence" {
 		return true
 	}
 	parts := append([]string{filepath.Base(strings.TrimSpace(entry.Executable))}, entry.Args...)
@@ -73,8 +81,37 @@ func (phpStormInvestigationProvider) MatchMCP(entry model.MCPDefinition) bool {
 	return strings.Contains(joined, "phpstorm") && (strings.Contains(joined, "mcp") || strings.Contains(joined, "code-intelligence") || strings.Contains(joined, "code_intelligence"))
 }
 
+type jetBrainsNativeInvestigationProvider struct{}
+
+func (jetBrainsNativeInvestigationProvider) ID() string { return InvestigationProviderJetBrainsNative }
+func (jetBrainsNativeInvestigationProvider) CapabilityKey() string {
+	return InvestigationProviderJetBrainsNativeKey
+}
+func (jetBrainsNativeInvestigationProvider) ReadOnlyTools() []string {
+	return append([]string(nil), jetBrainsNativeReadOnlyTools...)
+}
+
+func (jetBrainsNativeInvestigationProvider) MatchMCP(entry model.MCPDefinition) bool {
+	token := compactProviderToken(entry.Name)
+	switch token {
+	case "jetbrains", "jetbrainside", "idea", "intellijidea", "phpstorm", "webstorm", "pycharm", "goland", "rider", "clion", "rubymine", "datagrip", "androidstudio":
+		return true
+	}
+	parts := append([]string{filepath.Base(strings.TrimSpace(entry.Executable))}, entry.Args...)
+	joined := strings.ToLower(strings.Join(parts, " "))
+	if !strings.Contains(joined, "mcp") {
+		return false
+	}
+	for _, marker := range []string{"jetbrains", "phpstorm", "intellij", "webstorm", "pycharm", "goland", "rider", "clion", "rubymine", "datagrip"} {
+		if strings.Contains(joined, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func investigationProviders() []InvestigationProvider {
-	return []InvestigationProvider{gitNexusInvestigationProvider{}, phpStormInvestigationProvider{}}
+	return []InvestigationProvider{gitNexusInvestigationProvider{}, phpStormInvestigationProvider{}, jetBrainsNativeInvestigationProvider{}}
 }
 
 // InvestigationProviderReadOnlyTools returns the provider capabilities ADM may

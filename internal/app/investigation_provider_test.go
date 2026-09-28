@@ -115,6 +115,47 @@ func TestPhpStormInvestigationProviderIsRecognized(t *testing.T) {
 	}
 }
 
+func TestJetBrainsNativeInvestigationProviderRecognizesOfficialIDEName(t *testing.T) {
+	service, environmentID := endpointInvestigationService(t, map[string]string{
+		"app/Foo.php": "<?php\nclass Foo {}\n",
+	})
+	jetBrains, err := service.MCPs.AddMCPConfig("PhpStorm", catalog.MCPConfig{
+		Transport:  catalog.MCPTransportStdio,
+		AuthMode:   catalog.MCPAuthNone,
+		Executable: "jetbrains-mcp-not-allowlisted",
+		Args:       []string{"mcp"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetEnvironmentMCP(environmentID, jetBrains.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	report, err := service.InvestigationProviderReport(context.Background(), environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	native := requireInvestigationProviderFact(t, report, InvestigationProviderJetBrainsNativeKey)
+	if native.State != model.CapabilityStateUnavailable || native.ReasonCode != "executable_not_allowed" {
+		t.Fatalf("JetBrains native provider fact = %+v", native)
+	}
+	if got := native.Evidence[0].Details["provider"]; got != InvestigationProviderJetBrainsNative {
+		t.Fatalf("provider evidence = %q, want %q", got, InvestigationProviderJetBrainsNative)
+	}
+	tools := native.Evidence[0].Details["read_only_provider_tools"]
+	for _, want := range []string{"search_symbol", "get_symbol_info", "analyze_calls"} {
+		if !strings.Contains(tools, want) {
+			t.Fatalf("JetBrains native provider tools missing %q: %s", want, tools)
+		}
+	}
+
+	custom := requireInvestigationProviderFact(t, report, InvestigationProviderPhpStormKey)
+	if custom.State != model.CapabilityStateUnconfigured || custom.ReasonCode != "provider_not_configured" {
+		t.Fatalf("plain PhpStorm MCP must not be treated as Contract-v1 provider: %+v", custom)
+	}
+}
+
 func requireInvestigationProviderFact(t *testing.T, report model.InvestigationProviderReport, key string) model.CapabilityFact {
 	t.Helper()
 	for _, provider := range report.Providers {

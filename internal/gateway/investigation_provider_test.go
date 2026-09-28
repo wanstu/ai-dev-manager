@@ -154,6 +154,76 @@ func TestGatewayPhpStormProviderRecognizesReadOnlyInventory(t *testing.T) {
 	}
 }
 
+func TestGatewayJetBrainsNativeProviderRecognizesIDEInventory(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	workspace, err := service.Workspaces.Add(t.TempDir(), "jetbrains-native-provider")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jetBrains, err := service.MCPs.AddMCP("PhpStorm", "http://127.0.0.1:65527/mcp", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := service.Environments.Create(workspace.ID, "jetbrains-native-provider", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetEnvironmentMCP(environment.ID, jetBrains.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	observedAt := time.Now().UTC().Add(-time.Minute)
+	owner.mu.Lock()
+	owner.observations[runtimeOwnerKey{environmentID: environment.ID, mcpID: jetBrains.ID}] = app.MCPRuntimeObservation{
+		EnvironmentID:  environment.ID,
+		MCPID:          jetBrains.ID,
+		DesiredEnabled: true,
+		State:          app.MCPHealthHealthy,
+		LastCheckAt:    &observedAt,
+		LastHealthyAt:  &observedAt,
+		LastSuccessAt:  &observedAt,
+		ToolInventory: []app.MCPToolInventoryItem{
+			{Name: "search_symbol"},
+			{Name: "get_symbol_info"},
+			{Name: "analyze_calls"},
+			{Name: "rename_refactoring"},
+			{Name: "build_project"},
+		},
+		InventoryFetchedAt: &observedAt,
+	}
+	owner.mu.Unlock()
+
+	report, err := owner.InvestigationProviderReport(context.Background(), environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := requireGatewayInvestigationProviderFact(t, report, app.InvestigationProviderJetBrainsNativeKey)
+	if provider.State != model.CapabilityStateAvailable || provider.Confidence != "medium" {
+		t.Fatalf("JetBrains native provider fact = %+v", provider)
+	}
+	if got := capabilityEvidenceDetail(provider, "code_intelligence_provider_inventory", "provider"); got != app.InvestigationProviderJetBrainsNative {
+		t.Fatalf("provider inventory id = %q", got)
+	}
+	availableTools := capabilityEvidenceDetail(provider, "code_intelligence_provider_inventory", "available_read_tools")
+	for _, want := range []string{"analyze_calls", "get_symbol_info", "search_symbol"} {
+		if !strings.Contains(availableTools, want) {
+			t.Fatalf("JetBrains native read inventory missing %q: %s", want, availableTools)
+		}
+	}
+	for _, forbidden := range []string{"rename_refactoring", "build_project"} {
+		if strings.Contains(availableTools, forbidden) {
+			t.Fatalf("JetBrains native provider exposed non-read-only tool %q: %s", forbidden, availableTools)
+		}
+	}
+
+	custom := requireGatewayInvestigationProviderFact(t, report, app.InvestigationProviderPhpStormKey)
+	if custom.State != model.CapabilityStateUnconfigured {
+		t.Fatalf("plain PhpStorm MCP was incorrectly treated as Contract-v1 provider: %+v", custom)
+	}
+}
+
 func requireGatewayInvestigationProviderFact(t *testing.T, report model.InvestigationProviderReport, key string) model.CapabilityFact {
 	t.Helper()
 	for _, provider := range report.Providers {
