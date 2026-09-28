@@ -42,6 +42,8 @@ func (o *runtimeOwner) preferredCodeIntelligenceRoute(ctx context.Context, envir
 			continue
 		}
 		info := codeintel.ProviderInfo{
+			Contract:               codeintel.ContractName,
+			ProtocolVersion:        codeintel.ContractProtocolVersion,
 			ID:                     app.InvestigationProviderPhpStorm,
 			Name:                   "PhpStorm MCP Code Intelligence",
 			Source:                 "mcp:" + mcpID,
@@ -55,6 +57,70 @@ func (o *runtimeOwner) preferredCodeIntelligenceRoute(ctx context.Context, envir
 		return codeIntelligenceExternalRoute{Provider: info, MCPID: mcpID, Tools: available}, true
 	}
 	return codeIntelligenceExternalRoute{}, false
+}
+
+func (o *runtimeOwner) negotiateCodeIntelligenceRoute(ctx context.Context, environmentID, requiredTool string) (codeIntelligenceExternalRoute, string, bool) {
+	route, ok := o.preferredCodeIntelligenceRoute(ctx, environmentID, requiredTool)
+	if !ok {
+		return codeIntelligenceExternalRoute{}, "provider_capability_unavailable", false
+	}
+	if !route.Tools["code_intelligence_info"] {
+		return route, "external_provider_info_unavailable", false
+	}
+	rt, _, err := o.service.Runtime(environmentID)
+	if err != nil {
+		return route, "external_provider_environment_unavailable", false
+	}
+	result, err := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_info", map[string]any{
+		"environment_id":   environmentID,
+		"project_root":     rt.Root(),
+		"contract":         codeintel.ContractName,
+		"protocol_version": codeintel.ContractProtocolVersion,
+	})
+	if err != nil {
+		return route, "external_provider_negotiation_failed", false
+	}
+	var info codeintel.ProviderInfo
+	if err := decodeProviderStructuredResult(result, &info); err != nil {
+		return route, "external_provider_invalid_info", false
+	}
+	info.Contract = strings.TrimSpace(info.Contract)
+	info.ID = strings.TrimSpace(info.ID)
+	info.Name = strings.TrimSpace(info.Name)
+	info.ProviderVersion = strings.TrimSpace(info.ProviderVersion)
+	info.Source = strings.TrimSpace(info.Source)
+	if info.Contract != codeintel.ContractName || info.ProtocolVersion != codeintel.ContractProtocolVersion {
+		return route, "external_provider_protocol_mismatch", false
+	}
+	if info.ID == "" {
+		return route, "external_provider_invalid_info", false
+	}
+	if !codeIntelligenceProviderSupportsTool(info, requiredTool) {
+		return route, "external_provider_capability_mismatch", false
+	}
+	if info.Name == "" {
+		info.Name = route.Provider.Name
+	}
+	if info.Source == "" {
+		info.Source = "mcp:" + route.MCPID
+	}
+	route.Provider = info
+	return route, "", true
+}
+
+func codeIntelligenceProviderSupportsTool(info codeintel.ProviderInfo, tool string) bool {
+	switch tool {
+	case "", "code_intelligence_info", "code_intelligence_status":
+		return true
+	case "code_intelligence_query":
+		return info.Capabilities.Definitions
+	case "code_intelligence_references":
+		return info.Capabilities.References
+	case "code_intelligence_hierarchy":
+		return info.Capabilities.Hierarchy
+	default:
+		return false
+	}
 }
 
 func investigationProviderInventoryTools(fact model.CapabilityFact) map[string]bool {
@@ -74,7 +140,7 @@ func investigationProviderInventoryTools(fact model.CapabilityFact) map[string]b
 }
 
 func (o *runtimeOwner) preferredCodeIntelligenceInfo(ctx context.Context, environmentID string) (codeintel.ProviderInfo, error) {
-	if route, ok := o.preferredCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_query"); ok {
+	if route, _, ok := o.negotiateCodeIntelligenceRoute(ctx, environmentID, ""); ok {
 		return route.Provider, nil
 	}
 	return o.service.CodeIntelligenceInfo(environmentID)
@@ -98,10 +164,15 @@ func (o *runtimeOwner) queryCodeIntelligence(ctx context.Context, environmentID 
 	if infoErr != nil {
 		return CodeIntelligenceQueryResult{}, infoErr
 	}
-	route, ok := o.preferredCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_query")
+	route, routeReason, ok := o.negotiateCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_query")
 	if !ok {
 		value, err := o.service.ProjectIndexQuery(environmentID, query)
-		return CodeIntelligenceQueryResult{Provider: staticInfo, Result: value}, err
+		result := CodeIntelligenceQueryResult{Provider: staticInfo, Result: value}
+		if route.Provider.ID != "" && routeReason != "provider_capability_unavailable" {
+			result.AttemptedProvider = &route.Provider
+			result.FallbackReason = routeReason
+		}
+		return result, err
 	}
 
 	rt, _, err := o.service.Runtime(environmentID)
@@ -109,14 +180,16 @@ func (o *runtimeOwner) queryCodeIntelligence(ctx context.Context, environmentID 
 		return CodeIntelligenceQueryResult{}, err
 	}
 	external, callErr := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_query", map[string]any{
-		"environment_id": environmentID,
-		"project_root":   rt.Root(),
-		"query":          query.Query,
-		"path":           query.Path,
-		"kind":           query.Kind,
-		"language":       query.Language,
-		"exact":          query.Exact,
-		"max_results":    query.MaxResults,
+		"environment_id":   environmentID,
+		"project_root":     rt.Root(),
+		"contract":         codeintel.ContractName,
+		"protocol_version": codeintel.ContractProtocolVersion,
+		"query":            query.Query,
+		"path":             query.Path,
+		"kind":             query.Kind,
+		"language":         query.Language,
+		"exact":            query.Exact,
+		"max_results":      query.MaxResults,
 	})
 	if callErr == nil {
 		var value projectanalysis.IndexQueryResult
@@ -161,10 +234,15 @@ func (o *runtimeOwner) statusCodeIntelligence(ctx context.Context, environmentID
 	if infoErr != nil {
 		return CodeIntelligenceStatusResult{}, infoErr
 	}
-	route, ok := o.preferredCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_status")
+	route, routeReason, ok := o.negotiateCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_status")
 	if !ok {
 		value, err := o.service.ProjectIndexStatus(environmentID, maxChanges)
-		return CodeIntelligenceStatusResult{Provider: staticInfo, Result: value}, err
+		result := CodeIntelligenceStatusResult{Provider: staticInfo, Result: value}
+		if route.Provider.ID != "" && routeReason != "provider_capability_unavailable" {
+			result.AttemptedProvider = &route.Provider
+			result.FallbackReason = routeReason
+		}
+		return result, err
 	}
 
 	rt, _, err := o.service.Runtime(environmentID)
@@ -172,9 +250,11 @@ func (o *runtimeOwner) statusCodeIntelligence(ctx context.Context, environmentID
 		return CodeIntelligenceStatusResult{}, err
 	}
 	external, callErr := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_status", map[string]any{
-		"environment_id": environmentID,
-		"project_root":   rt.Root(),
-		"max_changes":    maxChanges,
+		"environment_id":   environmentID,
+		"project_root":     rt.Root(),
+		"contract":         codeintel.ContractName,
+		"protocol_version": codeintel.ContractProtocolVersion,
+		"max_changes":      maxChanges,
 	})
 	if callErr == nil {
 		var value projectanalysis.IndexStatusResult
@@ -217,23 +297,29 @@ func (o *runtimeOwner) referencesCodeIntelligence(ctx context.Context, environme
 	if err != nil {
 		return CodeIntelligenceReferencesResult{}, err
 	}
-	route, ok := o.preferredCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_references")
+	route, routeReason, ok := o.negotiateCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_references")
 	if !ok {
-		return CodeIntelligenceReferencesResult{
+		result := CodeIntelligenceReferencesResult{
 			Provider:  staticInfo,
 			Available: false,
-			Reason:    "provider_capability_unavailable",
-		}, nil
+			Reason:    routeReason,
+		}
+		if route.Provider.ID != "" && routeReason != "provider_capability_unavailable" {
+			result.AttemptedProvider = &route.Provider
+		}
+		return result, nil
 	}
 	rt, _, err := o.service.Runtime(environmentID)
 	if err != nil {
 		return CodeIntelligenceReferencesResult{}, err
 	}
 	external, callErr := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_references", map[string]any{
-		"environment_id": environmentID,
-		"project_root":   rt.Root(),
-		"symbol":         symbol,
-		"max_results":    maxResults,
+		"environment_id":   environmentID,
+		"project_root":     rt.Root(),
+		"contract":         codeintel.ContractName,
+		"protocol_version": codeintel.ContractProtocolVersion,
+		"symbol":           symbol,
+		"max_results":      maxResults,
 	})
 	if callErr != nil {
 		return CodeIntelligenceReferencesResult{
@@ -291,25 +377,31 @@ func (o *runtimeOwner) hierarchyCodeIntelligence(ctx context.Context, environmen
 	if err != nil {
 		return CodeIntelligenceHierarchyResult{}, err
 	}
-	route, ok := o.preferredCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_hierarchy")
+	route, routeReason, ok := o.negotiateCodeIntelligenceRoute(ctx, environmentID, "code_intelligence_hierarchy")
 	if !ok {
-		return CodeIntelligenceHierarchyResult{
+		result := CodeIntelligenceHierarchyResult{
 			Provider:  staticInfo,
 			Available: false,
-			Reason:    "provider_capability_unavailable",
-		}, nil
+			Reason:    routeReason,
+		}
+		if route.Provider.ID != "" && routeReason != "provider_capability_unavailable" {
+			result.AttemptedProvider = &route.Provider
+		}
+		return result, nil
 	}
 	rt, _, err := o.service.Runtime(environmentID)
 	if err != nil {
 		return CodeIntelligenceHierarchyResult{}, err
 	}
 	external, callErr := o.CallTool(ctx, environmentID, route.MCPID, "code_intelligence_hierarchy", map[string]any{
-		"environment_id": environmentID,
-		"project_root":   rt.Root(),
-		"symbol":         symbol,
-		"direction":      direction,
-		"max_depth":      maxDepth,
-		"max_results":    maxResults,
+		"environment_id":   environmentID,
+		"project_root":     rt.Root(),
+		"contract":         codeintel.ContractName,
+		"protocol_version": codeintel.ContractProtocolVersion,
+		"symbol":           symbol,
+		"direction":        direction,
+		"max_depth":        maxDepth,
+		"max_results":      maxResults,
 	})
 	if callErr != nil {
 		return CodeIntelligenceHierarchyResult{

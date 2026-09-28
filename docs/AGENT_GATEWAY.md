@@ -407,7 +407,7 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 ADM 也会识别 Environment 已启用的 `PhpStorm` / `PhpStorm Code Intelligence` / `JetBrains Code Intelligence` MCP 作为可选 Code Intelligence Provider。当前识别的只读 Provider tool contract 为 `code_intelligence_info`、`code_intelligence_query`、`code_intelligence_status`、`code_intelligence_references`、`code_intelligence_hierarchy`；未知或 mutating tools 不会被当作可消费的 code intelligence 能力。
 
-Provider 选择保持保守：只有 Environment 已授权、Gateway 已观察为 healthy、且 tool inventory 明确包含本次所需只读 tool 时，generic `code_intelligence_*` 才会优先调用 PhpStorm MCP。Provider 调用失败、返回 tool error、缺失 structured content 或结构不兼容时，ADM 会回退 `adm_static_index`；返回中的 `provider` 表示实际使用者，`attempted_provider` / `fallback_reason` 说明发生过的回退。单纯查看 Provider 状态不会执行项目代码。
+Provider 选择保持保守：只有 Environment 已授权、Gateway 已观察为 healthy、tool inventory 明确包含本次所需只读 tool，并且 `code_intelligence_info` 的 `adm.code_intelligence` Contract v1 negotiation 成功时，generic `code_intelligence_*` 才会调用 PhpStorm MCP。Provider 调用失败、返回 tool error、缺失 structured content、结构不兼容或协议版本不匹配时，ADM 会回退 `adm_static_index`；返回中的 `provider` 表示实际使用者，`attempted_provider` / `fallback_reason` 说明发生过的回退。单纯查看 capability report 不会执行项目代码。外部 Provider 的完整实现契约见 `docs/CODE_INTELLIGENCE_PROVIDER.md`。
 
 ### `code_intelligence_query`
 
