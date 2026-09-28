@@ -407,6 +407,8 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 ADM 将两类 JetBrains 能力分开识别：`PhpStorm Code Intelligence` / `JetBrains Code Intelligence` 表示实现 ADM Contract v1 的外部 Provider；官方 JetBrains IDE 自带 MCP（例如 `PhpStorm` / `JetBrains` / `IDEA` / `WebStorm` / `GoLand` / `Rider`）单独标记为 `jetbrains_native`。Contract-v1 Provider 识别 `code_intelligence_info/query/status/references/hierarchy`；JetBrains native 当前只识别官方只读语义工具 `search_symbol`、`get_symbol_info`、`analyze_calls`，不会把 rename/build/terminal 等工具算作 Code Intelligence 能力。当前自动 `code_intelligence_*` 路由仍只消费 Contract v1；`jetbrains_native` 先作为可观测候选 Provider 展示，待真实 IDE 返回结构适配完成后再接入 generic query。
 
+JetBrains native 适配还会在显式 Provider 检查时通过现有 `tools/list` 按需读取完整 schema，不把 schema 持久化进 Gateway observation。当前 `search_symbol` gate 要求 input schema 至少包含 `q`、`projectPath`、`limit`，且 `q` 为 required；同时单独记录是否存在 MCP `OutputSchema`。即使 input/output schema 都满足检查，当前 `auto_route_enabled` 仍为 false，因此 schema 检查不会调用 `search_symbol`，也不会改变实际 Provider。
+
 Provider 选择保持保守：只有 Environment 已授权、Gateway 已观察为 healthy、tool inventory 明确包含本次所需只读 tool，并且 `code_intelligence_info` 的 `adm.code_intelligence` Contract v1 negotiation 成功时，generic `code_intelligence_*` 才会调用 PhpStorm MCP。Provider 调用失败、返回 tool error、缺失 structured content、结构不兼容或协议版本不匹配时，ADM 会回退 `adm_static_index`；返回中的 `provider` 表示实际使用者，`attempted_provider` / `fallback_reason` 说明发生过的回退。单纯查看 capability report 不会执行项目代码。外部 Provider 的完整实现契约见 `docs/CODE_INTELLIGENCE_PROVIDER.md`。
 
 ### `code_intelligence_query`

@@ -107,10 +107,11 @@ type webSkillSourceInput struct {
 }
 
 type webCodeIntelligenceOverview struct {
-	Provider          codeintel.ProviderInfo  `json:"provider"`
-	AttemptedProvider *codeintel.ProviderInfo `json:"attempted_provider,omitempty"`
-	FallbackReason    string                  `json:"fallback_reason,omitempty"`
-	Providers         []model.CapabilityFact  `json:"providers,omitempty"`
+	Provider                     codeintel.ProviderInfo        `json:"provider"`
+	AttemptedProvider            *codeintel.ProviderInfo       `json:"attempted_provider,omitempty"`
+	FallbackReason               string                        `json:"fallback_reason,omitempty"`
+	Providers                    []model.CapabilityFact        `json:"providers,omitempty"`
+	JetBrainsNativeCompatibility *jetBrainsNativeCompatibility `json:"jetbrains_native_compatibility,omitempty"`
 }
 
 func newWebManagementHandler(service *app.Service, owner *runtimeOwner) http.Handler {
@@ -477,6 +478,8 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 				return nil, reportErr
 			}
 			overview.Providers = report.Providers
+			nativeCompatibility := h.owner.inspectJetBrainsNativeCompatibility(ctx, s1)
+			overview.JetBrainsNativeCompatibility = &nativeCompatibility
 			route, reason, ok := h.owner.negotiateCodeIntelligenceRoute(ctx, s1, "")
 			if ok {
 				overview.Provider = route.Provider

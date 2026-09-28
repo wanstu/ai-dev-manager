@@ -531,6 +531,21 @@ function renderEnvironmentCodeIntelligence() {
 
   const candidates = safeArray(overview.providers).filter((fact) => String(fact?.state || '').toLowerCase() !== 'unconfigured');
   const nativeCandidate = candidates.find((fact) => fact?.key === 'code_intelligence.jetbrains_native');
+  const nativeCompatibility = overview.jetbrains_native_compatibility;
+  if (nativeCompatibility && nativeCompatibility.reason !== 'provider_not_configured') {
+    elements.environmentCodeIntelligenceResult.append(
+      detailRow('JetBrains search_symbol input', nativeCompatibility.input_compatible ? 'Compatible' : 'Not compatible'),
+      detailRow('JetBrains structured output', nativeCompatibility.output_schema_available ? 'Schema available' : 'Schema unavailable'),
+      detailRow('JetBrains auto route', nativeCompatibility.auto_route_enabled ? 'Enabled' : 'Disabled'),
+      detailRow('JetBrains schema gate', nativeCompatibility.reason || '—')
+    );
+    if (safeArray(nativeCompatibility.input_fields).length) {
+      elements.environmentCodeIntelligenceResult.append(detailRow('JetBrains input fields', safeArray(nativeCompatibility.input_fields).join(', ')));
+    }
+    if (safeArray(nativeCompatibility.output_fields).length) {
+      elements.environmentCodeIntelligenceResult.append(detailRow('JetBrains output fields', safeArray(nativeCompatibility.output_fields).join(', ')));
+    }
+  }
   if (nativeCandidate && provider.provider_id !== 'jetbrains_native') {
     const nativeNote = document.createElement('div');
     nativeNote.className = 'detail-note';
