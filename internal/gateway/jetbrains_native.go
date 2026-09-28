@@ -172,12 +172,15 @@ func (o *runtimeOwner) probeJetBrainsNativeSearch(ctx context.Context, environme
 		Limit:           limit,
 		IncludeExternal: false,
 	}
-	callResult, err := o.CallTool(ctx, environmentID, compatibility.MCPID, "search_symbol", map[string]any{
-		"q":                query,
-		"projectPath":      projectPath,
-		"limit":            limit,
-		"include_external": false,
-	})
+	args := map[string]any{
+		"q":           query,
+		"projectPath": projectPath,
+		"limit":       limit,
+	}
+	if stringSliceContains(compatibility.InputFields, "include_external") {
+		args["include_external"] = false
+	}
+	callResult, err := o.CallTool(ctx, environmentID, compatibility.MCPID, "search_symbol", args)
 	if err != nil {
 		return result, err
 	}
@@ -258,12 +261,15 @@ func (o *runtimeOwner) queryJetBrainsNativeCodeIntelligence(ctx context.Context,
 	if limit > 50 {
 		limit = 50
 	}
-	callResult, err := o.CallTool(ctx, environmentID, compatibility.MCPID, "search_symbol", map[string]any{
-		"q":                strings.TrimSpace(query.Query),
-		"projectPath":      rt.Root(),
-		"limit":            limit,
-		"include_external": false,
-	})
+	args := map[string]any{
+		"q":           strings.TrimSpace(query.Query),
+		"projectPath": rt.Root(),
+		"limit":       limit,
+	}
+	if stringSliceContains(compatibility.InputFields, "include_external") {
+		args["include_external"] = false
+	}
+	callResult, err := o.CallTool(ctx, environmentID, compatibility.MCPID, "search_symbol", args)
 	if err != nil {
 		return provider, projectanalysis.IndexQueryResult{}, "jetbrains_native_call_failed", false
 	}
@@ -395,6 +401,15 @@ func normalizeJetBrainsNativePath(root, value string) (string, bool) {
 func pathEscapesRoot(path string) bool {
 	path = filepath.Clean(path)
 	return path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator)) || filepath.IsAbs(path)
+}
+
+func stringSliceContains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func firstMapValue(values map[string]any, names ...string) (any, bool) {

@@ -305,10 +305,9 @@ func compatibleJetBrainsSearchTool() *mcp.Tool {
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"q":                map[string]any{"type": "string"},
-				"projectPath":      map[string]any{"type": "string"},
-				"limit":            map[string]any{"type": "integer"},
-				"include_external": map[string]any{"type": "boolean"},
+				"q":           map[string]any{"type": "string"},
+				"projectPath": map[string]any{"type": "string"},
+				"limit":       map[string]any{"type": "integer"},
 			},
 			"required": []any{"q"},
 		},
@@ -424,8 +423,11 @@ func TestJetBrainsNativeGenericQueryUsesCompatibleIDEIndex(t *testing.T) {
 	if !ok {
 		t.Fatalf("arguments type=%T", call.Arguments)
 	}
-	if args["q"] != "Foo" || args["projectPath"] != root || args["limit"] != 10 || args["include_external"] != false {
+	if args["q"] != "Foo" || args["projectPath"] != root || args["limit"] != 10 {
 		t.Fatalf("arguments=%+v", args)
+	}
+	if _, ok := args["include_external"]; ok {
+		t.Fatalf("unexpected include_external for schema without that property: %+v", args)
 	}
 }
 
