@@ -411,6 +411,8 @@ JetBrains native 适配在显式 Provider 检查或 definition query 前通过�
 
 已在 PhpStorm 2026.2.3（build 262.10968.76）实机验证 headless MCP：默认 `mcpServer` invocation mode 为 router，`tools/list` 只显式暴露 `execute_tool`；使用 `--invocation-mode=direct` 后才直接列出 `search_symbol`。ADM 不通过 `execute_tool` 动态转发 Code Intelligence 调用；router 模式会报告 `jetbrains_direct_tools_not_exposed`，应切换为 direct mode，以维持只调用明确只读 tool 的安全边界。
 
+同一实机还验证了 `get_symbol_info` 与 `analyze_calls`。`get_symbol_info` 输入为 `filePath/line/column/projectPath`，官方 output schema 提供结构化 `symbolInfo`（可选）与 `documentation`，因此可作为后续 definitions 增强候选；实际语言实现可能只返回 `documentation`，不能假设 `symbolInfo` 一定存在。`analyze_calls` 明确标记 read-only，输入支持 `symbolFqn`、`INCOMING_CALLS/OUTGOING_CALLS`、depth/paging 等参数，但当前版本没有 output schema，实测返回 MCP text content 的调用树而非 structuredContent。因此 ADM 暂不把它自动映射为 references/hierarchy，也不解析自由文本树猜结构。
+
 definition query 的实际优先级为：**ADM Contract v1 Provider → JetBrains native `search_symbol` → `adm_static_index`**。native 路由当前只承接带文本 `query`、且不带 `kind/language` 过滤的 definitions 查询；其他过滤条件继续由 Contract-v1 Provider 或静态索引处理。status / references / hierarchy 暂不映射 JetBrains native。外部 Provider 调用失败、返回 tool error、缺失 structured content、结构不兼容或协议版本不匹配时，返回中的 `provider` 表示实际使用者，`attempted_provider` / `fallback_reason` 说明发生过的回退。单纯查看 capability report 不会执行项目代码。Contract-v1 外部 Provider 的完整实现契约见 `docs/CODE_INTELLIGENCE_PROVIDER.md`。
 
 ### `code_intelligence_query`
