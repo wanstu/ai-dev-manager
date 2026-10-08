@@ -374,6 +374,15 @@ type ProjectIndexQueryInput struct {
 	MaxResults    int    `json:"max_results,omitempty" jsonschema:"maximum returned matches; defaults to 50 and is capped at 200"`
 }
 
+type ProjectCallGraphInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Symbol        string `json:"symbol" jsonschema:"PHP method or function name, preferably qualified as Namespace\\Class::method"`
+	Path          string `json:"path,omitempty" jsonschema:"optional exact project-relative definition path when names are ambiguous"`
+	Direction     string `json:"direction,omitempty" jsonschema:"callers, callees, or both; defaults to both"`
+	MaxDepth      int    `json:"max_depth,omitempty" jsonschema:"maximum graph depth, defaults to 1 and capped at 3"`
+	MaxResults    int    `json:"max_results,omitempty" jsonschema:"maximum call-site edges, defaults to 100 and capped at 500"`
+}
+
 type ProjectIndexStatusInput struct {
 	EnvironmentID string `json:"environment_id"`
 	MaxChanges    int    `json:"max_changes,omitempty" jsonschema:"maximum changed paths returned; defaults to 50 and is capped at 200"`
@@ -1588,7 +1597,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(CodeIntelligenceStatusResult{Provider: provider, Result: value}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol through the preferred code-intelligence provider. The built-in static index currently does not support references; without a capable external provider the tool returns available=false with reason=provider_capability_unavailable."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol through the preferred code-intelligence provider. The built-in static index supports bounded PHP references via persisted call records; other languages require an external capable provider or return available=false."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceReferencesInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
@@ -1619,6 +1628,15 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			value, err := service.ProjectIndexQuery(in.EnvironmentID, projectanalysis.IndexQuery{
 				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
 				Exact: in.Exact, MaxResults: in.MaxResults,
+			})
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_call_graph", Description: "For PHP investigation or change-impact analysis, query ADM's native persisted code index to answer who calls a function/method and what it calls. Returns definition nodes, call sites (file/line/column), cross-file edges, and certainty labels: resolved_call is lexical evidence, candidate_call is not proven. For ambiguous names supply fully qualified symbol and definition path. Read-only; no IDE or other provider needed. Run project_analyze if v4 index is missing/stale; project_index_status detects content-only changes."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectCallGraphInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.ProjectPHPCallGraph(in.EnvironmentID, projectanalysis.PHPCallGraphQuery{
+				Symbol: in.Symbol, Path: in.Path, Direction: in.Direction,
+				MaxDepth: in.MaxDepth, MaxResults: in.MaxResults,
 			})
 			return toolResult(value, err)
 		})

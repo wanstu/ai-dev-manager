@@ -68,7 +68,8 @@ func decodePHPCallRecord(line []byte, target *PHPCallRecord) error {
 		return fmt.Errorf("ADM call index corrupt: %w", err)
 	}
 	if target.Path == "" || target.Line <= 0 || target.Column <= 0 ||
-		target.Name == "" || (target.CallKind != "method" && target.CallKind != "function") {
+		target.Name == "" || (target.CallKind != "method" && target.CallKind != "function") ||
+		(target.CallerQualifiedName != "" && (target.CallerKind == "" || target.CallerLine <= 0)) {
 		return fmt.Errorf("ADM call index contains invalid record")
 	}
 	return nil

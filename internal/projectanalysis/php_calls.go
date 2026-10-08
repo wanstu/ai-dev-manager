@@ -16,14 +16,17 @@ const maxIndexedPHPCalls = 250000
 // OwnerKnown captures only a safely understood lexical receiver and must not
 // be interpreted as proof of runtime dispatch.
 type PHPCallRecord struct {
-	Path       string `json:"path"`
-	Line       int    `json:"line"`
-	Column     int    `json:"column"`
-	Name       string `json:"name"`
-	CallKind   string `json:"call_kind"`
-	Owner      string `json:"owner,omitempty"`
-	OwnerKnown bool   `json:"owner_known,omitempty"`
-	Context    string `json:"context,omitempty"`
+	Path                string `json:"path"`
+	Line                int    `json:"line"`
+	Column              int    `json:"column"`
+	Name                string `json:"name"`
+	CallKind            string `json:"call_kind"`
+	Owner               string `json:"owner,omitempty"`
+	OwnerKnown          bool   `json:"owner_known,omitempty"`
+	CallerQualifiedName string `json:"caller_qualified_name,omitempty"`
+	CallerKind          string `json:"caller_kind,omitempty"`
+	CallerLine          int    `json:"caller_line,omitempty"`
+	Context             string `json:"context,omitempty"`
 }
 
 var phpMethodCallRE = regexp.MustCompile(`(?i)(?:->|::)[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*\(`)
@@ -42,6 +45,7 @@ func collectPHPCalls(path, rel string) ([]PHPCallRecord, bool, error) {
 	}
 	masked := maskSource(data, true)
 	caller := newPHPCallerFile(masked)
+	functionBodies := phpNamedFunctionBodies(masked, caller)
 	lineStarts := []int{0}
 	for offset, b := range data {
 		if b == '\n' {
@@ -62,13 +66,19 @@ func collectPHPCalls(path, rel string) ([]PHPCallRecord, bool, error) {
 		if lineIndex+1 < len(lineStarts) {
 			lineEnd = lineStarts[lineIndex+1] - 1
 		}
-		calls = append(calls, PHPCallRecord{
+		call := PHPCallRecord{
 			Path:   filepath.ToSlash(rel),
 			Line:   lineIndex + 1,
 			Column: nameStart + 1 - lineStart,
 			Name:   name, CallKind: kind, Owner: owner, OwnerKnown: known,
 			Context: phpReferenceContext(data, lineStart, lineEnd, start, matchEnd),
-		})
+		}
+		if scope, ok := phpCallerAt(start, functionBodies); ok {
+			call.CallerQualifiedName = scope.name
+			call.CallerKind = scope.kind
+			call.CallerLine = scope.line
+		}
+		calls = append(calls, call)
 	}
 	for _, m := range phpMethodCallRE.FindAllSubmatchIndex(masked, -1) {
 		start := m[0]

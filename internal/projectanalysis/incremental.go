@@ -121,7 +121,8 @@ func loadIndexSnapshot(root string, options Options) *indexSnapshot {
 	for scanner.Scan() {
 		var record PHPCallRecord
 		if json.Unmarshal(scanner.Bytes(), &record) != nil || record.Path == "" ||
-			record.Line <= 0 || record.Column <= 0 || (record.CallKind != "method" && record.CallKind != "function") {
+			record.Line <= 0 || record.Column <= 0 || (record.CallKind != "method" && record.CallKind != "function") ||
+			(record.CallerQualifiedName != "" && (record.CallerKind == "" || record.CallerLine <= 0)) {
 			return nil
 		}
 		file, ok := snapshot.files[record.Path]

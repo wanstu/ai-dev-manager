@@ -602,6 +602,14 @@ func (s *Service) ProjectIndexQuery(environmentID string, query projectanalysis.
 	return s.codeIntelligenceProvider().QuerySymbols(rt.Root(), query)
 }
 
+func (s *Service) ProjectPHPCallGraph(environmentID string, query projectanalysis.PHPCallGraphQuery) (projectanalysis.PHPCallGraphResult, error) {
+	rt, _, err := s.Runtime(environmentID)
+	if err != nil {
+		return projectanalysis.PHPCallGraphResult{}, err
+	}
+	return projectanalysis.ProjectPHPCallGraph(rt.Root(), query)
+}
+
 func (s *Service) ProjectIndexStatus(environmentID string, maxChanges int) (projectanalysis.IndexStatusResult, error) {
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {

@@ -391,7 +391,7 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 `project-overview.md` 不再承担完整索引职责；精确查找应优先使用 `.adm/index`。manifest 最后写入，且记录 artifact hashes，消费者可以检测中途失败产生的 partial/stale index。
 
-`project_analyze` **自动优先增量更新**：检测并校验现有 `manifest.json`、`files.jsonl`、`symbols.jsonl`、`calls.jsonl` 的哈希，沿用内容 SHA-256 未变化的 Go/PHP/JavaScript/TypeScript 源文件符号记录和 PHP 调用记录，只重新解析新增或变化文件，并移除已删除文件的记录；更新索引时仍会扫描文件目录与检查源码摘要，并重新生成完整 artifact。返回 `index_mode`（`full` / `incremental`）、`reused_source_files`、`reindexed_source_files`，以及 `calls_indexed`、`reused_php_call_files`、`reindexed_php_call_files`，方便判断是否真正复用了符号和 PHP 调用索引。旧 schema、artifact 校验失败或 bounds 变化时自动全量重建。对于达到扫描上限或存在解析问题的**部分索引**，仅复用 `files.jsonl` 中 `symbols_complete=true`、源码 SHA-256 未变化的文件；其余源文件仍重新解析，整体仍保留 `truncated` 或解析问题状态，不会假称全量完整。此版本将索引 schema 升为 **3**，旧索引首次执行 `project_analyze` 时自动升级；只读查询旧索引时会提示先刷新。
+`project_analyze` **自动优先增量更新**：检测并校验现有 `manifest.json`、`files.jsonl`、`symbols.jsonl`、`calls.jsonl` 的哈希，沿用内容 SHA-256 未变化的 Go/PHP/JavaScript/TypeScript 源文件符号记录和 PHP 调用记录，只重新解析新增或变化文件，并移除已删除文件的记录；更新索引时仍会扫描文件目录与检查源码摘要，并重新生成完整 artifact。返回 `index_mode`（`full` / `incremental`）、`reused_source_files`、`reindexed_source_files`，以及 `calls_indexed`、`reused_php_call_files`、`reindexed_php_call_files`，方便判断是否真正复用了符号和 PHP 调用索引。旧 schema、artifact 校验失败或 bounds 变化时自动全量重建。对于达到扫描上限或存在解析问题的**部分索引**，仅复用 `files.jsonl` 中 `symbols_complete=true`、源码 SHA-256 未变化的文件；其余源文件仍重新解析，整体仍保留 `truncated` 或解析问题状态，不会假称全量完整。此版本将索引 schema 升为 **4**，旧索引首次执行 `project_analyze` 时自动升级；只读查询旧索引时会提示先刷新。
 
 因为会写入 `.adm`，需要 matching Writer。返回结果只包含概要统计和 artifact 路径，不把 Markdown / JSONL 正文塞进 MCP 响应；Agent 后续可用 `read` / `search` 对索引做 bounded 查询。
 
@@ -477,6 +477,33 @@ Provider-neutral 的 freshness / health 查询：
 - PHP 动态分派、反射、变量方法名、复杂导入或继承关系尚不支持精确解析。轻量元数据校验可发现普通文件新增/删除/大小或修改时间变化并提示重新执行 `project_analyze`；但**文件内容被修改且大小及 mtime 都被保持不变**时，必须显式执行 `project_index_status` 的内容哈希扫描才能发现。调用索引每个 PHP 文件最多提取 20,000 条、整个项目最多 250,000 条，单文件只读取前 1 MiB 用于词法提取；触及任何上限时标记 `truncated=true`，并将不完整文件标记为 `calls_complete=false`，不暗示扫描完整。
 
 调用时尽量提供 `symbol.qualified_name`（例如 `Demo\\Services\\BillingService::run`），有重复类名时再提供 `symbol.path`，防止同名类互相污染。目标不属于支持范围或静态索引不可用时仍返回 `available=false`，不能把缺少索引误认为没有引用。
+
+### `project_call_graph`（ADM 原生 PHP 调用图）
+
+**给 AI 的典型调查顺序**：先用 `project_index_query` 确认被调查函数的准确声明（命名空间、定义文件、行号），再用 `project_call_graph` 的 `callers` 查看上游入口、`callees` 查看下游依赖；调用前可用 `project_index_status` 判断索引新鲜度。AI 应结合 `read` 查看关键代码分支再下修复结论，**不能把静态调用候选当作实际运行证据**。缺索引先运行 `project_analyze`，不要默认借助或启动 PhpStorm。
+
+直接查询 ADM 自己生成的 `.adm/index/calls.jsonl` 和 `symbols.jsonl`，**不依赖 PhpStorm、MCP Provider 或其他 IDE**。必须先对项目执行 `project_analyze`。
+
+```json
+{
+  "environment_id": "env_xxx",
+  "symbol": "User_goods::getDealBaseInfo",
+  "path": "base/application/controllers/m/User_goods.php",
+  "direction": "both",
+  "max_depth": 2,
+  "max_results": 100
+}
+```
+
+- `direction`：`callers`（谁调用当前方法）、`callees`（当前方法调用谁）、`both`；默认 `both`。
+- `max_depth` 默认 1，最多 3；`max_results` 默认 100，最多 500（限制**调用边数**）。
+- 返回 `symbol`、`nodes`、`edges`、`returned`、`truncated`。边保存调用位置 `path/line/column` 和简短源码上下文。循环调用会去重，超过限制标记 `truncated=true`。
+- `resolved_call` 表示静态语法与唯一已索引定义匹配，**不代表**运行时必然调用；`candidate_call` 表示变量接收者、继承、函数解析等存在不确定性。候选边**不会**被扩展为多层确定关系。
+- 同名方法对应多个定义时应提供带命名空间的 `symbol`，必要时加 `path`；仍不唯一就返回歧义错误，不会随机选一个。
+- 调用者归属支持具名 PHP function/method 的词法大括号范围，包括跨文件场景；匿名闭包、PHP 动态调用、完整继承/变量类型推断、运行时路由尚不保证准确。
+- 查询会校验索引 artifact 哈希与文件元数据，不重新解析 PHP；需要检测“内容变化但大小和修改时间不变”的情况时，显式运行 `project_index_status`。
+
+本版本的索引 schema 为 **4**；旧索引必须重新运行一次 `project_analyze` 才可使用调用图。所有查询均为只读，无须 Writer。
 
 ### `code_intelligence_hierarchy`
 
