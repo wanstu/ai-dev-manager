@@ -111,6 +111,9 @@ func (s *Service) ResourceRetentionCleanup(ctx context.Context, request model.Re
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}
+	if err := s.cleanupRemovedIndexes(result.Removed); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
@@ -162,7 +165,21 @@ func (s *Service) ResourceRetentionCleanupFromRuntimeReport(ctx context.Context,
 	result.Report = report
 	result.Skipped = skippedRetentionItems(report, result.Removed)
 	sortRetentionItems(result.Skipped)
+	if err := s.cleanupRemovedIndexes(result.Removed); err != nil {
+		return result, err
+	}
 	return result, nil
+}
+
+func (s *Service) cleanupRemovedIndexes(removed []model.ResourceRetentionCleanupMutation) error {
+	for _, item := range removed {
+		if item.Kind == model.RetentionResourceEnvironment {
+			if err := s.CleanupProjectIndex(item.ID); err != nil {
+				return fmt.Errorf("Environment %s removed; index cleanup failed: %w", item.ID, err)
+			}
+		}
+	}
+	return nil
 }
 
 func resourceRetentionReportFromState(state model.State, now time.Time) model.ResourceRetentionReport {

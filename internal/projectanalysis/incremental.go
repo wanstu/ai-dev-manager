@@ -35,8 +35,17 @@ func normalizedAnalyzeOptions(options Options) Options {
 // files. Any missing, damaged, old-schema, partial, or differently bounded
 // index causes a full rebuild. It does not depend on an IDE or other service.
 func AnalyzeIncremental(root string, options Options) (Result, error) {
+	return AnalyzeIncrementalAt(root, root, options)
+}
+
+// AnalyzeIncrementalAt reads validated cached artifacts from indexRoot,
+// while walking only the separate source root.
+func AnalyzeIncrementalAt(root, indexRoot string, options Options) (Result, error) {
 	options = normalizedAnalyzeOptions(options)
-	cache := loadIndexSnapshot(root, options)
+	var cache *indexSnapshot
+	if indexRoot!="" {
+		cache=loadIndexSnapshot(indexRoot,options)
+	}
 	return analyze(root, options, cache)
 }
 

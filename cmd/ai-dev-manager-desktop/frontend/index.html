@@ -338,6 +338,10 @@
       </section>
       <section id="environmentProjectIndexSection" class="subpanel environment-project-index" data-environment-detail-panel="summary" hidden>
         <div class="subpanel-heading"><div><h3>代码索引</h3><span>供 AI 定位函数、分析调用关系。首次点击「生成索引」，后续增量刷新。</span></div><div class="gateway-actions"><button id="environmentProjectIndexStatusButton" type="button" class="secondary-button small-button">检查索引</button><button id="environmentProjectAnalyzeButton" type="button" class="small-button">生成 / 更新索引</button></div></div>
+        <div class="environment-index-automatic">
+          <label><input id="environmentProjectAutoIndex" type="checkbox"> 自动监控代码变化，增量更新索引</label>
+          <small id="environmentProjectAutoIndexStatus" role="status">正在读取自动更新状态…</small>
+        </div>
         <div id="environmentProjectIndexResult" class="discovery-result empty">尚未检查项目索引。</div>
       </section>
       <section id="environmentCodeIntelligenceSection" class="subpanel environment-code-intelligence" data-environment-detail-panel="summary" hidden>

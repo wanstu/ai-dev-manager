@@ -363,7 +363,7 @@ type CompareFilesInput struct {
 
 type ProjectAnalyzeInput struct {
 	EnvironmentID string `json:"environment_id"`
-	WriterOwner   string `json:"writer_owner"`
+	WriterOwner   string `json:"writer_owner,omitempty" jsonschema:"deprecated; no Environment writer lease is needed for index analysis"`
 	MaxFiles      int    `json:"max_files,omitempty" jsonschema:"maximum files inspected; defaults to 25000 for large projects"`
 	MaxSymbols    int    `json:"max_symbols,omitempty" jsonschema:"maximum Go/PHP/JavaScript/TypeScript symbols recorded; defaults to 100000 for large projects"`
 }
@@ -400,6 +400,11 @@ type ProjectCallGraphInput struct {
 	Direction     string `json:"direction,omitempty" jsonschema:"callers, callees, or both; defaults to both"`
 	MaxDepth      int    `json:"max_depth,omitempty" jsonschema:"maximum graph depth, defaults to 1 and capped at 3"`
 	MaxResults    int    `json:"max_results,omitempty" jsonschema:"maximum call-site edges, defaults to 100 and capped at 500"`
+}
+
+type ProjectIndexAutoInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Enabled       bool   `json:"enabled"`
 }
 
 type ProjectIndexStatusInput struct {
@@ -579,7 +584,7 @@ func addScopedTool[In, Out any](server *mcp.Server, surface serverSurface, tool 
 
 func isAdminOnlyTool(name string) bool {
 	switch name {
-	case "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
+	case "project_index_auto_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
 		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_worktree_create", "environment_worktree_cleanup_stale",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
@@ -994,8 +999,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_destroy", Description: "Destroy one ADM-managed Git worktree Environment. Requires the matching writer_owner. Dirty or unpublished work is refused unless force=true; the managed branch is always retained."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentWorktreeDestroyInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.DestroyManagedWorktree(ctx, in.EnvironmentID, in.WriterOwner, in.Force)
-			if err == nil && owner != nil {
-				owner.DropEnvironment(in.EnvironmentID)
+			if err == nil {
+				if owner != nil {
+					owner.DropEnvironment(in.EnvironmentID)
+				} else {
+					_ = service.CleanupProjectIndex(in.EnvironmentID)
+				}
 			}
 			return toolResult(value, err)
 		})
@@ -1114,8 +1123,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_remove", Description: "Remove one ADM Environment record without deleting its root directory or project files. Active writers block removal."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.Remove(in.EnvironmentID)
-			if err == nil && owner != nil {
-				owner.DropEnvironment(in.EnvironmentID)
+			if err == nil {
+				if owner != nil {
+					owner.DropEnvironment(in.EnvironmentID)
+				} else {
+					_ = service.CleanupProjectIndex(in.EnvironmentID)
+				}
 			}
 			return toolResult(map[string]any{"removed": env}, err)
 		})
@@ -1586,7 +1599,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Statically analyze one Environment project and refresh .adm/project-overview.md plus .adm/index/{manifest.json,files.jsonl,symbols.jsonl,calls.jsonl}. Project code is never executed. Requires the matching writer_owner because generated index artifacts are written under the Environment root."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Read-only project source analysis stored in ADM-owned per-Environment immutable index generations. No Environment writer lease or writer_owner is required; separate index locking prevents concurrent refresh corruption. Does not write to project source."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectAnalyzeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.AnalyzeProject(in.EnvironmentID, in.WriterOwner, in.MaxFiles, in.MaxSymbols)
 			return toolResult(value, err)
@@ -1660,7 +1673,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_query", Description: "Query the generated .adm symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256. Check index_complete and coverage_warning before concluding that a symbol does not exist. Run project_analyze first when missing or stale."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_query", Description: "Query ADM-owned generated symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256. Check index_complete and coverage_warning before concluding that a symbol does not exist. Run project_analyze first when missing or stale."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexQueryInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectIndexQuery(in.EnvironmentID, projectanalysis.IndexQuery{
 				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
@@ -1681,12 +1694,29 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_call_graph", Description: "For PHP investigation or change-impact analysis, query ADM's native persisted code index to answer who calls a function/method and what it calls. Returns definition nodes, call sites (file/line/column), cross-file edges, and evidence labels: resolved_call is lexical ownership, inherited_candidate is a direct extends clue, candidate_call may include an advisory declared parameter type. Use edge.reason and edge.type_hint to assess confidence. For ambiguous names supply fully qualified symbol and definition path. Read-only; no IDE or other provider needed. Run project_analyze if v4 index is missing/stale; project_index_status detects content-only changes."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_call_graph", Description: "For PHP investigation or change-impact analysis, query ADM's native persisted code index to answer who calls a function/method and what it calls. Returns definition nodes, call sites (file/line/column), cross-file edges, and evidence labels: resolved_call is lexical ownership, inherited_candidate is a direct extends clue, candidate_call may include an advisory declared parameter type. Use edge.reason and edge.type_hint to assess confidence. For ambiguous names supply fully qualified symbol and definition path. Read-only; no IDE or other provider needed. Run project_analyze if v5 index is missing/stale; project_index_status detects content-only changes."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectCallGraphInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectPHPCallGraph(in.EnvironmentID, projectanalysis.PHPCallGraphQuery{
 				Symbol: in.Symbol, Path: in.Path, Direction: in.Direction,
 				MaxDepth: in.MaxDepth, MaxResults: in.MaxResults,
 			})
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_auto_status", Description: "Read the persistent automatic index watcher setting and runtime state for one Environment. No writer lease required."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
+			if owner == nil {
+				return toolResult(service.IndexAutoStatus(in.EnvironmentID))
+			}
+			value, err := owner.AutoIndexStatus(in.EnvironmentID)
+			return toolResult(value, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_auto_set", Description: "Admin-only: enable or disable a persistent native source watcher for one Environment. When enabled, source changes trigger debounced incremental index refresh in ADM-managed storage, without obtaining the Environment writer lease."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexAutoInput) (*mcp.CallToolResult, any, error) {
+			if owner == nil {
+				return nil, nil, fmt.Errorf("automatic index watcher is unavailable")
+			}
+			value, err := owner.SetAutoIndex(in.EnvironmentID, in.Enabled)
 			return toolResult(value, err)
 		})
 

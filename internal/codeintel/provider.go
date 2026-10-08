@@ -42,7 +42,7 @@ func (StaticIndexProvider) Info() ProviderInfo {
 		ProtocolVersion:        ContractProtocolVersion,
 		ID:                     "adm_static_index",
 		Name:                   "ADM Static Project Index",
-		Source:                 ".adm/index",
+		Source:                 "adm-managed-index",
 		RequiresGeneratedIndex: true,
 		Capabilities: Capabilities{
 			Definitions: true,

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -194,12 +195,23 @@ func TestGatewayDevelopsPlainDirectoryWithoutGit(t *testing.T) {
 		t.Fatalf("project_analyze failed: err=%v result=%+v", err, analyzed)
 	}
 	analyzedText := toolText(t, analyzed)
-	for _, want := range []string{`.adm/project-overview.md`, `.adm/index/manifest.json`, `.adm/index/files.jsonl`, `.adm/index/symbols.jsonl`, `example.com/plain`, `"go_files":1`} {
+	for _, want := range []string{`project-overview.md`, `manifest.json`, `files.jsonl`, `symbols.jsonl`, `example.com/plain`, `"go_files":1`} {
 		if !strings.Contains(analyzedText, want) {
 			t.Fatalf("project_analyze result missing %q: %s", want, analyzedText)
 		}
 	}
-	overview, err := os.ReadFile(filepath.Join(root, ".adm", "project-overview.md"))
+	var published struct {
+		Result struct {
+			OverviewPath string `json:"overview_path"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(analyzedText), &published); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".adm")); !os.IsNotExist(err) {
+		t.Fatalf("project root must not contain ADM-generated index: %v", err)
+	}
+	overview, err := os.ReadFile(published.Result.OverviewPath)
 	if err != nil {
 		t.Fatalf("project overview was not written: %v", err)
 	}

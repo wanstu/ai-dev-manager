@@ -1,10 +1,7 @@
 package desktop
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
-	"fmt"
 
 	"ai-dev-manager-v2/internal/projectanalysis"
 )
@@ -26,8 +23,8 @@ func (a *Adapter) ProjectIndexStatus(environmentID string, maxChanges int) (proj
 	return backend.ProjectIndexStatus(environmentID, maxChanges)
 }
 
-// AnalyzeProject is an explicit, user-triggered operation. It takes a short
-// owner-scoped lease and does not seize or release another session's writer.
+// AnalyzeProject is an explicit, user-triggered, read-only source scan.
+// The ADM Gateway owns an independent index lock, never a source writer lease.
 func (a *Adapter) AnalyzeProject(environmentID string, maxFiles, maxSymbols int) (projectanalysis.Result, error) {
 	if err := a.ready(); err != nil {
 		return projectanalysis.Result{}, err
@@ -36,14 +33,5 @@ func (a *Adapter) AnalyzeProject(environmentID string, maxFiles, maxSymbols int)
 	if !ok {
 		return projectanalysis.Result{}, errors.New("ADM Gateway does not support project index management; update the connected Gateway")
 	}
-	var entropy [16]byte
-	if _, err := rand.Read(entropy[:]); err != nil {
-		return projectanalysis.Result{}, fmt.Errorf("create index writer owner: %w", err)
-	}
-	owner := "desktop-index-" + hex.EncodeToString(entropy[:])
-	if _, err := a.runtime.WriterAcquire(environmentID, owner); err != nil {
-		return projectanalysis.Result{}, fmt.Errorf("project index requires a free writer lease: %w", err)
-	}
-	defer a.runtime.WriterRelease(environmentID, owner, false)
-	return backend.ProjectAnalyze(environmentID, owner, maxFiles, maxSymbols)
+	return backend.ProjectAnalyze(environmentID, "", maxFiles, maxSymbols)
 }

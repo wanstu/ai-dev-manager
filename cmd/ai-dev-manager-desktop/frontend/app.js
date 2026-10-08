@@ -45,7 +45,7 @@ const elements = {
   hostDirectoryDialog: document.getElementById('hostDirectoryDialog'), hostDirectoryRootsButton: document.getElementById('hostDirectoryRootsButton'), hostDirectoryParentButton: document.getElementById('hostDirectoryParentButton'), hostDirectoryRefreshButton: document.getElementById('hostDirectoryRefreshButton'), hostDirectoryCurrentPath: document.getElementById('hostDirectoryCurrentPath'), hostDirectoryList: document.getElementById('hostDirectoryList'), hostDirectoryHint: document.getElementById('hostDirectoryHint'), hostDirectorySelectButton: document.getElementById('hostDirectorySelectButton'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
   environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), cleanupStaleWorktreesButton: document.getElementById('cleanupStaleWorktreesButton'), staleWorktreeCleanupDialog: document.getElementById('staleWorktreeCleanupDialog'), staleWorktreeCleanupHours: document.getElementById('staleWorktreeCleanupHours'), staleWorktreeCleanupSummary: document.getElementById('staleWorktreeCleanupSummary'), staleWorktreeCleanupList: document.getElementById('staleWorktreeCleanupList'), staleWorktreeCleanupResult: document.getElementById('staleWorktreeCleanupResult'), staleWorktreeCleanupRefreshButton: document.getElementById('staleWorktreeCleanupRefreshButton'), staleWorktreeCleanupExecuteButton: document.getElementById('staleWorktreeCleanupExecuteButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
-  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetailSubviewHelp: document.getElementById('environmentDetailSubviewHelp'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'), environmentJetBrainsSearchInput: document.getElementById('environmentJetBrainsSearchInput'), environmentJetBrainsSearchButton: document.getElementById('environmentJetBrainsSearchButton'), environmentJetBrainsSearchResult: document.getElementById('environmentJetBrainsSearchResult'),
+  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetailSubviewHelp: document.getElementById('environmentDetailSubviewHelp'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentProjectAutoIndex: document.getElementById('environmentProjectAutoIndex'), environmentProjectAutoIndexStatus: document.getElementById('environmentProjectAutoIndexStatus'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'), environmentJetBrainsSearchInput: document.getElementById('environmentJetBrainsSearchInput'), environmentJetBrainsSearchButton: document.getElementById('environmentJetBrainsSearchButton'), environmentJetBrainsSearchResult: document.getElementById('environmentJetBrainsSearchResult'),
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
@@ -136,6 +136,7 @@ let environmentProjectIndexLoading = false;
 let environmentProjectIndexStatus = null;
 let environmentProjectIndexAnalysis = null;
 let environmentProjectIndexError = '';
+let environmentProjectAutoIndexLoading = false;
 let environmentCodeIntelligenceGeneration = 0;
 let environmentCodeIntelligenceLoading = false;
 let environmentCodeIntelligenceOverview = null;
@@ -380,9 +381,53 @@ function resetEnvironmentProjectIndex(message = '尚未检查项目索引。') {
   environmentProjectIndexStatus = null;
   environmentProjectIndexAnalysis = null;
   environmentProjectIndexError = '';
+  environmentProjectAutoIndexLoading = false;
+  elements.environmentProjectAutoIndex.checked = false;
+  elements.environmentProjectAutoIndex.disabled = true;
+  elements.environmentProjectAutoIndexStatus.textContent = '正在读取自动更新状态…';
   if (elements.environmentProjectIndexStatusButton) elements.environmentProjectIndexStatusButton.disabled = !selectedEnvironmentID;
   if (elements.environmentProjectAnalyzeButton) elements.environmentProjectAnalyzeButton.disabled = !selectedEnvironmentID;
   if (elements.environmentProjectIndexResult) emptyMessage(elements.environmentProjectIndexResult, message);
+}
+async function loadEnvironmentProjectAutoIndexStatus() {
+  if (!selectedEnvironmentID) return;
+  const id=selectedEnvironmentID, generation=detailGeneration, connection=connectionGeneration;
+  const checkbox=elements.environmentProjectAutoIndex, info=elements.environmentProjectAutoIndexStatus;
+  checkbox.disabled=true;
+  try{
+    const status=await desktopAdapter().ProjectIndexAutoStatus(id);
+    if(id!==selectedEnvironmentID||generation!==detailGeneration||connection!==connectionGeneration||elements.environmentDetailPanel.hidden)return;
+    checkbox.checked=Boolean(status.enabled);
+    info.textContent=status.message||(status.enabled?'自动更新已开启':'自动更新未开启；需要时可手动生成索引');
+    checkbox.disabled=false;
+  }catch(error){
+    if(id!==selectedEnvironmentID||generation!==detailGeneration||connection!==connectionGeneration||elements.environmentDetailPanel.hidden)return;
+    info.textContent='无法读取自动更新状态：'+errorText(error);
+    checkbox.disabled=true;
+  }
+}
+async function changeEnvironmentProjectAutoIndex(enabled){
+  if(!selectedEnvironmentID||environmentProjectAutoIndexLoading)return;
+  const id=selectedEnvironmentID, generation=detailGeneration, connection=connectionGeneration;
+  const checkbox=elements.environmentProjectAutoIndex,info=elements.environmentProjectAutoIndexStatus;
+  environmentProjectAutoIndexLoading=true;
+  checkbox.disabled=true;
+  info.textContent=enabled?'正在开启目录监控…':'正在关闭目录监控…';
+  try{
+    const status=await desktopAdapter().SetProjectIndexAuto(id,enabled);
+    if(id!==selectedEnvironmentID||generation!==detailGeneration||connection!==connectionGeneration||elements.environmentDetailPanel.hidden)return;
+    checkbox.checked=Boolean(status.enabled);
+    info.textContent=status.message||(status.enabled?'已开启自动监控与增量更新':'已关闭自动更新');
+    setStatus(status.enabled?'代码索引自动更新已开启':'代码索引自动更新已关闭','success');
+  }catch(error){
+    if(id!==selectedEnvironmentID||generation!==detailGeneration||connection!==connectionGeneration||elements.environmentDetailPanel.hidden)return;
+    checkbox.checked=!enabled;
+    info.textContent='自动索引配置失败：'+errorText(error);
+    setStatus(info.textContent,'error');
+  }finally{
+    environmentProjectAutoIndexLoading=false;
+    if(id===selectedEnvironmentID&&generation===detailGeneration&&connection===connectionGeneration&&!elements.environmentDetailPanel.hidden)checkbox.disabled=false;
+  }
 }
 function projectIndexStateLabel(state) {
   const labels = {fresh: 'Fresh', stale: 'Stale', partial: 'Partial', missing: 'Missing', invalid: 'Invalid'};
@@ -431,7 +476,7 @@ function renderEnvironmentProjectIndex() {
     const card = document.createElement('div');
     card.className = 'detail-group';
     const title = document.createElement('strong');
-    title.textContent = '最近一次 Web 分析';
+    title.textContent = '最近一次手动分析';
     const meta = document.createElement('small');
     meta.textContent = `${safeArray(analysis.languages).join(', ') || 'Unknown'} · files ${safeNumber(analysis.files_indexed || analysis.files_scanned)} · symbols ${safeNumber(analysis.symbols)}`;
     const paths = document.createElement('code');
@@ -475,7 +520,7 @@ async function analyzeEnvironmentProject() {
   environmentProjectIndexError = '';
   environmentProjectIndexAnalysis = null;
   renderEnvironmentProjectIndex();
-  setStatus('正在静态分析项目并刷新 .adm/index…', 'loading');
+  setStatus('正在分析源码并更新 ADM 独立索引…', 'loading');
   try {
     const analysis = await desktopAdapter().AnalyzeProject(identity.environmentID, 0, 0);
     if (!environmentProjectIndexScopeCurrent(identity)) return;
@@ -2807,7 +2852,8 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
   syncEnvironmentDetailSubviewUI();
   renderSelectionList(elements.environmentMCPSelections, safeArray(currentSnapshot?.mcps), environment.enabled_mcp_ids, 'mcp', facts, skillAvailabilityByID);
   renderSelectionList(elements.environmentSkillSelections, safeArray(currentSnapshot?.skills), environment.enabled_skill_ids, 'skill', facts, environmentSkillAvailabilityByID, managementSkillAvailabilityError);
-  elements.environmentDetailBackdrop.hidden = false; elements.environmentDetailPanel.hidden = false; return true;
+  elements.environmentDetailBackdrop.hidden = false; elements.environmentDetailPanel.hidden = false;
+  void loadEnvironmentProjectAutoIndexStatus(); return true;
 }
 function closeEnvironmentDetail() {
   const wasOpen = !elements.environmentDetailPanel.hidden; const opener = environmentDetailOpener;
@@ -3530,6 +3576,7 @@ elements.environmentWorkspaceRecommendationsDialog.addEventListener('close', () 
 elements.environmentTreeDigestButton.addEventListener('click', () => loadEnvironmentTreeDigest());
 elements.environmentProjectIndexStatusButton?.addEventListener('click', () => loadEnvironmentProjectIndexStatus());
 elements.environmentProjectAnalyzeButton?.addEventListener('click', () => analyzeEnvironmentProject());
+elements.environmentProjectAutoIndex?.addEventListener('change', () => changeEnvironmentProjectAutoIndex(elements.environmentProjectAutoIndex.checked));
 elements.environmentCodeIntelligenceButton?.addEventListener('click', () => loadEnvironmentCodeIntelligence());
 elements.environmentJetBrainsSearchButton?.addEventListener('click', () => probeEnvironmentJetBrainsSearch());
 elements.environmentJetBrainsSearchInput?.addEventListener('input', () => syncEnvironmentJetBrainsSearchButton());

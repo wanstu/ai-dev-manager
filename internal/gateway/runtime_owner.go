@@ -66,6 +66,7 @@ type runtimeOwner struct {
 	processes                 map[string]*ownedDevProcess
 	runs                      map[string]*ownedAgentRun
 	verifierRuns              map[string]*ownedVerifierRun
+	indexWatchers             map[string]context.CancelFunc
 	verifierHeartbeatInterval func(time.Duration) time.Duration
 }
 
@@ -87,11 +88,13 @@ func newRuntimeOwner(service *app.Service) *runtimeOwner {
 		processes:           map[string]*ownedDevProcess{},
 		runs:                map[string]*ownedAgentRun{},
 		verifierRuns:        map[string]*ownedVerifierRun{},
+		indexWatchers:       map[string]context.CancelFunc{},
 	}
 	owner.connect = func(ctx context.Context, mcpID, endpoint string, headers map[string]string) (ownedMCPSession, error) {
 		return connectExternalMCP(ctx, mcpID, endpoint, headers)
 	}
 	go owner.monitor()
+	go owner.restoreAutoIndexWatches()
 	return owner
 }
 
@@ -174,6 +177,12 @@ func (o *runtimeOwner) CallTool(ctx context.Context, environmentID, mcpID, tool 
 func (o *runtimeOwner) DropEnvironment(environmentID string) {
 	if o == nil {
 		return
+	}
+	if o.service != nil {
+		if _, err := o.service.Environments.Get(environmentID); err != nil {
+			o.stopAutoIndexWatch(environmentID)
+			_ = o.service.CleanupProjectIndex(environmentID)
+		}
 	}
 	o.dropDevProcessesForEnvironment(environmentID)
 	o.dropAgentRunsForEnvironment(environmentID)

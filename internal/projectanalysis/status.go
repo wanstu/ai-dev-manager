@@ -35,6 +35,9 @@ type IndexStatusResult struct {
 }
 
 func IndexStatus(root string, maxChanges int) (IndexStatusResult, error) {
+	return IndexStatusAt(root, root, maxChanges)
+}
+func IndexStatusAt(root, indexRoot string, maxChanges int) (IndexStatusResult, error) {
 	if maxChanges <= 0 {
 		maxChanges = 50
 	}
@@ -42,7 +45,7 @@ func IndexStatus(root string, maxChanges int) (IndexStatusResult, error) {
 		maxChanges = 200
 	}
 
-	manifestPath := filepath.Join(root, filepath.FromSlash(IndexManifestRelativePath))
+	manifestPath := filepath.Join(indexRoot, filepath.FromSlash(IndexManifestRelativePath))
 	manifestData, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -71,7 +74,7 @@ func IndexStatus(root string, maxChanges int) (IndexStatusResult, error) {
 			status.Reasons = []string{fmt.Sprintf("%s artifact manifest entry is invalid", item.key)}
 			return status, nil
 		}
-		data, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(item.path)))
+		data, readErr := os.ReadFile(filepath.Join(indexRoot, filepath.FromSlash(item.path)))
 		if readErr != nil {
 			if os.IsNotExist(readErr) {
 				status.Reasons = []string{fmt.Sprintf("%s artifact is missing", item.key)}

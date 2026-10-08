@@ -50,6 +50,9 @@ type scoredIndexMatch struct {
 }
 
 func QueryIndex(root string, query IndexQuery) (IndexQueryResult, error) {
+	return QueryIndexAt(root, query)
+}
+func QueryIndexAt(indexRoot string, query IndexQuery) (IndexQueryResult, error) {
 	query.Query = strings.TrimSpace(query.Query)
 	query.Path = filepath.ToSlash(strings.TrimSpace(query.Path))
 	query.Kind = strings.TrimSpace(query.Kind)
@@ -64,7 +67,7 @@ func QueryIndex(root string, query IndexQuery) (IndexQueryResult, error) {
 		query.MaxResults = 200
 	}
 
-	manifestPath := filepath.Join(root, filepath.FromSlash(IndexManifestRelativePath))
+	manifestPath := filepath.Join(indexRoot, filepath.FromSlash(IndexManifestRelativePath))
 	manifestData, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -84,7 +87,7 @@ func QueryIndex(root string, query IndexQuery) (IndexQueryResult, error) {
 		return IndexQueryResult{}, fmt.Errorf("project symbol index manifest entry is invalid; run project_analyze to refresh")
 	}
 
-	symbolPath := filepath.Join(root, filepath.FromSlash(IndexSymbolsRelativePath))
+	symbolPath := filepath.Join(indexRoot, filepath.FromSlash(IndexSymbolsRelativePath))
 	symbolData, err := os.ReadFile(symbolPath)
 	if err != nil {
 		if os.IsNotExist(err) {

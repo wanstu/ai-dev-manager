@@ -64,6 +64,9 @@ func phpGraphEvidencePriority(kind, hint string) int {
 // Resolved edges mean statically identified lexical ownership, never proof
 // of runtime dispatch. Candidates must not be expanded transitively.
 func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, error) {
+	return ProjectPHPCallGraphAt(root, root, q)
+}
+func ProjectPHPCallGraphAt(root, indexRoot string, q PHPCallGraphQuery) (PHPCallGraphResult, error) {
 	q.Symbol = strings.TrimSpace(q.Symbol)
 	q.Direction = strings.ToLower(strings.TrimSpace(q.Direction))
 	if q.Direction == "" {
@@ -94,7 +97,7 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 		}
 		q.Path = clean
 	}
-	manifest, filesData, symbolData, callsData, err := readVerifiedPHPCallIndex(root)
+	manifest, filesData, symbolData, callsData, err := readVerifiedPHPCallIndex(indexRoot)
 	if err != nil {
 		return PHPCallGraphResult{}, err
 	}

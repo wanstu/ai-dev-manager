@@ -58,7 +58,7 @@ func (s *Service) ProjectInvestigatePHP(environmentID string, opts ProjectPHPInv
 		opts.MaxExcerpts = 10
 	}
 
-	graph, err := projectanalysis.ProjectPHPCallGraph(rt.Root(), opts.Query)
+	graph, err := s.ProjectPHPCallGraph(environmentID, opts.Query)
 	if err != nil {
 		return ProjectPHPInvestigation{}, err
 	}

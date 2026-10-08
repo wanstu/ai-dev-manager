@@ -373,7 +373,6 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 ```json
 {
   "environment_id": "env_xxx",
-  "writer_owner": "agent-session-42",
   "max_files": 25000,
   "max_symbols": 100000
 }
@@ -381,7 +380,9 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 当前静态索引支持 Go / PHP / JavaScript / TypeScript：识别 `go.mod` / `composer.json`、主要源码目录，以及 Go type/func/method、PHP class/interface/trait/enum/function/method 和 JavaScript/TypeScript 顶层 function/class/arrow function（TypeScript 另支持 interface/type）大纲。PHP 类方法按 `类名::方法名` 索引；这些语言的大纲提取属于静态启发式识别，不等同于完整编译器语义分析。分析不会执行项目代码，并跳过 `.git`、`.adm`、`vendor`、`node_modules`、`dist`、`build` 等常见依赖或生成目录。
 
-生成：
+索引默认保存在 ADM 数据目录 `indexes/{EnvironmentID}/generations/{generation}/.adm/` 下，不再写入业务项目。每个 Environment 有独立缓存，生成过程使用独立索引锁；完整 artifact 写好后，原子切换 `current.json`。删除 Environment 时自动清理缓存。旧项目 `.adm` 文件不会被静默删除。
+
+生成的内部 artifact：
 
 - `.adm/project-overview.md`：给人和 Agent 快速建立项目心智模型的 bounded 摘要。
 - `.adm/index/manifest.json`：索引 schema、统计、bounds、生成时间和 artifact SHA-256。
@@ -393,7 +394,7 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 `project_analyze` **自动优先增量更新**：检测并校验现有 `manifest.json`、`files.jsonl`、`symbols.jsonl`、`calls.jsonl` 的哈希，沿用内容 SHA-256 未变化的 Go/PHP/JavaScript/TypeScript 源文件符号记录和 PHP 调用记录，只重新解析新增或变化文件，并移除已删除文件的记录；更新索引时仍会扫描文件目录与检查源码摘要，并重新生成完整 artifact。返回 `index_mode`（`full` / `incremental`）、`reused_source_files`、`reindexed_source_files`，以及 `calls_indexed`、`reused_php_call_files`、`reindexed_php_call_files`，方便判断是否真正复用了符号和 PHP 调用索引。旧 schema、artifact 校验失败或 bounds 变化时自动全量重建。对于达到扫描上限或存在解析问题的**部分索引**，仅复用 `files.jsonl` 中 `symbols_complete=true`、源码 SHA-256 未变化的文件；其余源文件仍重新解析，整体仍保留 `truncated` 或解析问题状态，不会假称全量完整。此版本将索引 schema 升为 **5**，旧索引首次执行 `project_analyze` 时自动升级；只读查询旧索引时会提示先刷新。
 
-因为会写入 `.adm`，需要 matching Writer。返回结果只包含概要统计和 artifact 路径，不把 Markdown / JSONL 正文塞进 MCP 响应；Agent 后续可用 `read` / `search` 对索引做 bounded 查询。
+**不需要 Environment Writer。** `project_analyze` 只读源码，ADM 使用按 Environment ID 隔离的内部索引锁、独立数据目录、不可变版本和原子发布。AI 持有源码写入锁时也能刷新索引，正在查询的任务读到的是某一份完整快照。返回统计与索引位置，不把 Markdown/JSONL 内容塞进响应；Agent 应通过 `project_index_query` 和 `project_call_graph` 调查索引。
 
 
 ### `code_intelligence_info`
@@ -406,7 +407,7 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 }
 ```
 
-当前默认 Provider 是 `adm_static_index`，能力为 definitions=true、references=false、hierarchy=false，数据来源 `.adm/index`。上层工具通过 Provider 接口调用；未来接入 PhpStorm/JetBrains Provider 时，可以在不改 Agent 查询流程的前提下增加 references / hierarchy 等能力。
+当前默认 Provider 是 `adm_static_index`，能力为 definitions=true、references=false、hierarchy=false，数据来源 ADM 独立索引缓存。上层工具通过 Provider 接口调用；未来接入 PhpStorm/JetBrains Provider 时，可以在不改 Agent 查询流程的前提下增加 references / hierarchy 等能力。
 
 ADM 将两类 JetBrains 能力分开识别：`PhpStorm Code Intelligence` / `JetBrains Code Intelligence` 表示实现 ADM Contract v1 的外部 Provider；官方 JetBrains IDE 自带 MCP（例如 `PhpStorm` / `JetBrains` / `IDEA` / `WebStorm` / `GoLand` / `Rider`）单独标记为 `jetbrains_native`。Contract-v1 Provider 识别 `code_intelligence_info/query/status/references/hierarchy`；JetBrains native 以官方只读语义工具 `search_symbol` 提供 definitions，并可在精确查询时受限使用 `get_symbol_info` 校验结构化名称；`analyze_calls` 目前仍只作为可观测能力。rename/build/terminal 等 mutating tools 不会被算作 Code Intelligence 能力。
 
@@ -470,7 +471,7 @@ Provider-neutral 的 freshness / health 查询：
 
 `symbol` 至少需要 `path` / `name` / `qualified_name` 之一；`max_results` 默认 100、上限 500。外部 Provider 会额外收到 `project_root`，结果必须通过 MCP `structuredContent` 返回 references 数组，每项可包含 path、line、column、kind、qualified_name 和 bounded context。
 
-当前 `adm_static_index` 仍将**通用** `references` 能力标记为 `false`：Go、JavaScript 等语言的可靠引用关系尚未实现。PHP function/method 有一项独立的、有范围限制的只读实现。无外部 Provider 或 Provider 调用失败时，ADM 查询生成的 `.adm/index/calls.jsonl`，结合 `symbols.jsonl` 判定归属。调用位置在 `project_analyze` 时提取并持久化，未变化的 PHP 文件可直接复用旧记录；查询阶段校验 artifact SHA-256 与源文件**元数据**，不再逐文件读取或解析 PHP 源码。正常返回 `available=true`。
+当前 `adm_static_index` 仍将**通用** `references` 能力标记为 `false`：Go、JavaScript 等语言的可靠引用关系尚未实现。PHP function/method 有一项独立的、有范围限制的只读实现。无外部 Provider 或 Provider 调用失败时，ADM 查询独立索引缓存中的 `calls.jsonl`，结合 `symbols.jsonl` 判定归属。调用位置在 `project_analyze` 时提取并持久化，未变化的 PHP 文件可直接复用旧记录；查询阶段校验 artifact SHA-256 与源文件**元数据**，不再逐文件读取或解析 PHP 源码。正常返回 `available=true`。
 
 - `references[].kind="resolved_call"`：目标方法能唯一对应到索引声明，且调用点为可静态判断的 `Class::method()`（包括文件头的简单 `use ... as ...` 别名、跨文件 FQN）、当前类的 `self::method()` 或 `$this->method()`。这里的“resolved”仅表示**词法所有者与已索引定义匹配**，不是证明实际运行时一定执行该方法。
 - `references[].kind="inherited_candidate"`：通过当前类的简单 `extends Parent` 关系和 `$this` / `self` 接收者找到父类方法；它是**有依据的继承候选**，不等于已解析运行时调用。若子类明确实现同名方法，会排除对父类方法的错误归属。
@@ -504,7 +505,7 @@ AI 建议：**先用它调查具体方法，再依据实际代码决定修改什
 
 **给 AI 的典型调查顺序**：先用 `project_index_query` 确认被调查函数的准确声明（命名空间、定义文件、行号），再用 `project_call_graph` 的 `callers` 查看上游入口、`callees` 查看下游依赖；调用前可用 `project_index_status` 判断索引新鲜度。AI 应结合 `read` 查看关键代码分支再下修复结论，**不能把静态调用候选当作实际运行证据**。缺索引先运行 `project_analyze`，不要默认借助或启动 PhpStorm。
 
-直接查询 ADM 自己生成的 `.adm/index/calls.jsonl` 和 `symbols.jsonl`，**不依赖 PhpStorm、MCP Provider 或其他 IDE**。必须先对项目执行 `project_analyze`。
+直接查询 ADM 数据目录生成的 `calls.jsonl` 和 `symbols.jsonl`，**不依赖 PhpStorm、MCP Provider 或其他 IDE**。必须先对项目执行 `project_analyze`。
 
 ```json
 {
@@ -551,7 +552,7 @@ AI 建议：**先用它调查具体方法，再依据实际代码决定修改什
 
 ### `project_index_query`（兼容别名）
 
-只读查询由 `project_analyze` 生成的 `.adm/index/symbols.jsonl`。不需要 Writer；查询前会用 `manifest.json` 中的 SHA-256 校验 symbol index，避免读取半生成或被修改的索引。
+只读查询由 `project_analyze` 在 ADM 数据目录生成的 `symbols.jsonl`。不需要 Writer；查询前会用 `manifest.json` 中的 SHA-256 校验 symbol index，避免读取半生成或被修改的索引。
 
 ```json
 {
@@ -571,7 +572,7 @@ AI 建议：**先用它调查具体方法，再依据实际代码决定修改什
 
 ### `project_index_status`（兼容别名）
 
-检查 `.adm/index` 是否仍然能代表当前源码，不需要 Writer：
+检查 ADM 的索引缓存是否仍然能代表当前源码，不需要 Writer：
 
 ```json
 {

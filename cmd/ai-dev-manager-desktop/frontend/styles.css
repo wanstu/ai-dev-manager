@@ -909,6 +909,10 @@ textarea:focus,
 }
 .host-directory-entry { width: 100%; text-align: left; justify-content: flex-start; }
 
+.environment-index-automatic { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px; padding:11px 8px; min-width:0; }
+.environment-index-automatic label { display:flex; gap:8px; align-items:center; cursor:pointer; font-size:13px; }
+.environment-index-automatic input[type=checkbox] { width:16px; height:16px; flex:0 0 auto; }
+.environment-index-automatic small { color:var(--dk-text-secondary, #64748b); font-size:11px; overflow-wrap:anywhere; }
 .mcp-secrets-panel { margin: 18px 0 0; min-width: 0; padding: 16px; }
 .mcp-secret-form { margin-top: 10px; gap: 12px; }
 .mcp-secret-form input { min-width: 0; width: 100%; box-sizing: border-box; }

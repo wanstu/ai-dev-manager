@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -38,6 +39,7 @@ type Service struct {
 	Logger                  *logging.Logger
 	Verifiers               *verifier.Service
 	CodeIntelligence        codeintel.Provider
+	indexStore              *projectIndexStore
 	writerHeartbeatInterval func(time.Duration) time.Duration
 }
 
@@ -61,7 +63,7 @@ func New(statePath string) *Service {
 	s := store.New(statePath)
 	ws := workspace.New(s)
 	environments := environment.New(s, ws)
-	return &Service{
+	result := &Service{
 		Store:                   s,
 		Secrets:                 secretvault.New(statePath),
 		Workspaces:              ws,
@@ -74,8 +76,11 @@ func New(statePath string) *Service {
 		Logger:                  logging.New(filepath.Join(filepath.Dir(statePath), "logs"), 5*1024*1024, 7),
 		Verifiers:               verifier.New(s),
 		CodeIntelligence:        codeintel.NewStaticIndexProvider(),
+		indexStore:              newProjectIndexStore(statePath),
 		writerHeartbeatInterval: defaultWriterHeartbeatInterval,
 	}
+	environments.SetOnRemoved(result.CleanupProjectIndex)
+	return result
 }
 
 func defaultWriterHeartbeatInterval(ttl time.Duration) time.Duration {
@@ -543,44 +548,116 @@ func (s *Service) CompareFiles(environmentID, leftPath string, leftStart, leftEn
 	return rt.CompareFiles(leftPath, leftStart, leftEnd, rightPath, rightStart, rightEnd, maxBytes, maxOutputBytes)
 }
 
+// AnalyzeProject scans source read-only and writes a complete immutable
+// generation to ADM-owned storage, never to the source Environment.
+// owner is accepted for legacy MCP/CLI request compatibility but no
+// source-write lease is required or acquired.
 func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbols int) (projectanalysis.Result, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
-		return projectanalysis.Result{}, err
-	}
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return projectanalysis.Result{}, err
 	}
-	result, err := projectanalysis.AnalyzeIncremental(rt.Root(), projectanalysis.Options{MaxFiles: maxFiles, MaxSymbols: maxSymbols})
+	lock, err := s.indexStore.lock(environmentID)
 	if err != nil {
 		return projectanalysis.Result{}, err
 	}
-	artifacts := []struct {
-		path    string
-		content string
-	}{
-		{projectanalysis.OverviewRelativePath, result.Markdown},
-		{projectanalysis.IndexFilesRelativePath, result.FilesJSONL},
-		{projectanalysis.IndexSymbolsRelativePath, result.SymbolsJSONL},
-		{projectanalysis.IndexCallsRelativePath, result.CallsJSONL},
-		// Write the manifest last. Its artifact hashes let consumers detect
-		// a partial/stale generation if an earlier write is interrupted.
-		{projectanalysis.IndexManifestRelativePath, result.ManifestJSON},
-	}
-	for _, artifact := range artifacts {
-		if _, err := rt.Write(artifact.path, artifact.content, true); err != nil {
-			return projectanalysis.Result{}, err
-		}
-	}
-	if err := s.Environments.Touch(environmentID, owner); err != nil {
+	lock.Lock()
+	defer lock.Unlock()
+	// An Environment may have been deleted while the index task waited
+	// for its own lock. Never publish an orphan generation after deletion.
+	if _, err := s.Environments.Get(environmentID); err != nil {
 		return projectanalysis.Result{}, err
 	}
+	oldRoot, err := s.indexStore.current(environmentID, rt.Root())
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return projectanalysis.Result{}, err
+		}
+		oldRoot = ""
+	}
+	result, err := projectanalysis.AnalyzeIncrementalAt(rt.Root(), oldRoot, projectanalysis.Options{MaxFiles: maxFiles, MaxSymbols: maxSymbols})
+	if err != nil {
+		return projectanalysis.Result{}, err
+	}
+	if err := s.indexStore.publish(environmentID, rt.Root(), result); err != nil {
+		return projectanalysis.Result{}, err
+	}
+	generation, err := s.indexStore.current(environmentID, rt.Root())
+	if err != nil {
+		return projectanalysis.Result{}, err
+	}
+	result.OverviewPath = filepath.Join(generation, filepath.FromSlash(projectanalysis.OverviewRelativePath))
+	result.IndexManifestPath = filepath.Join(generation, filepath.FromSlash(projectanalysis.IndexManifestRelativePath))
+	result.IndexFilesPath = filepath.Join(generation, filepath.FromSlash(projectanalysis.IndexFilesRelativePath))
+	result.IndexSymbolsPath = filepath.Join(generation, filepath.FromSlash(projectanalysis.IndexSymbolsRelativePath))
+	result.IndexCallsPath = filepath.Join(generation, filepath.FromSlash(projectanalysis.IndexCallsRelativePath))
 	result.Markdown = ""
 	result.ManifestJSON = ""
 	result.FilesJSONL = ""
 	result.SymbolsJSONL = ""
 	result.CallsJSONL = ""
 	return result, nil
+}
+
+func (s *Service) withIndex(environmentID string, fn func(root, indexRoot string) error) error {
+	rt, _, err := s.Runtime(environmentID)
+	if err != nil {
+		return err
+	}
+	lock, err := s.indexStore.lock(environmentID)
+	if err != nil {
+		return err
+	}
+	lock.RLock()
+	defer lock.RUnlock()
+	if _, err := s.Environments.Get(environmentID); err != nil {
+		return err
+	}
+	indexRoot, err := s.indexStore.current(environmentID, rt.Root())
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Missing indexes are surfaced as missing, not read from the
+			// project's legacy .adm folder.
+			indexRoot = filepath.Join(s.indexStore.environmentDir(environmentID), "missing")
+		} else {
+			return err
+		}
+	}
+	return fn(rt.Root(), indexRoot)
+}
+
+func (s *Service) ProjectPHPReferences(environmentID string, query projectanalysis.PHPReferenceQuery) (projectanalysis.ReferenceCandidateResult, error) {
+	var result projectanalysis.ReferenceCandidateResult
+	err := s.withIndex(environmentID, func(root, indexRoot string) error {
+		var err error
+		result, err = projectanalysis.FindPHPCallReferencesAt(root, indexRoot, query)
+		return err
+	})
+	return result, err
+}
+
+func (s *Service) CleanupProjectIndex(environmentID string) error {
+	// Only erase data after an authoritative, successful Environment listing
+	// proves the record has gone (not after a generic storage error).
+	list, err := s.Environments.List()
+	if err != nil {
+		return err
+	}
+	for _, item := range list {
+		if item.ID == environmentID {
+			return fmt.Errorf("refuse to remove index of existing Environment %q", environmentID)
+		}
+	}
+	lock, err := s.indexStore.lock(environmentID)
+	if err != nil {
+		return err
+	}
+	lock.Lock()
+	defer lock.Unlock()
+	if err := s.indexStore.remove(environmentID); err != nil {
+		return err
+	}
+	return s.removeAutoIndexID(environmentID)
 }
 
 func (s *Service) codeIntelligenceProvider() codeintel.Provider {
@@ -598,27 +675,41 @@ func (s *Service) CodeIntelligenceInfo(environmentID string) (codeintel.Provider
 }
 
 func (s *Service) ProjectIndexQuery(environmentID string, query projectanalysis.IndexQuery) (projectanalysis.IndexQueryResult, error) {
-	rt, _, err := s.Runtime(environmentID)
-	if err != nil {
-		return projectanalysis.IndexQueryResult{}, err
-	}
-	return s.codeIntelligenceProvider().QuerySymbols(rt.Root(), query)
+	var result projectanalysis.IndexQueryResult
+	err := s.withIndex(environmentID, func(root, indexRoot string) error {
+		var err error
+		if _, ok := s.codeIntelligenceProvider().(codeintel.StaticIndexProvider); ok {
+			result, err = projectanalysis.QueryIndexAt(indexRoot, query)
+		} else {
+			result, err = s.codeIntelligenceProvider().QuerySymbols(root, query)
+		}
+		return err
+	})
+	return result, err
 }
 
 func (s *Service) ProjectPHPCallGraph(environmentID string, query projectanalysis.PHPCallGraphQuery) (projectanalysis.PHPCallGraphResult, error) {
-	rt, _, err := s.Runtime(environmentID)
-	if err != nil {
-		return projectanalysis.PHPCallGraphResult{}, err
-	}
-	return projectanalysis.ProjectPHPCallGraph(rt.Root(), query)
+	var result projectanalysis.PHPCallGraphResult
+	err := s.withIndex(environmentID, func(root, indexRoot string) error {
+		var err error
+		result, err = projectanalysis.ProjectPHPCallGraphAt(root, indexRoot, query)
+		return err
+	})
+	return result, err
 }
 
 func (s *Service) ProjectIndexStatus(environmentID string, maxChanges int) (projectanalysis.IndexStatusResult, error) {
-	rt, _, err := s.Runtime(environmentID)
-	if err != nil {
-		return projectanalysis.IndexStatusResult{}, err
-	}
-	return s.codeIntelligenceProvider().Status(rt.Root(), maxChanges)
+	var result projectanalysis.IndexStatusResult
+	err := s.withIndex(environmentID, func(root, indexRoot string) error {
+		var err error
+		if _, ok := s.codeIntelligenceProvider().(codeintel.StaticIndexProvider); ok {
+			result, err = projectanalysis.IndexStatusAt(root, indexRoot, maxChanges)
+		} else {
+			result, err = s.codeIntelligenceProvider().Status(root, maxChanges)
+		}
+		return err
+	})
+	return result, err
 }
 
 func (s *Service) Search(environmentID, path, query string, maxFiles, maxMatches, maxBytesPerFile int) (any, error) {

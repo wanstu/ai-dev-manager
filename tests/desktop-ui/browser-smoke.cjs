@@ -148,6 +148,7 @@ const fakeBridge = String.raw`<script>
   window.runtime = {EventsOn(){}, EventsEmit(){}};
   window.confirm = (message) => { confirmations.push(String(message || '')); return true; };
   Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{writeText:async(text)=>{ window.__copiedText=String(text || ''); }}});
+  window.DesktopKit = {clipboard:{writeText:async(text)=>{ window.__copiedText=String(text || ''); }}};
   window.__fakeADM = {calls, confirmations, state, browserErrors, snapshotA, recomputeEnvironment};
 })();
 </script>`;
@@ -210,6 +211,9 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     if (new URLSearchParams(location.search).get('focus') === 'environment') {
       const bridge=window.go.desktop.Adapter;
+      let autoIndexEnabled=false,autoIndexSetCalls=0;
+      bridge.ProjectIndexAutoStatus=async(id)=>({environment_id:id,enabled:autoIndexEnabled,state:autoIndexEnabled?'watching':'disabled',message:autoIndexEnabled?'正在监控源码变化':'自动更新未开启'});
+      bridge.SetProjectIndexAuto=async(id,enabled)=>{autoIndexEnabled=Boolean(enabled);autoIndexSetCalls++;return bridge.ProjectIndexAutoStatus(id)};
       const inspect=bridge.InspectEnvironment.bind(bridge);
       bridge.InspectEnvironment=async (id) => {
         const report=await inspect(id);
@@ -232,6 +236,16 @@ window.addEventListener('DOMContentLoaded', async () => {
       const summary=document.getElementById('environmentDetail');
       const diagnostics=document.getElementById('environmentDiagnostics');
       check(tabs.textContent.includes('基本信息') && tabs.textContent.includes('能力诊断'), 'tabs explain their purpose');
+      const indexAuto=document.getElementById('environmentProjectAutoIndex');
+      await waitFor(()=>!indexAuto.disabled,'auto-index checkbox loads from Gateway state');
+      check(!indexAuto.checked,'source watcher defaults to disabled');
+      indexAuto.checked=true;
+      indexAuto.dispatchEvent(new Event('change',{bubbles:true}));
+      await waitFor(()=>autoIndexSetCalls===1 && !indexAuto.disabled && indexAuto.checked,'enable auto-index persists via management backend');
+      check(document.getElementById('environmentProjectAutoIndexStatus').textContent.includes('监控源码变化'),'watcher status shown in UI');
+      indexAuto.checked=false;
+      indexAuto.dispatchEvent(new Event('change',{bubbles:true}));
+      await waitFor(()=>autoIndexSetCalls===2 && !indexAuto.disabled && !indexAuto.checked,'disable auto-index persists via management backend');
       check(getComputedStyle(diagnostics).display==='none' && getComputedStyle(summary).display==='grid', 'summary is the only initially visible subview');
       const beforeSwitch=window.__fakeADM.calls.length;
       tabs.querySelector('[data-environment-detail-subview="diagnostics"]').click(); await sleep();
@@ -283,7 +297,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await waitFor(() => document.getElementById('execList').textContent.includes('blocked_python_fixture') && !document.getElementById('execBlockedList').textContent.includes('blocked_python_fixture'), 'Allowing blocked executable adds allowlist and clears observation');
     document.querySelector('#execBlockedList button[data-action="clear-blocked-executable"][data-id="blocked_node_fixture"]').click();
     await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='ClearExecDenial' && c.args[0]==='blocked_node_fixture'), 'Clear one blocked executable observation');
-    await waitFor(() => document.getElementById('execBlockedList').textContent.includes('暂无被拦截 executable'), 'Clearing blocked executable removes final observation');
+    await waitFor(() => document.getElementById('execBlockedList').textContent.includes('暂无执行授权观察'), 'Clearing blocked executable removes final observation');
     const afterExecAuthorityActions = window.__fakeADM.calls.length;
     await clickRoute('settings');
     check(document.getElementById('managementContextPanel').hidden, 'Settings route hides Management Context');
@@ -442,7 +456,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('environmentDiagnostics').scrollWidth<=document.getElementById('environmentDiagnostics').clientWidth+2, 'long diagnostic details do not overflow');
     check(document.getElementById('environmentDetailSubviewHelp').textContent.includes('不会执行检查'), 'diagnostics tab explains read-only behavior');
     check(!document.getElementById('environmentDiagnostics').hidden && document.getElementById('environmentDetail').hidden, 'Environment Diagnostics subview is local to detail modal');
-    check(document.getElementById('environmentDiagnostics').textContent.includes('只展示已读取') && document.getElementById('environmentDiagnostics').textContent.includes('fixture capability report') && document.getElementById('environmentDiagnostics').textContent.includes('artifact_missing'), 'Diagnostics renders returned fact source reason and state');
+    check(document.getElementById('environmentDiagnostics').textContent.includes('这里只做解释和分组') && document.getElementById('environmentDiagnostics').textContent.includes('fixture capability report') && document.getElementById('environmentDiagnostics').textContent.includes('artifact_missing'), 'Diagnostics renders returned fact source reason and state');
     check(window.__fakeADM.calls.length===diagnosticsCallCountBefore, 'Diagnostics subview does not call probe verifier reconnect or Memory APIs');
     document.querySelector('#environmentDetailSubviewTabs button[data-environment-detail-subview="summary"]').click(); await sleep();
     check(!document.getElementById('environmentDetail').hidden && document.getElementById('environmentDiagnostics').hidden, 'Environment Summary subview restores summary without adapter calls');
@@ -849,7 +863,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       const body=control.closest('.subpanel-body');
       const card=body.closest('.subpanel');
       const heading=card.querySelector('.subpanel-heading').getBoundingClientRect();
-      const note=body.querySelector('.subpanel-note').getBoundingClientRect();
+      const note=body.querySelector(':scope > .subpanel-note').getBoundingClientRect();
       const rect=control.getBoundingClientRect();
       const cardRect=card.getBoundingClientRect();
       check(rect.left-cardRect.left>=14 && rect.top-heading.bottom>=14, route+' controls inset from card and heading');

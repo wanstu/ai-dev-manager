@@ -25,6 +25,7 @@ type Service struct {
 	workspaces     *workspace.Service
 	now            func() time.Time
 	writerLeaseTTL time.Duration
+	onRemoved      func(string) error
 }
 
 func New(s *store.Store, workspaces *workspace.Service) *Service {
@@ -35,6 +36,10 @@ func New(s *store.Store, workspaces *workspace.Service) *Service {
 		writerLeaseTTL: DefaultWriterLeaseTTL,
 	}
 }
+
+// SetOnRemoved registers ADM-owned metadata cleanup after a successful
+// Environment deletion. It is configured once during application setup.
+func (s *Service) SetOnRemoved(fn func(string) error) { s.onRemoved = fn }
 
 func (s *Service) WriterLeaseTTL() time.Duration { return s.leaseTTL() }
 
@@ -403,6 +408,11 @@ func (s *Service) Remove(id string) (model.Environment, error) {
 		state.Environments = append(state.Environments[:idx], state.Environments[idx+1:]...)
 		return nil
 	})
+	if err == nil && s.onRemoved != nil {
+		if cleanupErr := s.onRemoved(id); cleanupErr != nil {
+			return removed, fmt.Errorf("Environment removed but index cleanup failed: %w", cleanupErr)
+		}
+	}
 	return removed, err
 }
 
@@ -430,6 +440,11 @@ func (s *Service) RemoveManaged(id string) (model.Environment, model.ManagedWork
 		state.ManagedWorktrees = append(state.ManagedWorktrees[:managedIdx], state.ManagedWorktrees[managedIdx+1:]...)
 		return nil
 	})
+	if err == nil && s.onRemoved != nil {
+		if cleanupErr := s.onRemoved(id); cleanupErr != nil {
+			return removed, managedRemoved, fmt.Errorf("Environment removed but index cleanup failed: %w", cleanupErr)
+		}
+	}
 	return removed, managedRemoved, err
 }
 

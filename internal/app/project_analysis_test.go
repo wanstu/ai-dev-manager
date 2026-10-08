@@ -41,6 +41,11 @@ func TestAnalyzeProjectWritesOverviewAndMachineIndex(t *testing.T) {
 		t.Fatal("AnalyzeProject response must not inline generated artifact contents")
 	}
 
+	if _,err:=os.Stat(filepath.Join(root,".adm"));!os.IsNotExist(err){
+		t.Fatalf("index must not write into source root: %v",err)
+	}
+	indexRoot,err:=service.indexStore.current(environment.ID,root)
+	if err!=nil{t.Fatal(err)}
 	for _, rel := range []string{
 		projectanalysis.OverviewRelativePath,
 		projectanalysis.IndexManifestRelativePath,
@@ -48,12 +53,12 @@ func TestAnalyzeProjectWritesOverviewAndMachineIndex(t *testing.T) {
 		projectanalysis.IndexSymbolsRelativePath,
 		projectanalysis.IndexCallsRelativePath,
 	} {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+		if _, err := os.Stat(filepath.Join(indexRoot, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("generated artifact %s: %v", rel, err)
 		}
 	}
 
-	overview, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(projectanalysis.OverviewRelativePath)))
+	overview, err := os.ReadFile(filepath.Join(indexRoot, filepath.FromSlash(projectanalysis.OverviewRelativePath)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +66,7 @@ func TestAnalyzeProjectWritesOverviewAndMachineIndex(t *testing.T) {
 		t.Fatalf("overview does not point at symbol index:\n%s", overview)
 	}
 
-	manifestData, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(projectanalysis.IndexManifestRelativePath)))
+	manifestData, err := os.ReadFile(filepath.Join(indexRoot, filepath.FromSlash(projectanalysis.IndexManifestRelativePath)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +79,7 @@ func TestAnalyzeProjectWritesOverviewAndMachineIndex(t *testing.T) {
 		t.Fatalf("manifest=%+v", manifest)
 	}
 
-	symbols, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(projectanalysis.IndexSymbolsRelativePath)))
+	symbols, err := os.ReadFile(filepath.Join(indexRoot, filepath.FromSlash(projectanalysis.IndexSymbolsRelativePath)))
 	if err != nil {
 		t.Fatal(err)
 	}

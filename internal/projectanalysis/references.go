@@ -31,6 +31,9 @@ func FindPHPCallCandidates(root, symbolName, kind string, maxResults int) (Refer
 // It does not read or parse PHP source files. Source freshness is checked with
 // filesystem metadata; use project_index_status for full content-hash checks.
 func FindPHPCallReferences(root string, query PHPReferenceQuery) (ReferenceCandidateResult, error) {
+	return FindPHPCallReferencesAt(root, root, query)
+}
+func FindPHPCallReferencesAt(root, indexRoot string, query PHPReferenceQuery) (ReferenceCandidateResult, error) {
 	maxResults := query.MaxResults
 	if maxResults <= 0 {
 		maxResults = 100
@@ -52,7 +55,7 @@ func FindPHPCallReferences(root string, query PHPReferenceQuery) (ReferenceCandi
 	if !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`).MatchString(name) {
 		return ReferenceCandidateResult{}, fmt.Errorf("PHP reference name is invalid")
 	}
-	manifest, filesData, symbolsData, callsData, err := readVerifiedPHPCallIndex(root)
+	manifest, filesData, symbolsData, callsData, err := readVerifiedPHPCallIndex(indexRoot)
 	if err != nil {
 		return ReferenceCandidateResult{}, err
 	}

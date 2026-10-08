@@ -452,6 +452,25 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, fmt.Errorf("release project analysis writer: %w", releaseErr)
 		}
 		return result, nil
+	case "ProjectIndexAutoStatus":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if h.owner == nil {
+			return h.app.IndexAutoStatus(s1)
+		}
+		return h.owner.AutoIndexStatus(s1)
+	case "SetProjectIndexAuto":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &b1); err != nil {
+			return nil, err
+		}
+		if h.owner == nil {
+			return nil, fmt.Errorf("auto index watcher unavailable")
+		}
+		return h.owner.SetAutoIndex(s1, b1)
 	case "ProjectIndexStatus":
 		if err := arg(0, &s1); err != nil {
 			return nil, err

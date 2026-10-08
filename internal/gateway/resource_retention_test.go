@@ -117,6 +117,17 @@ func TestGatewayResourceRetentionCleanupExecuteRemovesTemporaryEnvironmentStateO
 		t.Fatal(err)
 	}
 
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "Api.php"), []byte("<?php class Api { function go() {} }"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.AnalyzeProject(environment.ID, "", 100, 100); err != nil {
+		t.Fatalf("pre-cleanup index: %v", err)
+	}
+	indexDirectory := filepath.Join(filepath.Dir(service.Store.Path()), "indexes", environment.ID)
+	if _, err := os.Stat(indexDirectory); err != nil {
+		t.Fatalf("missing pre-cleanup index: %v", err)
+	}
+
 	owner := newRuntimeOwner(service)
 	defer owner.Close()
 	ctx := context.Background()
@@ -145,6 +156,13 @@ func TestGatewayResourceRetentionCleanupExecuteRemovesTemporaryEnvironmentStateO
 	if info, err := os.Stat(workspaceRoot); err != nil || !info.IsDir() {
 		t.Fatalf("environment cleanup touched Workspace/project directory: info=%v err=%v", info, err)
 	}
+	if _, err := os.Stat(indexDirectory); !os.IsNotExist(err) {
+		t.Fatalf("retention cleanup left orphaned index: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workspaceRoot, "Api.php")); err != nil {
+		t.Fatalf("retention cleanup deleted source: %v", err)
+	}
+
 }
 
 func TestGatewayResourceRetentionCleanupExecuteDestroysSafeTemporaryManagedWorktree(t *testing.T) {
