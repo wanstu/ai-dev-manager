@@ -333,7 +333,7 @@ func TestJetBrainsNativeSearchProbeUsesBoundedEnvironmentScopedArguments(t *test
 	if result.ProviderID != app.InvestigationProviderJetBrainsNative || result.MCPID != entry.ID || result.Tool != "search_symbol" {
 		t.Fatalf("probe identity=%+v", result)
 	}
-	if result.Query != "Foo" || result.ProjectPath != root || result.Limit != 50 || result.IncludeExternal {
+	if result.Query != "Foo" || !sameProjectRoot(result.ProjectPath, root) || result.Limit != 50 || result.IncludeExternal {
 		t.Fatalf("probe scope=%+v", result)
 	}
 	if result.TextPreview != "Foo src/Foo.php:17:1" || result.StructuredJSONPreview == "" || result.Truncated {
@@ -351,7 +351,7 @@ func TestJetBrainsNativeSearchProbeUsesBoundedEnvironmentScopedArguments(t *test
 	if !ok {
 		t.Fatalf("arguments type=%T", call.Arguments)
 	}
-	if args["q"] != "Foo" || args["projectPath"] != root || args["limit"] != 50 || args["include_external"] != false {
+	if args["q"] != "Foo" || !sameProjectRoot(args["projectPath"], root) || args["limit"] != 50 || args["include_external"] != false {
 		t.Fatalf("arguments=%+v", args)
 	}
 }
@@ -563,7 +563,7 @@ func TestJetBrainsNativeExactQueryUsesStructuredSymbolInfo(t *testing.T) {
 	if !ok {
 		t.Fatalf("get_symbol_info arguments type=%T", infoCalls[0].Arguments)
 	}
-	if infoArgs["filePath"] != "src/Foo.js" || infoArgs["line"] != 17 || infoArgs["column"] != 7 || infoArgs["projectPath"] != root {
+	if infoArgs["filePath"] != "src/Foo.js" || infoArgs["line"] != 17 || infoArgs["column"] != 7 || !sameProjectRoot(infoArgs["projectPath"], root) {
 		t.Fatalf("get_symbol_info arguments=%+v", infoArgs)
 	}
 }
@@ -656,7 +656,7 @@ func TestJetBrainsNativeGenericQueryUsesCompatibleIDEIndex(t *testing.T) {
 	if !ok {
 		t.Fatalf("arguments type=%T", call.Arguments)
 	}
-	if args["q"] != "Foo" || args["projectPath"] != root || args["limit"] != 10 || args["include_external"] != false {
+	if args["q"] != "Foo" || !sameProjectRoot(args["projectPath"], root) || args["limit"] != 10 || args["include_external"] != false {
 		t.Fatalf("arguments=%+v", args)
 	}
 }

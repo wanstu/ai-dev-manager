@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"ai-dev-manager-v2/internal/pathutil"
 	"ai-dev-manager-v2/internal/projectanalysis"
 )
 
@@ -57,11 +58,7 @@ func (s *projectIndexStore) current(id, sourceRoot string) (string, error) {
 	if p.Version != 1 || p.Generation == "" || filepath.Base(p.Generation) != p.Generation || strings.Contains(p.Generation, "..") {
 		return "", fmt.Errorf("invalid project index pointer")
 	}
-	actual, err := filepath.Abs(sourceRoot)
-	if err != nil {
-		return "", err
-	}
-	if !strings.EqualFold(filepath.Clean(p.SourceRoot), filepath.Clean(actual)) {
+	if !pathutil.Same(p.SourceRoot, sourceRoot) {
 		return "", fmt.Errorf("index belongs to a different Environment root; run project_analyze")
 	}
 	return filepath.Join(s.environmentDir(id), "generations", p.Generation), nil
@@ -98,11 +95,11 @@ func (s *projectIndexStore) publish(id, sourceRoot string, result projectanalysi
 			return err
 		}
 	}
-	abs, err := filepath.Abs(sourceRoot)
-	if err != nil {
-		return err
+	canonicalRoot := pathutil.ForCompare(sourceRoot)
+	if canonicalRoot == "" {
+		return fmt.Errorf("source root cannot be empty")
 	}
-	p := indexPointer{Version: 1, SourceRoot: abs, Generation: filepath.Base(stage)}
+	p := indexPointer{Version: 1, SourceRoot: canonicalRoot, Generation: filepath.Base(stage)}
 	pointerData, err := json.Marshal(p)
 	if err != nil {
 		return err

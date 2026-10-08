@@ -242,7 +242,7 @@ func TestCodeIntelligenceGenericToolsRouteToHealthyPhpStormProvider(t *testing.T
 	if queryArgs["contract"] != codeintel.ContractName || queryArgs["protocol_version"] != codeintel.ContractProtocolVersion {
 		t.Fatalf("provider query contract args=%+v", queryArgs)
 	}
-	if queryArgs["project_root"] != root || statusArgs["project_root"] != root {
+	if !sameProjectRoot(queryArgs["project_root"], root) || !sameProjectRoot(statusArgs["project_root"], root) {
 		t.Fatalf("provider project roots query=%v status=%v want=%q", queryArgs["project_root"], statusArgs["project_root"], root)
 	}
 	if queryArgs["environment_id"] != environment.ID {
