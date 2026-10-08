@@ -2,6 +2,7 @@ package projectanalysis
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // ReferenceCandidate is a lexical call-site candidate, not a semantically
@@ -29,9 +31,16 @@ type ReferenceCandidateResult struct {
 }
 
 // FindPHPCallCandidates reuses only ADM's own verified project index and
-// examines PHP source without executing any of it. Matches are candidates:
-// $variable->method() cannot be attributed to a specific class statically.
+// examines PHP source without executing any of it. Static receivers can be
+// resolved to one indexed method; dynamic calls remain candidates.
 func FindPHPCallCandidates(root, symbolName, kind string, maxResults int) (ReferenceCandidateResult, error) {
+	return FindPHPCallReferences(root, PHPReferenceQuery{Name: symbolName, Kind: kind, MaxResults: maxResults})
+}
+
+// FindPHPCallReferences additionally uses an optional definition path to
+// disambiguate same-named methods in distinct namespaces and files.
+func FindPHPCallReferences(root string, query PHPReferenceQuery) (ReferenceCandidateResult, error) {
+	symbolName, kind, maxResults := query.Name, query.Kind, query.MaxResults
 	if maxResults <= 0 {
 		maxResults = 100
 	}
@@ -52,7 +61,18 @@ func FindPHPCallCandidates(root, symbolName, kind string, maxResults int) (Refer
 	if !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`).MatchString(name) {
 		return ReferenceCandidateResult{}, fmt.Errorf("PHP call candidate symbol name is invalid")
 	}
-	filesData, _, err := readVerifiedPHPIndex(root)
+	filesData, symbolsData, err := readVerifiedPHPIndex(root)
+	if err != nil {
+		return ReferenceCandidateResult{}, err
+	}
+	status, err := IndexStatus(root, 1)
+	if err != nil {
+		return ReferenceCandidateResult{}, err
+	}
+	if status.State != "fresh" && status.State != "partial" {
+		return ReferenceCandidateResult{}, fmt.Errorf("ADM project index is %s; run project_analyze before querying PHP references", status.State)
+	}
+	resolver, err := newPHPReferenceResolver(symbolsData, query)
 	if err != nil {
 		return ReferenceCandidateResult{}, err
 	}
@@ -62,7 +82,10 @@ func FindPHPCallCandidates(root, symbolName, kind string, maxResults int) (Refer
 	} else {
 		matcher = regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(name) + `[ \t]*\(`)
 	}
-	result := ReferenceCandidateResult{References: make([]ReferenceCandidate, 0)}
+	result := ReferenceCandidateResult{
+		References: make([]ReferenceCandidate, 0),
+		Truncated:  status.State == "partial",
+	}
 	scanner := bufio.NewScanner(strings.NewReader(string(filesData)))
 	scanner.Buffer(make([]byte, 64*1024), 1<<20)
 	for scanner.Scan() {
@@ -99,9 +122,14 @@ func FindPHPCallCandidates(root, symbolName, kind string, maxResults int) (Refer
 			result.Truncated = true
 		}
 		masked := maskSource(data, true)
+		caller := newPHPCallerFile(masked)
 		for _, m := range matcher.FindAllIndex(masked, -1) {
 			start := m[0]
-			lineStart := strings.LastIndexByte(string(data[:start]), '\n') + 1
+			referenceKind, include := resolver.classifyCall(caller, masked, start, isMethod)
+			if !include {
+				continue
+			}
+			lineStart := bytes.LastIndexByte(data[:start], '\n') + 1
 			lineEnd := start
 			for lineEnd < len(data) && data[lineEnd] != '\n' {
 				lineEnd++
@@ -116,15 +144,19 @@ func FindPHPCallCandidates(root, symbolName, kind string, maxResults int) (Refer
 				result.Truncated = true
 				continue
 			}
-			// The name column is measured after the call operator.
-			column := start + 1 - lineStart
+			// Report the symbol's start column, not the operator or any
+			// intervening whitespace (e.g. "Foo :: method()").
+			nameStart := start
 			if isMethod {
-				column += 2
+				nameStart += 2
+				for nameStart < len(masked) && (masked[nameStart] == ' ' || masked[nameStart] == '\t') {
+					nameStart++
+				}
 			}
 			result.References = append(result.References, ReferenceCandidate{
 				Path: filepath.ToSlash(record.Path), Line: lineAt(masked, start),
-				Column: column, Name: name, Kind: "candidate_call",
-				Context: strings.TrimSpace(string(data[lineStart:lineEnd])),
+				Column: nameStart + 1 - lineStart, Name: name, Kind: referenceKind,
+				Context: phpReferenceContext(data, lineStart, lineEnd, start, m[1]),
 			})
 		}
 	}
@@ -132,6 +164,26 @@ func FindPHPCallCandidates(root, symbolName, kind string, maxResults int) (Refer
 		return ReferenceCandidateResult{}, err
 	}
 	return result, nil
+}
+
+func phpReferenceContext(data []byte, lineStart, lineEnd, callStart, callEnd int) string {
+	start := max(lineStart, callStart-120)
+	end := min(lineEnd, callEnd+120)
+	// Preserve valid UTF-8 when clipping a long line.
+	for start < end && !utf8.RuneStart(data[start]) {
+		start++
+	}
+	for end > start && end < len(data) && !utf8.RuneStart(data[end]) {
+		end--
+	}
+	value := strings.TrimSpace(string(data[start:end]))
+	if start > lineStart {
+		value = "…" + value
+	}
+	if end < lineEnd {
+		value += "…"
+	}
+	return value
 }
 
 func readVerifiedPHPIndex(root string) ([]byte, []byte, error) {

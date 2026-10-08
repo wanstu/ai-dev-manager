@@ -467,9 +467,13 @@ Provider-neutral 的 freshness / health 查询：
 
 `symbol` 至少需要 `path` / `name` / `qualified_name` 之一；`max_results` 默认 100、上限 500。外部 Provider 会额外收到 `project_root`，结果必须通过 MCP `structuredContent` 返回 references 数组，每项可包含 path、line、column、kind、qualified_name 和 bounded context。
 
-当前 `adm_static_index` 仍将通用 `references` 能力标记为 `false`：Go、JavaScript 等语言的可靠引用关系尚未实现。不过对于 **已经运行 `project_analyze` 且索引哈希可验证的 PHP 项目**，无外部 Provider 或外部调用失败时，ADM 已能利用自身 `files.jsonl` 及源码哈希搜索 PHP function/method 的调用候选，并返回 `available=true`、`references[].kind="candidate_call"`。候选仅表示发现 `->method()`、`::method()` 等词法调用，不表示已经确认对象的类或实际运行时调用边；注释、字符串和声明行会被排除。动态变量方法名等不能可靠识别。文件有变化时应先重新执行 `project_analyze`。
+当前 `adm_static_index` 仍将**通用** `references` 能力标记为 `false`：Go、JavaScript 等语言的可靠引用关系尚未实现。PHP function/method 有一项独立的、有范围限制的只读实现。无外部 Provider 或 Provider 调用失败时，ADM 复用自身 `.adm/index` 中的文件/声明索引，校验 artifact 与源码哈希后查询，并返回 `available=true`。
 
-若目标不属于支持范围，或静态索引缺失，则仍返回 `available=false`，附带不可用原因；不能把没有索引误认为不存在调用。
+- `references[].kind="resolved_call"`：目标方法能唯一对应到索引声明，且调用点为可静态判断的 `Class::method()`（包括文件头的简单 `use ... as ...` 别名、跨文件 FQN）、当前类的 `self::method()` 或 `$this->method()`。这里的“resolved”仅表示**词法所有者与已索引定义匹配**，不是证明实际运行时一定执行该方法。
+- `references[].kind="candidate_call"`：`$variable->method()`、`static::method()`、继承/类型不确定或目标重名时保留候选，不推断实际对象类型。其他类已明确声明自己的同名方法时，该调用不会算到目标类上。注释、字符串和普通声明行不会作为调用返回。
+- PHP 动态分派、反射、变量方法名、复杂导入或继承关系尚不支持精确解析；若发现新增/修改/删除源文件造成索引过期，返回不可用并提示重新运行 `project_analyze`。部分索引会标记 `truncated=true`，不暗示扫描完整。
+
+调用时尽量提供 `symbol.qualified_name`（例如 `Demo\\Services\\BillingService::run`），有重复类名时再提供 `symbol.path`，防止同名类互相污染。目标不属于支持范围或静态索引不可用时仍返回 `available=false`，不能把缺少索引误认为没有引用。
 
 ### `code_intelligence_hierarchy`
 

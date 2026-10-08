@@ -21,6 +21,7 @@ func writeFixture(t *testing.T, root, path, source string) {
 func installFixtureIndex(t *testing.T, root string, result Result) {
 	t.Helper()
 	for path, data := range map[string]string{
+		OverviewRelativePath:      result.Markdown,
 		IndexManifestRelativePath: result.ManifestJSON,
 		IndexSymbolsRelativePath:  result.SymbolsJSONL,
 		IndexFilesRelativePath:    result.FilesJSONL,

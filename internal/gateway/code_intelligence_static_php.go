@@ -40,7 +40,14 @@ func (o *runtimeOwner) staticPHPCallReferences(environmentID string, symbol code
 	if err != nil {
 		return codeintel.ReferencesResult{}, err
 	}
-	candidates, err := projectanalysis.FindPHPCallCandidates(rt.Root(), name, kind, maxResults)
+	// Prefer the fully qualified indexed method when the caller supplies it.
+	// Short-only names stay candidates whenever ownership is ambiguous.
+	if strings.Contains(symbol.QualifiedName, "::") {
+		name = symbol.QualifiedName
+	}
+	candidates, err := projectanalysis.FindPHPCallReferences(rt.Root(), projectanalysis.PHPReferenceQuery{
+		Name: name, Path: symbol.Path, Kind: kind, MaxResults: maxResults,
+	})
 	if err != nil {
 		return codeintel.ReferencesResult{}, err
 	}

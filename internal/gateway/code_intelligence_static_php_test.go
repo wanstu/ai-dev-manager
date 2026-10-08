@@ -23,6 +23,17 @@ class User_goods {
 	if err := os.WriteFile(filepath.Join(root, "User_goods.php"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	callerSource := `<?php
+class AnotherController {
+  public function action($service) {
+    User_goods::getDealBaseInfo();
+    $service->getDealBaseInfo();
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(root, "Caller.php"), []byte(callerSource), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	service := app.New(filepath.Join(t.TempDir(), "state.json"))
 	workspace, err := service.Workspaces.Add(root, "static-php-reference")
 	if err != nil {
@@ -65,8 +76,8 @@ class User_goods {
 	got := call()
 	for _, part := range []string{
 		`"provider_id":"adm_static_index"`, `"available":true`,
-		`"kind":"candidate_call"`, `"name":"getDealBaseInfo"`,
-		`"returned":1`,
+		`"kind":"resolved_call"`, `"kind":"candidate_call"`, `"path":"Caller.php"`, `"name":"getDealBaseInfo"`,
+		`"returned":3`,
 	} {
 		if !strings.Contains(got, part) {
 			t.Fatalf("PHP reference result missing %q: %s", part, got)

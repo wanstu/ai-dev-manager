@@ -39,7 +39,7 @@ function invoke($any) {
 		t.Fatalf("references=%+v", references)
 	}
 	for _, ref := range references.References {
-		if ref.Kind != "candidate_call" || ref.Line <= 0 || ref.Column <= 0 ||
+		if (ref.Kind != "candidate_call" && ref.Kind != "resolved_call") || ref.Line <= 0 || ref.Column <= 0 ||
 			!strings.Contains(ref.Context, "getDealBaseInfo") {
 			t.Fatalf("invalid reference=%+v", ref)
 		}

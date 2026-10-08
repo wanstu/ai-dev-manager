@@ -89,6 +89,7 @@ func maskSource(data []byte, php bool) []byte {
 }
 
 type phpTypeScope struct {
+	kind  string
 	name  string
 	start int
 	end   int
@@ -129,6 +130,7 @@ func phpTypeScopes(masked []byte) []phpTypeScope {
 		}
 		if close >= 0 {
 			scopes = append(scopes, phpTypeScope{
+				kind:  string(masked[match[2]:match[3]]),
 				name:  string(masked[match[4]:match[5]]),
 				start: open,
 				end:   close,
