@@ -390,6 +390,8 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 
 `project-overview.md` 不再承担完整索引职责；精确查找应优先使用 `.adm/index`。manifest 最后写入，且记录 artifact hashes，消费者可以检测中途失败产生的 partial/stale index。
 
+`project_analyze` **自动优先增量更新**：检测并校验现有 `manifest.json`、`files.jsonl`、`symbols.jsonl` 的哈希，沿用内容 SHA-256 未变化的 Go/PHP/JavaScript/TypeScript 源文件符号记录，只重新解析新增或变化文件，并移除已删除文件的记录；仍会扫描文件目录与检查源码摘要，且会重新生成完整 artifact。返回 `index_mode`（`full` / `incremental`）、`reused_source_files`、`reindexed_source_files`，方便判断是否真正复用了索引。旧 schema、artifact 校验失败或 bounds 变化时自动全量重建。对于达到扫描上限或存在解析问题的**部分索引**，仅复用 `files.jsonl` 中 `symbols_complete=true`、源码 SHA-256 未变化的文件；其余源文件仍重新解析，整体仍保留 `truncated` 或解析问题状态，不会假称全量完整。此版本将索引 schema 升为 **2**，旧索引首次执行 `project_analyze` 时自动升级；只读查询旧索引时会提示先刷新。
+
 因为会写入 `.adm`，需要 matching Writer。返回结果只包含概要统计和 artifact 路径，不把 Markdown / JSONL 正文塞进 MCP 响应；Agent 后续可用 `read` / `search` 对索引做 bounded 查询。
 
 

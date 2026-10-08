@@ -21,26 +21,29 @@ type Options struct {
 }
 
 type Result struct {
-	OverviewPath      string   `json:"overview_path"`
-	IndexManifestPath string   `json:"index_manifest_path"`
-	IndexFilesPath    string   `json:"index_files_path"`
-	IndexSymbolsPath  string   `json:"index_symbols_path"`
-	Languages         []string `json:"languages"`
-	FilesScanned      int      `json:"files_scanned"`
-	FilesIndexed      int      `json:"files_indexed"`
-	GoFiles           int      `json:"go_files"`
-	PHPFiles          int      `json:"php_files"`
-	JSFiles           int      `json:"js_files"`
-	TSFiles           int      `json:"ts_files"`
-	Symbols           int      `json:"symbols"`
-	GoModule          string   `json:"go_module,omitempty"`
-	ComposerPackage   string   `json:"composer_package,omitempty"`
-	Truncated         bool     `json:"truncated,omitempty"`
-	ParseIssues       int      `json:"parse_issues,omitempty"`
-	Markdown          string   `json:"-"`
-	ManifestJSON      string   `json:"-"`
-	FilesJSONL        string   `json:"-"`
-	SymbolsJSONL      string   `json:"-"`
+	IndexMode            string   `json:"index_mode"`
+	ReusedSourceFiles    int      `json:"reused_source_files"`
+	ReindexedSourceFiles int      `json:"reindexed_source_files"`
+	OverviewPath         string   `json:"overview_path"`
+	IndexManifestPath    string   `json:"index_manifest_path"`
+	IndexFilesPath       string   `json:"index_files_path"`
+	IndexSymbolsPath     string   `json:"index_symbols_path"`
+	Languages            []string `json:"languages"`
+	FilesScanned         int      `json:"files_scanned"`
+	FilesIndexed         int      `json:"files_indexed"`
+	GoFiles              int      `json:"go_files"`
+	PHPFiles             int      `json:"php_files"`
+	JSFiles              int      `json:"js_files"`
+	TSFiles              int      `json:"ts_files"`
+	Symbols              int      `json:"symbols"`
+	GoModule             string   `json:"go_module,omitempty"`
+	ComposerPackage      string   `json:"composer_package,omitempty"`
+	Truncated            bool     `json:"truncated,omitempty"`
+	ParseIssues          int      `json:"parse_issues,omitempty"`
+	Markdown             string   `json:"-"`
+	ManifestJSON         string   `json:"-"`
+	FilesJSONL           string   `json:"-"`
+	SymbolsJSONL         string   `json:"-"`
 }
 
 type fileOutline struct {
@@ -63,12 +66,10 @@ var (
 )
 
 func Analyze(root string, options Options) (Result, error) {
-	if options.MaxFiles <= 0 {
-		options.MaxFiles = 4000
-	}
-	if options.MaxSymbols <= 0 {
-		options.MaxSymbols = 1200
-	}
+	return analyze(root, normalizedAnalyzeOptions(options), nil)
+}
+
+func analyze(root string, options Options, cache *indexSnapshot) (Result, error) {
 	info, err := os.Stat(root)
 	if err != nil {
 		return Result{}, err
@@ -78,12 +79,16 @@ func Analyze(root string, options Options) (Result, error) {
 	}
 
 	result := Result{
+		IndexMode:         "full",
 		OverviewPath:      OverviewRelativePath,
 		IndexManifestPath: IndexManifestRelativePath,
 		IndexFilesPath:    IndexFilesRelativePath,
 		IndexSymbolsPath:  IndexSymbolsRelativePath,
 		GoModule:          readGoModule(filepath.Join(root, "go.mod")),
 		ComposerPackage:   readComposerPackage(filepath.Join(root, "composer.json")),
+	}
+	if cache != nil {
+		result.IndexMode = "incremental"
 	}
 	keyFiles := rootKeyFiles(root)
 	dirCounts := map[string]int{}
@@ -126,60 +131,62 @@ func Analyze(root string, options Options) (Result, error) {
 		ext := strings.ToLower(filepath.Ext(path))
 		record := newFileRecord(rel, ext, fileInfo)
 
+		var sourceLanguage string
 		switch ext {
 		case ".go":
 			result.GoFiles++
-			dirCounts[summaryDir(rel)]++
-			outline, parseIssue := analyzeGo(path, rel, max(remainingSymbols, 0))
-			if parseIssue {
-				result.ParseIssues++
-			}
-			record.Language = outline.Language
-			record.Namespace = outline.Namespace
-			record.SHA256 = sourceHash(path)
-			if remainingSymbols <= 0 {
-				result.Truncated = true
-			} else {
-				remainingSymbols -= len(outline.Symbols)
-				result.Symbols += len(outline.Symbols)
-				symbolRecords = append(symbolRecords, symbolRecordsForOutline(outline)...)
-			}
-			if len(outline.Symbols) > 0 {
-				outlines = append(outlines, outline)
-			}
-		case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx":
-			if ext == ".ts" || ext == ".tsx" {
-				result.TSFiles++
-			} else {
-				result.JSFiles++
-			}
-			dirCounts[summaryDir(rel)]++
-			outline, parseIssue := analyzeJavaScript(path, rel, ext, max(remainingSymbols, 0))
-			if parseIssue {
-				result.ParseIssues++
-			}
-			record.Language = outline.Language
-			record.SHA256 = sourceHash(path)
-			if remainingSymbols <= 0 {
-				result.Truncated = true
-			} else {
-				remainingSymbols -= len(outline.Symbols)
-				result.Symbols += len(outline.Symbols)
-				symbolRecords = append(symbolRecords, symbolRecordsForOutline(outline)...)
-			}
-			if len(outline.Symbols) > 0 {
-				outlines = append(outlines, outline)
-			}
+			sourceLanguage = "Go"
 		case ".php":
 			result.PHPFiles++
+			sourceLanguage = "PHP"
+		case ".js", ".jsx", ".mjs", ".cjs":
+			result.JSFiles++
+			sourceLanguage = "JavaScript"
+		case ".ts", ".tsx":
+			result.TSFiles++
+			sourceLanguage = "TypeScript"
+		}
+		if sourceLanguage != "" {
 			dirCounts[summaryDir(rel)]++
-			outline, parseIssue := analyzePHP(path, rel, max(remainingSymbols, 0))
-			if parseIssue {
-				result.ParseIssues++
-			}
-			record.Language = outline.Language
-			record.Namespace = outline.Namespace
+			record.Language = sourceLanguage
 			record.SHA256 = sourceHash(path)
+			// Namespace is part of the cached record. For modified files
+			// the parser below replaces it with the current value.
+			if cache != nil {
+				if previous, found := cache.files[rel]; found {
+					record.Namespace = previous.Namespace
+				}
+			}
+			outline, reused := cachedOutline(cache, rel, record, remainingSymbols)
+			if reused {
+				result.ReusedSourceFiles++
+				record.SymbolsComplete = true
+			} else {
+				result.ReindexedSourceFiles++
+				var parseIssue bool
+				// Parse one additional declaration to detect when a single
+				// source file exceeds the remaining symbol budget. Without
+				// that, an incomplete index could claim to be complete and
+				// become eligible for future cache reuse.
+				probeLimit := max(remainingSymbols+1, 1)
+				switch sourceLanguage {
+				case "Go":
+					outline, parseIssue = analyzeGo(path, rel, probeLimit)
+				case "PHP":
+					outline, parseIssue = analyzePHP(path, rel, probeLimit)
+				default:
+					outline, parseIssue = analyzeJavaScript(path, rel, ext, probeLimit)
+				}
+				record.SymbolsComplete = !parseIssue && record.SHA256 != "" && len(outline.Symbols) <= remainingSymbols
+				if len(outline.Symbols) > remainingSymbols {
+					result.Truncated = true
+					outline.Symbols = outline.Symbols[:max(remainingSymbols, 0)]
+				}
+				if parseIssue {
+					result.ParseIssues++
+				}
+			}
+			record.Namespace = outline.Namespace
 			if remainingSymbols <= 0 {
 				result.Truncated = true
 			} else {

@@ -548,7 +548,7 @@ func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbo
 	if err != nil {
 		return projectanalysis.Result{}, err
 	}
-	result, err := projectanalysis.Analyze(rt.Root(), projectanalysis.Options{MaxFiles: maxFiles, MaxSymbols: maxSymbols})
+	result, err := projectanalysis.AnalyzeIncremental(rt.Root(), projectanalysis.Options{MaxFiles: maxFiles, MaxSymbols: maxSymbols})
 	if err != nil {
 		return projectanalysis.Result{}, err
 	}

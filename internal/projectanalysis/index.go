@@ -17,7 +17,7 @@ const (
 	IndexManifestRelativePath = ".adm/index/manifest.json"
 	IndexFilesRelativePath    = ".adm/index/files.jsonl"
 	IndexSymbolsRelativePath  = ".adm/index/symbols.jsonl"
-	IndexSchemaVersion        = 1
+	IndexSchemaVersion        = 2
 )
 
 type IndexBounds struct {
@@ -32,32 +32,36 @@ type IndexArtifact struct {
 }
 
 type IndexManifest struct {
-	SchemaVersion   int                      `json:"schema_version"`
-	GeneratedAt     string                   `json:"generated_at"`
-	Languages       []string                 `json:"languages"`
-	FilesScanned    int                      `json:"files_scanned"`
-	FilesIndexed    int                      `json:"files_indexed"`
-	SymbolsIndexed  int                      `json:"symbols_indexed"`
-	GoFiles         int                      `json:"go_files"`
-	PHPFiles        int                      `json:"php_files"`
-	JSFiles         int                      `json:"js_files"`
-	TSFiles         int                      `json:"ts_files"`
-	GoModule        string                   `json:"go_module,omitempty"`
-	ComposerPackage string                   `json:"composer_package,omitempty"`
-	ParseIssues     int                      `json:"parse_issues,omitempty"`
-	Truncated       bool                     `json:"truncated,omitempty"`
-	Bounds          IndexBounds              `json:"bounds"`
-	Artifacts       map[string]IndexArtifact `json:"artifacts"`
+	IndexMode            string                   `json:"index_mode,omitempty"`
+	ReusedSourceFiles    int                      `json:"reused_source_files,omitempty"`
+	ReindexedSourceFiles int                      `json:"reindexed_source_files,omitempty"`
+	SchemaVersion        int                      `json:"schema_version"`
+	GeneratedAt          string                   `json:"generated_at"`
+	Languages            []string                 `json:"languages"`
+	FilesScanned         int                      `json:"files_scanned"`
+	FilesIndexed         int                      `json:"files_indexed"`
+	SymbolsIndexed       int                      `json:"symbols_indexed"`
+	GoFiles              int                      `json:"go_files"`
+	PHPFiles             int                      `json:"php_files"`
+	JSFiles              int                      `json:"js_files"`
+	TSFiles              int                      `json:"ts_files"`
+	GoModule             string                   `json:"go_module,omitempty"`
+	ComposerPackage      string                   `json:"composer_package,omitempty"`
+	ParseIssues          int                      `json:"parse_issues,omitempty"`
+	Truncated            bool                     `json:"truncated,omitempty"`
+	Bounds               IndexBounds              `json:"bounds"`
+	Artifacts            map[string]IndexArtifact `json:"artifacts"`
 }
 
 type FileRecord struct {
-	Path       string `json:"path"`
-	Extension  string `json:"extension,omitempty"`
-	Language   string `json:"language,omitempty"`
-	Namespace  string `json:"namespace,omitempty"`
-	Size       int64  `json:"size"`
-	ModifiedAt string `json:"modified_at,omitempty"`
-	SHA256     string `json:"sha256,omitempty"`
+	SymbolsComplete bool   `json:"symbols_complete,omitempty"`
+	Path            string `json:"path"`
+	Extension       string `json:"extension,omitempty"`
+	Language        string `json:"language,omitempty"`
+	Namespace       string `json:"namespace,omitempty"`
+	Size            int64  `json:"size"`
+	ModifiedAt      string `json:"modified_at,omitempty"`
+	SHA256          string `json:"sha256,omitempty"`
 }
 
 type SymbolRecord struct {
@@ -160,20 +164,23 @@ func buildIndexArtifacts(result Result, options Options, files []FileRecord, sym
 	}
 
 	manifest := IndexManifest{
-		SchemaVersion:   IndexSchemaVersion,
-		GeneratedAt:     time.Now().UTC().Format(time.RFC3339Nano),
-		Languages:       append([]string(nil), result.Languages...),
-		FilesScanned:    result.FilesScanned,
-		FilesIndexed:    len(files),
-		SymbolsIndexed:  len(symbols),
-		GoFiles:         result.GoFiles,
-		PHPFiles:        result.PHPFiles,
-		JSFiles:         result.JSFiles,
-		TSFiles:         result.TSFiles,
-		GoModule:        result.GoModule,
-		ComposerPackage: result.ComposerPackage,
-		ParseIssues:     result.ParseIssues,
-		Truncated:       result.Truncated,
+		IndexMode:            result.IndexMode,
+		ReusedSourceFiles:    result.ReusedSourceFiles,
+		ReindexedSourceFiles: result.ReindexedSourceFiles,
+		SchemaVersion:        IndexSchemaVersion,
+		GeneratedAt:          time.Now().UTC().Format(time.RFC3339Nano),
+		Languages:            append([]string(nil), result.Languages...),
+		FilesScanned:         result.FilesScanned,
+		FilesIndexed:         len(files),
+		SymbolsIndexed:       len(symbols),
+		GoFiles:              result.GoFiles,
+		PHPFiles:             result.PHPFiles,
+		JSFiles:              result.JSFiles,
+		TSFiles:              result.TSFiles,
+		GoModule:             result.GoModule,
+		ComposerPackage:      result.ComposerPackage,
+		ParseIssues:          result.ParseIssues,
+		Truncated:            result.Truncated,
 		Bounds: IndexBounds{
 			MaxFiles:   options.MaxFiles,
 			MaxSymbols: options.MaxSymbols,
