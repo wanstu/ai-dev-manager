@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"ai-dev-manager-v2/internal/catalog"
@@ -40,6 +41,8 @@ type Service struct {
 	Verifiers               *verifier.Service
 	CodeIntelligence        codeintel.Provider
 	indexStore              *projectIndexStore
+	indexJobsMu             sync.Mutex
+	indexJobs               map[string]*projectIndexJob
 	writerHeartbeatInterval func(time.Duration) time.Duration
 }
 
@@ -553,6 +556,9 @@ func (s *Service) CompareFiles(environmentID, leftPath string, leftStart, leftEn
 // owner is accepted for legacy MCP/CLI request compatibility but no
 // source-write lease is required or acquired.
 func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbols int) (projectanalysis.Result, error) {
+	return s.AnalyzeProjectWithProgress(environmentID, owner, maxFiles, maxSymbols, nil)
+}
+func (s *Service) AnalyzeProjectWithProgress(environmentID, owner string, maxFiles, maxSymbols int, progress func(projectanalysis.Progress)) (projectanalysis.Result, error) {
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return projectanalysis.Result{}, err
@@ -575,7 +581,7 @@ func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbo
 		}
 		oldRoot = ""
 	}
-	result, err := projectanalysis.AnalyzeIncrementalAt(rt.Root(), oldRoot, projectanalysis.Options{MaxFiles: maxFiles, MaxSymbols: maxSymbols})
+	result, err := projectanalysis.AnalyzeIncrementalAt(rt.Root(), oldRoot, projectanalysis.Options{MaxFiles: maxFiles, MaxSymbols: maxSymbols, OnProgress: progress})
 	if err != nil {
 		return projectanalysis.Result{}, err
 	}

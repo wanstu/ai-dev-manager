@@ -1599,6 +1599,17 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_job_start", Description: "Start a background index refresh and return immediately with a job ID. Repeated requests reuse the in-progress job. The job survives closing a Desktop/Web detail window."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.StartProjectIndexJob(in.EnvironmentID)
+			return toolResult(value, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_job_status", Description: "Read the latest Environment index job status, processed and total file counts, phase and result; no source writer lease required."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.ProjectIndexJobStatus(in.EnvironmentID)
+			return toolResult(value, err)
+		})
+
 	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Read-only project source analysis stored in ADM-owned per-Environment immutable index generations. No Environment writer lease or writer_owner is required; separate index locking prevents concurrent refresh corruption. Does not write to project source."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectAnalyzeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.AnalyzeProject(in.EnvironmentID, in.WriterOwner, in.MaxFiles, in.MaxSymbols)

@@ -15,6 +15,7 @@ test('Phase 18 navigation exposes management routes including standalone diagnos
     'diagnostics',
     'exec-allowlist',
     'settings',
+    'about',
   ]);
 });
 

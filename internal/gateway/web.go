@@ -424,6 +424,16 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.management.EnvironmentInspect(s1)
+	case "StartProjectIndexJob":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.app.StartProjectIndexJob(s1)
+	case "ProjectIndexJobStatus":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.app.ProjectIndexJobStatus(s1)
 	case "AnalyzeProject":
 		if err := arg(0, &s1); err != nil {
 			return nil, err
@@ -439,19 +449,9 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 				return nil, err
 			}
 		}
-		writerOwner := fmt.Sprintf("web-project-analysis:%d", time.Now().UTC().UnixNano())
-		if _, err := h.app.Environments.AcquireWriter(s1, writerOwner); err != nil {
-			return nil, fmt.Errorf("project analysis requires an idle Environment writer: %w", err)
-		}
-		result, analyzeErr := h.app.AnalyzeProject(s1, writerOwner, maxFiles, maxSymbols)
-		_, releaseErr := h.app.Environments.ReleaseWriter(s1, writerOwner, false)
-		if analyzeErr != nil {
-			return nil, analyzeErr
-		}
-		if releaseErr != nil {
-			return nil, fmt.Errorf("release project analysis writer: %w", releaseErr)
-		}
-		return result, nil
+		// Indexes are ADM-owned snapshots and never require the
+		// Environment source writer lease.
+		return h.app.AnalyzeProject(s1, "", maxFiles, maxSymbols)
 	case "ProjectIndexAutoStatus":
 		if err := arg(0, &s1); err != nil {
 			return nil, err

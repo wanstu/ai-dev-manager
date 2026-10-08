@@ -15,9 +15,14 @@ import (
 	"strings"
 )
 
+type Progress struct {
+	FilesScanned int `json:"files_scanned"`
+	TotalFiles   int `json:"total_files"`
+}
 type Options struct {
 	MaxFiles   int
 	MaxSymbols int
+	OnProgress func(Progress)
 }
 
 type Result struct {
@@ -103,6 +108,31 @@ func analyze(root string, options Options, cache *indexSnapshot) (Result, error)
 	var symbolRecords []SymbolRecord
 	var callRecords []PHPCallRecord
 	remainingSymbols := options.MaxSymbols
+	totalFiles := 0
+	if options.OnProgress != nil {
+		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if path == root {
+				return nil
+			}
+			if entry.IsDir() {
+				if ignoredDir(entry.Name()) {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if entry.Type()&os.ModeSymlink == 0 {
+				totalFiles++
+			}
+			if totalFiles >= options.MaxFiles {
+				return fs.SkipAll
+			}
+			return nil
+		})
+		options.OnProgress(Progress{TotalFiles: totalFiles})
+	}
 
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -125,6 +155,9 @@ func analyze(root string, options Options, cache *indexSnapshot) (Result, error)
 			return fs.SkipAll
 		}
 		result.FilesScanned++
+		if options.OnProgress != nil && (result.FilesScanned%32 == 0 || result.FilesScanned == totalFiles) {
+			options.OnProgress(Progress{FilesScanned: result.FilesScanned, TotalFiles: totalFiles})
+		}
 
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {

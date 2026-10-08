@@ -212,6 +212,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (new URLSearchParams(location.search).get('focus') === 'environment') {
       const bridge=window.go.desktop.Adapter;
       let autoIndexEnabled=false,autoIndexSetCalls=0;
+      let indexJobStarted=false,indexPolls=0,indexStartCalls=0;
+      bridge.StartProjectIndexJob=async(id)=>{indexJobStarted=true;indexStartCalls++;return{job_id:'job-fixture',environment_id:id,state:'queued',phase:'排队等待索引锁',total_files:100,files_scanned:0};};
+      bridge.ProjectIndexJobStatus=async(id)=>{
+        if(!indexJobStarted)return{environment_id:id,state:'idle'};
+        indexPolls++;
+        return indexPolls<3?{job_id:'job-fixture',environment_id:id,state:'running',phase:'扫描源码',total_files:100,files_scanned:indexPolls*30}:
+          {job_id:'job-fixture',environment_id:id,state:'succeeded',phase:'索引更新完成',total_files:100,files_scanned:100,files_indexed:100,symbols:200};
+      };
+      bridge.ProjectIndexStatus=async(id)=>({state:'fresh',generated_at:'2026-10-08T12:00:00Z',indexed_files:100,checked_files:100,change_count:0,artifact_verified:true,reasons:[],changes:[]});
       bridge.ProjectIndexAutoStatus=async(id)=>({environment_id:id,enabled:autoIndexEnabled,state:autoIndexEnabled?'watching':'disabled',message:autoIndexEnabled?'正在监控源码变化':'自动更新未开启'});
       bridge.SetProjectIndexAuto=async(id,enabled)=>{autoIndexEnabled=Boolean(enabled);autoIndexSetCalls++;return bridge.ProjectIndexAutoStatus(id)};
       const inspect=bridge.InspectEnvironment.bind(bridge);
@@ -258,6 +267,19 @@ window.addEventListener('DOMContentLoaded', async () => {
       tabs.querySelector('[data-environment-detail-subview="summary"]').click(); await sleep();
       check(getComputedStyle(diagnostics).display==='none' && getComputedStyle(summary).display==='grid', 'returning to basics hides diagnostics');
       check(window.__fakeADM.calls.length===beforeSwitch, 'tab switching makes no extra service calls');
+      const startButton=document.getElementById('environmentProjectAnalyzeButton');
+      startButton.click();
+      await waitFor(()=>indexStartCalls===1,'background index job started without blocking dialog');
+      check(!document.getElementById('environmentProjectIndexProgress').hidden,'job progress is visible');
+      document.getElementById('closeEnvironmentDetail').click(); await sleep();
+      check(indexJobStarted,'closing environment details does not stop the Gateway job');
+      detail.click();
+      await waitFor(()=>!document.getElementById('environmentDetailPanel').hidden,'environment details reopen during background job');
+      await waitFor(()=>document.getElementById('environmentProjectIndexPhase').textContent.includes('完成'),'reopening shows completed background job');
+      check(indexStartCalls===1,'reopening does not start a duplicate index job');
+      check(document.getElementById('environmentProjectIndexProgressBar').value===100,'index progress reaches 100 percent');
+      check(document.getElementById('environmentProjectIndexResult').textContent.includes('完整性已校验'),'index result shows compact verified summary');
+      check(!document.getElementById('environmentProjectIndexResult').textContent.includes('AppData\\Roaming'),'index UI does not expose long cache paths');
       document.getElementById('closeEnvironmentDetail').click(); await sleep();
       await clickRoute('workspaces');
       const discovery=document.querySelector('#workspaceList button[data-action="discover-workspace-projects"][data-id="ws-a"]');
@@ -695,7 +717,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('capabilityAssignmentSummary').textContent.includes('MCP 1') && document.getElementById('capabilityAssignmentSummary').textContent.includes('Skill 1') && document.getElementById('capabilityAssignmentSummary').textContent.includes('Environment 2'), 'bulk dialog summarizes resource and Environment selection counts');
     const bulkEnvAText=document.querySelector('#capabilityAssignmentEnvironmentList input[data-id="env-a"]').closest('label').textContent;
     const bulkEnvBText=document.querySelector('#capabilityAssignmentEnvironmentList input[data-id="env-b"]').closest('label').textContent;
-    check(bulkEnvAText.includes('MCP 1/1') && bulkEnvAText.includes('Skill 1/1') && bulkEnvAText.includes('显式 1') && bulkEnvBText.includes('MCP 0/1') && bulkEnvBText.includes('Skill 0/1'), 'bulk dialog exposes effective and explicit per-Environment state before apply');
+    check(bulkEnvAText.includes('显式 MCP 1/1') && bulkEnvAText.includes('Skill 1/1') && bulkEnvBText.includes('显式 MCP 0/1') && bulkEnvBText.includes('Skill 0/1'), 'bulk dialog exposes effective and explicit per-Environment state before apply');
     const bulkMCPBefore=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentMCP').length;
     const bulkSkillBefore=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentSkill').length;
     window.__fakeADM.state.failBulkSkillAssignment=true;
@@ -705,7 +727,22 @@ window.addEventListener('DOMContentLoaded', async () => {
     const bulkSkillCalls=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentSkill').slice(bulkSkillBefore);
     check(bulkMCPCalls.length===1 && bulkMCPCalls[0].args[0]==='env-b' && bulkMCPCalls[0].args[1]==='mcp-a' && bulkMCPCalls[0].args[2]===true, 'bulk assignment skips already-enabled MCP pair and mutates only the needed Environment');
     check(bulkSkillCalls.length===1 && bulkSkillCalls[0].args[0]==='env-b' && bulkSkillCalls[0].args[1]==='skill-a' && bulkSkillCalls[0].args[2]===true, 'bulk assignment attempts only the needed Skill pair');
-    check(document.getElementById('capabilityAssignmentResult').textContent.includes('组合 4') && document.getElementById('capabilityAssignmentResult').textContent.includes('已修改 1') && document.getElementById('capabilityAssignmentResult').textContent.includes('已是目标状态 2'), 'bulk result distinguishes changed, unchanged, and failed pairs');
+    check(document.getElementById('capabilityAssignmentResult').textContent.includes('共 4 组') && document.getElementById('capabilityAssignmentResult').textContent.includes('成功修改 1') && document.getElementById('capabilityAssignmentResult').textContent.includes('无需修改 2'), 'bulk result distinguishes changed, unchanged, and failed pairs');
+    // The same batch dialog also targets Workspace inheritance (not just Environment explicit picks).
+    document.getElementById('capabilityAssignmentClearButton').click(); await sleep();
+    const wsTarget=document.querySelector('#capabilityAssignmentWorkspaceList input[data-id="ws-b"]');
+    check(Boolean(wsTarget),'bulk dialog exposes Workspaces as selectable targets');
+    wsTarget.click(); await sleep();
+    check(document.getElementById('capabilityAssignmentSummary').textContent.includes('Workspace 1') &&
+      document.getElementById('capabilityAssignmentSummary').textContent.includes('Environment 0'),'Workspace-only batch target is valid');
+    const beforeWorkspaceCalls=window.__fakeADM.calls.filter(c=>c.name==='SetWorkspaceMCP'&&c.args[0]==='ws-b'&&c.args[1]==='mcp-a').length;
+    const beforeEnvCalls=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentMCP').length;
+    document.getElementById('capabilityAssignmentEnableButton').click();
+    await waitFor(()=>window.__fakeADM.calls.filter(c=>c.name==='SetWorkspaceMCP'&&c.args[0]==='ws-b'&&c.args[1]==='mcp-a'&&c.args[2]===true).length>beforeWorkspaceCalls,'Workspace-only batch enable called');
+    check(window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentMCP').length===beforeEnvCalls,'Workspace-only batch does not change Environment explicit settings');
+    check(document.getElementById('capabilityAssignmentResult').textContent.includes('Workspace 1'),'batch result reports affected Workspace count');
+    document.getElementById('capabilityAssignmentDisableButton').click();
+    await waitFor(()=>window.__fakeADM.calls.some(c=>c.name==='SetWorkspaceMCP'&&c.args[0]==='ws-b'&&c.args[1]==='mcp-a'&&c.args[2]===false),'Workspace-only batch disable called');
     window.__fakeADM.state.failBulkSkillAssignment=false;
     window.__fakeADM.snapshotA.environments.find(env=>env.environment_id==='env-b').explicit_mcp_ids=[]; window.__fakeADM.recomputeEnvironment(window.__fakeADM.snapshotA.environments.find(env=>env.environment_id==='env-b'));
     document.querySelector('#capabilityAssignmentDialog [data-dialog-close]').click();

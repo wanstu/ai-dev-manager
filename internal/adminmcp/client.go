@@ -423,6 +423,12 @@ func (c *Client) ProjectIndexAutoStatus(environmentID string) (app.IndexAutoStat
 func (c *Client) ProjectIndexAutoSet(environmentID string, enabled bool) (app.IndexAutoStatus, error) {
 	return callAdmin[app.IndexAutoStatus](c, context.Background(), "project_index_auto_set", map[string]any{"environment_id": environmentID, "enabled": enabled})
 }
+func (c *Client) StartProjectIndexJob(id string) (app.ProjectIndexJob, error) {
+	return callAdmin[app.ProjectIndexJob](c, context.Background(), "project_index_job_start", map[string]any{"environment_id": id})
+}
+func (c *Client) ProjectIndexJobStatus(id string) (app.ProjectIndexJob, error) {
+	return callAdmin[app.ProjectIndexJob](c, context.Background(), "project_index_job_status", map[string]any{"environment_id": id})
+}
 func (c *Client) ProjectIndexStatus(environmentID string, maxChanges int) (projectanalysis.IndexStatusResult, error) {
 	return callAdmin[projectanalysis.IndexStatusResult](c, context.Background(), "project_index_status", map[string]any{"environment_id": environmentID, "max_changes": maxChanges})
 }

@@ -196,24 +196,24 @@
         </div>
         <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="mcpEditorFlow">添加 MCP 定义</button></div>
         <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="mcpImportDialog">导入 MCP JSON / JSONC</button></div>
-        <div class="skill-bulk-toolbar" id="mcpBulkToolbar">
-          <div class="skill-bulk-actions">
-            <button id="mcpSelectVisibleButton" type="button" class="secondary-button small-button">选择当前结果</button>
-            <button id="mcpClearSelectionButton" type="button" class="secondary-button small-button">清除选择</button>
-            <span class="visible-count">已选择 <strong id="mcpSelectedCount">0</strong></span>
-            <button id="mcpAssignEnvironmentsButton" type="button" class="secondary-button small-button" disabled>批量分配到环境…</button>
-            <button id="mcpClearMissingButton" type="button" class="secondary-button small-button" disabled>清除不存在引用</button>
-          </div>
-          <div class="skill-bulk-actions">
-            <button id="mcpSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果设为新环境默认</button>
-            <button id="mcpUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果取消新环境默认</button>
-          </div>
-          <div class="skill-bulk-actions">
-            <button id="mcpEnableVisibleButton" type="button" class="secondary-button small-button" disabled>当前结果在 Environment 显式启用</button>
-            <button id="mcpDisableVisibleButton" type="button" class="secondary-button small-button" disabled>当前结果取消 Environment 显式启用</button>
-          </div>
-          <p id="mcpBulkHint" class="skill-bulk-hint">先选择 MCP / Skill，再用“批量分配到环境”选择多个 Environment；旧的当前结果操作仍只作用于当前筛选和当前 Environment。</p>
-        </div>
+        <div class="skill-bulk-toolbar batch-toolbar" id="mcpBulkToolbar">
+  <div class="skill-bulk-actions batch-primary">
+    <button id="mcpSelectVisibleButton" type="button" class="secondary-button small-button">选择当前结果</button>
+    <button id="mcpClearSelectionButton" type="button" class="secondary-button small-button">清除选择</button>
+    <span class="visible-count">已选 <strong id="mcpSelectedCount">0</strong></span>
+    <button id="mcpAssignEnvironmentsButton" type="button" class="small-button" disabled>批量启停…</button>
+  </div>
+  <details class="batch-advanced"><summary>其他批量操作</summary>
+    <div class="skill-bulk-actions">
+      <button id="mcpSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果设为新环境默认</button>
+      <button id="mcpUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>取消新环境默认</button>
+      <button id="mcpEnableVisibleButton" type="button" class="secondary-button small-button" disabled>当前环境显式启用</button>
+      <button id="mcpDisableVisibleButton" type="button" class="secondary-button small-button" disabled>取消当前环境显式启用</button>
+      <button id="mcpClearMissingButton" type="button" class="secondary-button small-button" disabled>清理无效引用</button>
+    </div>
+  </details>
+  <p id="mcpBulkHint" class="skill-bulk-hint">先勾选 MCP/Skill，再选择一个或多个 Workspace、Environment，批量开启或关闭。</p>
+</div>
         <div class="list-heading"><strong>全局 MCP 定义</strong><span>删除是全局操作；当前 Environment 开关只修改选择。</span></div>
         <div class="list-toolbar">
           <label class="filter-field"><span>搜索</span><input id="mcpFilter" type="search" placeholder="名称 / ID / endpoint / executable；正则用 /pattern/i"></label>
@@ -252,29 +252,27 @@
         <div class="runtime-subview-host skill-subview-host">
           <section id="skillsPanel" class="runtime-subview-panel skill-subview-panel" data-skill-subview-panel="skills">
             <div class="list-heading split-heading"><strong>Skills</strong><span>Source、artifact、当前 Environment 选择和全局可用性分开显示；不会读取 SKILL.md。</span></div>
-            <div class="skill-bulk-toolbar">
-              <div class="skill-bulk-actions">
-                <button id="skillProbeAllButton" type="button" class="secondary-button small-button">批量检查可用性</button>
-                <button id="skillSelectVisibleButton" type="button" class="secondary-button small-button">选择当前结果</button>
-                <button id="skillClearSelectionButton" type="button" class="secondary-button small-button">清除选择</button>
-                <button id="skillSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果设为新环境默认</button>
-                <button id="skillUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>当前结果取消新环境默认</button>
-              </div>
-              <div class="skill-bulk-actions">
-                <button id="skillEnableVisibleButton" type="button" class="secondary-button small-button" disabled>当前结果在 Environment 显式启用</button>
-                <button id="skillDisableVisibleButton" type="button" class="secondary-button small-button" disabled>当前结果取消 Environment 显式启用</button>
-              </div>
-              <div class="skill-bulk-actions">
-                <span class="visible-count">已选择 <strong id="skillSelectedCount">0</strong></span>
-                <button id="skillAssignEnvironmentsButton" type="button" class="secondary-button small-button" disabled>批量分配到环境…</button>
-                <button id="skillClearMissingButton" type="button" class="secondary-button small-button" disabled>清除不存在引用</button>
-              </div>
-              <div class="skill-bulk-actions skill-bulk-danger-actions">
-                <button id="skillDeleteSelectedButton" type="button" class="danger-button small-button" disabled>批量删除</button>
-                <button id="skillClearUnavailableButton" type="button" class="danger-button small-button" disabled>一键清除不可用</button>
-              </div>
-              <p id="skillBulkHint" class="skill-bulk-hint">批量检查会检查全局 Skill catalog 的 source root、artifact 与 support roots；不依赖当前 Environment。</p>
-            </div>
+            <div class="skill-bulk-toolbar batch-toolbar">
+  <div class="skill-bulk-actions batch-primary">
+    <button id="skillProbeAllButton" type="button" class="secondary-button small-button">检查可用性</button>
+    <button id="skillSelectVisibleButton" type="button" class="secondary-button small-button">选择当前结果</button>
+    <button id="skillClearSelectionButton" type="button" class="secondary-button small-button">清除选择</button>
+    <span class="visible-count">已选 <strong id="skillSelectedCount">0</strong></span>
+    <button id="skillAssignEnvironmentsButton" type="button" class="small-button" disabled>批量启停…</button>
+  </div>
+  <details class="batch-advanced"><summary>其他批量操作</summary>
+    <div class="skill-bulk-actions">
+      <button id="skillSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>设为新环境默认</button>
+      <button id="skillUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>取消新环境默认</button>
+      <button id="skillEnableVisibleButton" type="button" class="secondary-button small-button" disabled>当前环境显式启用</button>
+      <button id="skillDisableVisibleButton" type="button" class="secondary-button small-button" disabled>取消当前环境显式启用</button>
+      <button id="skillClearMissingButton" type="button" class="secondary-button small-button" disabled>清理无效引用</button>
+      <button id="skillDeleteSelectedButton" type="button" class="danger-button small-button" disabled>删除已选</button>
+      <button id="skillClearUnavailableButton" type="button" class="danger-button small-button" disabled>清除不可用</button>
+    </div>
+  </details>
+  <p id="skillBulkHint" class="skill-bulk-hint">选中 Skill 后可批量启停 Workspace/Environment；检查可用性不会修改配置。</p>
+</div>
             <div class="list-toolbar">
               <label class="filter-field"><span>搜索</span><input id="skillFilter" type="search" placeholder="名称 / ID / artifact 路径；正则用 /pattern/i"></label>
               <label class="filter-field compact-filter"><span>Source</span><select id="skillSourceFilter"><option value="">全部 Source</option></select></label>
@@ -337,10 +335,15 @@
         <div id="environmentTreeDigestResult" class="discovery-result empty">尚未读取目录摘要。</div>
       </section>
       <section id="environmentProjectIndexSection" class="subpanel environment-project-index" data-environment-detail-panel="summary" hidden>
-        <div class="subpanel-heading"><div><h3>代码索引</h3><span>供 AI 定位函数、分析调用关系。首次点击「生成索引」，后续增量刷新。</span></div><div class="gateway-actions"><button id="environmentProjectIndexStatusButton" type="button" class="secondary-button small-button">检查索引</button><button id="environmentProjectAnalyzeButton" type="button" class="small-button">生成 / 更新索引</button></div></div>
+        <div class="subpanel-heading"><div><h3>代码索引</h3><span>供 AI 定位函数、分析调用关系。首次点击「生成索引」，后续增量刷新。</span></div><div class="gateway-actions"><button id="environmentProjectIndexStatusButton" type="button" class="secondary-button small-button">检查索引</button><button id="environmentProjectAnalyzeButton" type="button" class="small-button">后台生成 / 更新</button></div></div>
         <div class="environment-index-automatic">
           <label><input id="environmentProjectAutoIndex" type="checkbox"> 自动监控代码变化，增量更新索引</label>
           <small id="environmentProjectAutoIndexStatus" role="status">正在读取自动更新状态…</small>
+        </div>
+        <div id="environmentProjectIndexProgress" class="index-job-progress" hidden role="status" aria-live="polite">
+          <div class="index-progress-header"><strong id="environmentProjectIndexPhase">正在准备索引任务…</strong><span id="environmentProjectIndexCount"></span></div>
+          <progress id="environmentProjectIndexProgressBar" max="100" value="0" aria-label="代码索引进度"></progress>
+          <small>任务在 ADM Gateway 后台运行，关闭窗口不会中断。重新打开可继续查看进度。</small>
         </div>
         <div id="environmentProjectIndexResult" class="discovery-result empty">尚未检查项目索引。</div>
       </section>
@@ -582,18 +585,29 @@
             <div class="form-actions wide-field"><button id="skillSourceSubmitButton" type="submit">添加并刷新 Source</button></div>
           </form>
         </dialog>
-<dialog id="capabilityAssignmentDialog" class="editor-dialog bulk-assignment-dialog" aria-labelledby="capabilityAssignmentTitle"><header class="dialog-heading"><div><p class="eyebrow">BULK ENVIRONMENT ASSIGNMENT</p><h2 id="capabilityAssignmentTitle">批量分配 MCP / Skill</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p>
-          <p id="capabilityAssignmentSummary" class="editor-hint">先在 MCP / Skills 页面选择资源，再选择目标 Environment。</p>
-          <div class="skill-bulk-actions">
-            <button id="capabilityAssignmentSelectAllButton" type="button" class="secondary-button small-button">选择全部 Environment</button>
-            <button id="capabilityAssignmentClearButton" type="button" class="secondary-button small-button">清除 Environment 选择</button>
-          </div>
-          <div id="capabilityAssignmentEnvironmentList" class="selection-list bulk-environment-list empty">暂无 Environment</div>
+<dialog id="capabilityAssignmentDialog" class="editor-dialog bulk-assignment-dialog" aria-labelledby="capabilityAssignmentTitle">
+          <header class="dialog-heading"><div><p class="eyebrow">批量管理</p><h2 id="capabilityAssignmentTitle">批量启停 MCP / Skill</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header>
+          <p class="dialog-message" role="status" hidden></p>
+          <p id="capabilityAssignmentSummary" class="editor-hint">先选择 MCP / Skill，再选择要修改的 Workspace 或 Environment。</p>
+          <section class="bulk-target-group"><div class="bulk-target-header"><strong>Workspace · 项目统一启停</strong><span>影响该 Workspace 下环境的继承选择</span></div>
+            <div class="skill-bulk-actions">
+              <button id="capabilityWorkspaceSelectAllButton" type="button" class="secondary-button small-button">全选 Workspace</button>
+              <button id="capabilityWorkspaceClearButton" type="button" class="secondary-button small-button">清空 Workspace</button>
+            </div>
+            <div id="capabilityAssignmentWorkspaceList" class="selection-list bulk-environment-list empty">暂无 Workspace</div>
+          </section>
+          <section class="bulk-target-group"><div class="bulk-target-header"><strong>Environment · 环境单独启停</strong><span>只修改显式选择；Workspace 继承仍然有效</span></div>
+            <div class="skill-bulk-actions">
+              <button id="capabilityAssignmentSelectAllButton" type="button" class="secondary-button small-button">全选 Environment</button>
+              <button id="capabilityAssignmentClearButton" type="button" class="secondary-button small-button">清空 Environment</button>
+            </div>
+            <div id="capabilityAssignmentEnvironmentList" class="selection-list bulk-environment-list empty">暂无 Environment</div>
+          </section>
           <div class="form-actions bulk-assignment-actions">
-            <button id="capabilityAssignmentEnableButton" type="button" disabled>在所选 Environment 开启</button>
-            <button id="capabilityAssignmentDisableButton" type="button" class="secondary-button" disabled>在所选 Environment 关闭</button>
+            <button id="capabilityAssignmentEnableButton" type="button" disabled>在所选目标开启</button>
+            <button id="capabilityAssignmentDisableButton" type="button" class="secondary-button" disabled>在所选目标关闭</button>
           </div>
-          <div id="capabilityAssignmentResult" class="preview-panel empty">尚未执行批量分配。</div>
+          <div id="capabilityAssignmentResult" class="preview-panel empty">尚未执行批量操作。</div>
         </dialog>
 <dialog id="workspaceDialog" class="editor-dialog" aria-labelledby="workspaceDialogTitle"><header class="dialog-heading"><h2 id="workspaceDialogTitle">添加 Workspace</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="workspaceForm" class="inline-form">
           <label><span>目录</span><span class="path-picker-field"><input id="workspacePath" name="path" type="text" placeholder="D:\projects\example" required><button id="workspaceBrowseButton" type="button" class="secondary-button">选择目录</button></span></label>

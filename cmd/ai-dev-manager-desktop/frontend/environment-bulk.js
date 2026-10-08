@@ -68,6 +68,24 @@
     return operations;
   }
 
+  function buildWorkspaceOperations(workspaces,workspaceIDs,mcpIDs,skillIDs,enabled){
+    const byID=new Map((Array.isArray(workspaces)?workspaces:[]).map(w=>[String(w?.workspace_id||''),w]));
+    const ops=[];
+    for(const workspaceID of uniqueIDs(workspaceIDs)){
+      const workspace=byID.get(workspaceID);
+      if(!workspace)continue;
+      for(const [kind,ids] of [['mcp',mcpIDs],['skill',skillIDs]]){
+        const selected=new Set(uniqueIDs(kind==='mcp'?workspace.enabled_mcp_ids:workspace.enabled_skill_ids));
+        for(const resourceID of uniqueIDs(ids)){
+          const currentEnabled=selected.has(resourceID);
+          ops.push({scope:'workspace',workspaceID,workspaceName:workspace.name||workspaceID,
+            kind,resourceID,enabled:Boolean(enabled),currentEnabled,noop:currentEnabled===Boolean(enabled)});
+        }
+      }
+    }
+    return ops;
+  }
+
   function missingSelections(environments, entries, kind) {
     const existing = new Set((Array.isArray(entries) ? entries : []).map((entry) => String(entry?.id || '').trim()).filter(Boolean));
     const operations = [];
@@ -117,17 +135,19 @@
 
   function summarizeResults(results) {
     const list = Array.isArray(results) ? results : [];
-    const summary = {total: list.length, changed: 0, unchanged: 0, failed: 0, environments: 0};
-    const environmentIDs = new Set();
+    const summary = {total: list.length, changed: 0, unchanged: 0, failed: 0, environments: 0, workspaces: 0};
+    const environmentIDs = new Set(), workspaceIDs = new Set();
     for (const result of list) {
       if (result?.environmentID) environmentIDs.add(result.environmentID);
+      if (result?.workspaceID) workspaceIDs.add(result.workspaceID);
       if (result?.status === 'changed') summary.changed++;
       else if (result?.status === 'unchanged') summary.unchanged++;
       else if (result?.status === 'failed') summary.failed++;
     }
     summary.environments = environmentIDs.size;
+    summary.workspaces = workspaceIDs.size;
     return summary;
   }
 
-  return {uniqueIDs, retainExistingSelection, environmentSummary, buildOperations, missingSelections, missingWorkspaceSelections, summarizeResults};
+  return {uniqueIDs, retainExistingSelection, environmentSummary, buildOperations, buildWorkspaceOperations, missingSelections, missingWorkspaceSelections, summarizeResults};
 });

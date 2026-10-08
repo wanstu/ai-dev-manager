@@ -49,7 +49,7 @@ test('result summary keeps changed, unchanged, and partial failures distinct', (
     {environmentID:'env-a', status:'unchanged'},
     {environmentID:'env-b', status:'failed'},
   ]);
-  assert.deepEqual(summary, {total:3, changed:1, unchanged:1, failed:1, environments:2});
+  assert.deepEqual(summary, {total:3, changed:1, unchanged:1, failed:1, environments:2, workspaces:0});
 });
 
 test('missing selections identify only explicit Environment references and Workspace references absent from the catalog', () => {
@@ -76,4 +76,23 @@ test('missing selections identify only explicit Environment references and Works
   ], [{id:'s1'}], 'skill').map((op) => [op.workspaceID, op.resourceID]), [
     ['ws-a','workspace-skill-missing'],
   ]);
+});
+
+test('workspace batch operations are independent of Environment explicit settings',()=>{
+ const workspaces=[
+  {workspace_id:'ws-a',name:'A',enabled_mcp_ids:['m1'],enabled_skill_ids:[]},
+  {workspace_id:'ws-b',name:'B',enabled_mcp_ids:[],enabled_skill_ids:['s1']},
+ ];
+ const ops=bulk.buildWorkspaceOperations(workspaces,['ws-b','ws-a','missing'],['m1'],['s1'],true);
+ assert.deepEqual(ops.map(op=>[op.scope,op.workspaceID,op.kind,op.resourceID,op.noop]),[
+  ['workspace','ws-a','mcp','m1',true],
+  ['workspace','ws-a','skill','s1',false],
+  ['workspace','ws-b','mcp','m1',false],
+  ['workspace','ws-b','skill','s1',true],
+ ]);
+ const disable=bulk.buildWorkspaceOperations(workspaces,['ws-a'],['m1'],[],false);
+ assert.equal(disable.length,1); assert.equal(disable[0].noop,false);
+ const summary=bulk.summarizeResults([...ops.map(op=>({...op,status:op.noop?'unchanged':'changed'})),
+  {scope:'environment',environmentID:'env-a',status:'failed'}]);
+ assert.deepEqual([summary.workspaces,summary.environments,summary.changed,summary.unchanged,summary.failed],[2,1,2,2,1]);
 });

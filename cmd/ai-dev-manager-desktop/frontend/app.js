@@ -38,14 +38,14 @@ const elements = {
   skillSourceForm: document.getElementById('skillSourceForm'), skillSourceID: document.getElementById('skillSourceID'), skillSourceDialogTitle: document.getElementById('skillSourceDialogTitle'), skillSourceRoot: document.getElementById('skillSourceRoot'), skillSupportRoots: document.getElementById('skillSupportRoots'), skillSourceDefault: document.getElementById('skillSourceDefault'), skillSourceSubmitButton: document.getElementById('skillSourceSubmitButton'), skillSubviewTabs: document.getElementById('skillSubviewTabs'), skillSubviewSkillCount: document.getElementById('skillSubviewSkillCount'), skillSubviewSourceCount: document.getElementById('skillSubviewSourceCount'), skillsPanel: document.getElementById('skillsPanel'), skillSourcesPanel: document.getElementById('skillSourcesPanel'), skillSourceList: document.getElementById('skillSourceList'), skillList: document.getElementById('skillList'),
   skillFilter: document.getElementById('skillFilter'), skillSourceFilter: document.getElementById('skillSourceFilter'), skillStateFilter: document.getElementById('skillStateFilter'), skillSourceFilterInput: document.getElementById('skillSourceFilterInput'), skillSourceVisibleCount: document.getElementById('skillSourceVisibleCount'), skillSourceListTotalCount: document.getElementById('skillSourceListTotalCount'), skillVisibleCount: document.getElementById('skillVisibleCount'), skillListTotalCount: document.getElementById('skillListTotalCount'),
   skillProbeAllButton: document.getElementById('skillProbeAllButton'), skillSelectVisibleButton: document.getElementById('skillSelectVisibleButton'), skillClearSelectionButton: document.getElementById('skillClearSelectionButton'), skillSetVisibleDefaultButton: document.getElementById('skillSetVisibleDefaultButton'), skillUnsetVisibleDefaultButton: document.getElementById('skillUnsetVisibleDefaultButton'), skillEnableVisibleButton: document.getElementById('skillEnableVisibleButton'), skillDisableVisibleButton: document.getElementById('skillDisableVisibleButton'), skillSelectedCount: document.getElementById('skillSelectedCount'), skillAssignEnvironmentsButton: document.getElementById('skillAssignEnvironmentsButton'), skillClearMissingButton: document.getElementById('skillClearMissingButton'), skillDeleteSelectedButton: document.getElementById('skillDeleteSelectedButton'), skillClearUnavailableButton: document.getElementById('skillClearUnavailableButton'), skillBulkHint: document.getElementById('skillBulkHint'),
-  capabilityAssignmentDialog: document.getElementById('capabilityAssignmentDialog'), capabilityAssignmentSummary: document.getElementById('capabilityAssignmentSummary'), capabilityAssignmentSelectAllButton: document.getElementById('capabilityAssignmentSelectAllButton'), capabilityAssignmentClearButton: document.getElementById('capabilityAssignmentClearButton'), capabilityAssignmentEnvironmentList: document.getElementById('capabilityAssignmentEnvironmentList'), capabilityAssignmentEnableButton: document.getElementById('capabilityAssignmentEnableButton'), capabilityAssignmentDisableButton: document.getElementById('capabilityAssignmentDisableButton'), capabilityAssignmentResult: document.getElementById('capabilityAssignmentResult'),
+  capabilityAssignmentDialog: document.getElementById('capabilityAssignmentDialog'), capabilityAssignmentSummary: document.getElementById('capabilityAssignmentSummary'), capabilityAssignmentSelectAllButton: document.getElementById('capabilityAssignmentSelectAllButton'), capabilityAssignmentClearButton: document.getElementById('capabilityAssignmentClearButton'), capabilityAssignmentEnvironmentList: document.getElementById('capabilityAssignmentEnvironmentList'), capabilityAssignmentWorkspaceList: document.getElementById('capabilityAssignmentWorkspaceList'), capabilityWorkspaceSelectAllButton: document.getElementById('capabilityWorkspaceSelectAllButton'), capabilityWorkspaceClearButton: document.getElementById('capabilityWorkspaceClearButton'), capabilityAssignmentEnableButton: document.getElementById('capabilityAssignmentEnableButton'), capabilityAssignmentDisableButton: document.getElementById('capabilityAssignmentDisableButton'), capabilityAssignmentResult: document.getElementById('capabilityAssignmentResult'),
   workspaceForm: document.getElementById('workspaceForm'), workspacePath: document.getElementById('workspacePath'), workspaceName: document.getElementById('workspaceName'), workspaceBrowseButton: document.getElementById('workspaceBrowseButton'), workspaceList: document.getElementById('workspaceList'), workspaceFilter: document.getElementById('workspaceFilter'), workspaceVisibleCount: document.getElementById('workspaceVisibleCount'), workspaceListTotalCount: document.getElementById('workspaceListTotalCount'),
   workspaceDiscoveryDialog: document.getElementById('workspaceDiscoveryDialog'), workspaceDiscoveryAdvanced: document.getElementById('workspaceDiscoveryAdvanced'), workspaceDiscoveryFilterToolbar: document.getElementById('workspaceDiscoveryFilterToolbar'), workspaceDiscoveryTitle: document.getElementById('workspaceDiscoveryTitle'), workspaceDiscoveryForm: document.getElementById('workspaceDiscoveryForm'), workspaceDiscoveryPath: document.getElementById('workspaceDiscoveryPath'), workspaceDiscoveryQuery: document.getElementById('workspaceDiscoveryQuery'), workspaceDiscoveryMaxDepth: document.getElementById('workspaceDiscoveryMaxDepth'), workspaceDiscoveryMaxEntries: document.getElementById('workspaceDiscoveryMaxEntries'), workspaceDiscoveryMaxCandidates: document.getElementById('workspaceDiscoveryMaxCandidates'), workspaceDiscoveryMaxDigestEntries: document.getElementById('workspaceDiscoveryMaxDigestEntries'), workspaceDiscoveryMaxOutputBytes: document.getElementById('workspaceDiscoveryMaxOutputBytes'), workspaceDiscoveryScanButton: document.getElementById('workspaceDiscoveryScanButton'), workspaceDiscoveryFilter: document.getElementById('workspaceDiscoveryFilter'), workspaceDiscoverySummary: document.getElementById('workspaceDiscoverySummary'), workspaceDiscoveryResult: document.getElementById('workspaceDiscoveryResult'),
   environmentForm: document.getElementById('environmentForm'), environmentWorkspace: document.getElementById('environmentWorkspace'), environmentName: document.getElementById('environmentName'), environmentRoot: document.getElementById('environmentRoot'), environmentBrowseButton: document.getElementById('environmentBrowseButton'), environmentList: document.getElementById('environmentList'), environmentFilter: document.getElementById('environmentFilter'), environmentWorkspaceFilter: document.getElementById('environmentWorkspaceFilter'), environmentVisibleCount: document.getElementById('environmentVisibleCount'), environmentListTotalCount: document.getElementById('environmentListTotalCount'), environmentFilterHint: document.getElementById('environmentFilterHint'),
   hostDirectoryDialog: document.getElementById('hostDirectoryDialog'), hostDirectoryRootsButton: document.getElementById('hostDirectoryRootsButton'), hostDirectoryParentButton: document.getElementById('hostDirectoryParentButton'), hostDirectoryRefreshButton: document.getElementById('hostDirectoryRefreshButton'), hostDirectoryCurrentPath: document.getElementById('hostDirectoryCurrentPath'), hostDirectoryList: document.getElementById('hostDirectoryList'), hostDirectoryHint: document.getElementById('hostDirectoryHint'), hostDirectorySelectButton: document.getElementById('hostDirectorySelectButton'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
   environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), cleanupStaleWorktreesButton: document.getElementById('cleanupStaleWorktreesButton'), staleWorktreeCleanupDialog: document.getElementById('staleWorktreeCleanupDialog'), staleWorktreeCleanupHours: document.getElementById('staleWorktreeCleanupHours'), staleWorktreeCleanupSummary: document.getElementById('staleWorktreeCleanupSummary'), staleWorktreeCleanupList: document.getElementById('staleWorktreeCleanupList'), staleWorktreeCleanupResult: document.getElementById('staleWorktreeCleanupResult'), staleWorktreeCleanupRefreshButton: document.getElementById('staleWorktreeCleanupRefreshButton'), staleWorktreeCleanupExecuteButton: document.getElementById('staleWorktreeCleanupExecuteButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
-  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetailSubviewHelp: document.getElementById('environmentDetailSubviewHelp'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentProjectAutoIndex: document.getElementById('environmentProjectAutoIndex'), environmentProjectAutoIndexStatus: document.getElementById('environmentProjectAutoIndexStatus'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'), environmentJetBrainsSearchInput: document.getElementById('environmentJetBrainsSearchInput'), environmentJetBrainsSearchButton: document.getElementById('environmentJetBrainsSearchButton'), environmentJetBrainsSearchResult: document.getElementById('environmentJetBrainsSearchResult'),
+  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetailSubviewHelp: document.getElementById('environmentDetailSubviewHelp'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentProjectIndexProgress: document.getElementById('environmentProjectIndexProgress'), environmentProjectIndexPhase: document.getElementById('environmentProjectIndexPhase'), environmentProjectIndexCount: document.getElementById('environmentProjectIndexCount'), environmentProjectIndexProgressBar: document.getElementById('environmentProjectIndexProgressBar'), environmentProjectAutoIndex: document.getElementById('environmentProjectAutoIndex'), environmentProjectAutoIndexStatus: document.getElementById('environmentProjectAutoIndexStatus'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'), environmentJetBrainsSearchInput: document.getElementById('environmentJetBrainsSearchInput'), environmentJetBrainsSearchButton: document.getElementById('environmentJetBrainsSearchButton'), environmentJetBrainsSearchResult: document.getElementById('environmentJetBrainsSearchResult'),
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
@@ -106,6 +106,7 @@ let managementSkillAvailabilityError = '';
 let selectedMCPIDs = new Set();
 let selectedSkillIDs = new Set();
 let selectedAssignmentEnvironmentIDs = new Set();
+let selectedAssignmentWorkspaceIDs = new Set();
 let capabilityAssignmentBusy = false;
 let explicitSkillAvailabilityProbe = null;
 let skillBulkBusy = false;
@@ -135,6 +136,8 @@ let environmentProjectIndexGeneration = 0;
 let environmentProjectIndexLoading = false;
 let environmentProjectIndexStatus = null;
 let environmentProjectIndexAnalysis = null;
+let environmentProjectIndexJob = null;
+let environmentProjectIndexPollTimer = null;
 let environmentProjectIndexError = '';
 let environmentProjectAutoIndexLoading = false;
 let environmentCodeIntelligenceGeneration = 0;
@@ -380,6 +383,9 @@ function resetEnvironmentProjectIndex(message = '尚未检查项目索引。') {
   environmentProjectIndexLoading = false;
   environmentProjectIndexStatus = null;
   environmentProjectIndexAnalysis = null;
+  environmentProjectIndexJob = null;
+  clearTimeout(environmentProjectIndexPollTimer);
+  environmentProjectIndexPollTimer = null;
   environmentProjectIndexError = '';
   environmentProjectAutoIndexLoading = false;
   elements.environmentProjectAutoIndex.checked = false;
@@ -387,6 +393,7 @@ function resetEnvironmentProjectIndex(message = '尚未检查项目索引。') {
   elements.environmentProjectAutoIndexStatus.textContent = '正在读取自动更新状态…';
   if (elements.environmentProjectIndexStatusButton) elements.environmentProjectIndexStatusButton.disabled = !selectedEnvironmentID;
   if (elements.environmentProjectAnalyzeButton) elements.environmentProjectAnalyzeButton.disabled = !selectedEnvironmentID;
+  if (elements.environmentProjectIndexProgress) elements.environmentProjectIndexProgress.hidden = true;
   if (elements.environmentProjectIndexResult) emptyMessage(elements.environmentProjectIndexResult, message);
 }
 async function loadEnvironmentProjectAutoIndexStatus() {
@@ -430,60 +437,55 @@ async function changeEnvironmentProjectAutoIndex(enabled){
   }
 }
 function projectIndexStateLabel(state) {
-  const labels = {fresh: 'Fresh', stale: 'Stale', partial: 'Partial', missing: 'Missing', invalid: 'Invalid'};
-  return labels[String(state || '').toLowerCase()] || textOrDash(state);
+ const labels={fresh:'已更新',stale:'源码有变化',partial:'部分索引',missing:'尚未生成',invalid:'索引无效'};
+ return labels[String(state||'').toLowerCase()]||textOrDash(state);
 }
-function renderEnvironmentProjectIndex() {
-  if (!elements.environmentProjectIndexResult) return;
-  const enabled = Boolean(selectedEnvironmentID);
-  elements.environmentProjectIndexStatusButton.disabled = !enabled || environmentProjectIndexLoading;
-  elements.environmentProjectAnalyzeButton.disabled = !enabled || environmentProjectIndexLoading;
-  if (environmentProjectIndexLoading) return emptyMessage(elements.environmentProjectIndexResult, '正在处理项目索引…');
-  if (environmentProjectIndexError) return emptyMessage(elements.environmentProjectIndexResult, environmentProjectIndexError);
-  const status = environmentProjectIndexStatus;
-  const analysis = environmentProjectIndexAnalysis;
-  if (!status && !analysis) return emptyMessage(elements.environmentProjectIndexResult, '尚未检查项目索引。');
-  elements.environmentProjectIndexResult.replaceChildren();
-  elements.environmentProjectIndexResult.classList.remove('empty');
-  if (status) {
-    const summary = document.createElement('div');
-    summary.className = 'preview-summary';
-    summary.textContent = `${projectIndexStateLabel(status.state)} · generated ${formatDateTime(status.generated_at)} · indexed ${safeNumber(status.indexed_files)} · checked ${safeNumber(status.checked_files)} · changes ${safeNumber(status.change_count)} · artifact ${status.artifact_verified ? 'verified' : 'unverified'}`;
-    elements.environmentProjectIndexResult.append(summary);
-    for (const reason of safeArray(status.reasons)) {
-      const note = document.createElement('div');
-      note.className = 'detail-note';
-      note.textContent = reason;
-      elements.environmentProjectIndexResult.append(note);
-    }
-    for (const change of safeArray(status.changes)) {
-      const row = document.createElement('div');
-      row.className = 'digest-row';
-      const path = document.createElement('code');
-      path.textContent = change.path || '—';
-      const meta = document.createElement('small');
-      meta.textContent = `${change.change || 'changed'}${change.detail ? ' · ' + change.detail : ''}`;
-      row.append(path, meta);
-      elements.environmentProjectIndexResult.append(row);
-    }
-    if (status.changes_truncated) {
-      const note = document.createElement('small');
-      note.textContent = 'Changed paths 已达到返回上限；刷新索引前可提高 max_changes 通过 Agent 工具进一步检查。';
-      elements.environmentProjectIndexResult.append(note);
-    }
-  }
-  if (analysis) {
-    const card = document.createElement('div');
-    card.className = 'detail-group';
-    const title = document.createElement('strong');
-    title.textContent = '最近一次手动分析';
-    const meta = document.createElement('small');
-    meta.textContent = `${safeArray(analysis.languages).join(', ') || 'Unknown'} · files ${safeNumber(analysis.files_indexed || analysis.files_scanned)} · symbols ${safeNumber(analysis.symbols)}`;
-    const paths = document.createElement('code');
-    paths.textContent = [analysis.overview_path, analysis.index_manifest_path, analysis.index_files_path, analysis.index_symbols_path].filter(Boolean).join(' · ');
-    card.append(title, meta, paths);
-    elements.environmentProjectIndexResult.prepend(card);
-  }
+function renderEnvironmentProjectIndex(){
+ const container=elements.environmentProjectIndexResult,job=environmentProjectIndexJob;
+ if(!container)return;
+ const busy=job&&['running','queued'].includes(job.state);
+ elements.environmentProjectAnalyzeButton.disabled=!selectedEnvironmentID||environmentProjectIndexLoading||busy;
+ elements.environmentProjectIndexStatusButton.disabled=!selectedEnvironmentID||environmentProjectIndexLoading;
+ const progress=elements.environmentProjectIndexProgress;
+ progress.hidden=!job||job.state==='idle';
+ if(!progress.hidden){
+   const total=safeNumber(job.total_files),scanned=safeNumber(job.files_scanned);
+   const percent=job.state==='succeeded'?100:total>0?Math.min(95,Math.floor(scanned*95/total)):0;
+   const bar=elements.environmentProjectIndexProgressBar;
+   if(job.state==='running' && total===0){bar.removeAttribute('value');}
+   else bar.value=percent;
+   elements.environmentProjectIndexPhase.textContent=job.state==='failed'?'索引任务失败':job.phase||'正在处理';
+   elements.environmentProjectIndexCount.textContent=job.state==='failed'?String(job.error||'请检查任务日志'):job.state==='succeeded'?
+     `完成 · ${safeNumber(job.files_indexed)} 文件 · ${safeNumber(job.symbols)} 符号`:total>0?`${scanned} / ${total} 文件 · ${percent}%`:'正在统计文件…';
+ }
+ if(environmentProjectIndexLoading && !environmentProjectIndexStatus)return emptyMessage(container,'正在读取索引状态…');
+ if(environmentProjectIndexError)return emptyMessage(container,environmentProjectIndexError);
+ const status=environmentProjectIndexStatus;
+ if(!status)return emptyMessage(container,busy?'后台任务进行中；关闭此弹窗不会中断。':'点击「检查索引」查看当前状态。');
+ container.replaceChildren();container.classList.remove('empty');
+ const summary=document.createElement('div');summary.className='index-result-summary';
+ const state=document.createElement('strong');state.textContent=projectIndexStateLabel(status.state);
+ const meta=document.createElement('span');meta.textContent=`已索引 ${safeNumber(status.indexed_files)} 文件 · 检查 ${safeNumber(status.checked_files)} 文件 · 变化 ${safeNumber(status.change_count)} 项`;
+ summary.append(state,meta);container.append(summary);
+ const info=document.createElement('small');info.className='index-result-subtitle';
+ info.textContent=`生成时间：${formatDateTime(status.generated_at)} · ${status.artifact_verified?'完整性已校验':'完整性未校验'}`;
+ container.append(info);
+ if(String(status.state).toLowerCase()==='partial'){
+  const warning=document.createElement('p');warning.className='index-partial-warning';
+  warning.textContent='该索引只覆盖部分源码。可检查项目规模和索引上限，不能将未检索到的符号视为不存在。';
+  container.append(warning);
+ }
+ const reasons=safeArray(status.reasons),changes=safeArray(status.changes);
+ if(reasons.length||changes.length){
+  const detail=document.createElement('details');detail.className='index-result-details';
+  const trigger=document.createElement('summary');trigger.textContent=`查看详情（${reasons.length} 条提示 · ${changes.length} 个变化文件）`;detail.append(trigger);
+  for(const reason of reasons){const p=document.createElement('p');p.className='index-reason';p.textContent=reason;detail.append(p);}
+  for(const change of changes){const row=document.createElement('div');row.className='index-change';
+    const path=document.createElement('code');path.textContent=change.path||'—';
+    const note=document.createElement('small');note.textContent=change.change||'changed';
+    row.append(path,note);detail.append(row);}
+  container.append(detail);
+ }
 }
 function environmentProjectIndexScopeCurrent(identity) {
   return Boolean(identity &&
@@ -513,31 +515,51 @@ async function loadEnvironmentProjectIndexStatus() {
     }
   }
 }
-async function analyzeEnvironmentProject() {
-  if (environmentProjectIndexLoading || !selectedEnvironmentID) return;
-  const identity = {connectionGeneration, detailGeneration, environmentID: selectedEnvironmentID, indexGeneration: ++environmentProjectIndexGeneration};
-  environmentProjectIndexLoading = true;
-  environmentProjectIndexError = '';
-  environmentProjectIndexAnalysis = null;
+async function loadEnvironmentProjectIndexJobStatus(){
+ if(!selectedEnvironmentID||elements.environmentDetailPanel.hidden)return;
+ const id=selectedEnvironmentID,connection=connectionGeneration,generation=detailGeneration;
+ clearTimeout(environmentProjectIndexPollTimer);
+ environmentProjectIndexPollTimer=null;
+ try{
+  const status=await desktopAdapter().ProjectIndexJobStatus(id);
+  if(id!==selectedEnvironmentID||connection!==connectionGeneration||generation!==detailGeneration||elements.environmentDetailPanel.hidden)return;
+  const wasRunning=['running','queued'].includes(environmentProjectIndexJob?.state);
+  environmentProjectIndexJob=status;
   renderEnvironmentProjectIndex();
-  setStatus('正在分析源码并更新 ADM 独立索引…', 'loading');
-  try {
-    const analysis = await desktopAdapter().AnalyzeProject(identity.environmentID, 0, 0);
-    if (!environmentProjectIndexScopeCurrent(identity)) return;
-    environmentProjectIndexAnalysis = analysis;
-    environmentProjectIndexStatus = await desktopAdapter().ProjectIndexStatus(identity.environmentID, 50);
-    if (!environmentProjectIndexScopeCurrent(identity)) return;
-    setStatus(`项目索引已刷新：${safeNumber(analysis?.files_indexed || analysis?.files_scanned)} files · ${safeNumber(analysis?.symbols)} symbols`, 'success');
-  } catch (error) {
-    if (!environmentProjectIndexScopeCurrent(identity)) return;
-    environmentProjectIndexError = '项目分析失败：' + errorText(error);
-    setStatus(environmentProjectIndexError, 'error');
-  } finally {
-    if (environmentProjectIndexScopeCurrent(identity)) {
-      environmentProjectIndexLoading = false;
-      renderEnvironmentProjectIndex();
-    }
+  if(['running','queued'].includes(status.state)){
+   environmentProjectIndexPollTimer=setTimeout(()=>void loadEnvironmentProjectIndexJobStatus(),850);
+  }else if(status.state==='succeeded' && (wasRunning||!environmentProjectIndexStatus)){
+   await loadEnvironmentProjectIndexStatus();
   }
+ }catch(error){
+  if(id!==selectedEnvironmentID||connection!==connectionGeneration||generation!==detailGeneration||elements.environmentDetailPanel.hidden)return;
+  environmentProjectIndexError='读取索引任务失败：'+errorText(error);
+  renderEnvironmentProjectIndex();
+ }
+}
+async function analyzeEnvironmentProject(){
+ if(environmentProjectIndexLoading||!selectedEnvironmentID)return;
+ const id=selectedEnvironmentID,connection=connectionGeneration,generation=detailGeneration;
+ environmentProjectIndexLoading=true;
+ environmentProjectIndexError='';
+ renderEnvironmentProjectIndex();
+ try{
+  const job=await desktopAdapter().StartProjectIndexJob(id);
+  if(id!==selectedEnvironmentID||connection!==connectionGeneration||generation!==detailGeneration||elements.environmentDetailPanel.hidden)return;
+  environmentProjectIndexJob=job;
+  setStatus('代码索引任务已在 Gateway 后台启动；关闭弹窗不会取消。','success');
+  clearTimeout(environmentProjectIndexPollTimer);
+  environmentProjectIndexPollTimer=setTimeout(()=>void loadEnvironmentProjectIndexJobStatus(),250);
+ }catch(error){
+  if(id!==selectedEnvironmentID||connection!==connectionGeneration||generation!==detailGeneration||elements.environmentDetailPanel.hidden)return;
+  environmentProjectIndexError='启动索引任务失败：'+errorText(error);
+  setStatus(environmentProjectIndexError,'error');
+ }finally{
+  if(id===selectedEnvironmentID&&connection===connectionGeneration&&generation===detailGeneration&&!elements.environmentDetailPanel.hidden){
+   environmentProjectIndexLoading=false;
+   renderEnvironmentProjectIndex();
+  }
+ }
 }
 function resetEnvironmentCodeIntelligence(message = '尚未检查 Code Intelligence Provider。') {
   environmentCodeIntelligenceGeneration++;
@@ -2189,6 +2211,9 @@ function pruneAssignmentEnvironmentSelection() {
   const retained = window.ADMEnvironmentBulk?.retainExistingSelection([...selectedAssignmentEnvironmentIDs], safeArray(currentSnapshot?.environments), 'environment_id') || [];
   selectedAssignmentEnvironmentIDs = new Set(retained);
 }
+function pruneAssignmentWorkspaceSelection(){
+ selectedAssignmentWorkspaceIDs=new Set(window.ADMEnvironmentBulk?.retainExistingSelection([...selectedAssignmentWorkspaceIDs],safeArray(currentSnapshot?.workspaces),'workspace_id')||[]);
+}
 function selectedCapabilityCount() { return selectedMCPIDs.size + selectedSkillIDs.size; }
 function missingSelectionOperations(kind) {
   const entries = kind === 'mcp' ? safeArray(currentSnapshot?.mcps) : safeArray(currentSnapshot?.skills);
@@ -2238,7 +2263,7 @@ function updateMCPBulkControls() {
   elements.mcpSelectedCount.textContent = String(selectedCount);
   elements.mcpSelectVisibleButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || visibleCount === 0;
   elements.mcpClearSelectionButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
-  elements.mcpAssignEnvironmentsButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || selectedCapabilityCount() === 0 || !safeArray(currentSnapshot?.environments).length;
+  elements.mcpAssignEnvironmentsButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || selectedCapabilityCount() === 0 || !(safeArray(currentSnapshot?.environments).length || safeArray(currentSnapshot?.workspaces).length);
   const missing = missingSelectionOperations('mcp'); elements.mcpClearMissingButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || missing.length === 0; elements.mcpClearMissingButton.textContent = missing.length ? `清除不存在引用 (${missing.length})` : '清除不存在引用';
   elements.mcpSetVisibleDefaultButton.disabled = disabled;
   elements.mcpUnsetVisibleDefaultButton.disabled = disabled;
@@ -2257,7 +2282,7 @@ function updateSkillBulkControls() {
   elements.skillProbeAllButton.disabled = skillBulkBusy || capabilityAssignmentBusy || !hasSkills;
   elements.skillSelectVisibleButton.disabled = skillBulkBusy || capabilityAssignmentBusy || !safeArray(currentSnapshot?.skills).length;
   elements.skillClearSelectionButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
-  elements.skillAssignEnvironmentsButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCapabilityCount() === 0 || !safeArray(currentSnapshot?.environments).length;
+  elements.skillAssignEnvironmentsButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCapabilityCount() === 0 || !(safeArray(currentSnapshot?.environments).length || safeArray(currentSnapshot?.workspaces).length);
   const missing = missingSelectionOperations('skill'); elements.skillClearMissingButton.disabled = skillBulkBusy || capabilityAssignmentBusy || missing.length === 0; elements.skillClearMissingButton.textContent = missing.length ? `清除不存在引用 (${missing.length})` : '清除不存在引用';
   elements.skillDeleteSelectedButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
   elements.skillSetVisibleDefaultButton.disabled = skillBulkBusy || visibleCount === 0;
@@ -2313,79 +2338,116 @@ async function runVisibleBatch(kind, label, ids, mutate, rerender) {
     else { skillBulkBusy = false; renderSkillManager(safeArray(currentSnapshot?.skills)); }
   }
 }
-function renderCapabilityAssignmentDialog() {
-  pruneMCPSelection(); pruneSkillSelection(); pruneAssignmentEnvironmentSelection();
-  const environments = safeArray(currentSnapshot?.environments), selectedEnvironmentCount = selectedAssignmentEnvironmentIDs.size, capabilityCount = selectedCapabilityCount();
-  elements.capabilityAssignmentSummary.textContent = `已选择 MCP ${selectedMCPIDs.size} · Skill ${selectedSkillIDs.size} · Environment ${selectedEnvironmentCount}。这里只修改 Environment 显式选择；Workspace 继承继续生效。`;
-  elements.capabilityAssignmentSelectAllButton.disabled = capabilityAssignmentBusy || environments.length === 0;
-  elements.capabilityAssignmentClearButton.disabled = capabilityAssignmentBusy || selectedEnvironmentCount === 0;
-  elements.capabilityAssignmentEnableButton.disabled = capabilityAssignmentBusy || capabilityCount === 0 || selectedEnvironmentCount === 0;
-  elements.capabilityAssignmentDisableButton.disabled = capabilityAssignmentBusy || capabilityCount === 0 || selectedEnvironmentCount === 0;
-  if (!environments.length) return emptyMessage(elements.capabilityAssignmentEnvironmentList, '暂无 Environment。');
-  elements.capabilityAssignmentEnvironmentList.replaceChildren(); elements.capabilityAssignmentEnvironmentList.classList.remove('empty');
-  for (const environment of environments) {
-    const summary = window.ADMEnvironmentBulk?.environmentSummary(environment, [...selectedMCPIDs], [...selectedSkillIDs]) || {mcpEnabled: 0, mcpExplicit: 0, mcpInherited: 0, mcpTotal: selectedMCPIDs.size, skillEnabled: 0, skillExplicit: 0, skillInherited: 0, skillTotal: selectedSkillIDs.size};
-    const row = document.createElement('label'); row.className = 'selection-row rich-selection bulk-environment-row';
-    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = selectedAssignmentEnvironmentIDs.has(environment.environment_id); checkbox.disabled = capabilityAssignmentBusy; checkbox.dataset.action = 'select-assignment-environment'; checkbox.dataset.id = environment.environment_id;
-    const copy = document.createElement('span'); copy.className = 'selection-copy';
-    const name = document.createElement('strong'); name.textContent = environment.name || environment.environment_id;
-    const id = document.createElement('code'); id.textContent = environment.environment_id || '';
-    const state = document.createElement('small'); state.textContent = `有效：MCP ${summary.mcpEnabled}/${summary.mcpTotal}（显式 ${summary.mcpExplicit} · Workspace ${summary.mcpInherited}） · Skill ${summary.skillEnabled}/${summary.skillTotal}（显式 ${summary.skillExplicit} · Workspace ${summary.skillInherited}）`;
-    copy.append(name, id, state);
-    const mixed = (summary.mcpTotal && summary.mcpExplicit > 0 && summary.mcpExplicit < summary.mcpTotal) || (summary.skillTotal && summary.skillExplicit > 0 && summary.skillExplicit < summary.skillTotal);
-    const allEnabled = (!summary.mcpTotal || summary.mcpExplicit === summary.mcpTotal) && (!summary.skillTotal || summary.skillExplicit === summary.skillTotal) && (summary.mcpTotal + summary.skillTotal > 0);
-    row.append(checkbox, copy, stateBadge(mixed ? '显式混合' : allEnabled ? '全部显式开启' : '存在未显式开启', mixed ? 'degraded' : allEnabled ? 'available' : 'disabled'));
-    elements.capabilityAssignmentEnvironmentList.append(row);
-  }
+function renderCapabilityAssignmentDialog(){
+ pruneMCPSelection();pruneSkillSelection();pruneAssignmentEnvironmentSelection();pruneAssignmentWorkspaceSelection();
+ const environments=safeArray(currentSnapshot?.environments),workspaces=safeArray(currentSnapshot?.workspaces);
+ const totalTargets=selectedAssignmentEnvironmentIDs.size+selectedAssignmentWorkspaceIDs.size;
+ const capabilityCount=selectedCapabilityCount();
+ elements.capabilityAssignmentSummary.textContent=`已选择 MCP ${selectedMCPIDs.size} · Skill ${selectedSkillIDs.size} · Workspace ${selectedAssignmentWorkspaceIDs.size} · Environment ${selectedAssignmentEnvironmentIDs.size}。Workspace 的设置会继承到所属环境；Environment 关闭显式选择不会覆盖 Workspace 继承。`;
+ elements.capabilityAssignmentSelectAllButton.disabled=capabilityAssignmentBusy||!environments.length;
+ elements.capabilityAssignmentClearButton.disabled=capabilityAssignmentBusy||selectedAssignmentEnvironmentIDs.size===0;
+ elements.capabilityWorkspaceSelectAllButton.disabled=capabilityAssignmentBusy||!workspaces.length;
+ elements.capabilityWorkspaceClearButton.disabled=capabilityAssignmentBusy||selectedAssignmentWorkspaceIDs.size===0;
+ elements.capabilityAssignmentEnableButton.disabled=capabilityAssignmentBusy||capabilityCount===0||!totalTargets;
+ elements.capabilityAssignmentDisableButton.disabled=capabilityAssignmentBusy||capabilityCount===0||!totalTargets;
+ const workspaceList=elements.capabilityAssignmentWorkspaceList;
+ workspaceList.replaceChildren();workspaceList.classList.remove('empty');
+ if(!workspaces.length)emptyMessage(workspaceList,'当前没有 Workspace。');
+ for(const workspace of workspaces){
+  const row=document.createElement('label');row.className='selection-row rich-selection bulk-environment-row';
+  const cb=document.createElement('input');cb.type='checkbox';cb.dataset.action='select-assignment-workspace';cb.dataset.id=workspace.workspace_id;
+  cb.checked=selectedAssignmentWorkspaceIDs.has(workspace.workspace_id);cb.disabled=capabilityAssignmentBusy;
+  const copy=document.createElement('span');copy.className='selection-copy';
+  const name=document.createElement('strong');name.textContent=workspace.name||workspace.workspace_id;
+  const counts=document.createElement('small');counts.textContent=`已开启 MCP ${safeArray(workspace.enabled_mcp_ids).length} · Skill ${safeArray(workspace.enabled_skill_ids).length}`;
+  copy.append(name,counts);row.append(cb,copy);workspaceList.append(row);
+ }
+ const list=elements.capabilityAssignmentEnvironmentList;
+ list.replaceChildren();list.classList.remove('empty');
+ if(!environments.length)emptyMessage(list,'当前没有 Environment。');
+ for(const environment of environments){
+  const info=window.ADMEnvironmentBulk?.environmentSummary(environment,[...selectedMCPIDs],[...selectedSkillIDs])||{};
+  const row=document.createElement('label');row.className='selection-row rich-selection bulk-environment-row';
+  const cb=document.createElement('input');cb.type='checkbox';cb.dataset.action='select-assignment-environment';cb.dataset.id=environment.environment_id;
+  cb.checked=selectedAssignmentEnvironmentIDs.has(environment.environment_id);cb.disabled=capabilityAssignmentBusy;
+  const copy=document.createElement('span');copy.className='selection-copy';
+  const name=document.createElement('strong');name.textContent=environment.name||environment.environment_id;
+  const counts=document.createElement('small');counts.textContent=`所选资源：显式 MCP ${safeNumber(info.mcpExplicit)}/${safeNumber(info.mcpTotal)} · Skill ${safeNumber(info.skillExplicit)}/${safeNumber(info.skillTotal)}；Workspace 继承不变`;
+  copy.append(name,counts);row.append(cb,copy);list.append(row);
+ }
 }
-function openCapabilityAssignmentDialog() {
-  pruneMCPSelection(); pruneSkillSelection();
-  if (!selectedCapabilityCount()) return setStatus('请先选择至少一个 MCP 或 Skill。', 'error');
-  if (!safeArray(currentSnapshot?.environments).length) return setStatus('当前没有可分配的 Environment。', 'error');
-  selectedAssignmentEnvironmentIDs = new Set(); capabilityAssignmentBusy = false;
-  emptyMessage(elements.capabilityAssignmentResult, '尚未执行批量分配。');
-  renderCapabilityAssignmentDialog(); openEditorDialog('capabilityAssignmentDialog');
+function openCapabilityAssignmentDialog(){
+ pruneMCPSelection();pruneSkillSelection();
+ if(!selectedCapabilityCount())return setStatus('请先选择至少一个 MCP 或 Skill。','error');
+ if(!safeArray(currentSnapshot?.environments).length&&!safeArray(currentSnapshot?.workspaces).length)
+  return setStatus('当前没有 Workspace 或 Environment 可以设置。','error');
+ selectedAssignmentEnvironmentIDs=new Set();
+ selectedAssignmentWorkspaceIDs=new Set();
+ capabilityAssignmentBusy=false;
+ emptyMessage(elements.capabilityAssignmentResult,'尚未执行批量操作。');
+ renderCapabilityAssignmentDialog();
+ openEditorDialog('capabilityAssignmentDialog');
 }
-function renderCapabilityAssignmentResult(results) {
-  const list = safeArray(results), summary = window.ADMEnvironmentBulk?.summarizeResults(list) || {total: list.length, changed: 0, unchanged: 0, failed: 0, environments: 0};
-  elements.capabilityAssignmentResult.replaceChildren(); elements.capabilityAssignmentResult.classList.remove('empty');
-  const head = document.createElement('div'); head.className = 'preview-summary'; head.textContent = `Environment ${summary.environments} · 组合 ${summary.total} · 已修改 ${summary.changed} · 已是目标状态 ${summary.unchanged} · 失败 ${summary.failed}`; elements.capabilityAssignmentResult.append(head);
-  for (const result of list) {
-    const row = document.createElement('div'); row.className = 'preview-row';
-    const title = document.createElement('strong'); title.textContent = `${result.environmentName || result.environmentID} · ${String(result.kind || '').toUpperCase()} · ${result.resourceID}`;
-    const detail = document.createElement('small'); detail.textContent = result.status === 'failed' ? `失败：${result.error || 'unknown error'}` : result.status === 'unchanged' ? (result.inherited && !result.enabled ? '未修改：Environment 已无显式选择，Workspace 继承仍然有效' : `未修改：Environment 显式选择已经${result.enabled ? '开启' : '关闭'}`) : (result.inherited && !result.enabled ? '已关闭 Environment 显式选择；Workspace 继承仍然有效' : `Environment 显式选择已${result.enabled ? '开启' : '关闭'}`);
-    row.append(title, stateBadge(result.status === 'changed' ? '已修改' : result.status === 'unchanged' ? '未变化' : '失败', result.status === 'failed' ? 'error' : result.status === 'changed' ? 'available' : 'configured'), detail); elements.capabilityAssignmentResult.append(row);
-  }
+function renderCapabilityAssignmentResult(results){
+ const list=safeArray(results);
+ const summary=window.ADMEnvironmentBulk?.summarizeResults(list)||{total:list.length,changed:0,unchanged:0,failed:0,environments:0,workspaces:0};
+ const box=elements.capabilityAssignmentResult;
+ box.replaceChildren();box.classList.remove('empty');
+ const head=document.createElement('div');head.className='preview-summary';
+ head.textContent=`Workspace ${summary.workspaces} · Environment ${summary.environments} · 共 ${summary.total} 组 · 成功修改 ${summary.changed} · 无需修改 ${summary.unchanged} · 失败 ${summary.failed}`;
+ box.append(head);
+ for(const result of list){
+  const row=document.createElement('div');row.className='preview-row';
+  const title=document.createElement('strong');
+  title.textContent=`${result.workspaceName||result.environmentName||result.workspaceID||result.environmentID} · ${String(result.kind||'').toUpperCase()} · ${result.resourceID}`;
+  const detail=document.createElement('small');
+  detail.textContent=result.status==='failed'?('失败：'+(result.error||'未知错误')):
+   result.status==='unchanged'?'原本已是目标状态':
+   result.scope==='workspace'?`Workspace 继承已${result.enabled?'开启':'关闭'}`:
+   result.inherited&&!result.enabled?'已关闭显式选择；Workspace 继承仍然有效':`Environment 显式选择已${result.enabled?'开启':'关闭'}`;
+  row.append(title,detail);box.append(row);
+ }
 }
-async function runCapabilityAssignment(enabled) {
-  pruneMCPSelection(); pruneSkillSelection(); pruneAssignmentEnvironmentSelection();
-  const environments = safeArray(currentSnapshot?.environments), environmentIDs = [...selectedAssignmentEnvironmentIDs];
-  const operations = window.ADMEnvironmentBulk?.buildOperations(environments, environmentIDs, [...selectedMCPIDs], [...selectedSkillIDs], enabled) || [];
-  if (!operations.length) return setStatus('请选择至少一个资源和一个 Environment。', 'error');
-  const actionLabel = enabled ? '开启' : '关闭';
-  if (!window.confirm(`将在 ${environmentIDs.length} 个 Environment 中${actionLabel}显式 MCP ${selectedMCPIDs.size} 个、Skill ${selectedSkillIDs.size} 个，共 ${operations.length} 个资源组合。Workspace 继承不会被 Environment 关闭覆盖；已是目标显式状态的组合会跳过。继续？`)) return;
-  const requestGeneration = connectionGeneration; capabilityAssignmentBusy = true; renderCapabilityAssignmentDialog(); updateMCPBulkControls(); updateSkillBulkControls(); setStatus(`正在批量${actionLabel} MCP / Skill…`, 'loading');
-  const results = [];
-  try {
-    for (const operation of operations) {
-      const base = {environmentID: operation.environmentID, environmentName: operation.environmentName, kind: operation.kind, resourceID: operation.resourceID, enabled: operation.enabled, inherited: Boolean(operation.inherited), effectiveEnabled: Boolean(operation.effectiveEnabled)};
-      if (requestGeneration !== connectionGeneration) { results.push({...base, status: 'failed', error: 'ADM connection changed before operation completed'}); continue; }
-      if (operation.noop) { results.push({...base, status: 'unchanged'}); continue; }
-      try {
-        if (operation.kind === 'mcp') await desktopAdapter().SetEnvironmentMCP(operation.environmentID, operation.resourceID, enabled);
-        else await desktopAdapter().SetEnvironmentSkill(operation.environmentID, operation.resourceID, enabled);
-        results.push({...base, status: 'changed'});
-      } catch (error) { results.push({...base, status: 'failed', error: errorText(error)}); }
+async function runCapabilityAssignment(enabled){
+ pruneMCPSelection();pruneSkillSelection();pruneAssignmentEnvironmentSelection();pruneAssignmentWorkspaceSelection();
+ const envIDs=[...selectedAssignmentEnvironmentIDs],workspaceIDs=[...selectedAssignmentWorkspaceIDs];
+ const operations=[
+  ...(window.ADMEnvironmentBulk?.buildWorkspaceOperations(safeArray(currentSnapshot?.workspaces),workspaceIDs,[...selectedMCPIDs],[...selectedSkillIDs],enabled)||[]),
+  ...(window.ADMEnvironmentBulk?.buildOperations(safeArray(currentSnapshot?.environments),envIDs,[...selectedMCPIDs],[...selectedSkillIDs],enabled)||[])
+ ];
+ if(!operations.length)return setStatus('请先选择资源及至少一个 Workspace 或 Environment。','error');
+ const actionLabel=enabled?'开启':'关闭';
+ if(!window.confirm(`将在 ${workspaceIDs.length} 个 Workspace、${envIDs.length} 个 Environment 中${actionLabel} MCP/Skill，共 ${operations.length} 组设置。Workspace 设置会被环境继承，关闭环境显式设置不会覆盖 Workspace 继承。继续？`))return;
+ const requestGeneration=connectionGeneration;
+ capabilityAssignmentBusy=true;renderCapabilityAssignmentDialog();updateMCPBulkControls();updateSkillBulkControls();
+ setStatus(`正在批量${actionLabel} MCP / Skill…`,'loading');
+ const results=[];
+ try{
+  for(const op of operations){
+   const base={...op,scope:op.scope||'environment'};
+   if(requestGeneration!==connectionGeneration){results.push({...base,status:'failed',error:'连接已切换'});continue}
+   if(op.noop){results.push({...base,status:'unchanged'});continue}
+   try{
+    if(op.scope==='workspace'){
+     if(op.kind==='mcp')await desktopAdapter().SetWorkspaceMCP(op.workspaceID,op.resourceID,enabled);
+     else await desktopAdapter().SetWorkspaceSkill(op.workspaceID,op.resourceID,enabled);
+    }else{
+     if(op.kind==='mcp')await desktopAdapter().SetEnvironmentMCP(op.environmentID,op.resourceID,enabled);
+     else await desktopAdapter().SetEnvironmentSkill(op.environmentID,op.resourceID,enabled);
     }
-    if (requestGeneration === connectionGeneration) await refreshSnapshot();
-    const summary = window.ADMEnvironmentBulk?.summarizeResults(results) || {changed: 0, unchanged: 0, failed: 0};
-    if (requestGeneration === connectionGeneration) {
-      renderCapabilityAssignmentDialog(); renderCapabilityAssignmentResult(results);
-      setStatus(`批量${actionLabel}完成：修改 ${summary.changed} · 未变化 ${summary.unchanged} · 失败 ${summary.failed}`, summary.failed ? 'error' : 'success');
-    }
-  } finally {
-    capabilityAssignmentBusy = false; updateMCPBulkControls(); updateSkillBulkControls(); if (elements.capabilityAssignmentDialog.open && requestGeneration === connectionGeneration) renderCapabilityAssignmentDialog();
+    results.push({...base,status:'changed'});
+   }catch(error){results.push({...base,status:'failed',error:errorText(error)});}
   }
+  if(requestGeneration===connectionGeneration)await refreshSnapshot();
+  const summary=window.ADMEnvironmentBulk?.summarizeResults(results)||{changed:0,unchanged:0,failed:0};
+  if(requestGeneration===connectionGeneration){
+   renderCapabilityAssignmentDialog();renderCapabilityAssignmentResult(results);
+   setStatus(`批量${actionLabel}完成：修改 ${summary.changed} · 无需修改 ${summary.unchanged} · 失败 ${summary.failed}`,summary.failed?'error':'success');
+  }
+ }finally{
+  capabilityAssignmentBusy=false;updateMCPBulkControls();updateSkillBulkControls();
+  if(elements.capabilityAssignmentDialog.open&&requestGeneration===connectionGeneration)renderCapabilityAssignmentDialog();
+ }
 }
 
 async function removeSkillCatalogEntries(ids, label) {
@@ -2853,7 +2915,8 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
   renderSelectionList(elements.environmentMCPSelections, safeArray(currentSnapshot?.mcps), environment.enabled_mcp_ids, 'mcp', facts, skillAvailabilityByID);
   renderSelectionList(elements.environmentSkillSelections, safeArray(currentSnapshot?.skills), environment.enabled_skill_ids, 'skill', facts, environmentSkillAvailabilityByID, managementSkillAvailabilityError);
   elements.environmentDetailBackdrop.hidden = false; elements.environmentDetailPanel.hidden = false;
-  void loadEnvironmentProjectAutoIndexStatus(); return true;
+  void loadEnvironmentProjectAutoIndexStatus();
+  void loadEnvironmentProjectIndexJobStatus(); return true;
 }
 function closeEnvironmentDetail() {
   const wasOpen = !elements.environmentDetailPanel.hidden; const opener = environmentDetailOpener;
@@ -3268,6 +3331,20 @@ elements.capabilityAssignmentEnvironmentList.addEventListener('change', (event) 
   const input = event.target.closest('input[data-action="select-assignment-environment"]'); if (!input) return;
   if (input.checked) selectedAssignmentEnvironmentIDs.add(input.dataset.id); else selectedAssignmentEnvironmentIDs.delete(input.dataset.id);
   renderCapabilityAssignmentDialog();
+});
+elements.capabilityAssignmentWorkspaceList.addEventListener('change',(event)=>{
+ const input=event.target.closest('input[data-action="select-assignment-workspace"]');
+ if(!input)return;
+ if(input.checked)selectedAssignmentWorkspaceIDs.add(input.dataset.id);
+ else selectedAssignmentWorkspaceIDs.delete(input.dataset.id);
+ renderCapabilityAssignmentDialog();
+});
+elements.capabilityWorkspaceSelectAllButton.addEventListener('click',()=>{
+ selectedAssignmentWorkspaceIDs=new Set(safeArray(currentSnapshot?.workspaces).map(x=>x.workspace_id).filter(Boolean));
+ renderCapabilityAssignmentDialog();
+});
+elements.capabilityWorkspaceClearButton.addEventListener('click',()=>{
+ selectedAssignmentWorkspaceIDs.clear();renderCapabilityAssignmentDialog();
 });
 elements.capabilityAssignmentSelectAllButton.addEventListener('click', () => { selectedAssignmentEnvironmentIDs = new Set(safeArray(currentSnapshot?.environments).map((environment) => environment.environment_id).filter(Boolean)); renderCapabilityAssignmentDialog(); });
 elements.capabilityAssignmentClearButton.addEventListener('click', () => { selectedAssignmentEnvironmentIDs.clear(); renderCapabilityAssignmentDialog(); });
