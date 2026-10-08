@@ -467,15 +467,9 @@ Provider-neutral 的 freshness / health 查询：
 
 `symbol` 至少需要 `path` / `name` / `qualified_name` 之一；`max_results` 默认 100、上限 500。外部 Provider 会额外收到 `project_root`，结果必须通过 MCP `structuredContent` 返回 references 数组，每项可包含 path、line、column、kind、qualified_name 和 bounded context。
 
-当前 `adm_static_index` 明确标记 `references=false`，因此没有可用外部 Provider 时不会伪造静态引用结果，而是返回：
+当前 `adm_static_index` 仍将通用 `references` 能力标记为 `false`：Go、JavaScript 等语言的可靠引用关系尚未实现。不过对于 **已经运行 `project_analyze` 且索引哈希可验证的 PHP 项目**，无外部 Provider 或外部调用失败时，ADM 已能利用自身 `files.jsonl` 及源码哈希搜索 PHP function/method 的调用候选，并返回 `available=true`、`references[].kind="candidate_call"`。候选仅表示发现 `->method()`、`::method()` 等词法调用，不表示已经确认对象的类或实际运行时调用边；注释、字符串和声明行会被排除。动态变量方法名等不能可靠识别。文件有变化时应先重新执行 `project_analyze`。
 
-```json
-{
-  "provider": {"provider_id": "adm_static_index"},
-  "available": false,
-  "reason": "provider_capability_unavailable"
-}
-```
+若目标不属于支持范围，或静态索引缺失，则仍返回 `available=false`，附带不可用原因；不能把没有索引误认为不存在调用。
 
 ### `code_intelligence_hierarchy`
 

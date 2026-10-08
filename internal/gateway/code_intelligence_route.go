@@ -317,6 +317,13 @@ func (o *runtimeOwner) referencesCodeIntelligence(ctx context.Context, environme
 		if route.Provider.ID != "" && routeReason != "provider_capability_unavailable" {
 			result.AttemptedProvider = &route.Provider
 		}
+		if candidate, err := o.staticPHPCallReferences(environmentID, symbol, maxResults); err == nil {
+			result.Available = true
+			result.Reason = ""
+			result.Result = &candidate
+		} else if strings.EqualFold(symbol.Language, "PHP") || strings.HasSuffix(strings.ToLower(symbol.Path), ".php") {
+			result.Reason = "static_php_reference_index_unavailable"
+		}
 		return result, nil
 	}
 	rt, _, err := o.service.Runtime(environmentID)
@@ -332,21 +339,33 @@ func (o *runtimeOwner) referencesCodeIntelligence(ctx context.Context, environme
 		"max_results":      maxResults,
 	})
 	if callErr != nil {
-		return CodeIntelligenceReferencesResult{
+		result := CodeIntelligenceReferencesResult{
 			Provider:          staticInfo,
 			Available:         false,
 			AttemptedProvider: &route.Provider,
 			Reason:            "external_provider_call_failed",
-		}, nil
+		}
+		if candidate, err := o.staticPHPCallReferences(environmentID, symbol, maxResults); err == nil {
+			result.Available = true
+			result.Result = &candidate
+			result.Reason = ""
+		}
+		return result, nil
 	}
 	var value codeintel.ReferencesResult
 	if decodeErr := decodeProviderStructuredResult(external, &value); decodeErr != nil {
-		return CodeIntelligenceReferencesResult{
+		result := CodeIntelligenceReferencesResult{
 			Provider:          staticInfo,
 			Available:         false,
 			AttemptedProvider: &route.Provider,
 			Reason:            "external_provider_invalid_result",
-		}, nil
+		}
+		if candidate, err := o.staticPHPCallReferences(environmentID, symbol, maxResults); err == nil {
+			result.Available = true
+			result.Result = &candidate
+			result.Reason = ""
+		}
+		return result, nil
 	}
 	if value.Returned == 0 && len(value.References) > 0 {
 		value.Returned = len(value.References)
