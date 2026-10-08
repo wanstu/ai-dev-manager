@@ -49,6 +49,9 @@ if ($trimpath) { $wailsArgs += '-trimpath' }
 $wailsArgs += @('-o', $OutputName)
 
 # Wails uses wails.json Info for Windows EXE FileVersion/ProductVersion.
+# Keep the tracked build/windows/info.json template (0409 language table and
+# fixed product_version): the stock 0000 template yields an empty Windows
+# FileVersionInfo.ProductVersion even when the version string is embedded.
 # The -ldflags version only updates the Go runtime. Inject build metadata
 # into a transient wails.json and restore the tracked bytes afterwards.
 $numericFileVersion = '0.0.0.0'
