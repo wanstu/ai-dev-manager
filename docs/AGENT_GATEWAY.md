@@ -519,7 +519,7 @@ AI 建议：**先用它调查具体方法，再依据实际代码决定修改什
 
 - `direction`：`callers`（谁调用当前方法）、`callees`（当前方法调用谁）、`both`；默认 `both`。
 - `max_depth` 默认 1，最多 3；`max_results` 默认 100，最多 500（限制**调用边数**）。
-- 返回 `symbol`、`nodes`、`edges`、`returned`、`truncated`。边保存调用位置 `path/line/column` 和简短源码上下文。循环调用会去重，超过限制标记 `truncated=true`。
+- 返回 `symbol`、`nodes`、`edges`、`returned`、`truncated`。边保存调用位置 `path/line/column` 和简短源码上下文。有限的返回数量中优先保留**词法明确的 `resolved_call`**、其次直接继承候选、再是有类型线索及普通动态候选；边列表也按证据等级优先展示。这样在调用数量上限较小时，不会仅因源文件排序靠前而挤掉更明确的调用。循环调用会去重，超过限制标记 `truncated=true`。
 - `resolved_call` 表示静态语法与唯一已索引定义匹配，**不代表**运行时必然调用；`inherited_candidate` 表示直接 `extends` 关系提供了父类调用线索；`candidate_call` 表示动态变量、参数声明的类型线索或其他未知情形。边包含 `reason`、可选 `type_hint`，方便 AI 判断证据强弱。所有候选边**不会**被扩展为多层确定关系。
 - 同名方法对应多个定义时应提供带命名空间的 `symbol`，必要时加 `path`；仍不唯一就返回歧义错误，不会随机选一个。
 - 调用者归属支持具名 PHP function/method 的词法大括号范围，包括跨文件场景；匿名闭包、PHP 动态调用、完整继承/变量类型推断、运行时路由尚不保证准确。

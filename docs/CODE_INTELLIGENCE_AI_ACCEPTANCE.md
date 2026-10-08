@@ -46,6 +46,32 @@ go test ./internal/projectanalysis ./internal/app ./internal/gateway ./internal/
 - `TestProjectInvestigatePHPReturnsDefinitionAndCallEvidenceInOneTool`：单次 MCP 工具调用返回带证据的片段，避免读取完整长文件，且拒绝陈旧索引。
 - 原有调用链、继承与类型证据测试，避免将不确定的 PHP 调用报告为确证关系。
 
+## 2026-10-08 补充：真实控制器调用链与候选优先级
+
+再次从原 `wm_main/base/application/controllers` **只读复制** PHP 文件至临时目录，完整运行 ADM v5 索引与调用图查询：
+
+| 观测项 | 结果 |
+| --- | ---: |
+| 复制 PHP 文件 | 605 |
+| PHP 源码总字节 | 13,309,022 |
+| 静态符号 | 7,614 |
+| 词法调用记录 | 100,059 |
+| 分析及查询耗时（含临时索引生成） | 约 11.05 秒 |
+| 对 `User_goods::getDealBaseInfo` 的调用边 | 1 条 `inherited_candidate` |
+| 是否包含 `User_goods_test.php:116` | 是 |
+| 调用图是否标记截断 | 否 |
+
+两次代码快照的文件数量及符号数量可能有差异（上一次为 610/7,656）；各次独立测试只说明当次的真实状态。**本轮没有直接写入原业务仓库，也没有执行业务代码**。
+
+受控回归构造了另一个可能导致 AI 误判的场景：15 条低可信度的动态调用出现在确定调用之前，且工具最多返回 4 条。旧实现返回的 4 条全是 `candidate_call`，未返回真正明确的 `Service::run()` 调用；修复后先取 `resolved_call`，再取 `inherited_candidate`，再取带类型线索的候选，最后才取纯动态候选。对下游调用同样测试了仅返回 2 条时的优先级。
+
+该排序是**证据展示顺序**，并不改变 PHP 的静态类型推断能力。`truncated=true` 仍提醒 AI 可能存在尚未返回的调用；没有返回某条调用不代表不存在。
+
+持续回归测试：
+
+- `TestPHPCallGraphPrefersResolvedEvidenceUnderSmallLimit`
+- `TestPHPCallGraphPrefersResolvedCalleeUnderSmallLimit`
+
 ## 下一轮需要量化的指标
 
 固定 3～5 个可复现的业务缺陷问题（真实重现记录或受控回放），分别使用普通 `search/read` 和索引辅助工作流，记录：调用次数、读取源码字节数、是否找到真正定义、候选误报、最终原因是否正确。**尚未完成 AI 模型端到端的对照评测**，不能因为工具测试通过就声称 AI 已提升某个百分比。

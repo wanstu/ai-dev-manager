@@ -45,6 +45,21 @@ type PHPCallGraphResult struct {
 	Truncated bool               `json:"truncated,omitempty"`
 }
 
+// phpGraphEvidencePriority ranks bounded answers for an AI investigator.
+// Only lexical evidence (not inferred runtime certainty) receives rank 0.
+func phpGraphEvidencePriority(kind, hint string) int {
+	switch kind {
+	case "resolved_call":
+		return 0
+	case "inherited_candidate":
+		return 1
+	}
+	if hint != "" {
+		return 2
+	}
+	return 3
+}
+
 // ProjectPHPCallGraph queries only ADM's own artifact-verified index.
 // Resolved edges mean statically identified lexical ownership, never proof
 // of runtime dispatch. Candidates must not be expanded transitively.
@@ -220,6 +235,16 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 		}
 		return PHPCallGraphNode{ID: "php-file:" + c.Path, Name: "(file scope)", Path: c.Path, Kind: "file"}, SymbolRecord{}, false
 	}
+	type proposedEdge struct {
+		from, to     PHPCallGraphNode
+		kind, reason string
+		call         PHPCallRecord
+		nextSymbol   SymbolRecord
+		canExpand    bool
+	}
+	rank := func(edge proposedEdge) int {
+		return phpGraphEvidencePriority(edge.kind, edge.call.TypeHint)
+	}
 	for len(queue) > 0 {
 		next := queue[0]
 		queue = queue[1:]
@@ -229,6 +254,7 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 			continue
 		}
 		expanded[srcNode.ID] = true
+		proposals := make([]proposedEdge, 0)
 		method := src.Kind == "method"
 		short := phpCallerShortName(src.QualifiedName)
 		if q.Direction == "both" || q.Direction == "callers" {
@@ -245,9 +271,10 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 					continue
 				}
 				from, callerSymbol, found := lookupCaller(c)
-				if add(from, srcNode, kind, reason, c) && found && kind == "resolved_call" {
-					queue = append(queue, pending{symbol: callerSymbol, depth: next.depth + 1})
-				}
+				proposals = append(proposals, proposedEdge{
+					from: from, to: srcNode, kind: kind, reason: reason, call: c,
+					nextSymbol: callerSymbol, canExpand: found,
+				})
 			}
 		}
 		if q.Direction == "both" || q.Direction == "callees" {
@@ -296,14 +323,47 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 					dst = PHPCallGraphNode{ID: fmt.Sprintf("php-unresolved:%s:%s", c.CallKind, strings.ToLower(c.Name)),
 						Name: c.Name, Kind: "unresolved_" + c.CallKind}
 				}
-				if add(srcNode, dst, kind, reason, c) && found && kind == "resolved_call" {
-					queue = append(queue, pending{symbol: callee, depth: next.depth + 1})
-				}
+				proposals = append(proposals, proposedEdge{
+					from: srcNode, to: dst, kind: kind, reason: reason, call: c,
+					nextSymbol: callee, canExpand: found,
+				})
+			}
+		}
+		// Rank *before* applying the result cap. Otherwise a directory full
+		// of uncertain calls can hide known callers or callees from the AI.
+		sort.SliceStable(proposals, func(i, j int) bool {
+			a, b := proposals[i], proposals[j]
+			if rank(a) != rank(b) {
+				return rank(a) < rank(b)
+			}
+			if a.call.Path != b.call.Path {
+				return a.call.Path < b.call.Path
+			}
+			if a.call.Line != b.call.Line {
+				return a.call.Line < b.call.Line
+			}
+			if a.call.Column != b.call.Column {
+				return a.call.Column < b.call.Column
+			}
+			if a.from.ID != b.from.ID {
+				return a.from.ID < b.from.ID
+			}
+			return a.to.ID < b.to.ID
+		})
+		for _, item := range proposals {
+			if add(item.from, item.to, item.kind, item.reason, item.call) &&
+				item.canExpand && item.kind == "resolved_call" {
+				queue = append(queue, pending{symbol: item.nextSymbol, depth: next.depth + 1})
 			}
 		}
 	}
 	sort.Slice(result.Nodes, func(i, j int) bool { return result.Nodes[i].ID < result.Nodes[j].ID })
 	sort.Slice(result.Edges, func(i, j int) bool {
+		priorityI := phpGraphEvidencePriority(result.Edges[i].Kind, result.Edges[i].TypeHint)
+		priorityJ := phpGraphEvidencePriority(result.Edges[j].Kind, result.Edges[j].TypeHint)
+		if priorityI != priorityJ {
+			return priorityI < priorityJ
+		}
 		if result.Edges[i].Path != result.Edges[j].Path {
 			return result.Edges[i].Path < result.Edges[j].Path
 		}
