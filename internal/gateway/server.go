@@ -356,8 +356,8 @@ type CompareFilesInput struct {
 type ProjectAnalyzeInput struct {
 	EnvironmentID string `json:"environment_id"`
 	WriterOwner   string `json:"writer_owner"`
-	MaxFiles      int    `json:"max_files,omitempty" jsonschema:"maximum files inspected; defaults to 4000"`
-	MaxSymbols    int    `json:"max_symbols,omitempty" jsonschema:"maximum Go/PHP/JavaScript/TypeScript symbols recorded; defaults to 1200"`
+	MaxFiles      int    `json:"max_files,omitempty" jsonschema:"maximum files inspected; defaults to 25000 for large projects"`
+	MaxSymbols    int    `json:"max_symbols,omitempty" jsonschema:"maximum Go/PHP/JavaScript/TypeScript symbols recorded; defaults to 100000 for large projects"`
 }
 
 type CodeIntelligenceInfoInput struct {
@@ -372,6 +372,17 @@ type ProjectIndexQueryInput struct {
 	Language      string `json:"language,omitempty" jsonschema:"optional exact language filter such as Go or PHP"`
 	Exact         bool   `json:"exact,omitempty" jsonschema:"match query only against exact name or qualified_name"`
 	MaxResults    int    `json:"max_results,omitempty" jsonschema:"maximum returned matches; defaults to 50 and is capped at 200"`
+}
+
+type ProjectInvestigatePHPInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Symbol        string `json:"symbol" jsonschema:"PHP method or function to investigate, preferably fully qualified"`
+	Path          string `json:"path,omitempty" jsonschema:"optional exact project-relative definition path to disambiguate"`
+	Direction     string `json:"direction,omitempty" jsonschema:"callers, callees, or both; defaults to both"`
+	MaxDepth      int    `json:"max_depth,omitempty" jsonschema:"graph depth 1-3; defaults to 1"`
+	MaxResults    int    `json:"max_results,omitempty" jsonschema:"maximum call edges; defaults to 20, capped at 40"`
+	ContextLines  int    `json:"context_lines,omitempty" jsonschema:"surrounding source lines; defaults to 3, capped at 6"`
+	MaxExcerpts   int    `json:"max_excerpts,omitempty" jsonschema:"maximum representative source excerpts; defaults to 6, capped at 10"`
 }
 
 type ProjectCallGraphInput struct {
@@ -1623,11 +1634,23 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_query", Description: "Query the generated .adm symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256 before returning matches. Run project_analyze first when the index is missing or stale."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_query", Description: "Query the generated .adm symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256. Check index_complete and coverage_warning before concluding that a symbol does not exist. Run project_analyze first when missing or stale."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexQueryInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectIndexQuery(in.EnvironmentID, projectanalysis.IndexQuery{
 				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
 				Exact: in.Exact, MaxResults: in.MaxResults,
+			})
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_investigate_php", Description: "Recommended first call for AI investigating PHP behavior: find one uniquely identified function/method, show its definition, bounded caller/callee edges with confidence reasons, and representative source ranges together. Reuses only ADM native indexes and safe read; no IDE required. Missing, stale or ambiguous indexes require project_analyze, project_index_status or project_index_query."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectInvestigatePHPInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.ProjectInvestigatePHP(in.EnvironmentID, app.ProjectPHPInvestigationOptions{
+				Query: projectanalysis.PHPCallGraphQuery{
+					Symbol: in.Symbol, Path: in.Path, Direction: in.Direction,
+					MaxDepth: in.MaxDepth, MaxResults: in.MaxResults,
+				},
+				ContextLines: in.ContextLines, MaxExcerpts: in.MaxExcerpts,
 			})
 			return toolResult(value, err)
 		})

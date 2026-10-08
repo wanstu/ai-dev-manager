@@ -374,8 +374,8 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 {
   "environment_id": "env_xxx",
   "writer_owner": "agent-session-42",
-  "max_files": 4000,
-  "max_symbols": 1200
+  "max_files": 25000,
+  "max_symbols": 100000
 }
 ```
 
@@ -479,6 +479,27 @@ Provider-neutral 的 freshness / health 查询：
 
 调用时尽量提供 `symbol.qualified_name`（例如 `Demo\\Services\\BillingService::run`），有重复类名时再提供 `symbol.path`，防止同名类互相污染。目标不属于支持范围或静态索引不可用时仍返回 `available=false`，不能把缺少索引误认为没有引用。
 
+### `project_investigate_php`（AI 优先使用的一次性 PHP 调查工具）
+
+针对明确的 PHP 方法或函数，**一次 MCP 调用**即可返回目标定义、上下游调用图和有代表性的源码片段。该工具组合 ADM 已有的 `project_call_graph` 与安全的按行 `read`，不依赖 PhpStorm 或其他 IDE，不执行项目代码。
+
+```json
+{
+  "environment_id": "env_xxx",
+  "symbol": "User_goods::getDealBaseInfo",
+  "path": "base/application/controllers/m/User_goods.php",
+  "direction": "both",
+  "max_depth": 1,
+  "max_results": 20,
+  "context_lines": 3,
+  "max_excerpts": 6
+}
+```
+
+返回 `graph`（已索引的调用证据）和 `excerpts`（定义及代表性调用代码，含文件与具体行范围）；对无法提取的片段返回 `error`，不会伪造源码。片段从不同文件优先采样，每段最多 2048 字节；`max_results` 上限 40，`max_excerpts` 上限 10。结果可能带有 `index_warning`，提示索引或结果并不完整。
+
+AI 建议：**先用它调查具体方法，再依据实际代码决定修改什么**。不能仅凭调用图判断业务根因；尤其不能把 `candidate_call` 或 `inherited_candidate` 当成已证实的运行链。如果符号重名，先用 `project_index_query` 找到完整符号和路径；若出现缺失或过期索引，先检查 `project_index_status`、再执行 `project_analyze`。
+
 ### `project_call_graph`（ADM 原生 PHP 调用图）
 
 **给 AI 的典型调查顺序**：先用 `project_index_query` 确认被调查函数的准确声明（命名空间、定义文件、行号），再用 `project_call_graph` 的 `callers` 查看上游入口、`callees` 查看下游依赖；调用前可用 `project_index_status` 判断索引新鲜度。AI 应结合 `read` 查看关键代码分支再下修复结论，**不能把静态调用候选当作实际运行证据**。缺索引先运行 `project_analyze`，不要默认借助或启动 PhpStorm。
@@ -567,7 +588,7 @@ Provider-neutral 的 freshness / health 查询：
 - `missing`：尚未生成索引。
 - `invalid`：manifest/schema/artifact hash 等索引完整性检查失败。
 
-`project_index_query` 只做快速 symbol 查询和 artifact 完整性校验，不会每次重新扫描整个项目；需要判断源码是否变化时显式调用 `project_index_status`，`stale/partial/invalid` 时再运行 `project_analyze` 刷新索引。
+`project_index_query` 返回 `index_complete` 和 `coverage_warning`，以免 AI 将部分索引中的零匹配误当作“方法不存在”。它只做快速 symbol 查询和 artifact 完整性校验，不会每次重新扫描整个项目；需要判断源码是否变化时显式调用 `project_index_status`，`stale/partial/invalid` 时再运行 `project_analyze` 刷新索引。
 
 ### `search`
 

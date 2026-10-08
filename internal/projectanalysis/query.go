@@ -37,6 +37,8 @@ type IndexQueryResult struct {
 	GeneratedAt      string            `json:"generated_at"`
 	SchemaVersion    int               `json:"schema_version"`
 	ArtifactVerified bool              `json:"artifact_verified"`
+	IndexComplete    bool              `json:"index_complete"`
+	CoverageWarning  string            `json:"coverage_warning,omitempty"`
 	Matches          []IndexQueryMatch `json:"matches"`
 	Returned         int               `json:"returned"`
 	Truncated        bool              `json:"truncated,omitempty"`
@@ -148,17 +150,22 @@ func QueryIndex(root string, query IndexQuery) (IndexQueryResult, error) {
 		}
 		return matches[i].match.Line < matches[j].match.Line
 	})
-	truncated := len(matches) > query.MaxResults
-	if truncated {
+	resultLimited := len(matches) > query.MaxResults
+	if resultLimited {
 		matches = matches[:query.MaxResults]
 	}
+	indexComplete := !manifest.Truncated && manifest.ParseIssues == 0
 	result := IndexQueryResult{
 		IndexPath:        IndexSymbolsRelativePath,
 		GeneratedAt:      manifest.GeneratedAt,
 		SchemaVersion:    manifest.SchemaVersion,
 		ArtifactVerified: true,
+		IndexComplete:    indexComplete,
 		Returned:         len(matches),
-		Truncated:        truncated,
+		Truncated:        resultLimited || !indexComplete,
+	}
+	if !indexComplete {
+		result.CoverageWarning = "The project index is incomplete; missing symbols may exist. Re-run project_analyze with larger max_files/max_symbols, then verify project_index_status before concluding that a symbol does not exist."
 	}
 	result.Matches = make([]IndexQueryMatch, 0, len(matches))
 	for _, item := range matches {

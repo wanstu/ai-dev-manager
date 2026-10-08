@@ -110,7 +110,7 @@ func IndexStatus(root string, maxChanges int) (IndexStatusResult, error) {
 
 	maxFiles := manifest.Bounds.MaxFiles
 	if maxFiles <= 0 {
-		maxFiles = 4000
+		maxFiles = DefaultMaxFiles
 	}
 	seen := map[string]bool{}
 	scanTruncated := false

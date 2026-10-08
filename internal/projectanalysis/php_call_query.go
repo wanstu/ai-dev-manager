@@ -104,7 +104,7 @@ func verifyIndexMetadata(root string, manifest IndexManifest, filesData []byte) 
 	checked := map[string]bool{}
 	maxFiles := manifest.Bounds.MaxFiles
 	if maxFiles <= 0 {
-		maxFiles = 4000
+		maxFiles = DefaultMaxFiles
 	}
 	scanned := 0
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {

@@ -16,12 +16,17 @@ type indexSnapshot struct {
 	calls   map[string][]PHPCallRecord
 }
 
+const (
+	DefaultMaxFiles   = 25000
+	DefaultMaxSymbols = 100000
+)
+
 func normalizedAnalyzeOptions(options Options) Options {
 	if options.MaxFiles <= 0 {
-		options.MaxFiles = 4000
+		options.MaxFiles = DefaultMaxFiles
 	}
 	if options.MaxSymbols <= 0 {
-		options.MaxSymbols = 1200
+		options.MaxSymbols = DefaultMaxSymbols
 	}
 	return options
 }
