@@ -48,15 +48,39 @@ if ($clean) { $wailsArgs += '-clean' }
 if ($trimpath) { $wailsArgs += '-trimpath' }
 $wailsArgs += @('-o', $OutputName)
 
-Push-Location $desktopRoot
+# Wails uses wails.json Info for Windows EXE FileVersion/ProductVersion.
+# The -ldflags version only updates the Go runtime. Inject build metadata
+# into a transient wails.json and restore the tracked bytes afterwards.
+$numericFileVersion = '0.0.0.0'
+if ($resolvedVersion -match '^v?(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$') {
+    $rcNumber = if ($Matches[4]) { [int]$Matches[4] } else { 0 }
+    $numericFileVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).$rcNumber"
+} elseif ($resolvedVersion -ne 'dev') {
+    throw "Version must be vMAJOR.MINOR.PATCH, vMAJOR.MINOR.PATCH-rc.N, or dev: $resolvedVersion"
+}
+$wailsConfigPath = Join-Path $desktopRoot 'wails.json'
+$originalConfigBytes = [System.IO.File]::ReadAllBytes($wailsConfigPath)
 try {
-    # wails.json owns Desktop pre-build preparation, including icon refresh.
-    & go run github.com/wailsapp/wails/v2/cmd/wails@v2.15.0 @wailsArgs
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
+    $config = Get-Content -LiteralPath $wailsConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $config | Add-Member -NotePropertyName 'info' -NotePropertyValue @{
+        companyName = 'wanstu'
+        productName = 'AI Dev Manager'
+        productVersion = $numericFileVersion
+        comments = "ADM $resolvedVersion"
+    } -Force
+    [System.IO.File]::WriteAllText($wailsConfigPath, ($config | ConvertTo-Json -Depth 15), (New-Object System.Text.UTF8Encoding($false)))
+    Push-Location $desktopRoot
+    try {
+        # wails.json owns Desktop pre-build preparation, including icon refresh.
+        & go run github.com/wailsapp/wails/v2/cmd/wails@v2.15.0 @wailsArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Wails build failed (exit code $LASTEXITCODE)"
+        }
+    } finally {
+        Pop-Location
     }
 } finally {
-    Pop-Location
+    [System.IO.File]::WriteAllBytes($wailsConfigPath, $originalConfigBytes)
 }
 
 $builtDesktop = Join-Path $desktopRoot (Join-Path 'build\bin' $OutputName)
@@ -66,4 +90,23 @@ if (-not (Test-Path -LiteralPath $builtDesktop)) {
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 $finalDesktop = Join-Path $OutputDir $OutputName
 Copy-Item -LiteralPath $builtDesktop -Destination $finalDesktop -Force
+# Fail the build rather than shipping another EXE whose Windows Explorer
+# Properties disagree with the in-app/CLI product version.
+if ($IsWindows) {
+    $resourceInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($finalDesktop)
+    $fileVersion = '{0}.{1}.{2}.{3}' -f $resourceInfo.FileMajorPart, $resourceInfo.FileMinorPart, $resourceInfo.FileBuildPart, $resourceInfo.FilePrivatePart
+    # Wails writes ProductVersion into StringFileInfo (Explorer Details),
+    # while VS_FIXEDFILEINFO product-version numeric fields default to zero.
+    $productVersion = [string]$resourceInfo.ProductVersion
+    if ($fileVersion -ne $numericFileVersion -or $productVersion -ne $numericFileVersion) {
+        throw "Windows EXE VERSIONINFO mismatch: FileVersion=$fileVersion ProductVersion=$productVersion expected=$numericFileVersion"
+    }
+    if ($resourceInfo.ProductName -ne 'AI Dev Manager') {
+        throw "Windows EXE ProductName mismatch: $($resourceInfo.ProductName)"
+    }
+    if ($resourceInfo.Comments -ne "ADM $resolvedVersion") {
+        throw "Windows EXE Comments mismatch: expected ADM $resolvedVersion, actual $($resourceInfo.Comments)"
+    }
+    Write-Host "Verified Windows FileVersion/ProductVersion: $fileVersion ($resolvedVersion)"
+}
 Write-Host "Desktop artifact: $finalDesktop"
