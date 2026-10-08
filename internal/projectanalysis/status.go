@@ -64,7 +64,7 @@ func IndexStatus(root string, maxChanges int) (IndexStatusResult, error) {
 
 	verified := map[string][]byte{}
 	for _, item := range []struct{ key, path string }{
-		{"overview", OverviewRelativePath}, {"files", IndexFilesRelativePath}, {"symbols", IndexSymbolsRelativePath},
+		{"overview", OverviewRelativePath}, {"files", IndexFilesRelativePath}, {"symbols", IndexSymbolsRelativePath}, {"calls", IndexCallsRelativePath},
 	} {
 		artifact, ok := manifest.Artifacts[item.key]
 		if !ok || artifact.Path != item.path || artifact.SHA256 == "" {

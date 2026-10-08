@@ -130,6 +130,7 @@ func writeStatusArtifacts(t *testing.T, root string, result Result) {
 		{IndexManifestRelativePath, result.ManifestJSON},
 		{IndexFilesRelativePath, result.FilesJSONL},
 		{IndexSymbolsRelativePath, result.SymbolsJSONL},
+		{IndexCallsRelativePath, result.CallsJSONL},
 	} {
 		path := filepath.Join(root, filepath.FromSlash(item.path))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

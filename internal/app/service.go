@@ -559,6 +559,7 @@ func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbo
 		{projectanalysis.OverviewRelativePath, result.Markdown},
 		{projectanalysis.IndexFilesRelativePath, result.FilesJSONL},
 		{projectanalysis.IndexSymbolsRelativePath, result.SymbolsJSONL},
+		{projectanalysis.IndexCallsRelativePath, result.CallsJSONL},
 		// Write the manifest last. Its artifact hashes let consumers detect
 		// a partial/stale generation if an earlier write is interrupted.
 		{projectanalysis.IndexManifestRelativePath, result.ManifestJSON},
@@ -575,6 +576,7 @@ func (s *Service) AnalyzeProject(environmentID, owner string, maxFiles, maxSymbo
 	result.ManifestJSON = ""
 	result.FilesJSONL = ""
 	result.SymbolsJSONL = ""
+	result.CallsJSONL = ""
 	return result, nil
 }
 

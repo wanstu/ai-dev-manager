@@ -21,29 +21,34 @@ type Options struct {
 }
 
 type Result struct {
-	IndexMode            string   `json:"index_mode"`
-	ReusedSourceFiles    int      `json:"reused_source_files"`
-	ReindexedSourceFiles int      `json:"reindexed_source_files"`
-	OverviewPath         string   `json:"overview_path"`
-	IndexManifestPath    string   `json:"index_manifest_path"`
-	IndexFilesPath       string   `json:"index_files_path"`
-	IndexSymbolsPath     string   `json:"index_symbols_path"`
-	Languages            []string `json:"languages"`
-	FilesScanned         int      `json:"files_scanned"`
-	FilesIndexed         int      `json:"files_indexed"`
-	GoFiles              int      `json:"go_files"`
-	PHPFiles             int      `json:"php_files"`
-	JSFiles              int      `json:"js_files"`
-	TSFiles              int      `json:"ts_files"`
-	Symbols              int      `json:"symbols"`
-	GoModule             string   `json:"go_module,omitempty"`
-	ComposerPackage      string   `json:"composer_package,omitempty"`
-	Truncated            bool     `json:"truncated,omitempty"`
-	ParseIssues          int      `json:"parse_issues,omitempty"`
-	Markdown             string   `json:"-"`
-	ManifestJSON         string   `json:"-"`
-	FilesJSONL           string   `json:"-"`
-	SymbolsJSONL         string   `json:"-"`
+	IndexMode             string   `json:"index_mode"`
+	ReusedSourceFiles     int      `json:"reused_source_files"`
+	ReindexedSourceFiles  int      `json:"reindexed_source_files"`
+	OverviewPath          string   `json:"overview_path"`
+	IndexManifestPath     string   `json:"index_manifest_path"`
+	IndexFilesPath        string   `json:"index_files_path"`
+	IndexSymbolsPath      string   `json:"index_symbols_path"`
+	IndexCallsPath        string   `json:"index_calls_path"`
+	CallsIndexed          int      `json:"calls_indexed"`
+	ReusedPHPCallFiles    int      `json:"reused_php_call_files"`
+	ReindexedPHPCallFiles int      `json:"reindexed_php_call_files"`
+	Languages             []string `json:"languages"`
+	FilesScanned          int      `json:"files_scanned"`
+	FilesIndexed          int      `json:"files_indexed"`
+	GoFiles               int      `json:"go_files"`
+	PHPFiles              int      `json:"php_files"`
+	JSFiles               int      `json:"js_files"`
+	TSFiles               int      `json:"ts_files"`
+	Symbols               int      `json:"symbols"`
+	GoModule              string   `json:"go_module,omitempty"`
+	ComposerPackage       string   `json:"composer_package,omitempty"`
+	Truncated             bool     `json:"truncated,omitempty"`
+	ParseIssues           int      `json:"parse_issues,omitempty"`
+	Markdown              string   `json:"-"`
+	ManifestJSON          string   `json:"-"`
+	FilesJSONL            string   `json:"-"`
+	SymbolsJSONL          string   `json:"-"`
+	CallsJSONL            string   `json:"-"`
 }
 
 type fileOutline struct {
@@ -84,6 +89,7 @@ func analyze(root string, options Options, cache *indexSnapshot) (Result, error)
 		IndexManifestPath: IndexManifestRelativePath,
 		IndexFilesPath:    IndexFilesRelativePath,
 		IndexSymbolsPath:  IndexSymbolsRelativePath,
+		IndexCallsPath:    IndexCallsRelativePath,
 		GoModule:          readGoModule(filepath.Join(root, "go.mod")),
 		ComposerPackage:   readComposerPackage(filepath.Join(root, "composer.json")),
 	}
@@ -95,6 +101,7 @@ func analyze(root string, options Options, cache *indexSnapshot) (Result, error)
 	var outlines []fileOutline
 	var fileRecords []FileRecord
 	var symbolRecords []SymbolRecord
+	var callRecords []PHPCallRecord
 	remainingSymbols := options.MaxSymbols
 
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -197,6 +204,43 @@ func analyze(root string, options Options, cache *indexSnapshot) (Result, error)
 			if len(outline.Symbols) > 0 {
 				outlines = append(outlines, outline)
 			}
+			if sourceLanguage == "PHP" {
+				prior, exists := FileRecord{}, false
+				if cache != nil {
+					prior, exists = cache.files[rel]
+				}
+				remainingCalls := maxIndexedPHPCalls - len(callRecords)
+				oldCalls := []PHPCallRecord(nil)
+				if cache != nil {
+					oldCalls = cache.calls[rel]
+				}
+				if exists && prior.CallsComplete && prior.SHA256 != "" &&
+					prior.SHA256 == record.SHA256 && record.SHA256 != "" &&
+					len(oldCalls) <= remainingCalls {
+					record.CallsComplete = true
+					result.ReusedPHPCallFiles++
+					callRecords = append(callRecords, oldCalls...)
+				} else if remainingCalls == 0 {
+					// Do not parse additional files just to discard results.
+					record.CallsComplete = false
+					result.Truncated = true
+				} else {
+					result.ReindexedPHPCallFiles++
+					calls, complete, callErr := collectPHPCalls(path, rel)
+					if callErr != nil {
+						return callErr
+					}
+					if len(calls) > remainingCalls {
+						calls = calls[:remainingCalls]
+						complete = false
+					}
+					record.CallsComplete = complete && record.SHA256 != ""
+					if !record.CallsComplete {
+						result.Truncated = true
+					}
+					callRecords = append(callRecords, calls...)
+				}
+			}
 		}
 		fileRecords = append(fileRecords, record)
 		return nil
@@ -219,8 +263,9 @@ func analyze(root string, options Options, cache *indexSnapshot) (Result, error)
 	}
 	sort.Slice(outlines, func(i, j int) bool { return outlines[i].Path < outlines[j].Path })
 	result.FilesIndexed = len(fileRecords)
+	result.CallsIndexed = len(callRecords)
 	result.Markdown = render(result, keyFiles, dirCounts, outlines)
-	result.ManifestJSON, result.FilesJSONL, result.SymbolsJSONL, err = buildIndexArtifacts(result, options, fileRecords, symbolRecords)
+	result.ManifestJSON, result.FilesJSONL, result.SymbolsJSONL, result.CallsJSONL, err = buildIndexArtifacts(result, options, fileRecords, symbolRecords, callRecords)
 	if err != nil {
 		return Result{}, err
 	}
@@ -445,7 +490,7 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 	}
 
 	out.WriteString("\n## Machine index\n\n")
-	fmt.Fprintf(&out, "- Manifest: %s\n- Files: %s\n- Symbols: %s\n", result.IndexManifestPath, result.IndexFilesPath, result.IndexSymbolsPath)
+	fmt.Fprintf(&out, "- Manifest: %s\n- Files: %s\n- Symbols: %s\n- PHP Calls: %s (%d)\n", result.IndexManifestPath, result.IndexFilesPath, result.IndexSymbolsPath, result.IndexCallsPath, result.CallsIndexed)
 	out.WriteString("- Use the overview for orientation; use the machine index for precise project lookup.\n")
 
 	out.WriteString("\n## Key files\n\n")

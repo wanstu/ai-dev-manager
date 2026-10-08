@@ -1540,7 +1540,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Statically analyze one Environment project and refresh .adm/project-overview.md plus .adm/index/{manifest.json,files.jsonl,symbols.jsonl}. Project code is never executed. Requires the matching writer_owner because generated index artifacts are written under the Environment root."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Statically analyze one Environment project and refresh .adm/project-overview.md plus .adm/index/{manifest.json,files.jsonl,symbols.jsonl,calls.jsonl}. Project code is never executed. Requires the matching writer_owner because generated index artifacts are written under the Environment root."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectAnalyzeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.AnalyzeProject(in.EnvironmentID, in.WriterOwner, in.MaxFiles, in.MaxSymbols)
 			return toolResult(value, err)

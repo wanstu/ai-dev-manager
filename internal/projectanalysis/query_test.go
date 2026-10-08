@@ -110,11 +110,11 @@ func TestQueryIndexRequiresGeneratedIndexAndFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := Result{Markdown: "# overview\n"}
-	manifest, files, symbols, err := buildIndexArtifacts(result, Options{MaxFiles: 1, MaxSymbols: 1}, nil, nil)
+	manifest, files, symbols, calls, err := buildIndexArtifacts(result, Options{MaxFiles: 1, MaxSymbols: 1}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result.ManifestJSON, result.FilesJSONL, result.SymbolsJSONL = manifest, files, symbols
+	result.ManifestJSON, result.FilesJSONL, result.SymbolsJSONL, result.CallsJSONL = manifest, files, symbols, calls
 	writeQueryArtifacts(t, root, result)
 	if _, err := QueryIndex(root, IndexQuery{}); err == nil || !strings.Contains(err.Error(), "is required") {
 		t.Fatalf("empty query err=%v", err)
@@ -127,6 +127,7 @@ func writeQueryArtifacts(t *testing.T, root string, result Result) {
 		{IndexManifestRelativePath, result.ManifestJSON},
 		{IndexFilesRelativePath, result.FilesJSONL},
 		{IndexSymbolsRelativePath, result.SymbolsJSONL},
+		{IndexCallsRelativePath, result.CallsJSONL},
 	} {
 		path := filepath.Join(root, filepath.FromSlash(item.path))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -37,7 +37,7 @@ func TestAnalyzeProjectWritesOverviewAndMachineIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Markdown != "" || result.ManifestJSON != "" || result.FilesJSONL != "" || result.SymbolsJSONL != "" {
+	if result.Markdown != "" || result.ManifestJSON != "" || result.FilesJSONL != "" || result.SymbolsJSONL != "" || result.CallsJSONL != "" {
 		t.Fatal("AnalyzeProject response must not inline generated artifact contents")
 	}
 
@@ -46,6 +46,7 @@ func TestAnalyzeProjectWritesOverviewAndMachineIndex(t *testing.T) {
 		projectanalysis.IndexManifestRelativePath,
 		projectanalysis.IndexFilesRelativePath,
 		projectanalysis.IndexSymbolsRelativePath,
+		projectanalysis.IndexCallsRelativePath,
 	} {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("generated artifact %s: %v", rel, err)
@@ -68,7 +69,8 @@ func TestAnalyzeProjectWritesOverviewAndMachineIndex(t *testing.T) {
 	if err := json.Unmarshal(manifestData, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.SchemaVersion != projectanalysis.IndexSchemaVersion || manifest.SymbolsIndexed < 2 {
+	if manifest.SchemaVersion != projectanalysis.IndexSchemaVersion || manifest.SymbolsIndexed < 2 ||
+		manifest.Artifacts["calls"].Path != projectanalysis.IndexCallsRelativePath {
 		t.Fatalf("manifest=%+v", manifest)
 	}
 

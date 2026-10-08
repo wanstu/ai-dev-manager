@@ -80,7 +80,7 @@ func TestAnalyzeGoAndPHPProject(t *testing.T) {
 	if result.FilesIndexed != 4 {
 		t.Fatalf("files indexed=%d", result.FilesIndexed)
 	}
-	for _, want := range []string{IndexManifestRelativePath, IndexFilesRelativePath, IndexSymbolsRelativePath} {
+	for _, want := range []string{IndexManifestRelativePath, IndexFilesRelativePath, IndexSymbolsRelativePath, IndexCallsRelativePath} {
 		if !strings.Contains(result.Markdown, want) {
 			t.Fatalf("overview missing machine index path %q:\n%s", want, result.Markdown)
 		}
@@ -100,9 +100,9 @@ func TestAnalyzeGoAndPHPProject(t *testing.T) {
 	if manifest.SchemaVersion != IndexSchemaVersion || manifest.FilesIndexed != 4 || manifest.SymbolsIndexed != result.Symbols {
 		t.Fatalf("unexpected manifest: %+v", manifest)
 	}
-	for _, key := range []string{"overview", "files", "symbols"} {
+	for _, key := range []string{"overview", "files", "symbols", "calls"} {
 		artifact := manifest.Artifacts[key]
-		if artifact.Path == "" || artifact.SHA256 == "" || artifact.Bytes <= 0 {
+		if artifact.Path == "" || artifact.SHA256 == "" || (key != "calls" && artifact.Bytes <= 0) {
 			t.Fatalf("manifest artifact %q incomplete: %+v", key, artifact)
 		}
 	}

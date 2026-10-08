@@ -13,6 +13,7 @@ import (
 type indexSnapshot struct {
 	files   map[string]FileRecord
 	symbols map[string][]SymbolRecord
+	calls   map[string][]PHPCallRecord
 }
 
 func normalizedAnalyzeOptions(options Options) Options {
@@ -47,11 +48,12 @@ func loadIndexSnapshot(root string, options Options) *indexSnapshot {
 		return nil
 	}
 
-	verified := make(map[string][]byte, 3)
+	verified := make(map[string][]byte, 4)
 	for _, item := range []struct{ key, path string }{
 		{"overview", OverviewRelativePath},
 		{"files", IndexFilesRelativePath},
 		{"symbols", IndexSymbolsRelativePath},
+		{"calls", IndexCallsRelativePath},
 	} {
 		artifact, ok := manifest.Artifacts[item.key]
 		if !ok || artifact.Path != item.path || artifact.SHA256 == "" {
@@ -71,6 +73,7 @@ func loadIndexSnapshot(root string, options Options) *indexSnapshot {
 	snapshot := &indexSnapshot{
 		files:   make(map[string]FileRecord, manifest.FilesIndexed),
 		symbols: make(map[string][]SymbolRecord),
+		calls:   make(map[string][]PHPCallRecord),
 	}
 	scanner := bufio.NewScanner(strings.NewReader(string(verified["files"])))
 	scanner.Buffer(make([]byte, 64*1024), 1<<20)
@@ -110,6 +113,25 @@ func loadIndexSnapshot(root string, options Options) *indexSnapshot {
 		count++
 	}
 	if scanner.Err() != nil || count != manifest.SymbolsIndexed {
+		return nil
+	}
+	scanner = bufio.NewScanner(strings.NewReader(string(verified["calls"])))
+	scanner.Buffer(make([]byte, 64*1024), 1<<20)
+	count = 0
+	for scanner.Scan() {
+		var record PHPCallRecord
+		if json.Unmarshal(scanner.Bytes(), &record) != nil || record.Path == "" ||
+			record.Line <= 0 || record.Column <= 0 || (record.CallKind != "method" && record.CallKind != "function") {
+			return nil
+		}
+		file, ok := snapshot.files[record.Path]
+		if !ok || file.Language != "PHP" {
+			return nil
+		}
+		snapshot.calls[record.Path] = append(snapshot.calls[record.Path], record)
+		count++
+	}
+	if scanner.Err() != nil || count != manifest.CallsIndexed {
 		return nil
 	}
 	return snapshot

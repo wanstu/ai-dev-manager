@@ -24,6 +24,7 @@ func installFixtureIndex(t *testing.T, root string, result Result) {
 		OverviewRelativePath:      result.Markdown,
 		IndexManifestRelativePath: result.ManifestJSON,
 		IndexSymbolsRelativePath:  result.SymbolsJSONL,
+		IndexCallsRelativePath:    result.CallsJSONL,
 		IndexFilesRelativePath:    result.FilesJSONL,
 	} {
 		writeFixture(t, root, path, data)

@@ -17,7 +17,8 @@ const (
 	IndexManifestRelativePath = ".adm/index/manifest.json"
 	IndexFilesRelativePath    = ".adm/index/files.jsonl"
 	IndexSymbolsRelativePath  = ".adm/index/symbols.jsonl"
-	IndexSchemaVersion        = 2
+	IndexCallsRelativePath    = ".adm/index/calls.jsonl"
+	IndexSchemaVersion        = 3
 )
 
 type IndexBounds struct {
@@ -32,29 +33,33 @@ type IndexArtifact struct {
 }
 
 type IndexManifest struct {
-	IndexMode            string                   `json:"index_mode,omitempty"`
-	ReusedSourceFiles    int                      `json:"reused_source_files,omitempty"`
-	ReindexedSourceFiles int                      `json:"reindexed_source_files,omitempty"`
-	SchemaVersion        int                      `json:"schema_version"`
-	GeneratedAt          string                   `json:"generated_at"`
-	Languages            []string                 `json:"languages"`
-	FilesScanned         int                      `json:"files_scanned"`
-	FilesIndexed         int                      `json:"files_indexed"`
-	SymbolsIndexed       int                      `json:"symbols_indexed"`
-	GoFiles              int                      `json:"go_files"`
-	PHPFiles             int                      `json:"php_files"`
-	JSFiles              int                      `json:"js_files"`
-	TSFiles              int                      `json:"ts_files"`
-	GoModule             string                   `json:"go_module,omitempty"`
-	ComposerPackage      string                   `json:"composer_package,omitempty"`
-	ParseIssues          int                      `json:"parse_issues,omitempty"`
-	Truncated            bool                     `json:"truncated,omitempty"`
-	Bounds               IndexBounds              `json:"bounds"`
-	Artifacts            map[string]IndexArtifact `json:"artifacts"`
+	IndexMode             string                   `json:"index_mode,omitempty"`
+	ReusedSourceFiles     int                      `json:"reused_source_files,omitempty"`
+	ReindexedSourceFiles  int                      `json:"reindexed_source_files,omitempty"`
+	CallsIndexed          int                      `json:"calls_indexed"`
+	ReusedPHPCallFiles    int                      `json:"reused_php_call_files,omitempty"`
+	ReindexedPHPCallFiles int                      `json:"reindexed_php_call_files,omitempty"`
+	SchemaVersion         int                      `json:"schema_version"`
+	GeneratedAt           string                   `json:"generated_at"`
+	Languages             []string                 `json:"languages"`
+	FilesScanned          int                      `json:"files_scanned"`
+	FilesIndexed          int                      `json:"files_indexed"`
+	SymbolsIndexed        int                      `json:"symbols_indexed"`
+	GoFiles               int                      `json:"go_files"`
+	PHPFiles              int                      `json:"php_files"`
+	JSFiles               int                      `json:"js_files"`
+	TSFiles               int                      `json:"ts_files"`
+	GoModule              string                   `json:"go_module,omitempty"`
+	ComposerPackage       string                   `json:"composer_package,omitempty"`
+	ParseIssues           int                      `json:"parse_issues,omitempty"`
+	Truncated             bool                     `json:"truncated,omitempty"`
+	Bounds                IndexBounds              `json:"bounds"`
+	Artifacts             map[string]IndexArtifact `json:"artifacts"`
 }
 
 type FileRecord struct {
 	SymbolsComplete bool   `json:"symbols_complete,omitempty"`
+	CallsComplete   bool   `json:"calls_complete,omitempty"`
 	Path            string `json:"path"`
 	Extension       string `json:"extension,omitempty"`
 	Language        string `json:"language,omitempty"`
@@ -142,7 +147,7 @@ func artifactFor(path, content string) IndexArtifact {
 	}
 }
 
-func buildIndexArtifacts(result Result, options Options, files []FileRecord, symbols []SymbolRecord) (string, string, string, error) {
+func buildIndexArtifacts(result Result, options Options, files []FileRecord, symbols []SymbolRecord, calls []PHPCallRecord) (string, string, string, string, error) {
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	sort.Slice(symbols, func(i, j int) bool {
 		if symbols[i].Path != symbols[j].Path {
@@ -156,31 +161,50 @@ func buildIndexArtifacts(result Result, options Options, files []FileRecord, sym
 
 	filesJSONL, err := encodeJSONLines(files)
 	if err != nil {
-		return "", "", "", fmt.Errorf("encode file index: %w", err)
+		return "", "", "", "", fmt.Errorf("encode file index: %w", err)
 	}
 	symbolsJSONL, err := encodeJSONLines(symbols)
 	if err != nil {
-		return "", "", "", fmt.Errorf("encode symbol index: %w", err)
+		return "", "", "", "", fmt.Errorf("encode symbol index: %w", err)
+	}
+	sort.Slice(calls, func(i, j int) bool {
+		if calls[i].Path != calls[j].Path {
+			return calls[i].Path < calls[j].Path
+		}
+		if calls[i].Line != calls[j].Line {
+			return calls[i].Line < calls[j].Line
+		}
+		if calls[i].Column != calls[j].Column {
+			return calls[i].Column < calls[j].Column
+		}
+		return calls[i].Name < calls[j].Name
+	})
+	callsJSONL, err := encodeJSONLines(calls)
+	if err != nil {
+		return "", "", "", "", fmt.Errorf("encode call index: %w", err)
 	}
 
 	manifest := IndexManifest{
-		IndexMode:            result.IndexMode,
-		ReusedSourceFiles:    result.ReusedSourceFiles,
-		ReindexedSourceFiles: result.ReindexedSourceFiles,
-		SchemaVersion:        IndexSchemaVersion,
-		GeneratedAt:          time.Now().UTC().Format(time.RFC3339Nano),
-		Languages:            append([]string(nil), result.Languages...),
-		FilesScanned:         result.FilesScanned,
-		FilesIndexed:         len(files),
-		SymbolsIndexed:       len(symbols),
-		GoFiles:              result.GoFiles,
-		PHPFiles:             result.PHPFiles,
-		JSFiles:              result.JSFiles,
-		TSFiles:              result.TSFiles,
-		GoModule:             result.GoModule,
-		ComposerPackage:      result.ComposerPackage,
-		ParseIssues:          result.ParseIssues,
-		Truncated:            result.Truncated,
+		IndexMode:             result.IndexMode,
+		ReusedSourceFiles:     result.ReusedSourceFiles,
+		ReindexedSourceFiles:  result.ReindexedSourceFiles,
+		CallsIndexed:          result.CallsIndexed,
+		ReusedPHPCallFiles:    result.ReusedPHPCallFiles,
+		ReindexedPHPCallFiles: result.ReindexedPHPCallFiles,
+		SchemaVersion:         IndexSchemaVersion,
+		GeneratedAt:           time.Now().UTC().Format(time.RFC3339Nano),
+		Languages:             append([]string(nil), result.Languages...),
+		FilesScanned:          result.FilesScanned,
+		FilesIndexed:          len(files),
+		SymbolsIndexed:        len(symbols),
+		GoFiles:               result.GoFiles,
+		PHPFiles:              result.PHPFiles,
+		JSFiles:               result.JSFiles,
+		TSFiles:               result.TSFiles,
+		GoModule:              result.GoModule,
+		ComposerPackage:       result.ComposerPackage,
+		ParseIssues:           result.ParseIssues,
+		Truncated:             result.Truncated,
 		Bounds: IndexBounds{
 			MaxFiles:   options.MaxFiles,
 			MaxSymbols: options.MaxSymbols,
@@ -189,12 +213,13 @@ func buildIndexArtifacts(result Result, options Options, files []FileRecord, sym
 			"overview": artifactFor(OverviewRelativePath, result.Markdown),
 			"files":    artifactFor(IndexFilesRelativePath, filesJSONL),
 			"symbols":  artifactFor(IndexSymbolsRelativePath, symbolsJSONL),
+			"calls":    artifactFor(IndexCallsRelativePath, callsJSONL),
 		},
 	}
 	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
-		return "", "", "", fmt.Errorf("encode index manifest: %w", err)
+		return "", "", "", "", fmt.Errorf("encode index manifest: %w", err)
 	}
 	manifestJSON = append(manifestJSON, '\n')
-	return string(manifestJSON), filesJSONL, symbolsJSONL, nil
+	return string(manifestJSON), filesJSONL, symbolsJSONL, callsJSONL, nil
 }
