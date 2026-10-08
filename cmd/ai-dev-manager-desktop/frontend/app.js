@@ -39,12 +39,12 @@ const elements = {
   skillProbeAllButton: document.getElementById('skillProbeAllButton'), skillSelectVisibleButton: document.getElementById('skillSelectVisibleButton'), skillClearSelectionButton: document.getElementById('skillClearSelectionButton'), skillSetVisibleDefaultButton: document.getElementById('skillSetVisibleDefaultButton'), skillUnsetVisibleDefaultButton: document.getElementById('skillUnsetVisibleDefaultButton'), skillEnableVisibleButton: document.getElementById('skillEnableVisibleButton'), skillDisableVisibleButton: document.getElementById('skillDisableVisibleButton'), skillSelectedCount: document.getElementById('skillSelectedCount'), skillAssignEnvironmentsButton: document.getElementById('skillAssignEnvironmentsButton'), skillClearMissingButton: document.getElementById('skillClearMissingButton'), skillDeleteSelectedButton: document.getElementById('skillDeleteSelectedButton'), skillClearUnavailableButton: document.getElementById('skillClearUnavailableButton'), skillBulkHint: document.getElementById('skillBulkHint'),
   capabilityAssignmentDialog: document.getElementById('capabilityAssignmentDialog'), capabilityAssignmentSummary: document.getElementById('capabilityAssignmentSummary'), capabilityAssignmentSelectAllButton: document.getElementById('capabilityAssignmentSelectAllButton'), capabilityAssignmentClearButton: document.getElementById('capabilityAssignmentClearButton'), capabilityAssignmentEnvironmentList: document.getElementById('capabilityAssignmentEnvironmentList'), capabilityAssignmentEnableButton: document.getElementById('capabilityAssignmentEnableButton'), capabilityAssignmentDisableButton: document.getElementById('capabilityAssignmentDisableButton'), capabilityAssignmentResult: document.getElementById('capabilityAssignmentResult'),
   workspaceForm: document.getElementById('workspaceForm'), workspacePath: document.getElementById('workspacePath'), workspaceName: document.getElementById('workspaceName'), workspaceBrowseButton: document.getElementById('workspaceBrowseButton'), workspaceList: document.getElementById('workspaceList'), workspaceFilter: document.getElementById('workspaceFilter'), workspaceVisibleCount: document.getElementById('workspaceVisibleCount'), workspaceListTotalCount: document.getElementById('workspaceListTotalCount'),
-  workspaceDiscoveryDialog: document.getElementById('workspaceDiscoveryDialog'), workspaceDiscoveryTitle: document.getElementById('workspaceDiscoveryTitle'), workspaceDiscoveryForm: document.getElementById('workspaceDiscoveryForm'), workspaceDiscoveryPath: document.getElementById('workspaceDiscoveryPath'), workspaceDiscoveryQuery: document.getElementById('workspaceDiscoveryQuery'), workspaceDiscoveryMaxDepth: document.getElementById('workspaceDiscoveryMaxDepth'), workspaceDiscoveryMaxEntries: document.getElementById('workspaceDiscoveryMaxEntries'), workspaceDiscoveryMaxCandidates: document.getElementById('workspaceDiscoveryMaxCandidates'), workspaceDiscoveryMaxDigestEntries: document.getElementById('workspaceDiscoveryMaxDigestEntries'), workspaceDiscoveryMaxOutputBytes: document.getElementById('workspaceDiscoveryMaxOutputBytes'), workspaceDiscoveryScanButton: document.getElementById('workspaceDiscoveryScanButton'), workspaceDiscoveryFilter: document.getElementById('workspaceDiscoveryFilter'), workspaceDiscoverySummary: document.getElementById('workspaceDiscoverySummary'), workspaceDiscoveryResult: document.getElementById('workspaceDiscoveryResult'),
+  workspaceDiscoveryDialog: document.getElementById('workspaceDiscoveryDialog'), workspaceDiscoveryAdvanced: document.getElementById('workspaceDiscoveryAdvanced'), workspaceDiscoveryFilterToolbar: document.getElementById('workspaceDiscoveryFilterToolbar'), workspaceDiscoveryTitle: document.getElementById('workspaceDiscoveryTitle'), workspaceDiscoveryForm: document.getElementById('workspaceDiscoveryForm'), workspaceDiscoveryPath: document.getElementById('workspaceDiscoveryPath'), workspaceDiscoveryQuery: document.getElementById('workspaceDiscoveryQuery'), workspaceDiscoveryMaxDepth: document.getElementById('workspaceDiscoveryMaxDepth'), workspaceDiscoveryMaxEntries: document.getElementById('workspaceDiscoveryMaxEntries'), workspaceDiscoveryMaxCandidates: document.getElementById('workspaceDiscoveryMaxCandidates'), workspaceDiscoveryMaxDigestEntries: document.getElementById('workspaceDiscoveryMaxDigestEntries'), workspaceDiscoveryMaxOutputBytes: document.getElementById('workspaceDiscoveryMaxOutputBytes'), workspaceDiscoveryScanButton: document.getElementById('workspaceDiscoveryScanButton'), workspaceDiscoveryFilter: document.getElementById('workspaceDiscoveryFilter'), workspaceDiscoverySummary: document.getElementById('workspaceDiscoverySummary'), workspaceDiscoveryResult: document.getElementById('workspaceDiscoveryResult'),
   environmentForm: document.getElementById('environmentForm'), environmentWorkspace: document.getElementById('environmentWorkspace'), environmentName: document.getElementById('environmentName'), environmentRoot: document.getElementById('environmentRoot'), environmentBrowseButton: document.getElementById('environmentBrowseButton'), environmentList: document.getElementById('environmentList'), environmentFilter: document.getElementById('environmentFilter'), environmentWorkspaceFilter: document.getElementById('environmentWorkspaceFilter'), environmentVisibleCount: document.getElementById('environmentVisibleCount'), environmentListTotalCount: document.getElementById('environmentListTotalCount'), environmentFilterHint: document.getElementById('environmentFilterHint'),
   hostDirectoryDialog: document.getElementById('hostDirectoryDialog'), hostDirectoryRootsButton: document.getElementById('hostDirectoryRootsButton'), hostDirectoryParentButton: document.getElementById('hostDirectoryParentButton'), hostDirectoryRefreshButton: document.getElementById('hostDirectoryRefreshButton'), hostDirectoryCurrentPath: document.getElementById('hostDirectoryCurrentPath'), hostDirectoryList: document.getElementById('hostDirectoryList'), hostDirectoryHint: document.getElementById('hostDirectoryHint'), hostDirectorySelectButton: document.getElementById('hostDirectorySelectButton'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
   environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), cleanupStaleWorktreesButton: document.getElementById('cleanupStaleWorktreesButton'), staleWorktreeCleanupDialog: document.getElementById('staleWorktreeCleanupDialog'), staleWorktreeCleanupHours: document.getElementById('staleWorktreeCleanupHours'), staleWorktreeCleanupSummary: document.getElementById('staleWorktreeCleanupSummary'), staleWorktreeCleanupList: document.getElementById('staleWorktreeCleanupList'), staleWorktreeCleanupResult: document.getElementById('staleWorktreeCleanupResult'), staleWorktreeCleanupRefreshButton: document.getElementById('staleWorktreeCleanupRefreshButton'), staleWorktreeCleanupExecuteButton: document.getElementById('staleWorktreeCleanupExecuteButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
-  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'), environmentJetBrainsSearchInput: document.getElementById('environmentJetBrainsSearchInput'), environmentJetBrainsSearchButton: document.getElementById('environmentJetBrainsSearchButton'), environmentJetBrainsSearchResult: document.getElementById('environmentJetBrainsSearchResult'),
+  environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetailSubviewHelp: document.getElementById('environmentDetailSubviewHelp'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'), environmentJetBrainsSearchInput: document.getElementById('environmentJetBrainsSearchInput'), environmentJetBrainsSearchButton: document.getElementById('environmentJetBrainsSearchButton'), environmentJetBrainsSearchResult: document.getElementById('environmentJetBrainsSearchResult'),
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
@@ -249,17 +249,18 @@ function matchingCandidateEnvironments(workspace, candidate) {
   const target = normalizeFilesystemKey(absoluteCandidateRoot(workspace, candidate?.suggested_environment_root || candidate?.root));
   return safeArray(currentSnapshot?.environments).filter((environment) => environment.workspace_id === workspace?.workspace_id && normalizeFilesystemKey(environment.root) === target);
 }
-function resetWorkspaceDiscoveryState(message = '点击“扫描”显式开始 discovery。') {
+function resetWorkspaceDiscoveryState(message = '扫描后会在这里列出项目，并可选择添加为开发环境。') {
   workspaceDiscoveryLoading = false; workspaceDiscoveryReport = null; workspaceDiscoveryError = ''; workspaceDiscoveryFingerprint = '';
   elements.workspaceDiscoveryScanButton.disabled = false;
-  elements.workspaceDiscoverySummary.textContent = '尚未扫描。打开此窗口不会读取目录。';
+  elements.workspaceDiscoverySummary.textContent = '尚未扫描。点击“开始扫描”查找项目。';
+  elements.workspaceDiscoveryFilterToolbar.hidden = true;
   emptyMessage(elements.workspaceDiscoveryResult, message);
 }
 function openWorkspaceDiscovery(workspace, opener) {
   if (!workspace) return;
   workspaceDiscoveryGeneration++; workspaceDiscoveryWorkspaceID = workspace.workspace_id || '';
-  elements.workspaceDiscoveryTitle.textContent = `Discover projects · ${workspace.name || workspace.workspace_id}`;
-  elements.workspaceDiscoveryForm.reset(); elements.workspaceDiscoveryFilter.value = '';
+  elements.workspaceDiscoveryTitle.textContent = `发现项目 · ${workspace.name || workspace.workspace_id}`;
+  elements.workspaceDiscoveryForm.reset(); elements.workspaceDiscoveryFilter.value = ''; elements.workspaceDiscoveryAdvanced.open = false;
   resetWorkspaceDiscoveryState();
   if (opener?.focus) opener.focus({preventScroll: true});
   openEditorDialog('workspaceDiscoveryDialog');
@@ -271,16 +272,17 @@ function workspaceDiscoveryIdentityIsCurrent(identity) {
 function renderWorkspaceDiscovery() {
   const workspace = currentWorkspaceDiscoveryWorkspace();
   elements.workspaceDiscoveryScanButton.disabled = workspaceDiscoveryLoading || !workspace;
+  elements.workspaceDiscoveryScanButton.textContent = workspaceDiscoveryLoading ? '扫描中…' : workspaceDiscoveryReport ? '重新扫描' : '开始扫描';
   if (!workspace) {
     elements.workspaceDiscoverySummary.textContent = '当前 Workspace 已不可用。';
-    return emptyMessage(elements.workspaceDiscoveryResult, 'Workspace 已切换或移除；关闭后重新打开 discovery。');
+    return emptyMessage(elements.workspaceDiscoveryResult, '工作区已切换或移除，请关闭窗口后重新打开。');
   }
   if (workspaceDiscoveryLoading) {
-    elements.workspaceDiscoverySummary.textContent = '正在执行有界 metadata discovery…';
+    elements.workspaceDiscoverySummary.textContent = '正在扫描项目目录，请稍候…';
     return emptyMessage(elements.workspaceDiscoveryResult, '扫描中…');
   }
   if (workspaceDiscoveryError) {
-    elements.workspaceDiscoverySummary.textContent = 'Discovery 失败；已保留当前选项，可显式重试。';
+    elements.workspaceDiscoverySummary.textContent = '扫描失败，已保留填写的条件，可以重试。';
     return emptyMessage(elements.workspaceDiscoveryResult, workspaceDiscoveryError);
   }
   if (!workspaceDiscoveryReport) return resetWorkspaceDiscoveryState();
@@ -290,35 +292,35 @@ function renderWorkspaceDiscovery() {
   const visible = candidates.filter((candidate) => matches([candidate.name, candidate.root, candidate.query_match, ...safeArray(candidate.markers).map((marker) => marker.path)].filter(Boolean).join(' ')));
   const partial = Boolean(report.truncated) || String(report.coverage || '').toLowerCase().startsWith('partial');
   const omitted = safeNumber(report.omitted_candidates) + safeNumber(report.omitted_digest_entries) + safeNumber(report.omitted_markers) + safeNumber(report.omitted_diagnostics);
-  const limits = report.limits || {}, scope = report.scope || {};
-  const scopeText = scope.workspace_id ? `Workspace ${scope.workspace_id}` : 'Workspace scope unavailable';
-  const stops = safeArray(report.stop_reasons);
-  elements.workspaceDiscoverySummary.textContent = `${requestChanged ? '选项已变化 · 需要重新扫描 · ' : ''}${partial ? 'Partial' : 'Complete'} · ${scopeText} · path ${report.scan_path || '.'} · candidates ${candidates.length}${omitted ? ` · omitted ${omitted}` : ''} · visited ${safeNumber(report.visited_entries)} · limits d${safeNumber(limits.max_depth)}/e${safeNumber(limits.max_entries)}/c${safeNumber(limits.max_candidates)}/g${safeNumber(limits.max_digest_entries)}/b${safeNumber(limits.max_output_bytes)}${stops.length ? ` · stop ${stops.join(', ')}` : ''} · ${formatDateTime(report.observed_at)}`;
+  elements.workspaceDiscoveryFilterToolbar.hidden = candidates.length === 0;
+  elements.workspaceDiscoverySummary.textContent = requestChanged
+    ? '扫描条件已修改，请点击“重新扫描”更新结果。'
+    : `发现 ${candidates.length} 个项目候选 · 已检查 ${safeNumber(report.visited_entries)} 项${partial ? ' · 扫描不完整，可缩小范围或调整高级设置' : ' · 扫描完成'}${omitted ? ` · 有 ${omitted} 项结果未显示` : ''}`;
   elements.workspaceDiscoveryResult.replaceChildren(); elements.workspaceDiscoveryResult.classList.remove('empty');
-  if (!candidates.length) return emptyMessage(elements.workspaceDiscoveryResult, report.query ? '扫描完成，但 discovery query 没有候选匹配。可缩小 path、修改 query 后显式重新扫描。' : '扫描完成，没有发现项目候选。可调整 path/budgets 后显式重新扫描。');
+  if (!candidates.length) return emptyMessage(elements.workspaceDiscoveryResult, report.query ? '没有找到符合条件的项目。可以清空项目名称，重新扫描。' : '未发现项目候选。可以指定更具体的子目录，或在高级设置中增加扫描范围。');
   if (!visible.length) return emptyMessage(elements.workspaceDiscoveryResult, '当前本地筛选没有匹配候选；不会重新扫描。');
 
   const digest = safeArray(report.digest);
   if (digest.length) {
     const digestPanel = document.createElement('details'); digestPanel.className = 'discovery-digest';
-    const digestSummary = document.createElement('summary'); digestSummary.textContent = `Directory digest · ${digest.length} entries${safeNumber(report.omitted_digest_entries) ? ` · ${safeNumber(report.omitted_digest_entries)} omitted` : ''}`;
+    const digestSummary = document.createElement('summary'); digestSummary.textContent = `查看扫描详情（${digest.length} 条目录记录）`;
     const digestBody = document.createElement('div'); digestBody.className = 'discovery-digest-body';
-    for (const entry of digest.slice(0, 12)) { const line = document.createElement('div'); const path = document.createElement('code'); path.textContent = entry.path || '.'; const meta = document.createElement('small'); meta.textContent = `${safeNumber(entry.observed_children)} children · ${safeNumber(entry.observed_markers)} markers${entry.children_complete === false ? ' · partial' : ''}`; line.append(path, meta); digestBody.append(line); }
-    if (digest.length > 12) { const more = document.createElement('small'); more.textContent = `${digest.length - 12} more digest entries in bounded report`; digestBody.append(more); }
+    for (const entry of digest.slice(0, 12)) { const line = document.createElement('div'); const path = document.createElement('code'); path.textContent = entry.path || '.'; const meta = document.createElement('small'); meta.textContent = `${safeNumber(entry.observed_children)} 项子内容 · ${safeNumber(entry.observed_markers)} 项目标记${entry.children_complete === false ? ' · 未完全扫描' : ''}`; line.append(path, meta); digestBody.append(line); }
+    if (digest.length > 12) { const more = document.createElement('small'); more.textContent = `还有 ${digest.length - 12} 条目录记录未展开显示`; digestBody.append(more); }
     digestPanel.append(digestSummary, digestBody); elements.workspaceDiscoveryResult.append(digestPanel);
   }
   for (const candidate of visible) {
     const row = document.createElement('article'); row.className = 'discovery-candidate'; row.dataset.root = candidate.root || '';
     const content = document.createElement('div'); content.className = 'item-content';
-    const title = document.createElement('div'); title.className = 'item-title-line'; const strong = document.createElement('strong'); strong.textContent = candidate.name || candidate.root || 'project'; title.append(strong, stateBadge(partial ? 'partial scan' : 'candidate', partial ? 'degraded' : 'available'));
+    const title = document.createElement('div'); title.className = 'item-title-line'; const strong = document.createElement('strong'); strong.textContent = candidate.name || candidate.root || '项目'; title.append(strong, stateBadge(partial ? '部分扫描' : '可添加', partial ? 'degraded' : 'available'));
     const root = document.createElement('code'); root.textContent = candidate.root || '.';
-    const evidence = document.createElement('small'); evidence.textContent = safeArray(candidate.markers).length ? `Markers: ${safeArray(candidate.markers).map((marker) => marker.path || marker.kind).join(', ')}` : (candidate.evidence || 'directory metadata');
+    const evidence = document.createElement('small'); evidence.textContent = safeArray(candidate.markers).length ? `识别依据：${safeArray(candidate.markers).map((marker) => marker.path || marker.kind).join(', ')}` : (candidate.evidence || '目录信息');
     const matchesEnvironment = matchingCandidateEnvironments(workspace, candidate);
-    const existing = document.createElement('small'); existing.textContent = matchesEnvironment.length ? `Existing Environment: ${matchesEnvironment.map((environment) => `${environment.name || environment.environment_id} (${environment.environment_id})`).join(', ')}` : 'Existing Environment: none for this exact root';
+    const existing = document.createElement('small'); existing.textContent = matchesEnvironment.length ? `已添加为开发环境：${matchesEnvironment.map((environment) => environment.name || environment.environment_id).join('、')}` : '尚未添加为开发环境';
     content.append(title, root, evidence, existing);
     const actions = document.createElement('div'); actions.className = 'item-actions';
-    const use = createActionButton('Use root', 'use-discovery-root', candidate.root || '.'); use.dataset.root = candidate.suggested_environment_root || candidate.root || '.'; actions.append(use);
-    if (matchesEnvironment.length) { const view = createActionButton('查看匹配 Environment', 'show-discovery-environments', candidate.root || '.'); view.dataset.root = candidate.suggested_environment_root || candidate.root || '.'; actions.append(view); }
+    if (!matchesEnvironment.length) { const use = createActionButton('添加为开发环境', 'use-discovery-root', candidate.root || '.'); use.dataset.root = candidate.suggested_environment_root || candidate.root || '.'; actions.append(use); }
+    if (matchesEnvironment.length) { const view = createActionButton('查看已有环境', 'show-discovery-environments', candidate.root || '.'); view.dataset.root = candidate.suggested_environment_root || candidate.root || '.'; actions.append(view); }
     row.append(content, actions); elements.workspaceDiscoveryResult.append(row);
   }
 }
@@ -332,7 +334,7 @@ async function scanWorkspaceDiscovery() {
     workspaceDiscoveryReport = report; workspaceDiscoveryFingerprint = fingerprint;
   } catch (error) {
     if (!workspaceDiscoveryIdentityIsCurrent(identity)) return;
-    workspaceDiscoveryReport = null; workspaceDiscoveryFingerprint = ''; workspaceDiscoveryError = 'Discovery 失败：' + errorText(error);
+    workspaceDiscoveryReport = null; workspaceDiscoveryFingerprint = ''; workspaceDiscoveryError = '项目扫描失败：' + errorText(error);
   } finally {
     if (workspaceDiscoveryIdentityIsCurrent(identity)) { workspaceDiscoveryLoading = false; renderWorkspaceDiscovery(); }
   }
@@ -377,8 +379,8 @@ function resetEnvironmentProjectIndex(message = '尚未检查项目索引。') {
   environmentProjectIndexStatus = null;
   environmentProjectIndexAnalysis = null;
   environmentProjectIndexError = '';
-  if (elements.environmentProjectIndexStatusButton) elements.environmentProjectIndexStatusButton.disabled = !window.ADMWebSurface || !selectedEnvironmentID;
-  if (elements.environmentProjectAnalyzeButton) elements.environmentProjectAnalyzeButton.disabled = !window.ADMWebSurface || !selectedEnvironmentID;
+  if (elements.environmentProjectIndexStatusButton) elements.environmentProjectIndexStatusButton.disabled = !selectedEnvironmentID;
+  if (elements.environmentProjectAnalyzeButton) elements.environmentProjectAnalyzeButton.disabled = !selectedEnvironmentID;
   if (elements.environmentProjectIndexResult) emptyMessage(elements.environmentProjectIndexResult, message);
 }
 function projectIndexStateLabel(state) {
@@ -387,7 +389,7 @@ function projectIndexStateLabel(state) {
 }
 function renderEnvironmentProjectIndex() {
   if (!elements.environmentProjectIndexResult) return;
-  const enabled = Boolean(window.ADMWebSurface && selectedEnvironmentID);
+  const enabled = Boolean(selectedEnvironmentID);
   elements.environmentProjectIndexStatusButton.disabled = !enabled || environmentProjectIndexLoading;
   elements.environmentProjectAnalyzeButton.disabled = !enabled || environmentProjectIndexLoading;
   if (environmentProjectIndexLoading) return emptyMessage(elements.environmentProjectIndexResult, '正在处理项目索引…');
@@ -446,7 +448,7 @@ function environmentProjectIndexScopeCurrent(identity) {
     !elements.environmentDetailPanel.hidden);
 }
 async function loadEnvironmentProjectIndexStatus() {
-  if (!window.ADMWebSurface || environmentProjectIndexLoading || !selectedEnvironmentID) return;
+  if (environmentProjectIndexLoading || !selectedEnvironmentID) return;
   const identity = {connectionGeneration, detailGeneration, environmentID: selectedEnvironmentID, indexGeneration: ++environmentProjectIndexGeneration};
   environmentProjectIndexLoading = true;
   environmentProjectIndexError = '';
@@ -466,7 +468,7 @@ async function loadEnvironmentProjectIndexStatus() {
   }
 }
 async function analyzeEnvironmentProject() {
-  if (!window.ADMWebSurface || environmentProjectIndexLoading || !selectedEnvironmentID) return;
+  if (environmentProjectIndexLoading || !selectedEnvironmentID) return;
   const identity = {connectionGeneration, detailGeneration, environmentID: selectedEnvironmentID, indexGeneration: ++environmentProjectIndexGeneration};
   environmentProjectIndexLoading = true;
   environmentProjectIndexError = '';
@@ -474,7 +476,7 @@ async function analyzeEnvironmentProject() {
   renderEnvironmentProjectIndex();
   setStatus('正在静态分析项目并刷新 .adm/index…', 'loading');
   try {
-    const analysis = await desktopAdapter().AnalyzeProject(identity.environmentID, 4000, 1200);
+    const analysis = await desktopAdapter().AnalyzeProject(identity.environmentID, 0, 0);
     if (!environmentProjectIndexScopeCurrent(identity)) return;
     environmentProjectIndexAnalysis = analysis;
     environmentProjectIndexStatus = await desktopAdapter().ProjectIndexStatus(identity.environmentID, 50);
@@ -2621,9 +2623,12 @@ function syncEnvironmentDetailSubviewUI() {
     button.setAttribute('aria-selected', String(active));
     button.tabIndex = active ? 0 : -1;
   }
+  elements.environmentDetailSubviewHelp.textContent = environmentDetailSubview === 'summary'
+    ? '基本信息：查看项目路径、开发权限和当前环境配置。'
+    : '能力诊断：查看已记录的能力状态及故障原因；切换页面不会执行检查或修改配置。';
   elements.environmentDetail.hidden = environmentDetailSubview !== 'summary';
   elements.environmentTreeDigestSection.hidden = environmentDetailSubview !== 'summary';
-  elements.environmentProjectIndexSection.hidden = environmentDetailSubview !== 'summary' || !window.ADMWebSurface;
+  elements.environmentProjectIndexSection.hidden = environmentDetailSubview !== 'summary';
   if (elements.environmentCodeIntelligenceSection) elements.environmentCodeIntelligenceSection.hidden = environmentDetailSubview !== 'summary' || !window.ADMWebSurface;
   elements.environmentDiagnostics.hidden = environmentDetailSubview !== 'diagnostics';
 }
@@ -2665,7 +2670,7 @@ function environmentDiagnosticGroups(inspection) {
     detailRow('诊断时间', report.generated_at ? new Date(report.generated_at).toLocaleString() : '未返回'),
     detailRow('正常', String(stateCounts.available)),
     detailRow('需关注', String(stateCounts.degraded + stateCounts.unavailable + stateCounts.unconfigured)),
-    detailRow('Disabled / Unknown', String(stateCounts.disabled + stateCounts.unknown)),
+    detailRow('已禁用 / 未知', String(stateCounts.disabled + stateCounts.unknown)),
   ];
   const unresolvedRows = [
     detailRow('MCP IDs', unresolvedMCP.join(', ') || 'None'),
@@ -2747,10 +2752,10 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
     detailRow('Skill IDs', safeArray(inspection?.unresolved_skill_ids).join(', ') || 'None'),
   ];
   elements.environmentDetail.replaceChildren(
-    detailGroup('Identity', identityRows, 'Stable identity/root/Workspace facts from the current inspection.'),
-    detailGroup('Lifecycle retention', temporaryLifecycleRows(environment), 'Lifecycle owner/session/run are retention provenance only, not task hierarchy or status.'),
-    detailGroup('Runtime authority', authorityRows, 'Writer is an observation only; this page never acquires or force-releases a lease.'),
-    detailGroup('Capability issues', capabilityRows, issueFacts.length + ' issue fact(s); optional failures stay local.'),
+    detailGroup('环境基本信息', identityRows, '项目路径、所属工作区及环境 ID。'),
+    detailGroup('生命周期', temporaryLifecycleRows(environment), '查看是否临时、持久以及所属会话；这里不会修改清理策略。'),
+    detailGroup('写入与运行权限', authorityRows, '仅展示写入锁状态，不会自动获取或释放写入权限。'),
+    detailGroup('需要关注的能力', capabilityRows, issueFacts.length + ' 项能力需要关注；未配置的可选服务不影响普通代码分析。'),
     detailGroup('未解析引用', unresolvedRows, '正常 catalog 删除会同步清理选择；若这里仍有 unresolved ID，说明是历史或外部状态残留。')
   );
   renderEnvironmentDiagnostics(inspection);

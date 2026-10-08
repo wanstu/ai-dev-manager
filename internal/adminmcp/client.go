@@ -16,6 +16,7 @@ import (
 	"ai-dev-manager-v2/internal/management"
 	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
+	"ai-dev-manager-v2/internal/projectanalysis"
 	"ai-dev-manager-v2/internal/verifier"
 	productversion "ai-dev-manager-v2/internal/version"
 
@@ -401,6 +402,14 @@ func (c *Client) WorkspaceRemove(id string) (model.Workspace, error) {
 }
 func (c *Client) EnvironmentInspect(id string) (app.EnvironmentInspection, error) {
 	return callAdmin[app.EnvironmentInspection](c, context.Background(), "environment_inspect", map[string]any{"environment_id": id})
+}
+
+// ProjectIndexStatus and ProjectAnalyze are management-only index operations.
+func (c *Client) ProjectIndexStatus(environmentID string, maxChanges int) (projectanalysis.IndexStatusResult, error) {
+	return callAdmin[projectanalysis.IndexStatusResult](c, context.Background(), "project_index_status", map[string]any{"environment_id": environmentID, "max_changes": maxChanges})
+}
+func (c *Client) ProjectAnalyze(environmentID, owner string, maxFiles, maxSymbols int) (projectanalysis.Result, error) {
+	return callAdmin[projectanalysis.Result](c, context.Background(), "project_analyze", map[string]any{"environment_id": environmentID, "writer_owner": owner, "max_files": maxFiles, "max_symbols": maxSymbols})
 }
 func (c *Client) EnvironmentTreeDigest(id string, request model.DiscoveryRequest) (model.DiscoveryReport, error) {
 	return callAdmin[model.DiscoveryReport](c, context.Background(), "environment_tree_digest", discoveryArguments(map[string]any{"environment_id": id}, request, false))

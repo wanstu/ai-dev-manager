@@ -175,6 +175,57 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
 
+    if (new URLSearchParams(location.search).get('focus') === 'environment') {
+      const bridge=window.go.desktop.Adapter;
+      const inspect=bridge.InspectEnvironment.bind(bridge);
+      bridge.InspectEnvironment=async (id) => {
+        const report=await inspect(id);
+        report.capability_report.facts.push({
+          key:'code_intelligence/super_long_key_'+('x'.repeat(320)),
+          kind:'code_intelligence_provider',
+          state:'unconfigured',reason_code:'provider_not_configured',
+          message:'Optional provider is unconfigured. '+('extended metadata '.repeat(28)),
+          source:'test fixture',
+        });
+        return report;
+      };
+      await clickRoute('environments');
+      const detail=document.querySelector('#environmentList button[data-action="inspect-environment"][data-id="env-a"]');
+      check(Boolean(detail), 'environment row can open details');
+      detail.click();
+      await waitFor(() => !document.getElementById('environmentDetailPanel').hidden && document.getElementById('environmentDetail').textContent.includes('环境基本信息'), 'environment detail renders Chinese basics');
+      const tabs=document.getElementById('environmentDetailSubviewTabs');
+      const help=document.getElementById('environmentDetailSubviewHelp');
+      const summary=document.getElementById('environmentDetail');
+      const diagnostics=document.getElementById('environmentDiagnostics');
+      check(tabs.textContent.includes('基本信息') && tabs.textContent.includes('能力诊断'), 'tabs explain their purpose');
+      check(getComputedStyle(diagnostics).display==='none' && getComputedStyle(summary).display==='grid', 'summary is the only initially visible subview');
+      const beforeSwitch=window.__fakeADM.calls.length;
+      tabs.querySelector('[data-environment-detail-subview="diagnostics"]').click(); await sleep();
+      check(getComputedStyle(summary).display==='none' && getComputedStyle(diagnostics).display==='grid', 'switch actually hides summary and shows diagnostics');
+      check(help.textContent.includes('不会执行检查'), 'diagnostics description explains read-only behavior');
+      check(tabs.querySelector('[data-environment-detail-subview="diagnostics"]').getAttribute('aria-selected')==='true', 'selected tab state is synchronized');
+      check(diagnostics.textContent.includes('provider_not_configured'), 'diagnostics preserve relevant backend evidence');
+      check(diagnostics.scrollWidth<=diagnostics.clientWidth+2, 'long diagnostics wrap within column bounds');
+      check(document.getElementById('environmentDetailPanel').scrollWidth<=document.getElementById('environmentDetailPanel').clientWidth+2, 'modal cannot horizontally overflow');
+      tabs.querySelector('[data-environment-detail-subview="summary"]').click(); await sleep();
+      check(getComputedStyle(diagnostics).display==='none' && getComputedStyle(summary).display==='grid', 'returning to basics hides diagnostics');
+      check(window.__fakeADM.calls.length===beforeSwitch, 'tab switching makes no extra service calls');
+      document.getElementById('closeEnvironmentDetail').click(); await sleep();
+      await clickRoute('workspaces');
+      const discovery=document.querySelector('#workspaceList button[data-action="discover-workspace-projects"][data-id="ws-a"]');
+      if(discovery){discovery.click(); await sleep();
+        check(!document.getElementById('workspaceDiscoveryAdvanced').open, 'advanced discovery settings are collapsed');
+        check(document.getElementById('workspaceDiscoveryFilterToolbar').hidden, 'results filter hidden before scanning');
+        const x=document.getElementById('workspaceDiscoveryPath').getBoundingClientRect();
+        const y=document.getElementById('workspaceDiscoveryQuery').getBoundingClientRect();
+        check(Math.abs(x.width-y.width)<3 && y.height>=36, 'basic discovery inputs have matching sizes');
+      }
+      check(document.documentElement.scrollWidth<=window.innerWidth+2, 'no whole-window horizontal overflow');
+      result.ok=true;
+      return;
+    }
+
     const beforeRoutes = window.__fakeADM.calls.length;
     for(const route of ['workspaces','environments','runtime','mcp','skills','gateway','diagnostics','exec-allowlist','settings','overview']) await clickRoute(route);
     check(document.getElementById('diagnosticsPageContent').textContent.includes('不会自动 fan-out'), 'Diagnostics route without Environment does not fan out');
@@ -235,7 +286,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     const discoverA=document.querySelector('#workspaceList button[data-action="discover-workspace"][data-id="ws-a"]');
     discoverA.focus(); discoverA.click(); await waitFor(() => document.getElementById('workspaceDiscoveryDialog').open, 'Workspace discovery dialog opens');
     check(window.__fakeADM.calls.filter(c=>c.name==='DiscoverWorkspace').length===discoveryCallsBefore, 'opening discovery does not scan');
-    check(document.getElementById('workspaceDiscoveryResult').textContent.includes('显式开始'), 'discovery starts unloaded');
+    check(document.getElementById('workspaceDiscoveryResult').textContent.includes('扫描后会'), 'discovery starts unloaded');
+    check(!document.getElementById('workspaceDiscoveryAdvanced').open, 'advanced discovery options stay collapsed by default');
+    check(document.getElementById('workspaceDiscoveryFilterToolbar').hidden, 'result-only filter stays hidden until scanning');
+    const discoveryPathBox=document.getElementById('workspaceDiscoveryPath').getBoundingClientRect();
+    const discoveryQueryBox=document.getElementById('workspaceDiscoveryQuery').getBoundingClientRect();
+    check(Math.abs(discoveryPathBox.width-discoveryQueryBox.width)<3 && discoveryQueryBox.height>=36 && getComputedStyle(document.getElementById('workspaceDiscoveryQuery')).borderTopStyle==='solid', 'both basic inputs have matching styled dimensions');
     document.getElementById('workspaceDiscoveryPath').value='apps'; document.getElementById('workspaceDiscoveryPath').dispatchEvent(new Event('input',{bubbles:true}));
     document.getElementById('workspaceDiscoveryFilter').value='p2'; document.getElementById('workspaceDiscoveryFilter').dispatchEvent(new Event('input',{bubbles:true})); await sleep();
     check(window.__fakeADM.calls.filter(c=>c.name==='DiscoverWorkspace').length===discoveryCallsBefore, 'typing discovery options and local filter does not scan');
@@ -247,8 +303,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     await waitFor(() => document.getElementById('workspaceDiscoveryResult').textContent.includes('apps/p2'), 'discovery results render');
     window.__fakeADM.state.delayDiscovery=false;
     check(window.__fakeADM.calls.filter(c=>c.name==='DiscoverWorkspace').length===discoveryCallsBefore+1, 'double submit remains one discovery call');
-    check(document.getElementById('workspaceDiscoverySummary').textContent.includes('Workspace ws-a') && document.getElementById('workspaceDiscoverySummary').textContent.includes('path .') && document.getElementById('workspaceDiscoverySummary').textContent.includes('limits d4/e2000/c50/g100/b65536'), 'discovery summary shows stable scope path and effective limits');
-    check(document.getElementById('workspaceDiscoveryResult').textContent.includes('Directory digest') && document.getElementById('workspaceDiscoveryResult').textContent.includes('Existing Environment: Environment A (env-a)'), 'discovery renders compact digest and explicit matching Environment identity');
+    check(!document.getElementById('workspaceDiscoveryFilterToolbar').hidden, 'loaded results expose the local filter');
+    check(document.getElementById('workspaceDiscoverySummary').textContent.includes('发现 3 个项目候选') && document.getElementById('workspaceDiscoverySummary').textContent.includes('扫描完成') && !document.getElementById('workspaceDiscoverySummary').textContent.includes('limits d'), 'discovery summary is useful Chinese status without internal budget codes');
+    check(document.getElementById('workspaceDiscoveryResult').textContent.includes('查看扫描详情') && document.getElementById('workspaceDiscoveryResult').textContent.includes('已添加为开发环境：Environment A'), 'discovery renders compact digest and explicit matching Environment identity');
     const discoveryDialog=document.getElementById('workspaceDiscoveryDialog');
     check(discoveryDialog.scrollWidth<=discoveryDialog.clientWidth+1, 'discovery dialog has no horizontal overflow with long candidate names');
     for(const row of document.querySelectorAll('#workspaceDiscoveryResult .discovery-candidate')) check(row.scrollWidth<=row.clientWidth+1, 'discovery candidate row has no horizontal overflow');
@@ -258,7 +315,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(window.__fakeADM.calls.length===callsBeforeLocalCandidateFilter, 'loaded candidate filtering makes no adapter calls');
     loadedFilter.value=''; loadedFilter.dispatchEvent(new Event('input',{bubbles:true}));
     document.getElementById('workspaceDiscoveryQuery').value='changed'; document.getElementById('workspaceDiscoveryQuery').dispatchEvent(new Event('input',{bubbles:true})); await sleep();
-    check(document.getElementById('workspaceDiscoverySummary').textContent.includes('需要重新扫描') && window.__fakeADM.calls.length===callsBeforeLocalCandidateFilter, 'editing discovery request marks loaded result stale without scanning');
+    check(document.getElementById('workspaceDiscoverySummary').textContent.includes('重新扫描') && window.__fakeADM.calls.length===callsBeforeLocalCandidateFilter, 'editing discovery request marks loaded result stale without scanning');
     document.getElementById('workspaceDiscoveryQuery').value=''; document.getElementById('workspaceDiscoveryQuery').dispatchEvent(new Event('input',{bubbles:true}));
     const managementBeforeRootHandoff=document.getElementById('managementEnvironment').value;
     const createBeforeRootHandoff=window.__fakeADM.calls.filter(c=>c.name==='CreateEnvironment').length;
@@ -278,11 +335,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     discoverA.click(); await waitFor(() => document.getElementById('workspaceDiscoveryDialog').open, 'discovery reopens after root handoff');
     const noMatchBefore=window.__fakeADM.calls.filter(c=>c.name==='DiscoverWorkspace').length;
     document.getElementById('workspaceDiscoveryQuery').value='nomatch'; document.getElementById('workspaceDiscoveryForm').requestSubmit();
-    await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='DiscoverWorkspace').length===noMatchBefore+1 && document.getElementById('workspaceDiscoveryResult').textContent.includes('discovery query 没有候选匹配'), 'explicit discovery no-match state');
+    await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='DiscoverWorkspace').length===noMatchBefore+1 && document.getElementById('workspaceDiscoveryResult').textContent.includes('没有找到符合条件的项目'), 'explicit discovery no-match state');
     document.getElementById('workspaceDiscoveryQuery').value=''; document.getElementById('workspaceDiscoveryPath').value='empty'; document.getElementById('workspaceDiscoveryForm').requestSubmit();
-    await waitFor(() => document.getElementById('workspaceDiscoveryResult').textContent.includes('没有发现项目候选'), 'explicit discovery empty state');
+    await waitFor(() => document.getElementById('workspaceDiscoveryResult').textContent.includes('未发现项目候选'), 'explicit discovery empty state');
     document.getElementById('workspaceDiscoveryPath').value=''; document.getElementById('workspaceDiscoveryMaxEntries').value='1'; document.getElementById('workspaceDiscoveryForm').requestSubmit();
-    await waitFor(() => document.getElementById('workspaceDiscoverySummary').textContent.includes('Partial') && document.getElementById('workspaceDiscoverySummary').textContent.includes('stop entry_limit'), 'explicit discovery partial state exposes reason');
+    await waitFor(() => document.getElementById('workspaceDiscoverySummary').textContent.includes('扫描不完整') && document.getElementById('workspaceDiscoverySummary').textContent.includes('高级设置'), 'explicit discovery partial state exposes reason');
     window.__fakeADM.state.failDiscovery=true; document.getElementById('workspaceDiscoveryMaxEntries').value=''; document.getElementById('workspaceDiscoveryForm').requestSubmit();
     await waitFor(() => document.getElementById('workspaceDiscoveryResult').textContent.includes('fixture discovery failure'), 'explicit discovery failure state');
     window.__fakeADM.state.failDiscovery=false;
@@ -330,7 +387,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await waitFor(() => !document.getElementById('environmentDetailPanel').hidden, 'Environment detail open');
     check(window.__fakeADM.calls.filter(c=>c.name==='InspectEnvironment' && c.args[0]==='env-a').length===detailInspectBefore+1, 'Environment detail reuses one scoped inspection instead of duplicate reads');
     check(window.__fakeADM.calls.filter(c=>c.name==='EnvironmentTreeDigest').length===detailDigestBefore && document.getElementById('environmentTreeDigestResult').textContent.includes('尚未读取'), 'opening Environment detail does not read directory summary');
-    check(document.getElementById('environmentDetail').textContent.includes('Identity') && document.getElementById('environmentDetail').textContent.includes('Runtime authority') && document.getElementById('environmentDetail').textContent.includes('Capability issues'), 'Environment detail groups identity authority and capability facts');
+    check(document.getElementById('environmentDetail').textContent.includes('环境基本信息') && document.getElementById('environmentDetail').textContent.includes('写入与运行权限') && document.getElementById('environmentDetail').textContent.includes('需要关注的能力'), 'Environment detail groups identity authority and capability facts');
     check(document.getElementById('environmentDetail').textContent.includes('artifact_missing'), 'Environment detail exposes capability reason without probing');
     document.getElementById('environmentTreeDigestButton').click();
     await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='EnvironmentTreeDigest').length===detailDigestBefore+1 && document.getElementById('environmentTreeDigestResult').textContent.includes('Environment env-a'), 'explicit Environment directory summary');
@@ -347,11 +404,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     const diagnosticTab=document.querySelector('#environmentDetailSubviewTabs button[data-environment-detail-subview="diagnostics"]');
     const diagnosticsCallCountBefore=window.__fakeADM.calls.length;
     diagnosticTab.click(); await sleep();
+    check(diagnosticTab.getAttribute('aria-selected')==='true' && diagnosticTab.textContent.includes('能力诊断'), 'active Environment tab is visibly labeled in Chinese');
+    check(getComputedStyle(document.getElementById('environmentDetail')).display==='none' && getComputedStyle(document.getElementById('environmentDiagnostics')).display==='grid', 'hidden summary content is removed from layout');
+    check(document.getElementById('environmentDiagnostics').scrollWidth<=document.getElementById('environmentDiagnostics').clientWidth+2, 'long diagnostic details do not overflow');
+    check(document.getElementById('environmentDetailSubviewHelp').textContent.includes('不会执行检查'), 'diagnostics tab explains read-only behavior');
     check(!document.getElementById('environmentDiagnostics').hidden && document.getElementById('environmentDetail').hidden, 'Environment Diagnostics subview is local to detail modal');
-    check(document.getElementById('environmentDiagnostics').textContent.includes('Existing InspectEnvironment payload only') && document.getElementById('environmentDiagnostics').textContent.includes('fixture capability report') && document.getElementById('environmentDiagnostics').textContent.includes('artifact_missing'), 'Diagnostics renders returned fact source reason and state');
+    check(document.getElementById('environmentDiagnostics').textContent.includes('只展示已读取') && document.getElementById('environmentDiagnostics').textContent.includes('fixture capability report') && document.getElementById('environmentDiagnostics').textContent.includes('artifact_missing'), 'Diagnostics renders returned fact source reason and state');
     check(window.__fakeADM.calls.length===diagnosticsCallCountBefore, 'Diagnostics subview does not call probe verifier reconnect or Memory APIs');
     document.querySelector('#environmentDetailSubviewTabs button[data-environment-detail-subview="summary"]').click(); await sleep();
     check(!document.getElementById('environmentDetail').hidden && document.getElementById('environmentDiagnostics').hidden, 'Environment Summary subview restores summary without adapter calls');
+    check(getComputedStyle(document.getElementById('environmentDiagnostics')).display==='none' && getComputedStyle(document.getElementById('environmentDetail')).display==='grid', 'hidden diagnostics content is removed from layout');
     check(window.__fakeADM.calls.length===diagnosticsCallCountBefore, 'Summary/Diagnostics switching stays local');
     check(window.__fakeADM.calls.filter(c=>c.name==='ListEnvironmentMemory').length===detailMemoryBefore, 'opening Environment detail does not read private Memory values');
     location.hash='#/skills'; await sleep(60);
@@ -809,7 +871,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(environmentList.textContent.includes('Temporary · 已过期') && environmentList.textContent.includes('Owner lifecycle-owner-a') && environmentList.textContent.includes('Session session-a') && environmentList.textContent.includes('Run run-provenance-a'), 'temporary Environment list renders expiry and lifecycle provenance');
     check(!environmentList.textContent.includes('env-a-private-visible'), 'temporary Environment list does not expose private Memory values');
     const tempDetail=document.querySelector('#environmentList button[data-action="inspect-environment"][data-id="env-a"]'); tempDetail.click();
-    await waitFor(() => !document.getElementById('environmentDetailPanel').hidden && document.getElementById('environmentDetail').textContent.includes('Lifecycle retention'), 'temporary Environment detail lifecycle group');
+    await waitFor(() => !document.getElementById('environmentDetailPanel').hidden && document.getElementById('environmentDetail').textContent.includes('生命周期'), 'temporary Environment detail lifecycle group');
     check(document.getElementById('environmentDetail').textContent.includes('lifecycle-owner-a') && document.getElementById('environmentDetail').textContent.includes('session-a') && document.getElementById('environmentDetail').textContent.includes('run-provenance-a'), 'temporary Environment detail renders provenance');
     check(!document.getElementById('environmentDetail').textContent.includes('env-a-private-visible'), 'temporary Environment detail does not expose private Memory values');
     document.getElementById('closeEnvironmentDetail').click();
@@ -904,7 +966,7 @@ function runBrowser(width, height, scale = 1) {
   const args = [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--allow-file-access-from-files',
     `--user-data-dir=${profile}`, `--window-size=${width},${height}`, `--force-device-scale-factor=${scale}`,
-    '--virtual-time-budget=45000', '--dump-dom', pathToFileURL(fixture).href,
+    '--virtual-time-budget=45000', '--dump-dom', pathToFileURL(fixture).href + (process.env.ADM_UI_SMOKE_FOCUS === 'environment' ? '?focus=environment' : ''),
   ];
   const execution = spawnSync(browser, args, {encoding:'utf8', timeout:100000, maxBuffer:20*1024*1024});
   try {

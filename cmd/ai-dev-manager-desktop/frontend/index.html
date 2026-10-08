@@ -316,18 +316,19 @@
 
     <div id="environmentDetailBackdrop" class="detail-backdrop" hidden></div>
     <section id="environmentDetailPanel" class="panel detail-panel" role="dialog" aria-modal="true" hidden>
-      <div class="panel-heading"><div><p class="eyebrow">ENVIRONMENT DETAIL</p><h2 id="environmentDetailTitle">Environment</h2></div><button id="closeEnvironmentDetail" class="secondary-button" type="button">关闭</button></div>
-      <div id="environmentDetailSubviewTabs" class="runtime-subview-tabs detail-subview-tabs" role="tablist" aria-label="Environment detail subviews">
-        <button type="button" role="tab" aria-selected="true" data-environment-detail-subview="summary">Summary</button>
-        <button type="button" role="tab" aria-selected="false" data-environment-detail-subview="diagnostics">Diagnostics</button>
+      <div class="panel-heading"><div><p class="eyebrow">环境详情</p><h2 id="environmentDetailTitle">Environment</h2></div><button id="closeEnvironmentDetail" class="secondary-button" type="button">关闭</button></div>
+      <div id="environmentDetailSubviewTabs" class="runtime-subview-tabs detail-subview-tabs" role="tablist" aria-label="环境详情分类">
+        <button type="button" role="tab" aria-selected="true" data-environment-detail-subview="summary">基本信息</button>
+        <button type="button" role="tab" aria-selected="false" data-environment-detail-subview="diagnostics">能力诊断</button>
       </div>
+      <p id="environmentDetailSubviewHelp" role="status">基本信息：查看项目路径、开发权限和当前环境配置。</p>
       <div id="environmentDetail" class="detail-content" data-environment-detail-panel="summary"></div>
       <section id="environmentTreeDigestSection" class="subpanel environment-tree-digest" data-environment-detail-panel="summary">
-        <div class="subpanel-heading"><div><h3>Directory summary</h3><span>显式读取有界目录 metadata；打开详情不会自动扫描。</span></div><button id="environmentTreeDigestButton" type="button" class="secondary-button small-button">读取目录摘要</button></div>
+        <div class="subpanel-heading"><div><h3>目录摘要</h3><span>按需读取项目目录，不会自动扫描。</span></div><button id="environmentTreeDigestButton" type="button" class="secondary-button small-button">读取目录摘要</button></div>
         <div id="environmentTreeDigestResult" class="discovery-result empty">尚未读取目录摘要。</div>
       </section>
       <section id="environmentProjectIndexSection" class="subpanel environment-project-index" data-environment-detail-panel="summary" hidden>
-        <div class="subpanel-heading"><div><h3>Project index</h3><span>`.adm` 项目总览 + files/symbols 机器索引；仅在 Web 管理台操作。</span></div><div class="gateway-actions"><button id="environmentProjectIndexStatusButton" type="button" class="secondary-button small-button">检查索引</button><button id="environmentProjectAnalyzeButton" type="button" class="small-button">分析 / 刷新索引</button></div></div>
+        <div class="subpanel-heading"><div><h3>代码索引</h3><span>供 AI 定位函数、分析调用关系。首次点击「生成索引」，后续增量刷新。</span></div><div class="gateway-actions"><button id="environmentProjectIndexStatusButton" type="button" class="secondary-button small-button">检查索引</button><button id="environmentProjectAnalyzeButton" type="button" class="small-button">生成 / 更新索引</button></div></div>
         <div id="environmentProjectIndexResult" class="discovery-result empty">尚未检查项目索引。</div>
       </section>
       <section id="environmentCodeIntelligenceSection" class="subpanel environment-code-intelligence" data-environment-detail-panel="summary" hidden>
@@ -586,20 +587,33 @@
           <label><span>名称（可选）</span><input id="workspaceName" name="name" type="text" placeholder="example"></label>
           <button type="submit">添加 Workspace</button>
         </form></dialog>
-<dialog id="workspaceDiscoveryDialog" class="editor-dialog discovery-dialog" aria-labelledby="workspaceDiscoveryTitle"><header class="dialog-heading"><div><p class="eyebrow">EXPLICIT DISCOVERY</p><h2 id="workspaceDiscoveryTitle">Discover projects</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p>
+<dialog id="workspaceDiscoveryDialog" class="editor-dialog discovery-dialog" aria-labelledby="workspaceDiscoveryTitle">
+          <header class="dialog-heading discovery-dialog-heading">
+            <div><h2 id="workspaceDiscoveryTitle">发现项目</h2><p class="discovery-dialog-subtitle">扫描当前工作区的子目录，找到可以添加到 ADM 的项目；扫描不会自动创建或修改项目。</p></div>
+            <button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button>
+          </header>
+          <p class="dialog-message" role="status" hidden></p>
           <form id="workspaceDiscoveryForm" class="manager-form discovery-options-form">
-            <label class="wide-field"><span>Scan path（Workspace-relative，可选）</span><input id="workspaceDiscoveryPath" type="text" placeholder="默认 Workspace root"></label>
-            <label class="wide-field"><span>Candidate query（literal，可选）</span><input id="workspaceDiscoveryQuery" type="search" placeholder="候选名称或相对路径"></label>
-            <label><span>Max depth</span><input id="workspaceDiscoveryMaxDepth" type="number" min="0" max="8" placeholder="Core default"></label>
-            <label><span>Max entries</span><input id="workspaceDiscoveryMaxEntries" type="number" min="0" max="10000" placeholder="Core default"></label>
-            <label><span>Max candidates</span><input id="workspaceDiscoveryMaxCandidates" type="number" min="0" max="200" placeholder="Core default"></label>
-            <label><span>Max digest entries</span><input id="workspaceDiscoveryMaxDigestEntries" type="number" min="0" max="500" placeholder="Core default"></label>
-            <label><span>Max output bytes</span><input id="workspaceDiscoveryMaxOutputBytes" type="number" min="0" max="262144" placeholder="Core default"></label>
-            <div class="form-actions wide-field"><button id="workspaceDiscoveryScanButton" type="submit">扫描</button></div>
+            <label class="wide-field"><span>从哪个目录扫描？（可选）</span><input id="workspaceDiscoveryPath" type="text" placeholder="留空则扫描整个工作区"><small>填写相对于当前工作区的子目录，例如 backend。通常留空即可。</small></label>
+            <label class="wide-field"><span>只查找指定项目（可选）</span><input id="workspaceDiscoveryQuery" type="search" placeholder="例如 wm_main；留空查找全部候选"><small>按项目名称或相对路径查找。不确定项目名称就留空。</small></label>
+            <details id="workspaceDiscoveryAdvanced" class="discovery-advanced wide-field">
+              <summary>高级扫描设置 <span>通常无需修改</span></summary>
+              <div class="discovery-advanced-fields">
+                <label><span>最大扫描深度</span><input id="workspaceDiscoveryMaxDepth" type="number" min="0" max="8" placeholder="使用默认值"></label>
+                <label><span>最大扫描条目</span><input id="workspaceDiscoveryMaxEntries" type="number" min="0" max="10000" placeholder="使用默认值"></label>
+                <label><span>最多返回候选</span><input id="workspaceDiscoveryMaxCandidates" type="number" min="0" max="200" placeholder="使用默认值"></label>
+                <label><span>最多返回目录摘要</span><input id="workspaceDiscoveryMaxDigestEntries" type="number" min="0" max="500" placeholder="使用默认值"></label>
+                <label><span>最大输出字节数</span><input id="workspaceDiscoveryMaxOutputBytes" type="number" min="0" max="262144" placeholder="使用默认值"></label>
+              </div>
+              <p class="discovery-advanced-hint">仅在结果提示“扫描不完整”时调整；数值留空即使用 ADM 默认限制，避免扫描过大目录。</p>
+            </details>
+            <div class="form-actions wide-field discovery-scan-actions"><span>此操作只读取目录信息，不会修改项目。</span><button id="workspaceDiscoveryScanButton" type="submit">开始扫描</button></div>
           </form>
-          <div class="list-toolbar discovery-filter-toolbar"><label class="filter-field"><span>Filter loaded candidates</span><input id="workspaceDiscoveryFilter" type="search" placeholder="只筛选当前结果，不重新扫描"></label></div>
-          <div id="workspaceDiscoverySummary" class="status-legend">尚未扫描。打开此窗口不会读取目录。</div>
-          <div id="workspaceDiscoveryResult" class="discovery-result empty">点击“扫描”显式开始 discovery。</div>
+          <section class="discovery-results-section" aria-label="项目扫描结果">
+            <div id="workspaceDiscoverySummary" class="status-legend discovery-summary" role="status">尚未扫描。点击“开始扫描”查找项目。</div>
+            <div class="list-toolbar discovery-filter-toolbar" id="workspaceDiscoveryFilterToolbar" hidden><label class="filter-field"><span>筛选扫描结果</span><input id="workspaceDiscoveryFilter" type="search" placeholder="输入项目名称；仅筛选已有结果"></label></div>
+            <div id="workspaceDiscoveryResult" class="discovery-result empty">扫描后会在这里列出项目，并可选择添加为开发环境。</div>
+          </section>
         </dialog>
 <dialog id="environmentDialog" class="editor-dialog" aria-labelledby="environmentDialogTitle"><header class="dialog-heading"><h2 id="environmentDialogTitle">创建 Environment</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="environmentForm" class="inline-form">
           <label><span>Workspace</span><select id="environmentWorkspace" required><option value="">先添加 Workspace</option></select></label>
