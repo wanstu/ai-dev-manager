@@ -28,8 +28,8 @@ class Child extends Base {
 		t.Fatalf("expected 2 inherited call candidates: %+v", refs)
 	}
 	for _, ref := range refs.References {
-		if ref.Kind != "candidate_call" {
-			t.Fatalf("inheritance not analyzed; must not claim resolved: %+v", ref)
+		if ref.Kind != "inherited_candidate" || ref.Reason != "direct_extends_clause" {
+			t.Fatalf("inheritance must remain evidence-backed candidate, not resolved: %+v", ref)
 		}
 	}
 }

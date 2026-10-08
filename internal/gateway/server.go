@@ -1597,7 +1597,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(CodeIntelligenceStatusResult{Provider: provider, Result: value}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol through the preferred code-intelligence provider. The built-in static index supports bounded PHP references via persisted call records; other languages require an external capable provider or return available=false."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol through the preferred code-intelligence provider. The built-in static index supports bounded PHP references with kind, reason, and optional type_hint fields. Treat inherited_candidate and candidate_call as clues, not runtime-proven calls. Other languages require an external provider or return available=false."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceReferencesInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
@@ -1632,7 +1632,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_call_graph", Description: "For PHP investigation or change-impact analysis, query ADM's native persisted code index to answer who calls a function/method and what it calls. Returns definition nodes, call sites (file/line/column), cross-file edges, and certainty labels: resolved_call is lexical evidence, candidate_call is not proven. For ambiguous names supply fully qualified symbol and definition path. Read-only; no IDE or other provider needed. Run project_analyze if v4 index is missing/stale; project_index_status detects content-only changes."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "project_call_graph", Description: "For PHP investigation or change-impact analysis, query ADM's native persisted code index to answer who calls a function/method and what it calls. Returns definition nodes, call sites (file/line/column), cross-file edges, and evidence labels: resolved_call is lexical ownership, inherited_candidate is a direct extends clue, candidate_call may include an advisory declared parameter type. Use edge.reason and edge.type_hint to assess confidence. For ambiguous names supply fully qualified symbol and definition path. Read-only; no IDE or other provider needed. Run project_analyze if v4 index is missing/stale; project_index_status detects content-only changes."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectCallGraphInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectPHPCallGraph(in.EnvironmentID, projectanalysis.PHPCallGraphQuery{
 				Symbol: in.Symbol, Path: in.Path, Direction: in.Direction,

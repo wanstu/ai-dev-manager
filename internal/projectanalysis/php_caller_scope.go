@@ -9,9 +9,10 @@ import (
 // phpFunctionBody denotes a named lexical function/method body. No PHP code
 // is executed. Anonymous functions/closures stay an explicit limitation.
 type phpFunctionBody struct {
-	start, end int
-	name, kind string
-	line       int
+	start, end     int
+	name, kind     string
+	line           int
+	parameterTypes map[string]string
 }
 
 func phpMatchingBrace(masked []byte, open int) int {
@@ -90,7 +91,11 @@ func phpNamedFunctionBodies(masked []byte, file phpCallerFile) []phpFunctionBody
 		if file.ambiguousNamespace { // cannot attribute across namespace blocks
 			continue
 		}
-		out = append(out, phpFunctionBody{start: open, end: close, name: name, kind: kind, line: bytes.Count(masked[:m[0]], []byte{'\n'}) + 1})
+		out = append(out, phpFunctionBody{
+			start: open, end: close, name: name, kind: kind,
+			line:           bytes.Count(masked[:m[0]], []byte{'\n'}) + 1,
+			parameterTypes: phpParameterTypeHints(masked, m[1], file),
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].start < out[j].start })
 	return out

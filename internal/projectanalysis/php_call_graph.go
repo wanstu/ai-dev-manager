@@ -25,13 +25,15 @@ type PHPCallGraphNode struct {
 }
 
 type PHPCallGraphEdge struct {
-	From    string `json:"from"`
-	To      string `json:"to"`
-	Kind    string `json:"kind"`
-	Path    string `json:"path"`
-	Line    int    `json:"line"`
-	Column  int    `json:"column"`
-	Context string `json:"context,omitempty"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Kind     string `json:"kind"`
+	Reason   string `json:"reason,omitempty"`
+	TypeHint string `json:"type_hint,omitempty"`
+	Path     string `json:"path"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column"`
+	Context  string `json:"context,omitempty"`
 }
 
 type PHPCallGraphResult struct {
@@ -180,7 +182,7 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 	}
 	queue := []pending{{symbol: target, depth: 0}}
 	expanded := map[string]bool{}
-	add := func(from, to PHPCallGraphNode, kind string, call PHPCallRecord) bool {
+	add := func(from, to PHPCallGraphNode, kind, reason string, call PHPCallRecord) bool {
 		edgeID := fmt.Sprintf("%s|%s|%s|%d|%d|%s", from.ID, to.ID, call.Path, call.Line, call.Column, kind)
 		if edges[edgeID] {
 			return false
@@ -199,7 +201,7 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 			nodes[to.ID] = true
 		}
 		result.Edges = append(result.Edges, PHPCallGraphEdge{
-			From: from.ID, To: to.ID, Kind: kind,
+			From: from.ID, To: to.ID, Kind: kind, Reason: reason, TypeHint: call.TypeHint,
 			Path: call.Path, Line: call.Line, Column: call.Column, Context: call.Context,
 		})
 		return true
@@ -238,16 +240,12 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 				if (c.CallKind == "method") != method {
 					continue
 				}
-				kind := "candidate_call"
-				if method && resolver.targetFQN != "" && c.OwnerKnown {
-					if strings.EqualFold(resolver.targetClass, c.Owner) {
-						kind = "resolved_call"
-					} else if resolver.directOwners[strings.ToLower(c.Owner)] {
-						continue
-					}
+				kind, reason, include := resolver.classifyIndexedCall(c)
+				if !include {
+					continue
 				}
 				from, callerSymbol, found := lookupCaller(c)
-				if add(from, srcNode, kind, c) && found && kind == "resolved_call" {
+				if add(from, srcNode, kind, reason, c) && found && kind == "resolved_call" {
 					queue = append(queue, pending{symbol: callerSymbol, depth: next.depth + 1})
 				}
 			}
@@ -256,6 +254,7 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 			key := fmt.Sprintf("%s:%d:%s", src.Path, src.Line, strings.ToLower(src.QualifiedName))
 			for _, c := range byCaller[key] {
 				kind := "candidate_call"
+				reason := "dynamic_receiver"
 				var dst PHPCallGraphNode
 				var callee SymbolRecord
 				found := false
@@ -266,7 +265,21 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 						callee = matches[0]
 						dst = toNode(callee)
 						kind = "resolved_call"
+						reason = "lexical_owner_matches_definition"
 						found = true
+					} else if c.OwnerParent != "" {
+						parentMatches := byFQN[strings.ToLower(c.OwnerParent+"::"+c.Name)]
+						if len(parentMatches) == 1 {
+							dst = toNode(parentMatches[0])
+							kind = "inherited_candidate"
+							reason = "direct_extends_clause"
+						}
+					}
+				} else if c.CallKind == "method" && c.TypeHint != "" {
+					hintMatches := byFQN[strings.ToLower(c.TypeHint+"::"+c.Name)]
+					if len(hintMatches) == 1 {
+						dst = toNode(hintMatches[0])
+						reason = "declared_parameter_type_not_runtime"
 					}
 				} else if c.CallKind == "function" {
 					// Without expression/type analysis a namespaced function call has
@@ -276,13 +289,14 @@ func ProjectPHPCallGraph(root string, q PHPCallGraphQuery) (PHPCallGraphResult, 
 						callee = matches[0]
 						dst = toNode(callee)
 						kind = "candidate_call"
+						reason = "unique_function_name_not_namespace_resolved"
 					}
 				}
 				if dst.ID == "" {
 					dst = PHPCallGraphNode{ID: fmt.Sprintf("php-unresolved:%s:%s", c.CallKind, strings.ToLower(c.Name)),
 						Name: c.Name, Kind: "unresolved_" + c.CallKind}
 				}
-				if add(srcNode, dst, kind, c) && found && kind == "resolved_call" {
+				if add(srcNode, dst, kind, reason, c) && found && kind == "resolved_call" {
 					queue = append(queue, pending{symbol: callee, depth: next.depth + 1})
 				}
 			}

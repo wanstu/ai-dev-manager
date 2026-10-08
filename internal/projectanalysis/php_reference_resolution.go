@@ -76,6 +76,37 @@ func newPHPReferenceResolver(symbolsJSONL []byte, query PHPReferenceQuery) (phpR
 	return phpReferenceResolver{targetClass: matches[0].QualifiedName[:split], targetFQN: matches[0].QualifiedName, directOwners: directOwners}, nil
 }
 
+// classifyIndexedCall preserves why the index did or did not connect a
+// lexical call to this definition. Inheritance and parameter types are
+// evidence for an AI investigator, not a claim about runtime dispatch.
+func (r phpReferenceResolver) classifyIndexedCall(call PHPCallRecord) (kind, reason string, include bool) {
+	if call.CallKind != "method" {
+		return "candidate_call", "function_name_only", true
+	}
+	if r.targetFQN == "" {
+		return "candidate_call", "target_definition_unresolved", true
+	}
+	if call.OwnerKnown {
+		if strings.EqualFold(call.Owner, r.targetClass) {
+			return "resolved_call", "lexical_owner_matches_definition", true
+		}
+		if r.directOwners[strings.ToLower(call.Owner)] {
+			return "", "another_class_defines_method", false
+		}
+		if call.OwnerParent != "" && strings.EqualFold(call.OwnerParent, r.targetClass) {
+			return "inherited_candidate", "direct_extends_clause", true
+		}
+		return "candidate_call", "receiver_hierarchy_unverified", true
+	}
+	if call.TypeHint != "" {
+		if strings.EqualFold(call.TypeHint, r.targetClass) {
+			return "candidate_call", "parameter_type_matches_definition", true
+		}
+		return "candidate_call", "parameter_type_other_or_subtype", true
+	}
+	return "candidate_call", "dynamic_receiver", true
+}
+
 var phpClassImportRE = regexp.MustCompile(`(?m)^[ \t]*use[ \t]+(\\?[A-Za-z_][A-Za-z0-9_]*(?:\\[A-Za-z_][A-Za-z0-9_]*)*)(?:[ \t]+as[ \t]+([A-Za-z_][A-Za-z0-9_]*))?[ \t]*;`)
 var phpSimpleReceiverRE = regexp.MustCompile(`^(?:\$[A-Za-z_][A-Za-z0-9_]*|\\?[A-Za-z_][A-Za-z0-9_]*(?:\\[A-Za-z_][A-Za-z0-9_]*)*)$`)
 

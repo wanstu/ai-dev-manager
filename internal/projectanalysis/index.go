@@ -18,7 +18,7 @@ const (
 	IndexFilesRelativePath    = ".adm/index/files.jsonl"
 	IndexSymbolsRelativePath  = ".adm/index/symbols.jsonl"
 	IndexCallsRelativePath    = ".adm/index/calls.jsonl"
-	IndexSchemaVersion        = 4
+	IndexSchemaVersion        = 5
 )
 
 type IndexBounds struct {

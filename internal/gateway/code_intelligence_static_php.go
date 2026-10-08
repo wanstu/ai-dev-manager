@@ -59,7 +59,7 @@ func (o *runtimeOwner) staticPHPCallReferences(environmentID string, symbol code
 		result.References = append(result.References, codeintel.Reference{
 			Path: match.Path, Line: match.Line, Column: match.Column,
 			Language: "PHP", Kind: match.Kind, Name: match.Name,
-			Context: match.Context,
+			Reason: match.Reason, TypeHint: match.TypeHint, Context: match.Context,
 		})
 	}
 	return result, nil

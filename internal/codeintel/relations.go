@@ -25,6 +25,8 @@ type Reference struct {
 	EndColumn     int    `json:"end_column,omitempty"`
 	Language      string `json:"language,omitempty"`
 	Kind          string `json:"kind,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	TypeHint      string `json:"type_hint,omitempty"`
 	Name          string `json:"name,omitempty"`
 	QualifiedName string `json:"qualified_name,omitempty"`
 	Context       string `json:"context,omitempty"`

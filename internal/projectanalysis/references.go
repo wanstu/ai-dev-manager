@@ -8,12 +8,14 @@ import (
 )
 
 type ReferenceCandidate struct {
-	Path    string `json:"path"`
-	Line    int    `json:"line"`
-	Column  int    `json:"column"`
-	Name    string `json:"name"`
-	Kind    string `json:"kind"`
-	Context string `json:"context,omitempty"`
+	Path     string `json:"path"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column"`
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	Reason   string `json:"reason,omitempty"`
+	TypeHint string `json:"type_hint,omitempty"`
+	Context  string `json:"context,omitempty"`
 }
 
 type ReferenceCandidateResult struct {
@@ -78,13 +80,9 @@ func FindPHPCallReferences(root string, query PHPReferenceQuery) (ReferenceCandi
 		if isMethod && call.CallKind != "method" || !isMethod && call.CallKind != "function" {
 			return nil
 		}
-		kind := "candidate_call"
-		if isMethod && resolver.targetFQN != "" && call.OwnerKnown {
-			if strings.EqualFold(call.Owner, resolver.targetClass) {
-				kind = "resolved_call"
-			} else if resolver.directOwners[strings.ToLower(call.Owner)] {
-				return nil // This method belongs to a different indexed class.
-			}
+		kind, reason, include := resolver.classifyIndexedCall(call)
+		if !include {
+			return nil
 		}
 		if len(result.References) >= maxResults {
 			result.Truncated = true
@@ -92,7 +90,7 @@ func FindPHPCallReferences(root string, query PHPReferenceQuery) (ReferenceCandi
 		}
 		result.References = append(result.References, ReferenceCandidate{
 			Path: call.Path, Line: call.Line, Column: call.Column,
-			Name: call.Name, Kind: kind, Context: call.Context,
+			Name: call.Name, Kind: kind, Reason: reason, TypeHint: call.TypeHint, Context: call.Context,
 		})
 		return nil
 	})

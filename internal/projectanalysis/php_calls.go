@@ -23,6 +23,9 @@ type PHPCallRecord struct {
 	CallKind            string `json:"call_kind"`
 	Owner               string `json:"owner,omitempty"`
 	OwnerKnown          bool   `json:"owner_known,omitempty"`
+	OwnerParent         string `json:"owner_parent,omitempty"`
+	TypeHint            string `json:"type_hint,omitempty"`
+	HintSource          string `json:"hint_source,omitempty"`
 	CallerQualifiedName string `json:"caller_qualified_name,omitempty"`
 	CallerKind          string `json:"caller_kind,omitempty"`
 	CallerLine          int    `json:"caller_line,omitempty"`
@@ -46,6 +49,7 @@ func collectPHPCalls(path, rel string) ([]PHPCallRecord, bool, error) {
 	masked := maskSource(data, true)
 	caller := newPHPCallerFile(masked)
 	functionBodies := phpNamedFunctionBodies(masked, caller)
+	parentByScope := phpDirectParentByScope(masked, caller)
 	lineStarts := []int{0}
 	for offset, b := range data {
 		if b == '\n' {
@@ -77,6 +81,21 @@ func collectPHPCalls(path, rel string) ([]PHPCallRecord, bool, error) {
 			call.CallerQualifiedName = scope.name
 			call.CallerKind = scope.kind
 			call.CallerLine = scope.line
+			if kind == "method" && !known {
+				recv := readPHPReceiver(masked, start)
+				if hint := scope.parameterTypes[recv]; hint != "" {
+					call.TypeHint = hint
+					call.HintSource = "declared_parameter_type"
+				}
+			}
+		}
+		if kind == "method" && known {
+			recv := readPHPReceiver(masked, start)
+			if recv == "$this" || strings.EqualFold(recv, "self") {
+				if klass := caller.classAt(start); klass != nil {
+					call.OwnerParent = parentByScope[klass.start]
+				}
+			}
 		}
 		calls = append(calls, call)
 	}
