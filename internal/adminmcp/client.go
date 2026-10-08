@@ -17,6 +17,7 @@ import (
 	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/projectanalysis"
+	"ai-dev-manager-v2/internal/secretvault"
 	"ai-dev-manager-v2/internal/verifier"
 	productversion "ai-dev-manager-v2/internal/version"
 
@@ -405,6 +406,17 @@ func (c *Client) EnvironmentInspect(id string) (app.EnvironmentInspection, error
 }
 
 // ProjectIndexStatus and ProjectAnalyze are management-only index operations.
+func (c *Client) SecretList() ([]secretvault.Metadata, error) {
+	return callAdmin[[]secretvault.Metadata](c, context.Background(), "secret_list", map[string]any{})
+}
+func (c *Client) SecretSet(name, value string) (secretvault.Metadata, error) {
+	return callAdmin[secretvault.Metadata](c, context.Background(), "secret_set", map[string]any{"name": name, "value": value})
+}
+func (c *Client) SecretDelete(name string) error {
+	_, err := callAdmin[map[string]string](c, context.Background(), "secret_delete", map[string]any{"name": name})
+	return err
+}
+
 func (c *Client) ProjectIndexStatus(environmentID string, maxChanges int) (projectanalysis.IndexStatusResult, error) {
 	return callAdmin[projectanalysis.IndexStatusResult](c, context.Background(), "project_index_status", map[string]any{"environment_id": environmentID, "max_changes": maxChanges})
 }

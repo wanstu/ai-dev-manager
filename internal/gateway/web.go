@@ -589,6 +589,25 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 		return h.management.ExecDenyClear(s1)
 	case "ClearAllExecDenials":
 		return nil, h.management.ExecDenyClearAll()
+	case "ListSecrets":
+		return h.app.SecretList()
+	case "SaveSecret":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		meta, err := h.app.SecretSet(s1, s2)
+		if err == nil {
+			dropMCPsUsingSecret(h.app, h.owner, s1)
+		}
+		return meta, err
+	case "DeleteSecret":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return map[string]string{"deleted": s1}, h.app.SecretDelete(s1)
 	case "AddMCP":
 		var input webMCPInput
 		if err := arg(0, &input); err != nil {

@@ -31,6 +31,7 @@ const elements = {
   mcpEditorFlow: document.getElementById('mcpEditorFlow'), mcpEditorSummary: document.getElementById('mcpEditorSummary'), mcpEditorHint: document.getElementById('mcpEditorHint'), mcpSubmitButton: document.getElementById('mcpSubmitButton'), mcpEditCancelButton: document.getElementById('mcpEditCancelButton'),
   mcpImportForm: document.getElementById('mcpImportForm'), mcpImportFormat: document.getElementById('mcpImportFormat'), mcpImportConflict: document.getElementById('mcpImportConflict'), mcpImportDefault: document.getElementById('mcpImportDefault'), mcpImportContent: document.getElementById('mcpImportContent'),
   mcpImportApplyButton: document.getElementById('mcpImportApplyButton'), mcpImportPreview: document.getElementById('mcpImportPreview'), mcpList: document.getElementById('mcpList'),
+  mcpSecretForm: document.getElementById('mcpSecretForm'), mcpSecretName: document.getElementById('mcpSecretName'), mcpSecretValue: document.getElementById('mcpSecretValue'), mcpSecretSave: document.getElementById('mcpSecretSave'), mcpSecretsRefresh: document.getElementById('mcpSecretsRefresh'), mcpSecretsResult: document.getElementById('mcpSecretsResult'),
   mcpFilter: document.getElementById('mcpFilter'), mcpStateFilter: document.getElementById('mcpStateFilter'), mcpVisibleCount: document.getElementById('mcpVisibleCount'), mcpListTotalCount: document.getElementById('mcpListTotalCount'),
   mcpSelectVisibleButton: document.getElementById('mcpSelectVisibleButton'), mcpClearSelectionButton: document.getElementById('mcpClearSelectionButton'), mcpSelectedCount: document.getElementById('mcpSelectedCount'), mcpAssignEnvironmentsButton: document.getElementById('mcpAssignEnvironmentsButton'), mcpClearMissingButton: document.getElementById('mcpClearMissingButton'), mcpSetVisibleDefaultButton: document.getElementById('mcpSetVisibleDefaultButton'), mcpUnsetVisibleDefaultButton: document.getElementById('mcpUnsetVisibleDefaultButton'), mcpEnableVisibleButton: document.getElementById('mcpEnableVisibleButton'), mcpDisableVisibleButton: document.getElementById('mcpDisableVisibleButton'), mcpBulkHint: document.getElementById('mcpBulkHint'),
   skillSourceCount: document.getElementById('skillSourceCount'), skillTotalCount: document.getElementById('skillTotalCount'), skillEnvironmentCount: document.getElementById('skillEnvironmentCount'), skillIssueCount: document.getElementById('skillIssueCount'),
@@ -2020,6 +2021,50 @@ function mcpProbeRecoveryHint(health, entry) {
   if (kind === 'activation_failed') return entry?.transport === 'stdio' ? '处理建议：检查 executable、Environment references 与执行许可。' : '处理建议：检查 Endpoint、HTTP Auth 与 Header reference mappings。';
   return '处理建议：检查 Endpoint、Transport、TLS/代理；使用 Header reference 时选择 Secret-backed headers，并确认引用环境变量存在于 ADM 服务进程中。';
 }
+async function refreshMCPSecrets(){
+  const box=elements.mcpSecretsResult;
+  if(!box)return;
+  elements.mcpSecretsRefresh.disabled=true;
+  emptyMessage(box,'正在读取密钥名称…');
+  try{
+    const items=safeArray(await desktopAdapter().ListSecrets());
+    box.replaceChildren();
+    if(!items.length)return emptyMessage(box,'暂无密钥。可以填写上方名称和 Token，点击“加密保存”。');
+    box.classList.remove('empty');
+    for(const item of items){
+      const row=document.createElement('div');
+      row.className='mcp-secret-row';
+      const name=document.createElement('strong');name.textContent=item.name;
+      const note=document.createElement('small');note.textContent='已加密保存 · 内容不可查看';
+      const remove=document.createElement('button');remove.type='button';remove.className='secondary-button small-button';
+      remove.textContent='删除';remove.addEventListener('click',async()=>{
+        if(!window.confirm('删除密钥 '+item.name+'？仍被 MCP 使用时系统会拒绝删除。'))return;
+        try{await desktopAdapter().DeleteSecret(item.name);setStatus('密钥已删除：'+item.name,'success');await refreshMCPSecrets();}
+        catch(error){setStatus('删除密钥失败：'+errorText(error),'error');}
+      });
+      row.append(name,note,remove);box.append(row);
+    }
+  }catch(error){emptyMessage(box,'读取密钥失败：'+errorText(error));}
+  finally{elements.mcpSecretsRefresh.disabled=false;}
+}
+elements.mcpSecretsRefresh?.addEventListener('click',()=>refreshMCPSecrets());
+elements.mcpSecretForm?.addEventListener('submit',async(event)=>{
+  event.preventDefault();
+  const name=elements.mcpSecretName.value.trim();
+  const value=elements.mcpSecretValue.value;
+  if(!name||!value)return;
+  elements.mcpSecretSave.disabled=true;
+  try{
+    await desktopAdapter().SaveSecret(name,value);
+    elements.mcpSecretForm.reset();
+    setStatus('已加密保存 MCP 密钥：'+name+'。配置 MCP 时请使用密钥引用，不要粘贴 Token。','success');
+    await refreshMCPSecrets();
+  }catch(error){setStatus('保存密钥失败：'+errorText(error),'error');}
+  finally{
+    elements.mcpSecretValue.value='';
+    elements.mcpSecretSave.disabled=false;
+  }
+});
 function renderMCPManager(mcps) {
   const scrollTop = elements.mcpList.scrollTop;
   try { renderMCPManagerContents(mcps); } finally { elements.mcpList.scrollTop = scrollTop; }

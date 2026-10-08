@@ -18,6 +18,7 @@ import (
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/projectanalysis"
 	"ai-dev-manager-v2/internal/runtime"
+	"ai-dev-manager-v2/internal/secretvault"
 	skillruntime "ai-dev-manager-v2/internal/skill"
 	"ai-dev-manager-v2/internal/store"
 	"ai-dev-manager-v2/internal/verifier"
@@ -26,6 +27,7 @@ import (
 
 type Service struct {
 	Store                   *store.Store
+	Secrets                 *secretvault.Store
 	Workspaces              *workspace.Service
 	Environments            *environment.Service
 	Isolation               *isolation.Service
@@ -61,6 +63,7 @@ func New(statePath string) *Service {
 	environments := environment.New(s, ws)
 	return &Service{
 		Store:                   s,
+		Secrets:                 secretvault.New(statePath),
 		Workspaces:              ws,
 		Environments:            environments,
 		Isolation:               isolation.New(s, ws, environments),

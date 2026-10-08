@@ -175,6 +175,39 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
 
+    if (new URLSearchParams(location.search).get('focus') === 'secrets') {
+      const bridge=window.go.desktop.Adapter;
+      const saved=[];
+      bridge.ListSecrets=async()=>[{name:'existing-key'},...saved.map(item=>({name:item.name}))];
+      bridge.SaveSecret=async(name,value)=>{
+        saved.push({name,value});
+        return {name};
+      };
+      bridge.DeleteSecret=async(name)=>{
+        const index=saved.findIndex(item=>item.name===name);
+        if(index>=0)saved.splice(index,1);
+      };
+      await clickRoute('mcp');
+      const form=document.getElementById('mcpSecretForm');
+      const output=document.getElementById('mcpSecretsResult');
+      const name=document.getElementById('mcpSecretName');
+      const value=document.getElementById('mcpSecretValue');
+      check(Boolean(form)&&Boolean(output)&&value.type==='password','MCP secret manager is visible with masked input');
+      document.getElementById('mcpSecretsRefresh').click();
+      await waitFor(()=>output.textContent.includes('existing-key'),'secret metadata loads without plaintext');
+      check(!output.textContent.includes('token'),'secret list does not echo credentials');
+      name.value='github-token';
+      value.value='sensitive-token-visible-only-in-transit';
+      form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+      await waitFor(()=>saved.length===1&&output.textContent.includes('github-token'),'vault save reaches management backend and refreshes metadata');
+      check(saved[0].value==='sensitive-token-visible-only-in-transit','secret input sent unchanged for encryption');
+      await waitFor(()=>value.value==='','secret input cleared after save');
+      check(!output.textContent.includes(saved[0].value) && !document.getElementById('statusPanel').textContent.includes(saved[0].value),'secret plaintext never echoed to the visible UI');
+      check(document.documentElement.scrollWidth<=window.innerWidth+2,'secret manager does not overflow viewport');
+      result.ok=true;
+      return;
+    }
+
     if (new URLSearchParams(location.search).get('focus') === 'environment') {
       const bridge=window.go.desktop.Adapter;
       const inspect=bridge.InspectEnvironment.bind(bridge);
@@ -966,7 +999,7 @@ function runBrowser(width, height, scale = 1) {
   const args = [
     '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--allow-file-access-from-files',
     `--user-data-dir=${profile}`, `--window-size=${width},${height}`, `--force-device-scale-factor=${scale}`,
-    '--virtual-time-budget=45000', '--dump-dom', pathToFileURL(fixture).href + (process.env.ADM_UI_SMOKE_FOCUS === 'environment' ? '?focus=environment' : ''),
+    '--virtual-time-budget=45000', '--dump-dom', pathToFileURL(fixture).href + (process.env.ADM_UI_SMOKE_FOCUS ? '?focus='+encodeURIComponent(process.env.ADM_UI_SMOKE_FOCUS) : ''),
   ];
   const execution = spawnSync(browser, args, {encoding:'utf8', timeout:100000, maxBuffer:20*1024*1024});
   try {

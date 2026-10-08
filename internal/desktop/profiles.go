@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"ai-dev-manager-v2/internal/configpath"
+	"ai-dev-manager-v2/internal/secretvault"
 	"strings"
 	"sync"
 
@@ -62,7 +63,7 @@ func connectionProfilesView(state ConnectionProfiles) ConnectionProfiles {
 	view := state
 	view.Profiles = append([]ConnectionProfile(nil), state.Profiles...)
 	for i := range view.Profiles {
-		view.Profiles[i].APIKeyConfigured = strings.TrimSpace(view.Profiles[i].APIKey) != ""
+		view.Profiles[i].APIKeyConfigured = strings.TrimSpace(view.Profiles[i].APIKey) != "" || view.Profiles[i].APIKeyConfigured
 		view.Profiles[i].APIKey = ""
 	}
 	return view
@@ -72,7 +73,7 @@ func validateConnectionProfileAccess(profile ConnectionProfile) error {
 	if gateway.LocalHTTPLifecycleEligible(profile.BaseURL) {
 		return nil
 	}
-	if strings.TrimSpace(profile.APIKey) == "" {
+	if strings.TrimSpace(profile.APIKey) == "" && !profile.APIKeyConfigured {
 		return errors.New("remote ADM management connection requires an Admin API key")
 	}
 	return nil
@@ -108,10 +109,46 @@ func readConnectionProfiles(path string) (ConnectionProfiles, error) {
 	if state.Profiles == nil {
 		state.Profiles = []ConnectionProfile{}
 	}
+	vault := secretvault.New(path)
+	names, err := vault.List()
+	if err != nil {
+		return state, err
+	}
+	available := map[string]bool{}
+	for _, m := range names {
+		available[m.Name] = true
+	}
+	migrated := false
+	for i := range state.Profiles {
+		if state.Profiles[i].APIKey != "" {
+			state.Profiles[i].APIKeyConfigured = true
+			migrated = true
+		} else if available["desktop-"+state.Profiles[i].ID] {
+			state.Profiles[i].APIKeyConfigured = true
+		}
+	}
+	if migrated {
+		if err := writeConnectionProfiles(path, state); err != nil {
+			return state, err
+		}
+		for i := range state.Profiles {
+			state.Profiles[i].APIKey = ""
+		}
+	}
 	return state, nil
 }
 
 func writeConnectionProfiles(path string, state ConnectionProfiles) error {
+	vault := secretvault.New(path)
+	for i := range state.Profiles {
+		if state.Profiles[i].APIKey != "" {
+			if err := vault.Set("desktop-"+state.Profiles[i].ID, state.Profiles[i].APIKey); err != nil {
+				return err
+			}
+			state.Profiles[i].APIKey = ""
+			state.Profiles[i].APIKeyConfigured = true
+		}
+	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
@@ -125,6 +162,10 @@ func writeConnectionProfiles(path string, state ConnectionProfiles) error {
 	}
 	name := file.Name()
 	defer os.Remove(name)
+	if err := file.Chmod(0600); err != nil {
+		file.Close()
+		return err
+	}
 	if _, err = file.Write(append(data, '\n')); err != nil {
 		file.Close()
 		return err
@@ -155,7 +196,11 @@ func (a *Adapter) connectionAPIKey(baseURL, explicit string) string {
 	}
 	for _, profile := range state.Profiles {
 		if profile.ID == state.ActiveID && strings.EqualFold(strings.TrimSpace(profile.BaseURL), strings.TrimSpace(baseURL)) {
-			return strings.TrimSpace(profile.APIKey)
+			value, err := secretvault.New(path).Get("desktop-" + profile.ID)
+			if err != nil {
+				return ""
+			}
+			return strings.TrimSpace(value)
 		}
 	}
 	return ""
@@ -204,7 +249,7 @@ func (a *Adapter) SaveConnectionProfile(profile ConnectionProfile) (ConnectionPr
 		for i := range state.Profiles {
 			if state.Profiles[i].ID == profile.ID {
 				if strings.TrimSpace(profile.APIKey) == "" {
-					profile.APIKey = state.Profiles[i].APIKey
+					profile.APIKeyConfigured = state.Profiles[i].APIKeyConfigured
 				}
 				if err := validateConnectionProfileAccess(profile); err != nil {
 					return connectionProfilesView(state), err
@@ -267,6 +312,9 @@ func (a *Adapter) DeleteConnectionProfile(id string) (ConnectionProfiles, error)
 		state.ActiveID = ""
 	}
 	err = writeConnectionProfiles(path, state)
+	if err == nil {
+		_ = secretvault.New(path).Delete("desktop-" + id)
+	}
 	return connectionProfilesView(state), err
 }
 func (a *Adapter) DisconnectADM() {

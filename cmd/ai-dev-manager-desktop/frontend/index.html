@@ -222,6 +222,15 @@
         </div>
         <div class="status-legend"><span><strong>配置</strong>：静态可激活性，不联网。</span><span><strong>全局探测</strong>：检查 MCP 连接，与 Environment 启用状态无关；刷新页面不会自动探测。</span></div>
         <div id="mcpList" class="resource-list filtered-resource-list empty">暂无 MCP 定义</div>
+        <section class="subpanel mcp-secrets-panel" aria-label="MCP 加密密钥库">
+          <div class="subpanel-heading"><div><h3>加密密钥库</h3><span>MCP 使用密钥名称引用凭据，明文不会写进 MCP 配置文件。</span></div><button id="mcpSecretsRefresh" type="button" class="secondary-button small-button">查看密钥</button></div>
+          <form id="mcpSecretForm" class="manager-form mcp-secret-form" autocomplete="off">
+            <label><span>密钥名称</span><input id="mcpSecretName" type="text" placeholder="例如 github-token" required pattern="[A-Za-z][A-Za-z0-9_.-]{0,79}" maxlength="80"></label>
+            <label><span>密钥内容</span><input id="mcpSecretValue" type="password" placeholder="输入 Token，不会在列表中回显" required autocomplete="new-password"></label>
+            <div class="form-actions wide-field"><span>在 MCP Header 中填写：<code>Authorization=Bearer &#36;{secret:github-token}</code></span><button type="submit" id="mcpSecretSave">加密保存</button></div>
+          </form>
+          <div id="mcpSecretsResult" class="discovery-result empty">点击“查看密钥”读取已保存的密钥名称。密钥内容永不展示。</div>
+        </section>
       </article>
 
       <article id="skillManager" class="panel core-manager management-page" data-management-page="skills" hidden>
@@ -539,8 +548,8 @@
             <label id="mcpExecutableField" class="wide-field" hidden><span>Executable</span><input id="mcpExecutable" type="text" placeholder="node / npx / executable path"></label>
             <label id="mcpArgsField" class="wide-field" hidden><span>Arguments（每行一个）</span><textarea id="mcpArgs" placeholder="server.js\n--stdio"></textarea></label>
             <label id="mcpAuthField"><span>HTTP Auth</span><select id="mcpAuthMode"><option value="none">None</option><option value="headers">Secret-backed headers</option></select></label>
-            <label id="mcpRefsField" class="wide-field" hidden><span>Header reference mappings（每行 Header=${ENV_NAME}）</span><textarea id="mcpReferencePairs" placeholder="Authorization=Bearer ${ADM_MCP_TOKEN}"></textarea><small>只在 HTTP Auth = Secret-backed headers 时有效；这里只保存环境变量引用，不持久化 literal secret。</small></label>
-            <label id="mcpEnvRefsField" class="wide-field" hidden><span>Environment reference mappings（每行 KEY=${ENV_NAME}）</span><textarea id="mcpEnvReferencePairs" placeholder="DATABASE_URL=${DATABASE_URL}"></textarea><small>只在 stdio Transport 时有效；值保持为环境变量引用，由 ADM 服务进程环境解析。</small></label>
+            <label id="mcpRefsField" class="wide-field" hidden><span>Header 引用（每行 Header=值）</span><textarea id="mcpReferencePairs" placeholder="Authorization=Bearer ${ADM_MCP_TOKEN}"></textarea><small>推荐使用 ADM 加密密钥库：Authorization=Bearer ${secret:github-token}；也兼容旧环境变量引用。</small></label>
+            <label id="mcpEnvRefsField" class="wide-field" hidden><span>子进程环境引用（每行 KEY=值）</span><textarea id="mcpEnvReferencePairs" placeholder="DATABASE_URL=${DATABASE_URL}"></textarea><small>只在 stdio Transport 时有效；值保持为环境变量引用，由 ADM 服务进程环境解析。</small></label>
             <label class="check-field"><input id="mcpHealthEnabled" type="checkbox" checked><span>启用协议健康检查</span></label>
             <label class="check-field"><input id="mcpAutoReconnect" type="checkbox"><span>自动重连</span></label>
             <label id="mcpProbeTimeoutField"><span>Probe timeout (s)</span><input id="mcpProbeTimeout" type="number" min="1" value="5"></label>

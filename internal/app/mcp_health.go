@@ -170,10 +170,10 @@ func (s *Service) resolveCatalogMCPActivation(mcpID string) (*MCPActivation, MCP
 			MCPID:     mcpID,
 			State:     MCPHealthConfigured,
 			ErrorKind: "unresolved_secret_reference",
-			Message:   "MCP 配置引用的环境变量尚未解析。请更新系统/用户环境变量，在 ADM 内刷新环境变量后重新探测。",
+			Message:   "MCP 配置引用的凭据或环境变量无法解析；请检查 ADM 密钥库或系统环境配置。",
 		}, nil
 	}
-	endpoint, _ := s.expandEnvironmentTemplate(entry.Endpoint)
+	endpoint, _ := s.expandMCPTemplate(entry.Endpoint)
 	activation := &MCPActivation{
 		MCPID:      mcpID,
 		Transport:  entry.Transport,
@@ -340,13 +340,13 @@ func (s *Service) resolveMap(refs map[string]string) map[string]string {
 	}
 	resolved := make(map[string]string, len(refs))
 	for key, value := range refs {
-		resolved[key], _ = s.expandEnvironmentTemplate(value)
+		resolved[key], _ = s.expandMCPTemplate(value)
 	}
 	return resolved
 }
 
 func (s *Service) hasUnresolvedEnvRef(value string) bool {
-	_, unresolved := s.expandEnvironmentTemplate(value)
+	_, unresolved := s.expandMCPTemplate(value)
 	return unresolved
 }
 

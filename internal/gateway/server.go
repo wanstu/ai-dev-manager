@@ -175,6 +175,14 @@ type WriterAcquireInput struct {
 	Owner         string `json:"owner" jsonschema:"stable agent/session owner identifier"`
 }
 
+type SecretSetInput struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+type SecretDeleteInput struct {
+	Name string `json:"name"`
+}
+
 type MCPAddInput struct {
 	Name           string                `json:"name"`
 	Transport      string                `json:"transport"`
@@ -576,7 +584,7 @@ func isAdminOnlyTool(name string) bool {
 		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_worktree_create", "environment_worktree_cleanup_stale",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
 		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
-		"mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
+		"secret_list", "secret_set", "secret_delete", "mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
 		"environment_mcp_set",
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
@@ -1197,6 +1205,24 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.MCPs.List()
 			return toolResult(items, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "secret_list", Description: "List encrypted MCP credential names only; never returns values. Admin-only."},
+		func(_ context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, any, error) {
+			items, err := service.SecretList()
+			return toolResult(items, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "secret_set", Description: "Store or replace one encrypted MCP credential in ADM Secret Vault. Admin-only. Never returns the credential value."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in SecretSetInput) (*mcp.CallToolResult, any, error) {
+			meta, err := service.SecretSet(in.Name, in.Value)
+			if err == nil {
+				dropMCPsUsingSecret(service, owner, in.Name)
+			}
+			return toolResult(meta, err)
+		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "secret_delete", Description: "Delete an unused encrypted MCP credential. Referenced credentials cannot be deleted. Admin-only."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in SecretDeleteInput) (*mcp.CallToolResult, any, error) {
+			err := service.SecretDelete(in.Name)
+			return toolResult(map[string]string{"deleted": in.Name}, err)
 		})
 	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_add", Description: "Add one typed global MCP definition using streamable-http or stdio configuration."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in MCPAddInput) (*mcp.CallToolResult, any, error) {
