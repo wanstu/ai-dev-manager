@@ -180,6 +180,11 @@ func scoreSymbolQuery(record SymbolRecord, query string, exact bool) (int, strin
 	if name == q {
 		return 1, "name_exact", true
 	}
+	// PHP method symbols are stored as Class::method; an exact method-name
+	// lookup must still find the declaration without knowing its class.
+	if strings.HasSuffix(name, "::"+q) {
+		return 2, "method_name_exact", true
+	}
 	if exact {
 		return 0, "", false
 	}

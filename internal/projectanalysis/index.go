@@ -40,6 +40,8 @@ type IndexManifest struct {
 	SymbolsIndexed  int                      `json:"symbols_indexed"`
 	GoFiles         int                      `json:"go_files"`
 	PHPFiles        int                      `json:"php_files"`
+	JSFiles         int                      `json:"js_files"`
+	TSFiles         int                      `json:"ts_files"`
 	GoModule        string                   `json:"go_module,omitempty"`
 	ComposerPackage string                   `json:"composer_package,omitempty"`
 	ParseIssues     int                      `json:"parse_issues,omitempty"`
@@ -166,6 +168,8 @@ func buildIndexArtifacts(result Result, options Options, files []FileRecord, sym
 		SymbolsIndexed:  len(symbols),
 		GoFiles:         result.GoFiles,
 		PHPFiles:        result.PHPFiles,
+		JSFiles:         result.JSFiles,
+		TSFiles:         result.TSFiles,
 		GoModule:        result.GoModule,
 		ComposerPackage: result.ComposerPackage,
 		ParseIssues:     result.ParseIssues,

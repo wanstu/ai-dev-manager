@@ -30,6 +30,8 @@ type Result struct {
 	FilesIndexed      int      `json:"files_indexed"`
 	GoFiles           int      `json:"go_files"`
 	PHPFiles          int      `json:"php_files"`
+	JSFiles           int      `json:"js_files"`
+	TSFiles           int      `json:"ts_files"`
 	Symbols           int      `json:"symbols"`
 	GoModule          string   `json:"go_module,omitempty"`
 	ComposerPackage   string   `json:"composer_package,omitempty"`
@@ -145,6 +147,29 @@ func Analyze(root string, options Options) (Result, error) {
 			if len(outline.Symbols) > 0 {
 				outlines = append(outlines, outline)
 			}
+		case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx":
+			if ext == ".ts" || ext == ".tsx" {
+				result.TSFiles++
+			} else {
+				result.JSFiles++
+			}
+			dirCounts[summaryDir(rel)]++
+			outline, parseIssue := analyzeJavaScript(path, rel, ext, max(remainingSymbols, 0))
+			if parseIssue {
+				result.ParseIssues++
+			}
+			record.Language = outline.Language
+			record.SHA256 = sourceHash(path)
+			if remainingSymbols <= 0 {
+				result.Truncated = true
+			} else {
+				remainingSymbols -= len(outline.Symbols)
+				result.Symbols += len(outline.Symbols)
+				symbolRecords = append(symbolRecords, symbolRecordsForOutline(outline)...)
+			}
+			if len(outline.Symbols) > 0 {
+				outlines = append(outlines, outline)
+			}
 		case ".php":
 			result.PHPFiles++
 			dirCounts[summaryDir(rel)]++
@@ -178,6 +203,12 @@ func Analyze(root string, options Options) (Result, error) {
 	}
 	if result.PHPFiles > 0 || result.ComposerPackage != "" {
 		result.Languages = append(result.Languages, "PHP")
+	}
+	if result.JSFiles > 0 {
+		result.Languages = append(result.Languages, "JavaScript")
+	}
+	if result.TSFiles > 0 {
+		result.Languages = append(result.Languages, "TypeScript")
 	}
 	sort.Slice(outlines, func(i, j int) bool { return outlines[i].Path < outlines[j].Path })
 	result.FilesIndexed = len(fileRecords)
@@ -332,10 +363,12 @@ func analyzePHP(path, rel string, limit int) (fileOutline, bool) {
 		data = data[:1<<20]
 		parseIssue = true
 	}
-	if match := phpNamespaceRE.FindSubmatch(data); len(match) > 1 {
+	masked := maskSource(data, true)
+	if match := phpNamespaceRE.FindSubmatch(masked); len(match) > 1 {
 		out.Namespace = string(match[1])
 	}
-	for _, match := range phpTypeRE.FindAllSubmatchIndex(data, -1) {
+	scopes := phpTypeScopes(masked)
+	for _, match := range phpTypeRE.FindAllSubmatchIndex(masked, -1) {
 		if len(out.Symbols) >= limit {
 			break
 		}
@@ -345,13 +378,20 @@ func analyzePHP(path, rel string, limit int) (fileOutline, bool) {
 			Line: lineAt(data, match[0]),
 		})
 	}
-	for _, match := range phpFunctionRE.FindAllSubmatchIndex(data, -1) {
+	for _, match := range phpFunctionRE.FindAllSubmatchIndex(masked, -1) {
 		if len(out.Symbols) >= limit {
 			break
 		}
+		kind, name := "function", string(data[match[2]:match[3]])
+		for _, scope := range scopes {
+			if scope.start < match[0] && match[0] < scope.end {
+				kind, name = "method", scope.name+"::"+name
+				break
+			}
+		}
 		out.Symbols = append(out.Symbols, symbol{
-			Kind: "function",
-			Name: string(data[match[2]:match[3]]),
+			Kind: kind,
+			Name: name,
 			Line: lineAt(data, match[0]),
 		})
 	}
@@ -383,7 +423,7 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 	if len(result.Languages) > 0 {
 		languages = strings.Join(result.Languages, ", ")
 	}
-	fmt.Fprintf(&out, "- Root: .\n- Detected languages: %s\n- Files scanned: %d\n- Files indexed: %d\n- Go files: %d\n- PHP files: %d\n- Symbols indexed: %d\n", languages, result.FilesScanned, result.FilesIndexed, result.GoFiles, result.PHPFiles, result.Symbols)
+	fmt.Fprintf(&out, "- Root: .\n- Detected languages: %s\n- Files scanned: %d\n- Files indexed: %d\n- Go files: %d\n- PHP files: %d\n- JavaScript files: %d\n- TypeScript files: %d\n- Symbols indexed: %d\n", languages, result.FilesScanned, result.FilesIndexed, result.GoFiles, result.PHPFiles, result.JSFiles, result.TSFiles, result.Symbols)
 	if result.GoModule != "" {
 		fmt.Fprintf(&out, "- Go module: %s\n", result.GoModule)
 	}
@@ -417,7 +457,7 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 	}
 	sort.Strings(dirs)
 	if len(dirs) == 0 {
-		out.WriteString("- No Go/PHP source directories detected.\n")
+		out.WriteString("- No Go/PHP/JavaScript/TypeScript source directories detected.\n")
 	} else {
 		for _, dir := range dirs {
 			fmt.Fprintf(&out, "- %s — %d source files\n", dir, dirCounts[dir])
@@ -426,7 +466,7 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 
 	out.WriteString("\n## Source outline\n\n")
 	if len(outlines) == 0 {
-		out.WriteString("No indexed Go/PHP declarations.\n")
+		out.WriteString("No indexed Go/PHP/JavaScript/TypeScript declarations.\n")
 	} else {
 		renderedFiles := 0
 		renderedSymbols := 0
@@ -460,7 +500,7 @@ func render(result Result, keyFiles []string, dirCounts map[string]int, outlines
 	out.WriteString("## Analysis boundaries\n\n")
 	out.WriteString("- Static only: ADM does not execute project code during analysis.\n")
 	out.WriteString("- Common dependency/generated directories are skipped: .git, .adm, vendor, node_modules, dist, build and similar.\n")
-	out.WriteString("- Go declarations use the Go parser; PHP outline extraction is heuristic.\n")
+	out.WriteString("- Go declarations use the Go parser; PHP and JavaScript/TypeScript outline extraction are heuristic.\n")
 	out.WriteString("- The generated manifest includes artifact hashes so consumers can detect partial/stale index files.\n")
 	return out.String()
 }

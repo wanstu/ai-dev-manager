@@ -379,13 +379,13 @@ Writer 是 physical root 级单写者，所以另一个 Environment 如果指向
 }
 ```
 
-当前 MVP 重点支持 Go / PHP：识别 `go.mod` / `composer.json`、主要源码目录，以及 Go type/func/method 和 PHP class/interface/trait/enum/function 大纲。分析不会执行项目代码，并跳过 `.git`、`.adm`、`vendor`、`node_modules`、`dist`、`build` 等常见依赖或生成目录。
+当前静态索引支持 Go / PHP / JavaScript / TypeScript：识别 `go.mod` / `composer.json`、主要源码目录，以及 Go type/func/method、PHP class/interface/trait/enum/function/method 和 JavaScript/TypeScript 顶层 function/class/arrow function（TypeScript 另支持 interface/type）大纲。PHP 类方法按 `类名::方法名` 索引；这些语言的大纲提取属于静态启发式识别，不等同于完整编译器语义分析。分析不会执行项目代码，并跳过 `.git`、`.adm`、`vendor`、`node_modules`、`dist`、`build` 等常见依赖或生成目录。
 
 生成：
 
 - `.adm/project-overview.md`：给人和 Agent 快速建立项目心智模型的 bounded 摘要。
 - `.adm/index/manifest.json`：索引 schema、统计、bounds、生成时间和 artifact SHA-256。
-- `.adm/index/files.jsonl`：项目文件清单；Go/PHP 源文件附 language / package-or-namespace / SHA-256。
+- `.adm/index/files.jsonl`：项目文件清单；Go/PHP/JavaScript/TypeScript 源文件附 language / package-or-namespace（如有）/ SHA-256。
 - `.adm/index/symbols.jsonl`：type/class/func/method 等定义到文件和行号的机器索引。
 
 `project-overview.md` 不再承担完整索引职责；精确查找应优先使用 `.adm/index`。manifest 最后写入，且记录 artifact hashes，消费者可以检测中途失败产生的 partial/stale index。

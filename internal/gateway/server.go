@@ -357,7 +357,7 @@ type ProjectAnalyzeInput struct {
 	EnvironmentID string `json:"environment_id"`
 	WriterOwner   string `json:"writer_owner"`
 	MaxFiles      int    `json:"max_files,omitempty" jsonschema:"maximum files inspected; defaults to 4000"`
-	MaxSymbols    int    `json:"max_symbols,omitempty" jsonschema:"maximum Go/PHP symbols recorded; defaults to 1200"`
+	MaxSymbols    int    `json:"max_symbols,omitempty" jsonschema:"maximum Go/PHP/JavaScript/TypeScript symbols recorded; defaults to 1200"`
 }
 
 type CodeIntelligenceInfoInput struct {
