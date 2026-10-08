@@ -107,7 +107,7 @@
           </div>
         </section>
         <section class="subpanel remote-access-panel">
-          <div class="subpanel-heading"><h3>远程访问</h3><span>服务端访问控制 · Host + 双 Key</span></div>
+          <div class="subpanel-heading"><h3>远程访问</h3><span>0.0.0.0 监听 · 独立白名单 · 双 Key</span></div>
           <div class="subpanel-body">
             <div class="remote-access-intro">
               <strong>这里配置的是 ADM 服务端鉴权</strong>
@@ -115,10 +115,13 @@
             </div>
 
             <div class="credential-card">
-              <div class="credential-heading"><div><strong>允许的 Host / IP</strong><small>决定哪些 Host 头可以访问远程 Gateway</small></div><span id="gatewayHostState" class="resource-badge" data-state="unconfigured">未启用远程 Host</span></div>
-              <label class="gateway-profile-field full-width-field"><span>白名单</span><textarea id="gatewayAllowedHosts" rows="3" placeholder="101.37.171.174&#10;adm.example.com&#10;*"></textarea></label>
-              <div class="gateway-actions"><button id="gatewayAccessSaveHosts" type="button" class="secondary-button">保存 Host 白名单</button></div>
-              <p class="field-help"><code>*</code> 表示不限制 Host，但不会关闭 API Key 鉴权。<code>0.0.0.0</code> 只是监听地址/普通 IP，不表示“不限制”。</p>
+              <div class="credential-heading"><div><strong>访问白名单</strong><small>默认关闭，不影响 Admin / Agent API Key 鉴权</small></div><span id="gatewayHostState" class="resource-badge" data-state="unconfigured">未启用</span></div>
+              <label class="gateway-profile-field"><span>启用白名单</span><input id="gatewayWhitelistEnabled" type="checkbox"></label>
+              <p class="field-help">不需要配置监听 IP；Gateway 默认监听 0.0.0.0，仅通过端口和下列可选白名单控制网络访问。</p>
+              <label class="gateway-profile-field full-width-field"><span>允许的访问域名 / 目标 IP（HTTP Host）</span><textarea id="gatewayAllowedHosts" rows="3" placeholder="adm.example.com&#10;192.168.1.10"></textarea></label>
+              <label class="gateway-profile-field full-width-field"><span>允许的客户端来源 IP / 网段</span><textarea id="gatewayAllowedClientIPs" rows="3" placeholder="192.168.1.0/24&#10;10.0.0.5"></textarea></label>
+              <div class="gateway-actions"><button id="gatewayAccessSaveHosts" type="button" class="secondary-button">保存访问策略</button></div>
+              <p class="field-help">两组规则可以分别留空；同时填写时必须同时满足。域名只检查 HTTP Host，请勿将其视作不可伪造的来源验证；需要限制连接来源请设置客户端 IP/CIDR。反向代理后 ADM 看到的是代理 IP，建议在代理层控制真实访客来源。启用至少需要一条限制规则。</p>
             </div>
 
             <div class="credential-grid">
@@ -144,7 +147,7 @@
               </div>
             </div>
 
-            <p class="subpanel-note">启用顺序：先设置 Admin Key 和 Agent Key，再保存 Host 白名单。两把 Key 不能互换；保存后服务端只保留哈希，因此原始 Key 不会回显。</p>
+            <p class="subpanel-note">Admin 与 Agent 使用各自的 Key；访问白名单是额外限制，不会替代登录鉴权。启用白名单时请确认当前访问域名和来源地址已包含在规则内。</p>
           </div>
         </section>
       </div>

@@ -216,6 +216,10 @@ func (c *Client) GatewayDiagnostics() (management.GatewayDiagnostics, error) {
 	return callAdmin[management.GatewayDiagnostics](c, context.Background(), "gateway_diagnostics", map[string]any{})
 }
 
+func (c *Client) GatewayAccessPolicySet(enabled bool, hosts, clientIPs []string) (app.GatewayAccessStatus, error) {
+	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_access_policy_set", map[string]any{"enabled": enabled, "hosts": hosts, "client_ips": clientIPs})
+}
+
 func (c *Client) GatewayAllowedHostsSet(hosts []string) (app.GatewayAccessStatus, error) {
 	return callAdmin[app.GatewayAccessStatus](c, context.Background(), "gateway_allowed_hosts_set", map[string]any{"hosts": hosts})
 }

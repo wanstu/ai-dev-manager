@@ -121,7 +121,7 @@ func TestGatewayRemoteReadinessReportsMissingPrerequisites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if readiness.Ready || len(readiness.Missing) != 3 {
+	if readiness.Ready || len(readiness.Missing) != 2 {
 		t.Fatalf("initial readiness = %+v", readiness)
 	}
 	if _, err := service.SetGatewayAllowedHosts([]string{"*"}); err != nil {

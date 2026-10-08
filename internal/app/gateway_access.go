@@ -20,6 +20,8 @@ const (
 
 type GatewayAccessStatus struct {
 	AllowedHosts          []string `json:"allowed_hosts"`
+	AllowedClientIPs      []string `json:"allowed_client_ips"`
+	WhitelistEnabled      bool     `json:"whitelist_enabled"`
 	AdminAPIKeyConfigured bool     `json:"admin_api_key_configured"`
 	AgentAPIKeyConfigured bool     `json:"agent_api_key_configured"`
 }
@@ -54,6 +56,7 @@ func (s *Service) GatewayAccessConfig() (model.GatewayAccessSettings, error) {
 	}
 	settings := state.GatewayAccess
 	settings.AllowedHosts = append([]string(nil), settings.AllowedHosts...)
+	settings.AllowedClientIPs = append([]string(nil), settings.AllowedClientIPs...)
 	return settings, nil
 }
 
@@ -75,12 +78,9 @@ func (s *Service) GatewayRemoteReadiness() (GatewayReadiness, error) {
 
 func gatewayReadiness(status GatewayAccessStatus) GatewayReadiness {
 	result := GatewayReadiness{
-		HostPolicyConfigured:  len(status.AllowedHosts) > 0,
+		HostPolicyConfigured:  !status.WhitelistEnabled || len(status.AllowedHosts)+len(status.AllowedClientIPs) > 0,
 		AdminAPIKeyConfigured: status.AdminAPIKeyConfigured,
 		AgentAPIKeyConfigured: status.AgentAPIKeyConfigured,
-	}
-	if !result.HostPolicyConfigured {
-		result.Missing = append(result.Missing, "Host policy")
 	}
 	if !result.AdminAPIKeyConfigured {
 		result.Missing = append(result.Missing, "Admin API Key")
@@ -123,6 +123,8 @@ func (s *Service) SetGatewayAllowedHosts(hosts []string) (GatewayAccessStatus, e
 	}
 	if err := s.Store.Update(func(state *model.State) error {
 		state.GatewayAccess.AllowedHosts = append([]string(nil), normalized...)
+		enabled := len(normalized) > 0 || len(state.GatewayAccess.AllowedClientIPs) > 0
+		state.GatewayAccess.WhitelistEnabled = &enabled
 		return nil
 	}); err != nil {
 		return GatewayAccessStatus{}, err
@@ -246,6 +248,10 @@ func (s *Service) SetupGatewayRemote(hosts []string, rotateKeys bool) (GatewaySe
 	}
 	if err := s.Store.Update(func(state *model.State) error {
 		state.GatewayAccess.AllowedHosts = append([]string(nil), normalized...)
+		if state.GatewayAccess.WhitelistEnabled == nil && len(settings.AllowedHosts) == 0 {
+			enabled := false
+			state.GatewayAccess.WhitelistEnabled = &enabled
+		}
 		if generateAdmin {
 			state.GatewayAccess.AdminAPIKeyHash = hashGatewayAPIKey(adminKey)
 		}
@@ -341,6 +347,8 @@ func hashGatewayAPIKey(secret string) string {
 func gatewayAccessStatus(settings model.GatewayAccessSettings) GatewayAccessStatus {
 	return GatewayAccessStatus{
 		AllowedHosts:          append([]string(nil), settings.AllowedHosts...),
+		AllowedClientIPs:      append([]string(nil), settings.AllowedClientIPs...),
+		WhitelistEnabled:      GatewayWhitelistEnabled(settings),
 		AdminAPIKeyConfigured: strings.TrimSpace(settings.AdminAPIKeyHash) != "",
 		AgentAPIKeyConfigured: strings.TrimSpace(settings.AgentAPIKeyHash) != "",
 	}

@@ -199,6 +199,10 @@ func (s *Service) GatewayAccessStatus() (app.GatewayAccessStatus, error) {
 	return s.app.GatewayAccessStatus()
 }
 
+func (s *Service) GatewayAccessPolicySet(enabled bool, hosts, clientIPs []string) (app.GatewayAccessStatus, error) {
+	return s.app.SetGatewayAccessPolicy(enabled, hosts, clientIPs)
+}
+
 func (s *Service) GatewayAllowedHostsSet(hosts []string) (app.GatewayAccessStatus, error) {
 	return s.app.SetGatewayAllowedHosts(hosts)
 }

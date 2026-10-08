@@ -33,7 +33,7 @@ type gatewayInstallPlan struct {
 func runGatewayService(args []string) error {
 	if wantsHelp(args) {
 		fmt.Fprintln(os.Stdout, `用法：
-  adm gateway service install [--user USER] [--listen HOST:PORT]
+  adm gateway service install [--user USER] [--port PORT]
   adm gateway service status
   sudo adm gateway service start
   sudo adm gateway service stop
@@ -51,16 +51,17 @@ func runGatewayService(args []string) error {
 	switch args[0] {
 	case "install":
 		fs := newFlagSet("gateway service install", func() {
-			fmt.Fprintln(os.Stdout, "用法：sudo adm gateway service install [--user USER] [--listen HOST:PORT]")
-			fmt.Fprintln(os.Stdout, "首次安装需要 --user；已由 ADM 管理的 service 可重复执行并沿用原 user/listen/Enabled 状态。")
+			fmt.Fprintln(os.Stdout, "用法：sudo adm gateway service install [--user USER] [--port PORT]")
+			fmt.Fprintln(os.Stdout, "首次安装需要 --user；已安装的 service 会保留原用户和端口，仅监听 0.0.0.0。")
 		})
 		userName := fs.String("user", "", "运行 Gateway 的系统用户")
-		listen := fs.String("listen", "", "Gateway 监听地址；首次安装默认 0.0.0.0:8001，升级时省略则保留原监听地址")
+		listen := fs.String("listen", "", "旧版脚本兼容参数；请改用 --port")
+		port := fs.Int("port", 0, "监听端口，默认 8001，升级时保留旧端口")
 		if err := fs.Parse(args[1:]); err != nil {
 			return flagError(err)
 		}
 		if fs.NArg() != 0 {
-			return fmt.Errorf("gateway service install 只接受 --user / --listen")
+			return fmt.Errorf("gateway service install 只接受 --user / --port")
 		}
 		if err := gatewayservice.CheckManagementPrivileges(); err != nil {
 			return err
@@ -72,7 +73,7 @@ func runGatewayService(args []string) error {
 		if previous.Installed && !previous.Managed {
 			return fmt.Errorf("%s 已存在但不是 ADM 管理的 Gateway service；拒绝覆盖", previous.UnitPath)
 		}
-		targetUserName, targetListen, err := resolveGatewayInstallTarget(previous, *userName, *listen, 0)
+		targetUserName, targetListen, err := resolveGatewayInstallTarget(previous, *userName, *listen, *port)
 		if err != nil {
 			return err
 		}
@@ -85,7 +86,7 @@ func runGatewayService(args []string) error {
 		}
 		targetService := app.New(target.StatePath)
 		if err := validateGatewayStartReadiness(targetService, targetListen); err != nil {
-			return fmt.Errorf("目标用户 %s 的 Gateway 尚未完成远程配置：%w\n建议直接运行：sudo adm gateway install --user %s --remote --listen %s", target.Name, err, target.Name, targetListen)
+			return fmt.Errorf("目标用户 %s 的 Gateway 配置有误：%w", target.Name, err)
 		}
 		executable, err := currentExecutablePath()
 		if err != nil {
@@ -608,20 +609,15 @@ func normalizeRemoteListen(raw string) (string, error) {
 	if strings.HasPrefix(listen, ":") {
 		listen = "0.0.0.0" + listen
 	}
-	host, port, err := net.SplitHostPort(listen)
+	_, port, err := net.SplitHostPort(listen)
 	if err != nil {
-		return "", fmt.Errorf("无效监听地址 %q：%w", raw, err)
+		return "", fmt.Errorf("无效监听端口 %q：%w", raw, err)
 	}
-	if strings.TrimSpace(port) == "" {
-		return "", fmt.Errorf("监听地址必须包含端口")
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 1 || number > 65535 {
+		return "", fmt.Errorf("无效监听端口 %q", raw)
 	}
-	if host == "localhost" {
-		return listen, nil
-	}
-	if ip := net.ParseIP(host); ip == nil && strings.TrimSpace(host) == "" {
-		return "", fmt.Errorf("监听地址必须包含 host")
-	}
-	return listen, nil
+	return net.JoinHostPort("0.0.0.0", strconv.Itoa(number)), nil
 }
 
 func currentExecutablePath() (string, error) {

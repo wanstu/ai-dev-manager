@@ -143,7 +143,7 @@ func TestGatewayLifecycleUsesSelectedADMBaseURL(t *testing.T) {
 	if err := run([]string{"--adm-url", "http://127.0.0.1:48001", "gateway", "start", "--detach"}); err != nil {
 		t.Fatal(err)
 	}
-	if gotListen != "127.0.0.1:48001" {
+	if gotListen != "0.0.0.0:48001" {
 		t.Fatalf("gateway start listen=%q, want selected ADM port", gotListen)
 	}
 }

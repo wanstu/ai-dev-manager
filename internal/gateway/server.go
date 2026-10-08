@@ -588,7 +588,7 @@ func isAdminOnlyTool(name string) bool {
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
 		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_worktree_create", "environment_worktree_cleanup_stale",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
-		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
+		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_access_policy_set", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
 		"secret_list", "secret_set", "secret_delete", "mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
 		"environment_mcp_set",
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
@@ -654,6 +654,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			diagnostics, err := management.New(service).GatewayDiagnostics()
 			return nil, diagnostics, err
 		})
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_access_policy_set", Description: "Atomically enable or disable optional HTTP Host and TCP source IP allowlists."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAccessPolicyInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.SetGatewayAccessPolicy(in.Enabled, in.Hosts, in.ClientIPs)
+			return toolResult(status, err)
+		})
 	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_allowed_hosts_set", Description: "Replace the remote ADM Host/IP allowlist. Entries are DNS names or IP addresses without scheme or port; '*' allows any Host/IP while API-key authentication remains mandatory."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAllowedHostsInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetGatewayAllowedHosts(in.Hosts)
@@ -669,7 +674,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			result, err := service.RotateGatewayAdminAPIKey()
 			return toolResult(result, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_clear", Description: "Clear the /admin/mcp API key. Remote Gateway listening remains refused until both Admin and Agent keys are configured."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_clear", Description: "Clear the /admin/mcp API key. Remote MCP remains unauthorized until both Admin and Agent keys are configured; HTTP binding itself is independent."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.ClearGatewayAdminAPIKey()
 			return toolResult(status, err)
@@ -2001,6 +2006,10 @@ func newHTTPHandlerWithShutdown(service *app.Service, owner *runtimeOwner, shutd
 	mux.Handle("/mcp", newSurfaceHandler(agentServer, serverSurfaceAgent))
 	mux.Handle("/admin/mcp", newSurfaceHandler(adminServer, serverSurfaceAdmin))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if !gatewayWebAccessAllowed(service, r) {
+			http.Error(w, "Forbidden: gateway access denied", http.StatusForbidden)
+			return
+		}
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
@@ -2034,7 +2043,14 @@ func newHTTPHandlerWithShutdown(service *app.Service, owner *runtimeOwner, shutd
 		w.WriteHeader(http.StatusAccepted)
 		go shutdown()
 	})
-	mux.Handle("/", newWebManagementHandler(service, owner))
+	webManagement := newWebManagementHandler(service, owner)
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !gatewayWebAccessAllowed(service, r) {
+			http.Error(w, "Forbidden: gateway access denied", http.StatusForbidden)
+			return
+		}
+		webManagement.ServeHTTP(w, r)
+	}))
 	return mux
 }
 
@@ -2057,22 +2073,22 @@ func RunHTTP(ctx context.Context, service *app.Service, listen string) error {
 	if listen == "" {
 		return fmt.Errorf("gateway listen address is required")
 	}
-	host, _, err := net.SplitHostPort(listen)
+	host, port, err := net.SplitHostPort(listen)
 	if err != nil {
 		return fmt.Errorf("invalid gateway listen address %q: %w", listen, err)
 	}
-	if host != "localhost" {
+	if host != "0.0.0.0" && host != "localhost" {
 		ip := net.ParseIP(host)
 		if ip == nil || !ip.IsLoopback() {
-			readiness, readinessErr := service.GatewayRemoteReadiness()
-			if readinessErr != nil {
-				return fmt.Errorf("check remote gateway readiness: %w", readinessErr)
-			}
-			if !readiness.Ready {
-				return fmt.Errorf("remote gateway listen %q is not ready; missing: %s; run adm gateway setup --remote --listen %s", listen, strings.Join(readiness.Missing, ", "), listen)
-			}
+			return fmt.Errorf("Gateway 监听 IP 固定为 0.0.0.0；请使用 --port 指定端口")
 		}
 	}
+	if port == "" {
+		return fmt.Errorf("Gateway 服务端口不能为空")
+	}
+	// Binding to all interfaces does not grant unauthenticated MCP access.
+	// The HTTP handler enforces separate Admin/Agent API keys for remote peers.
+	// Keep loopback bootstrap and password-protected Web administration usable.
 
 	service.Log("info", "gateway.start", map[string]string{"listen": listen})
 	defer service.Log("info", "gateway.stop", map[string]string{"listen": listen})

@@ -238,6 +238,12 @@ See `.planning/post-1.0/PHASE-MAP.md` for the high-level phase sequence. Detaile
 - Important Phase 18 task/check/commit progress must be written to planning before further work when quota/context is low; chat is not the continuation record.
 - Phase 25 distribution polish remains conditional unless daily use proves it is necessary.
 
+## User-requested follow-up (2026-10-08): Gateway network access policy
+
+- Newly requested: remove user-facing listen-IP configuration, listen on `0.0.0.0` with configurable port, add optional independently switchable domain/HTTP Host and client-source IP/CIDR allowlists, disabled by default on new installs. Keep Admin/Agent Key authentication and safe reverse-proxy behavior.
+- The existing `AllowedHosts` checks HTTP Host, **not** client source IP. Preserve existing effective restrictions during upgrades and reject untrusted forwarded-header spoofing. Scope and negative acceptance tests: `docs/ADM_GATEWAY_NETWORK_POLICY.md`.
+- Gateway network policy is implemented on this branch with optional Host/source-IP allowlists, Desktop/CLI controls and 0.0.0.0 bind. Go full tests, go vet, real Windows TCP startup test, 3-viewport Chrome UI tests and native Wails production build passed. Git commit follows as a separate unit, excluding earlier go.mod and Windows version-resource script edits. Remote second-machine LAN test and RC release remain outside this checkpoint.
+
 ## Deferred
 
 - automatic Memory context composition;

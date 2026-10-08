@@ -17,7 +17,8 @@ func runGatewayAccess(service *app.Service, args []string) error {
 	if wantsHelp(args) {
 		fmt.Fprintln(os.Stdout, `用法：
   adm gateway access status
-  adm gateway access set-hosts --hosts HOST1,HOST2
+  adm gateway access set-policy --enabled=true --hosts HOST1,HOST2 --ips CIDR1,CIDR2
+  adm gateway access set-hosts --hosts HOST1,HOST2  (旧接口)
   adm gateway access rotate-admin-key
   adm gateway access rotate-agent-key
   adm gateway access rotate --all
@@ -43,6 +44,39 @@ set-admin-key / set-agent-key 必须显式使用 --key 或 --generate；服务�
 			return err
 		}
 		return writeJSON(status)
+	case "set-policy":
+		fs := newFlagSet("gateway access set-policy", func() {
+			fmt.Fprintln(os.Stdout, "用法：adm gateway access set-policy --enabled=true --hosts adm.example.com --ips 192.168.1.0/24")
+			fmt.Fprintln(os.Stdout, "关闭限制：adm gateway access set-policy --enabled=false")
+		})
+		enabled := fs.Bool("enabled", false, "是否启用可选访问白名单（默认关闭）")
+		hostText := fs.String("hosts", "", "允许的域名或目标 IP，逗号分隔")
+		ipText := fs.String("ips", "", "允许的客户端来源 IP/CIDR，逗号分隔")
+		if err := fs.Parse(args[1:]); err != nil {
+			return flagError(err)
+		}
+		if fs.NArg() != 0 {
+			return fmt.Errorf("gateway access set-policy 只接受 --enabled / --hosts / --ips")
+		}
+		hosts := splitGatewayHosts(*hostText)
+		ips := splitGatewayHosts(*ipText)
+		if !flagWasSet(fs, "hosts") || !flagWasSet(fs, "ips") {
+			current, configErr := service.GatewayAccessConfig()
+			if configErr != nil {
+				return configErr
+			}
+			if !flagWasSet(fs, "hosts") {
+				hosts = current.AllowedHosts
+			}
+			if !flagWasSet(fs, "ips") {
+				ips = current.AllowedClientIPs
+			}
+		}
+		returnValue, err := service.SetGatewayAccessPolicy(*enabled, hosts, ips)
+		if err != nil {
+			return err
+		}
+		return writeJSON(returnValue)
 	case "set-hosts":
 		fs := newFlagSet("gateway access set-hosts", func() {
 			fmt.Fprintln(os.Stdout, "用法：adm gateway access set-hosts --hosts HOST1,HOST2")

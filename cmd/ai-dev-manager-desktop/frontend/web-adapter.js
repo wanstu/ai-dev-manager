@@ -7,7 +7,7 @@
 
   const genericMethods = [
     'GetSnapshot','UpdateWorktreeSettings','RefreshHostEnvironment','GetLoggingStatus',
-    'GetGatewayAccessStatus','GetGatewayDiagnostics','SetGatewayAllowedHosts',
+    'GetGatewayAccessStatus','GetGatewayDiagnostics','SetGatewayAccessPolicy','SetGatewayAllowedHosts',
     'RotateGatewayAdminAPIKey','RotateGatewayAgentAPIKey','ClearGatewayAdminAPIKey',
     'SetGatewayAgentAPIKey','ClearGatewayAgentAPIKey','GetExecAuthorizationStatus',
     'SetExecFullAuthorization','ListSkillSources','ListSkillAvailability','BrowseHostDirectories','AddWorkspace',

@@ -15,7 +15,7 @@ const elements = {
   gatewayRefreshButton: document.getElementById('gatewayRefreshButton'),
   gatewayStartButton: document.getElementById('gatewayStartButton'),
   gatewayStopButton: document.getElementById('gatewayStopButton'),
-  gatewayAllowedHosts: document.getElementById('gatewayAllowedHosts'), gatewayHostState: document.getElementById('gatewayHostState'), gatewayAccessSaveHosts: document.getElementById('gatewayAccessSaveHosts'), gatewayAdminAPIKey: document.getElementById('gatewayAdminAPIKey'), gatewayAdminKeyState: document.getElementById('gatewayAdminKeyState'), gatewayAdminKeyHint: document.getElementById('gatewayAdminKeyHint'), gatewayGenerateAdminKey: document.getElementById('gatewayGenerateAdminKey'), gatewayCopyAdminKey: document.getElementById('gatewayCopyAdminKey'), gatewayAccessSetAdminKey: document.getElementById('gatewayAccessSetAdminKey'), gatewayAccessClearAdminKey: document.getElementById('gatewayAccessClearAdminKey'), gatewayAgentAPIKey: document.getElementById('gatewayAgentAPIKey'), gatewayAgentKeyState: document.getElementById('gatewayAgentKeyState'), gatewayAgentKeyHint: document.getElementById('gatewayAgentKeyHint'), gatewayGenerateAgentKey: document.getElementById('gatewayGenerateAgentKey'), gatewayCopyAgentKey: document.getElementById('gatewayCopyAgentKey'), gatewayAccessSetAgentKey: document.getElementById('gatewayAccessSetAgentKey'), gatewayAccessClearAgentKey: document.getElementById('gatewayAccessClearAgentKey'), gatewayAccessSummary: document.getElementById('gatewayAccessSummary'),
+  gatewayAllowedHosts: document.getElementById('gatewayAllowedHosts'), gatewayAllowedClientIPs: document.getElementById('gatewayAllowedClientIPs'), gatewayWhitelistEnabled: document.getElementById('gatewayWhitelistEnabled'), gatewayHostState: document.getElementById('gatewayHostState'), gatewayAccessSaveHosts: document.getElementById('gatewayAccessSaveHosts'), gatewayAdminAPIKey: document.getElementById('gatewayAdminAPIKey'), gatewayAdminKeyState: document.getElementById('gatewayAdminKeyState'), gatewayAdminKeyHint: document.getElementById('gatewayAdminKeyHint'), gatewayGenerateAdminKey: document.getElementById('gatewayGenerateAdminKey'), gatewayCopyAdminKey: document.getElementById('gatewayCopyAdminKey'), gatewayAccessSetAdminKey: document.getElementById('gatewayAccessSetAdminKey'), gatewayAccessClearAdminKey: document.getElementById('gatewayAccessClearAdminKey'), gatewayAgentAPIKey: document.getElementById('gatewayAgentAPIKey'), gatewayAgentKeyState: document.getElementById('gatewayAgentKeyState'), gatewayAgentKeyHint: document.getElementById('gatewayAgentKeyHint'), gatewayGenerateAgentKey: document.getElementById('gatewayGenerateAgentKey'), gatewayCopyAgentKey: document.getElementById('gatewayCopyAgentKey'), gatewayAccessSetAgentKey: document.getElementById('gatewayAccessSetAgentKey'), gatewayAccessClearAgentKey: document.getElementById('gatewayAccessClearAgentKey'), gatewayAccessSummary: document.getElementById('gatewayAccessSummary'),
   gatewayDiagnosticsReadiness: document.getElementById('gatewayDiagnosticsReadiness'), gatewayDiagnosticsCopyButton: document.getElementById('gatewayDiagnosticsCopyButton'), gatewayDiagnosticListen: document.getElementById('gatewayDiagnosticListen'), gatewayDiagnosticUser: document.getElementById('gatewayDiagnosticUser'), gatewayDiagnosticRuntime: document.getElementById('gatewayDiagnosticRuntime'), gatewayDiagnosticStatePath: document.getElementById('gatewayDiagnosticStatePath'), gatewayDiagnosticClientConfigDir: document.getElementById('gatewayDiagnosticClientConfigDir'), gatewayDiagnosticExecutable: document.getElementById('gatewayDiagnosticExecutable'), gatewayDiagnosticService: document.getElementById('gatewayDiagnosticService'), gatewayDiagnosticIssues: document.getElementById('gatewayDiagnosticIssues'), gatewayDiagnosticSuggestion: document.getElementById('gatewayDiagnosticSuggestion'), gatewayDiagnosticServiceDetail: document.getElementById('gatewayDiagnosticServiceDetail'),
   workspaceCount: document.getElementById('workspaceCount'), environmentCount: document.getElementById('environmentCount'),
   execCount: document.getElementById('execCount'), mcpCount: document.getElementById('mcpCount'), skillCount: document.getElementById('skillCount'), memoryCount: document.getElementById('memoryCount'),
@@ -1069,21 +1069,25 @@ async function updateLaunchAtLogin() {
 function renderGatewayAccessStatus(status) {
   gatewayAccessStatus = status || null;
   const hosts = safeArray(status?.allowed_hosts);
+  const ips = safeArray(status?.allowed_client_ips);
+  const enabled = Boolean(status?.whitelist_enabled);
   const adminConfigured = Boolean(status?.admin_api_key_configured);
   const agentConfigured = Boolean(status?.agent_api_key_configured);
   elements.gatewayAllowedHosts.value = hosts.join('\n');
-  const hostSummary = hosts.includes('*') ? '不限制 (*)' : (hosts.length ? hosts.length + ' 个 Host' : '未配置');
+  elements.gatewayAllowedClientIPs.value = ips.join('\n');
+  elements.gatewayWhitelistEnabled.checked = enabled;
+  const hostSummary = enabled ? `已启用：${hosts.length} 条域名/目标 IP，${ips.length} 条来源规则` : '已关闭（不限制来源）';
   const setBadge = (element, configured, configuredText, emptyText) => {
     if (!element) return;
     element.dataset.state = configured ? 'configured' : 'unconfigured';
     element.textContent = configured ? configuredText : emptyText;
   };
-  setBadge(elements.gatewayHostState, hosts.length > 0, hostSummary, '未启用远程 Host');
+  setBadge(elements.gatewayHostState, enabled, '白名单已启用', '白名单已关闭');
   setBadge(elements.gatewayAdminKeyState, adminConfigured, '已配置', '未配置');
   setBadge(elements.gatewayAgentKeyState, agentConfigured, '已配置', '未配置');
   elements.gatewayAccessSummary.textContent = adminConfigured && agentConfigured
-    ? `服务端双 Key 已就绪；远程 Host：${hostSummary}。保存 Host 白名单后，客户端仍必须携带对应 Key。`
-    : '远程访问尚未就绪：先配置 Admin Key 和 Agent Key，再保存 Host 白名单。';
+    ? `双 Key 已就绪；${hostSummary}。修改白名单不会关闭 API Key 鉴权。`
+    : 'Admin / Agent API Key 尚未全部配置；启用公网监听前请完成配置。';
   elements.gatewayAdminAPIKey.placeholder = adminConfigured ? '已配置；不会回显。输入新 Key 可轮换' : '至少 16 字符；保存后不回显';
   elements.gatewayAgentAPIKey.placeholder = agentConfigured ? '已配置；不会回显。输入新 Key 可轮换' : '至少 16 字符；保存后不回显';
   elements.gatewayAdminKeyHint.textContent = adminConfigured
@@ -1303,15 +1307,20 @@ async function refreshExecAuthorizationStatus() {
   }
 }
 async function saveGatewayAllowedHosts() {
-  const hosts = String(elements.gatewayAllowedHosts.value || '').split(/[\n,]+/).map((value) => value.trim()).filter(Boolean);
+  const hosts = String(elements.gatewayAllowedHosts.value || '').split(/[\n,]+/).map((v) => v.trim()).filter(Boolean);
+  const ips = String(elements.gatewayAllowedClientIPs.value || '').split(/[\n,]+/).map((v) => v.trim()).filter(Boolean);
+  const enabled = Boolean(elements.gatewayWhitelistEnabled.checked);
+  const hasHostRestriction = hosts.some((v) => v !== '*');
+  if (enabled && !hasHostRestriction && !ips.length) return setStatus('启用白名单需要至少填写一条访问域名或客户端来源 IP。', 'error');
   const profile = activeConnectionProfile();
-  if (hosts.length && (!gatewayAccessStatus?.admin_api_key_configured || !gatewayAccessStatus?.agent_api_key_configured)) {
-    return setStatus('启用远程 Host 前必须先配置 Admin Key 和 Agent Key。', 'error');
+  if (enabled && (!gatewayAccessStatus?.admin_api_key_configured || !gatewayAccessStatus?.agent_api_key_configured)) {
+    return setStatus('启用访问白名单前，请先配置 Admin Key 和 Agent Key。', 'error');
   }
-  if (hosts.length && gatewayAccessStatus?.admin_api_key_configured && !profile?.api_key_configured) {
-    return setStatus('服务端已经配置 Admin Key，但当前 Desktop 连接还没有保存 Admin Key。请先用下方“设置 Admin Key”同步后再启用远程 Host。', 'error');
+  if (enabled && gatewayAccessStatus?.admin_api_key_configured && !profile?.api_key_configured) {
+    return setStatus('当前 Desktop 连接尚未保存 Admin Key，请先配置再启用白名单。', 'error');
   }
-  await runMutation('保存远程 Host 白名单', () => desktopAdapter().SetGatewayAllowedHosts(hosts));
+  if (enabled && !window.confirm('启用白名单可能使不符合规则的远程客户端立即断开。请确认当前访问域名、实际来源 IP 或反向代理 IP 已包含在允许范围内。继续保存？')) return;
+  await runMutation('保存 Gateway 访问策略', () => desktopAdapter().SetGatewayAccessPolicy(enabled, hosts, ips));
 }
 async function rotateGatewayAPIKey(kind) {
   const admin = kind === 'admin';

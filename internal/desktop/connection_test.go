@@ -251,9 +251,9 @@ func TestLocalBootstrapListenRequiresLoopbackHTTPRoot(t *testing.T) {
 		want    string
 		wantErr bool
 	}{
-		{name: "ipv4", baseURL: "http://127.0.0.1:41137", want: "127.0.0.1:41137"},
-		{name: "localhost", baseURL: "http://localhost:41137", want: "localhost:41137"},
-		{name: "ipv6", baseURL: "http://[::1]:41137", want: "[::1]:41137"},
+		{name: "ipv4", baseURL: "http://127.0.0.1:41137", want: "0.0.0.0:41137"},
+		{name: "localhost", baseURL: "http://localhost:41137", want: "0.0.0.0:41137"},
+		{name: "ipv6", baseURL: "http://[::1]:41137", want: "0.0.0.0:41137"},
 		{name: "https", baseURL: "https://127.0.0.1:41137", wantErr: true},
 		{name: "remote", baseURL: "http://adm.example.test:41137", wantErr: true},
 		{name: "base path", baseURL: "http://127.0.0.1:41137/control", wantErr: true},

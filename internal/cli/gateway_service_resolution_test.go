@@ -214,8 +214,8 @@ func TestValidateGatewayServiceStartReadinessRejectsMissingForeignAndIncompleteS
 		Listen:    "0.0.0.0:8001",
 		StatePath: statePath,
 	}
-	if err := validateGatewayServiceStartReadiness(status); err == nil || !strings.Contains(err.Error(), "Host Policy") {
-		t.Fatalf("incomplete remote state error = %v", err)
+	if err := validateGatewayServiceStartReadiness(status); err != nil {
+		t.Fatalf("unconfigured but auth-protected Gateway may start: %v", err)
 	}
 	service := app.New(statePath)
 	if _, err := service.SetupGatewayRemote([]string{"adm.example.com"}, false); err != nil {

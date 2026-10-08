@@ -281,9 +281,9 @@ func TestResolveHTTPTargetDerivesCanonicalEndpointsAndLocalLifecycle(t *testing.
 		listen string
 		local  bool
 	}{
-		{name: "ipv4 local", raw: " http://127.0.0.1:43137/ ", base: "http://127.0.0.1:43137", health: "http://127.0.0.1:43137/healthz", agent: "http://127.0.0.1:43137/mcp", admin: "http://127.0.0.1:43137/admin/mcp", listen: "127.0.0.1:43137", local: true},
-		{name: "localhost local", raw: "http://localhost:48001", base: "http://localhost:48001", health: "http://localhost:48001/healthz", agent: "http://localhost:48001/mcp", admin: "http://localhost:48001/admin/mcp", listen: "localhost:48001", local: true},
-		{name: "ipv6 local", raw: "http://[::1]:48002/", base: "http://[::1]:48002", health: "http://[::1]:48002/healthz", agent: "http://[::1]:48002/mcp", admin: "http://[::1]:48002/admin/mcp", listen: "[::1]:48002", local: true},
+		{name: "ipv4 local", raw: " http://127.0.0.1:43137/ ", base: "http://127.0.0.1:43137", health: "http://127.0.0.1:43137/healthz", agent: "http://127.0.0.1:43137/mcp", admin: "http://127.0.0.1:43137/admin/mcp", listen: "0.0.0.0:43137", local: true},
+		{name: "localhost local", raw: "http://localhost:48001", base: "http://localhost:48001", health: "http://localhost:48001/healthz", agent: "http://localhost:48001/mcp", admin: "http://localhost:48001/admin/mcp", listen: "0.0.0.0:48001", local: true},
+		{name: "ipv6 local", raw: "http://[::1]:48002/", base: "http://[::1]:48002", health: "http://[::1]:48002/healthz", agent: "http://[::1]:48002/mcp", admin: "http://[::1]:48002/admin/mcp", listen: "0.0.0.0:48002", local: true},
 		{name: "https loopback inspection only", raw: "https://127.0.0.1:443/", base: "https://127.0.0.1:443", health: "https://127.0.0.1:443/healthz", agent: "https://127.0.0.1:443/mcp", admin: "https://127.0.0.1:443/admin/mcp"},
 		{name: "remote base path inspection only", raw: "https://adm.example.test:8443/control/", base: "https://adm.example.test:8443/control", health: "https://adm.example.test:8443/control/healthz", agent: "https://adm.example.test:8443/control/mcp", admin: "https://adm.example.test:8443/control/admin/mcp"},
 	}

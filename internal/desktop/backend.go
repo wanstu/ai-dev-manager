@@ -48,6 +48,7 @@ type managementBackend interface {
 	GatewayAccessStatus() (app.GatewayAccessStatus, error)
 	GatewayDiagnostics() (management.GatewayDiagnostics, error)
 	GatewayAllowedHostsSet([]string) (app.GatewayAccessStatus, error)
+	GatewayAccessPolicySet(bool, []string, []string) (app.GatewayAccessStatus, error)
 	GatewayAdminAPIKeySet(string) (app.GatewayAccessStatus, error)
 	GatewayAdminAPIKeyRotate() (app.GatewayKeyRotationResult, error)
 	GatewayAdminAPIKeyClear() (app.GatewayAccessStatus, error)

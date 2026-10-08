@@ -24,7 +24,7 @@ const fakeBridge = String.raw`<script>
   window.addEventListener('unhandledrejection', (event) => browserErrors.push(event.reason?.stack || event.reason?.message || String(event.reason || 'rejection')));
   let activeID = 'profile-a';
   const profiles = [
-    {id: 'profile-a', name: 'Profile A', base_url: 'http://127.0.0.1:43137', start_service_on_desktop_launch: true},
+    {id: 'profile-a', name: 'Profile A', base_url: 'http://127.0.0.1:43137', start_service_on_desktop_launch: true, api_key_configured: new URLSearchParams(location.search).get('focus') === 'gateway-access'},
     {id: 'profile-b', name: 'Profile B', base_url: 'http://127.0.0.1:43138'},
   ];
   const longRoot = 'C:\\fixtures\\' + 'very-long-segment-'.repeat(18) + 'workspace-a';
@@ -175,6 +175,44 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('workspaceCount').textContent==='2', 'successful snapshot renders count');
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
+
+    if (new URLSearchParams(location.search).get('focus') === 'gateway-access') {
+      const bridge=window.go.desktop.Adapter;
+      let policy={whitelist_enabled:false,allowed_hosts:[],allowed_client_ips:[],admin_api_key_configured:true,agent_api_key_configured:true};
+      const saved=[];
+      bridge.GetGatewayAccessStatus=async()=>structuredClone(policy);
+      bridge.SetGatewayAccessPolicy=async(enabled,hosts,ips)=>{
+        saved.push({enabled,hosts,ips});
+        policy={...policy,whitelist_enabled:enabled,allowed_hosts:hosts,allowed_client_ips:ips};
+        return structuredClone(policy);
+      };
+      await clickRoute('gateway');
+      document.getElementById('gatewayRefreshButton').click();
+      await waitFor(()=>document.getElementById('gatewayAccessSummary').textContent.includes('双 Key 已就绪'),'Gateway access policy loads in Desktop');
+      const enabled=document.getElementById('gatewayWhitelistEnabled');
+      const host=document.getElementById('gatewayAllowedHosts');
+      const ips=document.getElementById('gatewayAllowedClientIPs');
+      const button=document.getElementById('gatewayAccessSaveHosts');
+      check(Boolean(enabled&&host&&ips&&button),'Gateway exposes switch and separate Host/source-IP lists');
+      check(!enabled.checked,'new policy renders disabled by default');
+      check(!document.getElementById('gatewayAccessSummary').textContent.includes('未读取'),'Gateway policy has readable status');
+      host.value='adm.example.test';
+      ips.value='192.168.1.0/24';
+      button.click();
+      await waitFor(()=>saved.length===1,'disabled Gateway policy can be saved without switching on the whitelist');
+      check(saved[0].enabled===false&&saved[0].hosts[0]==='adm.example.test'&&saved[0].ips[0]==='192.168.1.0/24','Gateway policy preserves both rule sets when disabled');
+      enabled.checked=true;
+      button.click();
+      await waitFor(()=>saved.length===2,'enabling Gateway whitelist submits explicit enabled=true');
+      check(saved[1].enabled===true&&saved[1].ips[0]==='192.168.1.0/24','enabled Gateway policy retains source IP/CIDR rules');
+      check(window.__fakeADM.confirmations.some(v=>v.includes('远程客户端立即断开')),'enabling Gateway whitelist warns of connection loss');
+      host.value=''; ips.value=''; enabled.checked=true; button.click();
+      await sleep();
+      check(saved.length===2,'enabled empty whitelist is rejected before backend mutation');
+      check(document.documentElement.scrollWidth<=window.innerWidth+2,'Gateway access page does not overflow viewport');
+      result.ok=true;
+      return;
+    }
 
     if (new URLSearchParams(location.search).get('focus') === 'secrets') {
       const bridge=window.go.desktop.Adapter;

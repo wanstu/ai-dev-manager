@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"ai-dev-manager-v2/internal/app"
@@ -13,11 +14,12 @@ const defaultRemoteGatewayListen = "0.0.0.0:8001"
 
 func runGatewaySetup(service *app.Service, args []string) error {
 	fs := newFlagSet("gateway setup", func() {
-		fmt.Fprintln(os.Stdout, "用法：adm gateway setup --remote [--listen HOST:PORT] [--hosts HOST1,HOST2] [--rotate-keys]")
+		fmt.Fprintln(os.Stdout, "用法：adm gateway setup --remote [--port PORT] [--hosts HOST1,HOST2] [--rotate-keys]")
 		fmt.Fprintln(os.Stdout, "\n一次完成远程 Gateway 的 Host policy 与双 Key 初始化；重复执行默认保留已有 Host policy 和 Key。")
 	})
 	remote := fs.Bool("remote", false, "初始化远程 Gateway")
-	listen := fs.String("listen", "", "计划使用的监听地址；--remote 未指定时默认 0.0.0.0:8001")
+	listen := fs.String("listen", "", "兼容旧脚本的监听地址；新配置仅需要 --port")
+	port := fs.Int("port", 0, "服务端口；默认为 8001，监听 IP 固定 0.0.0.0")
 	hostsRaw := fs.String("hosts", "*", "允许的 Host/IP，逗号分隔；默认 *")
 	rotate := fs.Bool("rotate-keys", false, "即使已配置也重新生成 Admin/Agent Key")
 	if err := fs.Parse(args); err != nil {
@@ -26,14 +28,23 @@ func runGatewaySetup(service *app.Service, args []string) error {
 	if fs.NArg() != 0 || !*remote {
 		return fmt.Errorf("gateway setup 当前要求 --remote；运行 adm gateway setup -h 查看帮助")
 	}
-	targetListen := strings.TrimSpace(*listen)
-	if targetListen == "" {
-		targetListen = defaultRemoteGatewayListen
-	} else if strings.HasPrefix(targetListen, ":") {
-		targetListen = "0.0.0.0" + targetListen
+	if flagWasSet(fs, "port") && flagWasSet(fs, "listen") {
+		return fmt.Errorf("--port 与旧 --listen 不能同时指定")
 	}
-	if _, _, err := net.SplitHostPort(targetListen); err != nil {
-		return fmt.Errorf("无效 --listen %q：%w", targetListen, err)
+	portNumber := *port
+	if portNumber != 0 && (portNumber < 1 || portNumber > 65535) {
+		return fmt.Errorf("无效的服务端口：%d", portNumber)
+	}
+	targetListen := defaultRemoteGatewayListen
+	if flagWasSet(fs, "port") {
+		targetListen = fmt.Sprintf("0.0.0.0:%d", portNumber)
+	}
+	if flagWasSet(fs, "listen") {
+		_, legacyPort, err := net.SplitHostPort(strings.TrimSpace(*listen))
+		if err != nil {
+			return fmt.Errorf("无效的旧监听地址：%w", err)
+		}
+		targetListen = net.JoinHostPort("0.0.0.0", legacyPort)
 	}
 	hosts := splitGatewayHosts(*hostsRaw)
 	if !flagWasSet(fs, "hosts") {
@@ -53,7 +64,9 @@ func runGatewaySetup(service *app.Service, args []string) error {
 	fmt.Println("ADM Gateway 远程配置完成")
 	fmt.Println()
 	fmt.Println("监听地址：", targetListen)
-	fmt.Println("Host Policy：", strings.Join(result.Status.AllowedHosts, ", "))
+	fmt.Println("白名单：   ", map[bool]string{true: "启用", false: "关闭"}[result.Status.WhitelistEnabled])
+	fmt.Println("域名/目标：", strings.Join(result.Status.AllowedHosts, ", "))
+	fmt.Println("来源 IP：  ", strings.Join(result.Status.AllowedClientIPs, ", "))
 	fmt.Println("Admin API Key：已配置")
 	fmt.Println("Agent API Key：已配置")
 	if result.AdminKeyGenerated || result.AgentKeyGenerated {
@@ -72,7 +85,7 @@ func runGatewaySetup(service *app.Service, args []string) error {
 	fmt.Println()
 	fmt.Println("Desktop URL： http://<server-ip>:" + gatewayPort(targetListen))
 	fmt.Println("Agent MCP：   http://<server-ip>:" + gatewayPort(targetListen) + "/mcp")
-	fmt.Println("启动：        adm gateway start --listen " + targetListen)
+	fmt.Println("启动：        adm gateway start --port " + gatewayPort(targetListen))
 	return nil
 }
 
@@ -94,41 +107,18 @@ func gatewayPort(listen string) string {
 	return port
 }
 
-func validateGatewayStartReadiness(service *app.Service, listen string) error {
-	host, _, err := net.SplitHostPort(strings.TrimSpace(listen))
+func validateGatewayStartReadiness(_ *app.Service, listen string) error {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(listen))
 	if err != nil {
-		return fmt.Errorf("invalid gateway listen address %q: %w", listen, err)
+		return fmt.Errorf("无效的 Gateway 监听地址 %q: %w", listen, err)
 	}
-	if host == "localhost" {
-		return nil
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 1 || number > 65535 {
+		return fmt.Errorf("无效的 Gateway 端口 %q", port)
 	}
-	ip := net.ParseIP(host)
-	if ip != nil && ip.IsLoopback() {
-		return nil
+	if host != "0.0.0.0" && host != "127.0.0.1" && host != "localhost" && host != "::1" {
+		return fmt.Errorf("Gateway 仅支持统一监听 0.0.0.0；旧脚本可暂用回环地址")
 	}
-	readiness, err := service.GatewayRemoteReadiness()
-	if err != nil {
-		return err
-	}
-	if readiness.Ready {
-		return nil
-	}
-	var lines []string
-	if readiness.HostPolicyConfigured {
-		lines = append(lines, "✓ Host Policy")
-	} else {
-		lines = append(lines, "✗ Host Policy")
-	}
-	if readiness.AdminAPIKeyConfigured {
-		lines = append(lines, "✓ Admin API Key")
-	} else {
-		lines = append(lines, "✗ Admin API Key")
-	}
-	if readiness.AgentAPIKeyConfigured {
-		lines = append(lines, "✓ Agent API Key")
-	} else {
-		lines = append(lines, "✗ Agent API Key")
-	}
-	return fmt.Errorf("无法监听 %s\n\n远程 Gateway 尚未就绪：\n%s\n\n运行：\n  adm gateway setup --remote --listen %s",
-		listen, strings.Join(lines, "\n"), listen)
+	// Public binding does not bypass authentication: remote MCP requires both keys.
+	return nil
 }

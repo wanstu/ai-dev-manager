@@ -1824,11 +1824,12 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 	switch args[0] {
 	case "start", "http":
 		fs := newFlagSet("gateway start", func() {
-			fmt.Fprintln(os.Stdout, "用法：adm [--adm-url URL] gateway start [--listen HOST:PORT] [-d|--detach]")
-			fmt.Fprintln(os.Stdout, "\n未显式提供 --listen 时，从当前 ADM Base URL 派生本机回环监听地址。")
+			fmt.Fprintln(os.Stdout, "用法：adm [--adm-url URL] gateway start [--port PORT] [-d|--detach]")
+			fmt.Fprintln(os.Stdout, "\n默认监听 0.0.0.0；未指定 --port 时从当前 ADM Base URL 获取端口。")
 			fmt.Fprintln(os.Stdout, "在当前终端前台启动 HTTP MCP Gateway；按 Ctrl+C 停止。加 -d 或 --detach 可后台运行。")
 		})
-		listen := fs.String("listen", "", "Gateway 监听地址；远程监听必须先配置 gateway access Host 白名单、Admin API Key 和 Agent API Key")
+		listen := fs.String("listen", "", "兼容旧脚本的监听地址参数（新配置建议使用 --port）")
+		port := fs.Int("port", 0, "Gateway 服务端口，监听 IP 固定为 0.0.0.0")
 		var detach bool
 		fs.BoolVar(&detach, "detach", false, "脱离当前终端运行，并在健康检查通过后返回")
 		fs.BoolVar(&detach, "d", false, "--detach 的简写")
@@ -1841,6 +1842,15 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 		targetListen, err := resolveListen(fs, *listen)
 		if err != nil {
 			return err
+		}
+		if flagWasSet(fs, "port") {
+			if flagWasSet(fs, "listen") {
+				return fmt.Errorf("--port 与旧 --listen 不能同时提供")
+			}
+			if *port < 1 || *port > 65535 {
+				return fmt.Errorf("无效的服务端口：%d", *port)
+			}
+			targetListen = fmt.Sprintf("0.0.0.0:%d", *port)
 		}
 		if err := validateGatewayStartReadiness(service, targetListen); err != nil {
 			return err
@@ -2746,19 +2756,19 @@ func printGatewayHelp() {
 连接目标：
   默认 ADM Base URL 是 http://127.0.0.1:43137。
   可用 --adm-url URL 或 ADM_V2_URL 覆盖；--adm-url 可写在 gateway 命令前或后。
-  start/restart 默认使用本机 loopback；配置 gateway access Host 白名单、Admin API Key 和 Agent API Key 后可显式 --listen 远程地址。stop 仍只安全停止本机进程；status 可检查自定义端口或远端 health。
-  显式 --listen HOST:PORT 时，它优先于 ADM Base URL。
+  start 默认绑定 0.0.0.0，服务端口由 --port 选择；域名与来源 IP 白名单默认关闭，可单独开启。未配置双 Key 时远端 MCP 请求仍无法授权。
+  旧版 --listen 仅保留脚本兼容；推荐使用 --port。
 
 远程初始化：
-  adm gateway setup --remote [--listen HOST:PORT] [--hosts HOST1,HOST2] [--rotate-keys]
-      自动补齐 Host policy 与缺失的 Admin/Agent Key；已有 Key 默认保留。
+  adm gateway setup --remote [--port PORT] [--hosts HOST1,HOST2] [--rotate-keys]
+      初始化缺失的 Admin/Agent Key；默认关闭访问白名单。
 
 Linux 一键安装：
-  sudo adm gateway install --remote [--user USER] [--port PORT | --listen HOST:PORT] [--hosts HOST1,HOST2] [--rotate-keys] [--dry-run]
-      首次安装需要 --user；已有 ADM managed service 可重复执行升级，省略 user/listen/hosts 时保留原值，启动并等待 /healthz ready。
+  sudo adm gateway install --remote [--user USER] [--port PORT] [--hosts HOST1,HOST2] [--rotate-keys] [--dry-run]
+      首次安装需要 --user；已有 ADM managed service 可重复执行升级，省略 user/port/hosts 时保留原值，启动并等待 /healthz ready。
 
 系统服务：
-  sudo adm gateway service install [--user USER] [--listen HOST:PORT]
+  sudo adm gateway service install [--user USER] [--port PORT]
   adm gateway service status
   sudo adm gateway service start
   sudo adm gateway service stop
@@ -2768,7 +2778,7 @@ Linux 一键安装：
   sudo adm gateway service uninstall
 
 人工使用的 HTTP Gateway：
-  adm [--adm-url URL] gateway start [--listen HOST:PORT] [-d|--detach]
+  adm [--adm-url URL] gateway start [--port PORT] [-d|--detach]
   adm gateway logs status
       在当前终端前台启动。终端会被占用，按 Ctrl+C 停止。
       加 -d 或 --detach 后脱离当前终端运行，健康检查通过后命令立即返回。
@@ -2777,7 +2787,7 @@ Linux 一键安装：
       查看当前 ADM Base URL 或显式监听地址的运行状态、MCP 地址、PID 和版本。
 
   adm [--adm-url URL] gateway diagnostics
-      通过 Admin MCP 输出服务端诊断 JSON：运行用户/平台、state/config 路径、Host/双 Key readiness 与 systemd 状态；不返回 Key 原文。
+      通过 Admin MCP 输出服务端诊断 JSON：运行用户/平台、state/config 路径、访问策略/双 Key readiness 与 systemd 状态；不返回 Key 原文。
 
   adm [--adm-url URL] gateway stop [--listen HOST:PORT]
       停止本机 Gateway。不会通过远端 URL 发送停止操作。

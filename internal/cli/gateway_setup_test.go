@@ -75,20 +75,16 @@ func TestGatewaySetupRemotePreservesHostsUnlessExplicit(t *testing.T) {
 	}
 }
 
-func TestValidateGatewayStartReadinessExplainsMissingItems(t *testing.T) {
+func TestGatewayStartUsesOpenBindWithoutImplicitlyOpeningMCP(t *testing.T) {
 	service := app.New(filepath.Join(t.TempDir(), "state.json"))
-	err := validateGatewayStartReadiness(service, "0.0.0.0:8001")
-	if err == nil {
-		t.Fatal("remote start without access configuration unexpectedly passed")
-	}
-	message := err.Error()
-	for _, want := range []string{"✗ Host Policy", "✗ Admin API Key", "✗ Agent API Key", "adm gateway setup --remote"} {
-		if !strings.Contains(message, want) {
-			t.Fatalf("readiness error missing %q:\n%s", want, message)
-		}
+	if err := validateGatewayStartReadiness(service, "0.0.0.0:8001"); err != nil {
+		t.Fatalf("public binding must not require whitelist setup: %v", err)
 	}
 	if err := validateGatewayStartReadiness(service, "127.0.0.1:8001"); err != nil {
-		t.Fatalf("loopback start should not require remote access setup: %v", err)
+		t.Fatalf("legacy loopback binding should remain valid: %v", err)
+	}
+	if err := validateGatewayStartReadiness(service, "0.0.0.0:99999"); err == nil {
+		t.Fatal("invalid port must be rejected")
 	}
 }
 

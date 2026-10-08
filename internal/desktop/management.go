@@ -253,6 +253,13 @@ func (a *Adapter) GetGatewayDiagnostics() (management.GatewayDiagnostics, error)
 	return a.management.GatewayDiagnostics()
 }
 
+func (a *Adapter) SetGatewayAccessPolicy(enabled bool, hosts, clientIPs []string) (app.GatewayAccessStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.GatewayAccessStatus{}, err
+	}
+	return a.management.GatewayAccessPolicySet(enabled, hosts, clientIPs)
+}
+
 func (a *Adapter) SetGatewayAllowedHosts(hosts []string) (app.GatewayAccessStatus, error) {
 	if err := a.ready(); err != nil {
 		return app.GatewayAccessStatus{}, err

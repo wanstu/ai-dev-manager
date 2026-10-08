@@ -1,4 +1,18 @@
-# ADM 远程访问、Host 白名单与双 API Key
+# ADM Gateway：默认监听与可选访问白名单
+
+> **2026-10-08 新版规则（覆盖本文后续旧版监听/Host 配置说明）**：服务端默认监听 `0.0.0.0`，只需要配置端口。新的访问白名单默认**关闭**。关闭仅代表不限制域名/来源 IP，绝不绕过 API Key 或 Web 登录。Desktop 的「远程访问 → 访问白名单」可单独开启并设置 HTTP Host 和客户端来源 IP/CIDR；同时填写时须同时符合。
+>
+> `adm gateway start --port 8001`、`adm gateway setup --remote --port 8001`、`sudo adm gateway install --remote --user admin --port 8001` 是推荐的新命令。旧 `--listen` 仅作为脚本兼容入口保留。
+>
+> **安全**：HTTP Host 可由请求端声明，不代表真实客户端 IP。来源规则只能根据直连 TCP 地址匹配，程序不信任传入的 `Forwarded`、`X-Forwarded-For`、`X-Real-IP`；反向代理后请在代理层验证真实访客 IP，ADM 一侧看到的是代理的来源地址。升级旧配置时，旧 Host 白名单默认继续生效，不会静默开放。
+>
+> Gateway 允许在双 Key 尚未配置时绑定所有网卡，但远端无法免 Key 使用 MCP；需运行 `adm gateway setup --remote` 初始化 Admin/Agent Key。Web 管理仍由单独账号会话验证，首次管理员注册只能从本机进行。
+
+---
+
+## 旧版操作记录（保留供排查和升级参考）
+
+
 
 ADM 的远程 HTTP Gateway 同时暴露两个 MCP surface：
 

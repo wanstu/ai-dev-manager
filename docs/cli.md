@@ -1,5 +1,9 @@
 # `adm` CLI 完整参考（v1.1）
 
+> **2026-10-08 Gateway 网络配置更新**：默认监听 `0.0.0.0`，用户只需配置服务端口。推荐 `adm gateway start --port 8001`、`adm gateway setup --remote --port 8001`、`adm gateway access set-policy --enabled=true --hosts adm.example.com --ips 192.168.1.0/24`。关闭访问白名单使用 `adm gateway access set-policy --enabled=false`；关闭白名单不取消 API Key/Web 登录。旧版文档里的 `--listen`、必须先配置 Host 才能监听所有网卡等说明已不适用，相关旧命令仅保留必要的脚本兼容入口。详见 [REMOTE_ACCESS.md](REMOTE_ACCESS.md)。
+
+
+
 `adm` 是 ADM 的命令行管理端和本机 Gateway 启动器。
 
 - 正常 `workspace` / `environment` / `exec` / `mcp` / `skill` / `memory` 管理通过所选 ADM 的 `/admin/mcp`。

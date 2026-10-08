@@ -330,6 +330,19 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 		return h.management.GatewayAccessStatus()
 	case "GetGatewayDiagnostics":
 		return h.management.GatewayDiagnostics()
+	case "SetGatewayAccessPolicy":
+		var enabled bool
+		var hosts, ips []string
+		if err := arg(0, &enabled); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &hosts); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &ips); err != nil {
+			return nil, err
+		}
+		return h.management.GatewayAccessPolicySet(enabled, hosts, ips)
 	case "SetGatewayAllowedHosts":
 		var hosts []string
 		if err := arg(0, &hosts); err != nil {

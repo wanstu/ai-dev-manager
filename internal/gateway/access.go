@@ -3,12 +3,19 @@ package gateway
 import (
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"ai-dev-manager-v2/internal/app"
 )
 
 const gatewayAPIKeyHeader = "X-ADM-API-Key"
+
+type GatewayAccessPolicyInput struct {
+	Enabled   bool     `json:"enabled"`
+	Hosts     []string `json:"hosts"`
+	ClientIPs []string `json:"client_ips"`
+}
 
 type GatewayAllowedHostsInput struct {
 	Hosts []string `json:"hosts"`
@@ -31,13 +38,19 @@ func gatewayRequestAllowed(service *app.Service, request *http.Request, surface 
 		return false
 	}
 	host := gatewayAuthorityHost(request.Host)
-	local := isLocalGatewayHost(host)
-	remoteConfigured := len(settings.AllowedHosts) > 0
-	if !remoteConfigured {
-		return local && (host == "host.docker.internal" || directLoopbackPeer(request))
-	}
-	if !local && !gatewayHostConfigured(host, settings.AllowedHosts) {
-		return false
+	// Recovery uses the TCP peer, never a caller-controlled Host header.
+	localRecovery := isLocalGatewayHost(host) && directLoopbackPeer(request)
+	keyConfigured := settings.AdminAPIKeyHash != "" && settings.AgentAPIKeyHash != ""
+	if !keyConfigured {
+		return localRecovery
+	} // Local-only bootstrap.
+	if app.GatewayWhitelistEnabled(settings) && !localRecovery {
+		if len(settings.AllowedHosts) > 0 && !gatewayHostConfigured(host, settings.AllowedHosts) {
+			return false
+		}
+		if len(settings.AllowedClientIPs) > 0 && !gatewayClientIPConfigured(request.RemoteAddr, settings.AllowedClientIPs) {
+			return false
+		}
 	}
 	secret := gatewayRequestAPIKey(request)
 	if secret == "" {
@@ -122,6 +135,53 @@ func gatewayHostConfigured(host string, configured []string) bool {
 		}
 	}
 	return false
+}
+
+// Trust only the transport peer; forwarding headers are untrusted.
+func gatewayClientIPConfigured(remoteAddr string, configured []string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(remoteAddr))
+	if err != nil {
+		return false
+	}
+	peer, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	peer = peer.Unmap()
+	for _, item := range configured {
+		if addr, err := netip.ParseAddr(item); err == nil && addr.Unmap() == peer {
+			return true
+		}
+		if prefix, err := netip.ParsePrefix(item); err == nil && prefix.Contains(peer) {
+			return true
+		}
+	}
+	return false
+}
+
+// Web management uses the same network policy; login/session auth is separate.
+func gatewayWebAccessAllowed(service *app.Service, request *http.Request) bool {
+	if service == nil || request == nil {
+		return false
+	}
+	settings, err := service.GatewayAccessConfig()
+	if err != nil {
+		return false
+	}
+	if !app.GatewayWhitelistEnabled(settings) {
+		return true
+	}
+	host := gatewayAuthorityHost(request.Host)
+	if isLocalGatewayHost(host) && directLoopbackPeer(request) {
+		return true
+	}
+	if len(settings.AllowedHosts) > 0 && !gatewayHostConfigured(host, settings.AllowedHosts) {
+		return false
+	}
+	if len(settings.AllowedClientIPs) > 0 && !gatewayClientIPConfigured(request.RemoteAddr, settings.AllowedClientIPs) {
+		return false
+	}
+	return true
 }
 
 func remoteGatewayListenAllowed(service *app.Service) bool {

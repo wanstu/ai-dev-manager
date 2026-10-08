@@ -21,9 +21,11 @@ type WorktreeSettings struct {
 }
 
 type GatewayAccessSettings struct {
-	AllowedHosts    []string `json:"allowed_hosts,omitempty"`
-	AdminAPIKeyHash string   `json:"admin_api_key_hash,omitempty"`
-	AgentAPIKeyHash string   `json:"agent_api_key_hash,omitempty"`
+	AllowedHosts     []string `json:"allowed_hosts,omitempty"`
+	AllowedClientIPs []string `json:"allowed_client_ips,omitempty"`
+	WhitelistEnabled *bool    `json:"whitelist_enabled,omitempty"`
+	AdminAPIKeyHash  string   `json:"admin_api_key_hash,omitempty"`
+	AgentAPIKeyHash  string   `json:"agent_api_key_hash,omitempty"`
 }
 
 type WebAdminAccount struct {

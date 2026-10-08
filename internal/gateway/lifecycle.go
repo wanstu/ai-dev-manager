@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const DefaultHTTPListen = "127.0.0.1:43137"
+const DefaultHTTPListen = "0.0.0.0:43137"
 
 // ManagementAPIVersion is the compatibility contract for Desktop/CLI management.
 // Increment it only when the Admin management surface is no longer backwards compatible.
@@ -98,7 +98,7 @@ func LocalHTTPListenFromBaseURL(rawBaseURL string) (string, error) {
 	if !loopback {
 		return "", fmt.Errorf("local Gateway lifecycle is only available for loopback ADM URLs")
 	}
-	return net.JoinHostPort(host, port), nil
+	return net.JoinHostPort("0.0.0.0", port), nil
 }
 
 func LocalHTTPLifecycleEligible(rawBaseURL string) bool {
@@ -112,7 +112,7 @@ func HTTPBaseURL(listen string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid Gateway listen address %q; expected host:port", listen)
 	}
-	if host == "" {
+	if host == "" || host == "0.0.0.0" {
 		host = "127.0.0.1"
 	}
 	return "http://" + net.JoinHostPort(host, port), nil
