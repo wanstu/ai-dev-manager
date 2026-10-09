@@ -1,6 +1,6 @@
 # ADM 安装与开机自启（Kit 集成）
 
-> 本文描述当前开发分支的发布配置；新增资产要等 tag CI 通过后才会出现在 GitHub Release。已有 v1.4.0-rc.2 不会自动补上 Setup 或 CLI .deb。
+> v1.4.0-rc.3 已发布 Windows Setup、Portable 与 Linux CLI .deb；本开发分支现将 Go 依赖和 Windows/Linux 打包工具统一到 **Wails Desktop Kit v0.11.3**。这不会修改既有 RC 发布资产；新版本仍需重新运行对应发布 CI。
 
 ## Windows Desktop
 
@@ -11,7 +11,7 @@
 - `adm-desktop-<version>-windows-amd64.zip`：便于携带的 Portable ZIP。
 - `SHA256SUMS-<version>.txt`：Release 文件 SHA256 总校验清单。
 
-Setup 使用 Kit v0.11.0 的 NSIS 安装功能：默认 **当前用户安装**、无需管理员权限；固定卸载标识 `com.wanstu.adm-desktop`，支持覆盖安装、卸载与 `/S` 静默执行。**卸载不会删除** `~/.config/adm` 中的业务数据或 Gateway 配置。安装版会被 Kit Updater 识别，但 ADM 应用内的自动更新 UI 尚未接入。
+本分支后续 Setup 使用 Kit v0.11.3 的 NSIS 安装功能（已发布的 v1.4.0-rc.3 使用 Kit v0.11.0）：默认 **当前用户安装**、无需管理员权限；固定卸载标识 `com.wanstu.adm-desktop`，支持覆盖安装、卸载与 `/S` 静默执行。**卸载不会删除** `~/.config/adm` 中的业务数据或 Gateway 配置。安装版会被 Kit Updater 识别，但 ADM 应用内的自动更新 UI 尚未接入。
 
 本地只打包现有已构建的 Wails EXE（需要 NSIS）：
 
