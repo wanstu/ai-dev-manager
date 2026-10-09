@@ -84,6 +84,7 @@ jobs:
           path: |
             dist/${{ steps.windows_desktop.outputs.desktop_name }}
             dist/adm-desktop-*-windows-amd64-setup.exe
+            dist/adm-desktop-*-windows-amd64-setup.exe.sha256
             dist/adm-desktop-*-windows-amd64.zip
           if-no-files-found: error
           retention-days: 14

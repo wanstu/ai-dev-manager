@@ -72,6 +72,9 @@ try {
 if (-not (Test-Path -LiteralPath $setupPath -PathType Leaf)) {
     throw "Expected Windows Setup artifact is missing: $setupPath"
 }
+if (-not (Test-Path -LiteralPath "$setupPath.sha256" -PathType Leaf)) {
+    throw "Expected Windows Setup SHA256 sidecar is missing: $setupPath.sha256"
+}
 if ((Get-Item -LiteralPath $setupPath).Length -eq 0) {
     throw "Windows Setup artifact is empty: $setupPath"
 }
