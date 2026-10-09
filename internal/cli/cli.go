@@ -1816,7 +1816,8 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 
 	resolveListen := func(fs *flag.FlagSet, listen string) (string, error) {
 		if flagWasSet(fs, "listen") {
-			return strings.TrimSpace(listen), nil
+			// Legacy flag is port-only: the requested bind IP is ignored.
+			return normalizeRemoteListen(listen)
 		}
 		return localGatewayListenFromBaseURL(baseURL)
 	}
@@ -1913,8 +1914,8 @@ func runGatewayForTarget(service *app.Service, baseURL string, args []string) er
 		return stopHTTPGatewayBaseURL(baseURL)
 	case "restart":
 		fs := newFlagSet("gateway restart", func() {
-			fmt.Fprintln(os.Stdout, "用法：adm [--adm-url URL] gateway restart [--listen HOST:PORT]")
-			fmt.Fprintln(os.Stdout, "\n未显式提供 --listen 时，从当前 ADM Base URL 派生本机 Gateway。")
+			fmt.Fprintln(os.Stdout, "用法：adm [--adm-url URL] gateway restart")
+			fmt.Fprintln(os.Stdout, "\n重启当前 ADM Base URL 的端口；绑定地址固定为 0.0.0.0。旧 --listen 仅兼容指定端口。")
 		})
 		listen := fs.String("listen", "", "Gateway 监听地址；显式值优先于 --adm-url/ADM_V2_URL")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -2435,15 +2436,17 @@ func printUsage() {
   state          查看本机 ADM 状态文件位置
 
 Gateway 常用命令：
-  gateway setup      一次初始化远程 Host policy 与双 Key；已有 Key 默认保留
+  gateway setup      初始化远程访问双 Key；可选访问白名单默认关闭
   gateway install    Linux 一键 setup + managed system service 安装/升级 + ready 检查
   gateway service    管理 Gateway 系统服务（Linux 第一版使用 systemd）
-  gateway start      启动本机 HTTP Gateway；未写 --listen 时使用当前 --adm-url / ADM_V2_URL（默认 127.0.0.1:43137）
-  gateway status     查看当前 ADM Base URL，或用 --listen 显式检查一个本机监听地址
+  gateway start      启动 HTTP Gateway，固定监听 0.0.0.0；--port 指定端口（默认 43137）
+  gateway status     查看当前 ADM Base URL，或用 --listen 检查一个已有监听端点
   gateway diagnostics 通过 Admin MCP 读取运行用户、状态路径、远程访问 readiness 与 systemd 元数据
   gateway stop       强制停止当前 ADM Base URL 对应的已识别 Gateway；版本不兼容也允许停止
   gateway restart    重启当前本机 ADM Base URL 对应的 Gateway
-  gateway access     配置远程 Host/IP 白名单、Admin API Key 与 Agent API Key\n  gateway logs       查看持久日志目录与轮转/保留策略\n  gateway stdio      仅供 MCP 客户端使用；不要在普通终端里手动运行
+  gateway access     配置可选域名/来源 IP 白名单、Admin API Key 与 Agent API Key
+  gateway logs       查看持久日志目录与轮转/保留策略
+  gateway stdio      仅供 MCP 客户端使用；不要在普通终端里手动运行
 
 查看子命令帮助：
   adm workspace -h
@@ -2792,8 +2795,8 @@ Linux 一键安装：
   adm [--adm-url URL] gateway stop [--listen HOST:PORT]
       停止本机 Gateway。不会通过远端 URL 发送停止操作。
 
-  adm [--adm-url URL] gateway restart [--listen HOST:PORT]
-      停止本机旧 Gateway，然后在当前终端启动新 Gateway。
+  adm [--adm-url URL] gateway restart
+      重新启动当前 ADM Base URL 的端口，始终绑定 0.0.0.0。
 
 仅供 MCP 客户端使用：
   adm gateway stdio

@@ -112,7 +112,7 @@ func TestGatewayStartDetachRoutesToDetachedLauncher(t *testing.T) {
 		if err := runGateway(service, []string{"start", flagName, "--listen", "127.0.0.1:45555"}); err != nil {
 			t.Fatal(err)
 		}
-		if gotListen != "127.0.0.1:45555" {
+		if gotListen != "0.0.0.0:45555" {
 			t.Fatalf("%s listen = %q", flagName, gotListen)
 		}
 	}

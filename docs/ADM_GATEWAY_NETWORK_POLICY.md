@@ -1,6 +1,6 @@
 # ADM Gateway 网络访问策略（2026-10-08）
 
-状态：Gateway、Desktop、CLI 功能已完成编码。Go 全量测试 `go test ./... -count=1`、`go vet ./...`、Windows 真实 TCP `RunHTTP` 全接口监听测试、Chrome 3 窗口通用/白名单交互验收、Wails Windows production 构建均通过。代码准备独立提交；未发布 RC，也未实际从第二台 LAN 客户端验收。项目为 AI Dev Manager，使用现有 LADM Environment，不创建 worktree；不覆盖已有未提交文件。
+状态：v1.4.0-rc.1 已于 2026-10-09 发布，跨平台 CI 全绿。发布后验收确认旧 `--listen` 启动入口仍可能绑定回环 IP；后续修复为只提取端口、统一绑定 0.0.0.0。Windows 非回环网卡 192.168.56.1 已完成真实 TCP/Host/来源 IP 与转发头伪造测试；尚未从第二台 LAN 设备访问，且尚未发布后续修复版本。项目为 AI Dev Manager，使用现有 LADM Environment，不创建 worktree；不覆盖已有未提交文件。
 
 ## 目标和范围
 

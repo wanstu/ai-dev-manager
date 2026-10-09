@@ -15,7 +15,7 @@ const defaultRemoteGatewayListen = "0.0.0.0:8001"
 func runGatewaySetup(service *app.Service, args []string) error {
 	fs := newFlagSet("gateway setup", func() {
 		fmt.Fprintln(os.Stdout, "用法：adm gateway setup --remote [--port PORT] [--hosts HOST1,HOST2] [--rotate-keys]")
-		fmt.Fprintln(os.Stdout, "\n一次完成远程 Gateway 的 Host policy 与双 Key 初始化；重复执行默认保留已有 Host policy 和 Key。")
+		fmt.Fprintln(os.Stdout, "\n初始化远程 Gateway 的 Admin/Agent 双 Key；访问白名单默认关闭，重复执行默认保留已有策略和 Key。")
 	})
 	remote := fs.Bool("remote", false, "初始化远程 Gateway")
 	listen := fs.String("listen", "", "兼容旧脚本的监听地址；新配置仅需要 --port")
