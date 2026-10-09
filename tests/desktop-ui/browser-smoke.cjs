@@ -787,6 +787,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(!staleWorkspace.enabled_skill_ids.includes('workspace-skill-missing'), 'Skill missing selection is removed from Workspace');
 
     await clickRoute('mcp');
+    const mcpBulkToolbar=document.getElementById('mcpBulkToolbar');
+    check(mcpBulkToolbar.querySelector('details')===null && mcpBulkToolbar.querySelectorAll('.batch-action-group').length===2, 'MCP batch operations are visible without opening advanced menus');
+    check(document.getElementById('mcpSetVisibleDefaultButton').getBoundingClientRect().width>0, 'MCP default batch action is visibly available');
+    check(document.getElementById('mcpBatchEnvironmentName').textContent.length>0, 'MCP Environment selection explains target and disabled state');
+    check(document.documentElement.scrollWidth<=window.innerWidth+2, 'MCP batch toolbar does not overflow the viewport');
+    check(Number(document.getElementById('mcpBatchVisibleCount').textContent)===Number(document.getElementById('mcpVisibleCount').textContent), 'MCP bulk action count follows current filter');
+    check(mcpBulkToolbar.querySelector('#mcpFilter')===null && document.getElementById('mcpFilter').compareDocumentPosition(mcpBulkToolbar)&Node.DOCUMENT_POSITION_FOLLOWING, 'MCP search precedes batch actions');
     const removeMCPBefore=window.__fakeADM.calls.filter(c=>c.name==='RemoveMCP' && c.args[0]==='mcp-b').length;
     document.querySelector('#mcpList button[data-action="remove-mcp"][data-id="mcp-b"]').click();
     await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='RemoveMCP' && c.args[0]==='mcp-b').length>removeMCPBefore, 'MCP delete call');
@@ -800,6 +807,13 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     await clickRoute('skills');
     check(!document.getElementById('skillsPanel').hidden && document.getElementById('skillSourcesPanel').hidden, 'Skill route defaults to Skills subview');
+    const skillBatchToolbar=document.querySelector('#skillsPanel .batch-toolbar');
+    check(skillBatchToolbar.querySelector('details')===null && skillBatchToolbar.querySelectorAll('.batch-action-group').length===2, 'Skill batch operations are visible without an advanced menu');
+    check(document.getElementById('skillSetVisibleDefaultButton').getBoundingClientRect().width>0, 'Skill default batch action is visibly available');
+    check(document.getElementById('skillBatchEnvironmentName').textContent.length>0, 'Skill Environment selection explains target and disabled state');
+    check(document.documentElement.scrollWidth<=window.innerWidth+2, 'Skill batch toolbar does not overflow the viewport');
+    check(Number(document.getElementById('skillBatchVisibleCount').textContent)===Number(document.getElementById('skillVisibleCount').textContent), 'Skill batch action count follows current filter');
+    check(Boolean(document.getElementById('skillFilter').compareDocumentPosition(skillBatchToolbar)&Node.DOCUMENT_POSITION_FOLLOWING), 'Skill filtering precedes batch actions');
     const workspaceSkillBefore=window.__fakeADM.calls.filter(c=>c.name==='SetWorkspaceSkill' && c.args[0]==='ws-a' && c.args[1]==='skill-a').length;
     document.querySelector('#skillList input[data-action="workspace-skill"][data-id="skill-a"]').click();
     await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='SetWorkspaceSkill' && c.args[0]==='ws-a' && c.args[1]==='skill-a' && c.args[2]===true).length>workspaceSkillBefore, 'Workspace Skill inheritance enable call');

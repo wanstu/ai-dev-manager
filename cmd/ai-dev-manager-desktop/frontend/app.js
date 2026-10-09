@@ -2268,40 +2268,57 @@ function updateMCPBulkControls() {
   const visibleCount = visibleResourceIDs(elements.mcpList).length;
   const environment = currentEnvironment();
   const selectedCount = selectedMCPIDs.size;
+  document.getElementById('mcpBatchVisibleCount').textContent = String(visibleCount);
   const disabled = mcpBulkBusy || capabilityAssignmentBusy || visibleCount === 0;
   elements.mcpSelectedCount.textContent = String(selectedCount);
   elements.mcpSelectVisibleButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || visibleCount === 0;
   elements.mcpClearSelectionButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
   elements.mcpAssignEnvironmentsButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || selectedCapabilityCount() === 0 || !(safeArray(currentSnapshot?.environments).length || safeArray(currentSnapshot?.workspaces).length);
   const missing = missingSelectionOperations('mcp'); elements.mcpClearMissingButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || missing.length === 0; elements.mcpClearMissingButton.textContent = missing.length ? `清除不存在引用 (${missing.length})` : '清除不存在引用';
+  elements.mcpSetVisibleDefaultButton.title = visibleCount ? `无需勾选，将修改当前筛选出的 ${visibleCount} 项` : '当前筛选结果为空';
   elements.mcpSetVisibleDefaultButton.disabled = disabled;
   elements.mcpUnsetVisibleDefaultButton.disabled = disabled;
+  document.getElementById('mcpBatchEnvironmentName').textContent = environment
+    ? `目标：${environment.name || environment.environment_id}（不会改变 Workspace 继承）`
+    : '先在页面顶部选择当前 Environment';
+  elements.mcpEnableVisibleButton.title = environment ? `当前 Environment：${environment.name || environment.environment_id}；Workspace 继承不受影响` : '需要先选择当前 Environment';
+  elements.mcpDisableVisibleButton.title = elements.mcpEnableVisibleButton.title;
   elements.mcpEnableVisibleButton.disabled = disabled || !environment;
   elements.mcpDisableVisibleButton.disabled = disabled || !environment;
-  elements.mcpBulkHint.textContent = selectedCapabilityCount()
-    ? `已选择 MCP ${selectedMCPIDs.size} · Skill ${selectedSkillIDs.size}；可批量分配到多个 Environment。当前筛选结果仍为 ${visibleCount} 项。`
-    : (environment
-      ? `批量操作只作用于当前筛选结果（${visibleCount} 项）；当前 Environment：${environment.name || environment.environment_id}。`
-      : `先选择 MCP / Skill 后可批量分配到多个 Environment；当前筛选结果 ${visibleCount} 项。`);
+  elements.mcpAssignEnvironmentsButton.title = selectedCapabilityCount()
+    ? '已选中资源，可选择 Workspace / Environment 执行批量启停'
+    : '先勾选 MCP 或 Skill 后再批量分配';
+  elements.mcpBulkHint.textContent = `上方筛选结果 ${visibleCount} 项的快捷操作无需勾选；跨 Workspace / Environment 分配使用已勾选的 MCP ${selectedMCPIDs.size} 项和 Skill ${selectedSkillIDs.size} 项。`;
 }
 function updateSkillBulkControls() {
   pruneSkillSelection();
   const environment = currentEnvironment(); const selectedCount = selectedSkillIDs.size; const probeCurrent = explicitSkillProbeIsCurrent(); const summary = probeCurrent ? skillAvailabilitySummary() : null; const hasSkills = Boolean(safeArray(currentSnapshot?.skills).length); const visibleCount = visibleResourceIDs(elements.skillList).length;
   elements.skillSelectedCount.textContent = String(selectedCount);
+  document.getElementById('skillBatchVisibleCount').textContent = String(visibleCount);
   elements.skillProbeAllButton.disabled = skillBulkBusy || capabilityAssignmentBusy || !hasSkills;
-  elements.skillSelectVisibleButton.disabled = skillBulkBusy || capabilityAssignmentBusy || !safeArray(currentSnapshot?.skills).length;
+  elements.skillSelectVisibleButton.disabled = skillBulkBusy || capabilityAssignmentBusy || visibleCount === 0;
   elements.skillClearSelectionButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
   elements.skillAssignEnvironmentsButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCapabilityCount() === 0 || !(safeArray(currentSnapshot?.environments).length || safeArray(currentSnapshot?.workspaces).length);
   const missing = missingSelectionOperations('skill'); elements.skillClearMissingButton.disabled = skillBulkBusy || capabilityAssignmentBusy || missing.length === 0; elements.skillClearMissingButton.textContent = missing.length ? `清除不存在引用 (${missing.length})` : '清除不存在引用';
   elements.skillDeleteSelectedButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
+  elements.skillSetVisibleDefaultButton.title = visibleCount ? `无需勾选，将修改当前筛选出的 ${visibleCount} 项` : '当前筛选结果为空';
   elements.skillSetVisibleDefaultButton.disabled = skillBulkBusy || visibleCount === 0;
   elements.skillUnsetVisibleDefaultButton.disabled = skillBulkBusy || visibleCount === 0;
+  document.getElementById('skillBatchEnvironmentName').textContent = environment
+    ? `目标：${environment.name || environment.environment_id}（不会改变 Workspace 继承）`
+    : '先在页面顶部选择当前 Environment';
+  elements.skillEnableVisibleButton.title = environment ? `当前 Environment：${environment.name || environment.environment_id}；Workspace 继承不受影响` : '需要先选择当前 Environment';
+  elements.skillDisableVisibleButton.title = elements.skillEnableVisibleButton.title;
   elements.skillEnableVisibleButton.disabled = skillBulkBusy || visibleCount === 0 || !environment;
   elements.skillDisableVisibleButton.disabled = skillBulkBusy || visibleCount === 0 || !environment;
   elements.skillClearUnavailableButton.disabled = skillBulkBusy || !probeCurrent || !summary?.cleanupIDs?.length;
   elements.skillClearUnavailableButton.textContent = probeCurrent && summary?.cleanupIDs?.length ? `一键清除不可用 (${summary.cleanupIDs.length})` : '一键清除不可用';
-  if (!probeCurrent) elements.skillBulkHint.textContent = '批量检查会检查全局 Skill catalog 的 source root、artifact 与 support roots；不依赖当前 Environment。';
-  else elements.skillBulkHint.textContent = `最近全局检查：可用 ${summary.available} · 不可用 ${summary.unavailable} · 未知 ${summary.unknown}。清理只删除 ADM catalog metadata，不删除磁盘文件。`;
+  elements.skillAssignEnvironmentsButton.title = selectedCapabilityCount()
+    ? '已选中资源，可选择 Workspace / Environment 执行批量启停'
+    : '先勾选 MCP 或 Skill 后再批量分配';
+  const filteredSummary = `上方筛选结果 ${visibleCount} 项的快捷操作无需勾选；跨 Workspace / Environment 分配使用已勾选的 Skill ${selectedSkillIDs.size} 项和 MCP ${selectedMCPIDs.size} 项。`;
+  if (!probeCurrent) elements.skillBulkHint.textContent = filteredSummary + ' 批量检查会检查全局 Skill catalog 的 source root、artifact 与 support roots；不依赖当前 Environment。';
+  else elements.skillBulkHint.textContent = filteredSummary + ` 最近全局检查：可用 ${summary.available} · 不可用 ${summary.unavailable} · 未知 ${summary.unknown}。清理只删除 ADM catalog metadata，不删除磁盘文件。`;
 }
 async function probeAllSkillAvailability() {
   const identity = currentSkillProbeIdentity();
