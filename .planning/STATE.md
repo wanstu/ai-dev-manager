@@ -242,7 +242,7 @@ See `.planning/post-1.0/PHASE-MAP.md` for the high-level phase sequence. Detaile
 
 - Newly requested: remove user-facing listen-IP configuration, listen on `0.0.0.0` with configurable port, add optional independently switchable domain/HTTP Host and client-source IP/CIDR allowlists, disabled by default on new installs. Keep Admin/Agent Key authentication and safe reverse-proxy behavior.
 - The existing `AllowedHosts` checks HTTP Host, **not** client source IP. Preserve existing effective restrictions during upgrades and reject untrusted forwarded-header spoofing. Scope and negative acceptance tests: `docs/ADM_GATEWAY_NETWORK_POLICY.md`.
-- Gateway network policy is implemented on this branch with optional Host/source-IP allowlists, Desktop/CLI controls and 0.0.0.0 bind. Go full tests, go vet, real Windows TCP startup test, 3-viewport Chrome UI tests and native Wails production build passed. Git commit follows as a separate unit, excluding earlier go.mod and Windows version-resource script edits. Remote second-machine LAN test and RC release remain outside this checkpoint.
+- Gateway network policy shipped as v1.4.0-rc.1 (commit 7a1a4b5) and post-release CLI bind/help correction shipped as v1.4.0-rc.2 (commit 9fbb520). v1.4.0-rc.2 cross-platform release pipeline 37869585885 is green with all 14 published artifacts and SHA256SUMS. Local full Go/vet, Chrome 762 general + 39 Gateway-policy checks, and real Windows TCP via nonloopback 192.168.56.1 passed, including source-IP/Host filtering, unauthorized MCP and forged forwarded headers. Do not equate same-host NIC connectivity with a second LAN device: actual second-device verification remains open; do not claim stable v1.4.0 completion yet. Pre-existing dirty go.mod remains untouched.
 
 ## Deferred
 
