@@ -59,11 +59,32 @@ jobs:
           "desktop_name=$desktopName" >> $env:GITHUB_OUTPUT
           "desktop_artifact=adm-desktop$tagSuffix-windows-amd64" >> $env:GITHUB_OUTPUT
 
-      - name: Upload Windows Desktop artifact
+      - name: Ensure NSIS for Windows Setup
+        shell: pwsh
+        run: |
+          $nsis = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
+          if (-not (Test-Path -LiteralPath $nsis)) {
+            choco install nsis --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          if (-not (Test-Path -LiteralPath $nsis)) { throw "NSIS compiler not found: $nsis" }
+
+      - name: Package Windows Desktop Setup and Portable ZIP
+        shell: pwsh
+        run: |
+          $buildVersion = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { 'dev' }
+          $desktopName = 'adm-desktop-windows-amd64.exe'
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $desktopName = "adm-desktop-$buildVersion-windows-amd64.exe" }
+          ./scripts/package-windows.ps1 -InputPath "dist/$desktopName" -OutputDir dist -Version $buildVersion
+
+      - name: Upload Windows Desktop artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.windows_desktop.outputs.desktop_artifact }}
-          path: dist/${{ steps.windows_desktop.outputs.desktop_name }}
+          path: |
+            dist/${{ steps.windows_desktop.outputs.desktop_name }}
+            dist/adm-desktop-*-windows-amd64-setup.exe
+            dist/adm-desktop-*-windows-amd64.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -236,11 +257,53 @@ jobs:
           "output=$output" >> $env:GITHUB_OUTPUT
           "artifact=$artifact" >> $env:GITHUB_OUTPUT
 
-      - name: Upload CLI artifact
+      - name: Package Linux headless CLI (Debian)
+        if: matrix.goos == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_version='dev'
+          suffix=''
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            build_version="$GITHUB_REF_NAME"
+            suffix="-$build_version"
+          fi
+          package_version="${build_version#v}"
+          if [[ "$build_version" == 'dev' ]]; then
+            package_version='0.0.0~dev'
+          else
+            package_version="${package_version/-rc./~rc.}"
+          fi
+          go run github.com/wanstu/wails-desktop-kit/cmd/desktopkit@v0.10.2 package linux \
+            --input "dist/adm$suffix-${{ matrix.name }}" \
+            --dist dist \
+            --app-name adm \
+            --asset-base "adm-cli-$build_version" \
+            --package-name adm-cli \
+            --package-version "$package_version" \
+            --arch "${{ matrix.goarch }}" \
+            --formats deb \
+            --description 'AI Dev Manager headless CLI and Gateway (no GTK required)' \
+            --maintainer 'AI Dev Manager' \
+            --section devel
+          deb="dist/adm-cli-$build_version-linux-${{ matrix.goarch }}.deb"
+          test -s "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = 'adm-cli'
+          test "$(dpkg-deb -f "$deb" Architecture)" = '${{ matrix.goarch }}'
+          dpkg-deb -c "$deb" | grep -qE '\./usr/bin/adm$'
+          if dpkg-deb -f "$deb" Depends | grep -Eqi 'gtk|webkit'; then
+            echo 'Headless CLI package must not depend on GTK/WebKit' >&2
+            exit 1
+          fi
+
+      - name: Upload CLI artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.cli_artifact.outputs.artifact }}
-          path: dist/${{ steps.cli_artifact.outputs.output }}
+          path: |
+            dist/${{ steps.cli_artifact.outputs.output }}
+            dist/adm-cli-*-linux-*.deb
+            dist/adm-cli-*-linux-*.deb.sha256
           if-no-files-found: error
           retention-days: 14
 

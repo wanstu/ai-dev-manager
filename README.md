@@ -100,6 +100,7 @@ go build -trimpath -o dist\adm-windows-amd64.exe ./cmd/ai-dev-manager
 - [MCP、Skill 与 Memory](docs/catalog-memory.md)
 - [Desktop 管理端](docs/desktop.md)
 - [打包与 GitHub Actions](docs/packaging.md)
+- [安装包与 Linux 开机自启](docs/ADM_INSTALLATION.md)
 - [产品语义合同](docs/PRODUCT_CONTRACT.md)
 
 ## 产品边界
