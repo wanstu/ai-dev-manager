@@ -540,6 +540,25 @@
             <div class="detail-row"><strong>Runtime</strong><span id="aboutRuntime">—</span></div>
           </div>
         </section>
+        <section class="subpanel" id="desktopUpdatePanel">
+          <div class="subpanel-heading"><h3>软件更新</h3><span id="desktopUpdateMode">Windows Desktop</span></div>
+          <div class="subpanel-body desktop-update-actions">
+            <p id="desktopUpdateStatus" class="subpanel-note" role="status" aria-live="polite">正在检查安装方式…</p>
+            <label class="desktop-toggle"><input id="desktopUpdatePrerelease" type="checkbox"><span>包含候选版本（RC）</span></label>
+            <div class="gateway-actions">
+              <button type="button" class="secondary-button" id="desktopUpdateCheck">检查更新</button>
+              <button type="button" class="secondary-button" id="desktopUpdateDownload" disabled>下载并校验</button>
+              <button type="button" class="secondary-button" id="desktopUpdateCancel" hidden>取消下载</button>
+              <button type="button" class="secondary-button" id="desktopUpdateOpenFolder" hidden>打开安装包所在目录</button>
+              <button type="button" id="desktopUpdateInstall" hidden>安装并重启</button>
+            </div>
+            <progress id="desktopUpdateProgress" max="100" value="0" hidden></progress>
+            <p id="desktopUpdateProgressText" class="subpanel-note" hidden></p>
+            <p id="desktopUpdateFile" class="subpanel-note" hidden></p>
+            <a id="desktopUpdateRelease" href="https://github.com/wanstu/ai-dev-manager/releases" target="_blank" rel="noopener noreferrer" hidden>查看发行说明</a>
+            <p class="subpanel-note">安装版支持自动安装并重启；Portable 版仅下载校验，需要自行运行安装包。所有更新来自 ADM 的 GitHub Release，下载后必须通过 SHA256 校验。</p>
+          </div>
+        </section>
         <section class="subpanel">
           <div class="subpanel-heading"><h3>产品边界</h3><span>Control plane</span></div>
           <p class="subpanel-note">ADM 管理 Workspace、Environment、执行权限、MCP、Skill、Memory、Git/worktree、Verifier 与 Runtime 生命周期；不替代 Planner / Executor / Reviewer。</p>
@@ -672,5 +691,6 @@
   <script src="./mcp-export.js" defer></script>
   <script src="./web-adapter.js" defer></script>
   <script src="./app.js" defer></script>
+  <script src="./updater.js" defer></script>
 </body>
 </html>

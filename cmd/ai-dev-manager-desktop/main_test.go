@@ -64,7 +64,9 @@ func TestProductionDesktopUsesDesktopKitRuntime(t *testing.T) {
 		`SingleInstance:`,
 		`SecondInstancePolicy: desktopkit.SecondInstanceWakeManual`,
 		`desktopTrayConfig(trayIcon, adapter, autoStart)`,
-		`Ready: autoStart.setController`,
+		`Ready: func(controller *desktopkit.Controller)`,
+		`autoStart.setController(controller)`,
+		`updateManager.onReady(`,
 	} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("production Desktop missing desktop-kit lifecycle marker %q", required)

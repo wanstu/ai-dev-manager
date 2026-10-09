@@ -852,6 +852,10 @@ textarea:focus,
 .config-source-card strong {
   color: var(--dk-text);
 }
+.desktop-update-actions { display: grid; gap: 12px; }
+.desktop-update-actions .subpanel-note { margin: 0; overflow-wrap: anywhere; }
+.desktop-update-actions .gateway-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.desktop-update-actions progress { width: 100%; height: 10px; }
 .desktop-preferences-grid { gap: 14px; }
 .desktop-theme-controls {
   display: grid;

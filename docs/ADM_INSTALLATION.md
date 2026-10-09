@@ -11,7 +11,7 @@
 - `adm-desktop-<version>-windows-amd64.zip`：便于携带的 Portable ZIP。
 - `SHA256SUMS-<version>.txt`：Release 文件 SHA256 总校验清单。
 
-本分支后续 Setup 使用 Kit v0.11.3 的 NSIS 安装功能（已发布的 v1.4.0-rc.3 使用 Kit v0.11.0）：默认 **当前用户安装**、无需管理员权限；固定卸载标识 `com.wanstu.adm-desktop`，支持覆盖安装、卸载与 `/S` 静默执行。**卸载不会删除** `~/.config/adm` 中的业务数据或 Gateway 配置。安装版会被 Kit Updater 识别，但 ADM 应用内的自动更新 UI 尚未接入。
+本分支后续 Setup 使用 Kit v0.11.3 的 NSIS 安装功能（已发布的 v1.4.0-rc.3 使用 Kit v0.11.0）：默认 **当前用户安装**、无需管理员权限；固定卸载标识 `com.wanstu.adm-desktop`，支持覆盖安装、卸载与 `/S` 静默执行。**卸载不会删除** `~/.config/adm` 中的业务数据或 Gateway 配置。本开发分支已接入应用内更新 UI（尚未发布）。
 
 本地只打包现有已构建的 Wails EXE（需要 NSIS）：
 
@@ -19,6 +19,18 @@
 ./scripts/build-desktop.ps1 -clean -trimpath -Version v1.4.0-rc.3 -o adm-desktop-v1.4.0-rc.3-windows-amd64.exe
 ./scripts/package-windows.ps1 -InputPath dist/adm-desktop-v1.4.0-rc.3-windows-amd64.exe -Version v1.4.0-rc.3
 ```
+
+### Desktop 应用内检查更新（开发分支，尚未发布）
+
+Windows Desktop 打开 **关于 → 软件更新**，可以选择是否包含 RC 候选版，依次进行“检查更新 → 下载并校验”。
+
+- **当前用户安装版**：SHA256 验证通过后显示“安装并重启”，必须再次确认。安装器由 Kit 管理，并等待旧 Desktop 退出后覆盖安装。
+- **Portable 版**：只提供检查、下载、验证和“打开安装包所在目录”，不允许自动覆盖当前 EXE。手动运行 Setup 是明确的用户操作。
+- **系统级安装版**：只提供下载和“打开安装包所在目录”，由用户手动执行 Setup 并处理权限，不自动提权重启。
+- **浏览器 Web 管理台、非 Windows、开发构建**：不会提供可用的 Desktop 自动更新功能。
+- 安装器来自项目官方 GitHub Release，Kit 必须验证 SHA256；取消、校验失败、重复安装都不能触发应用重启。安装退出 Desktop 不会调用“退出（不保留后台）”逻辑，因此不主动关闭 Gateway 服务。
+
+本次本地集成基于 Wails Desktop Kit v0.11.3，需经新的 ADM 发行版打包及真实安装版升级验收后才能宣告向最终用户交付。缓存文件位于当前用户缓存目录下的 `adm/updates`。
 
 ## Linux 无桌面服务器
 

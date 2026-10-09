@@ -85,6 +85,7 @@ func runDesktop(startHidden bool) error {
 	}
 	adapter := desktop.NewClientAdapter()
 	autoStart := newDesktopAutoStartProvider(adapter)
+	updateManager := newUpdateManager(productversion.Current())
 	window := desktopkit.DefaultWindowConfig()
 	window.Width = 1120
 	window.Height = 760
@@ -99,13 +100,19 @@ func runDesktop(startHidden bool) error {
 		Assets: kitui.Mount(assets),
 		Bind: []interface{}{
 			adapter,
+			updateManager,
 		},
 		Launch: desktopkit.LaunchOptions{AutoStart: startHidden},
 		Window: window,
 		Theme:  desktopkit.DefaultThemeConfig(),
 		Tray:   desktopTrayConfig(trayIcon, adapter, autoStart),
 		Hooks: desktopkit.Hooks{
-			Ready: autoStart.setController,
+			Ready: func(controller *desktopkit.Controller) {
+				autoStart.setController(controller)
+				updateManager.onReady(func(status DesktopUpdateStatus) {
+					_ = controller.Emit("desktop:update-progress", status)
+				}, controller.Quit)
+			},
 		},
 		SingleInstance:       true,
 		SecondInstancePolicy: desktopkit.SecondInstanceWakeManual,

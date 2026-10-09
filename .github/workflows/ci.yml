@@ -43,6 +43,14 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Browser acceptance for Windows Desktop updater
+        shell: pwsh
+        run: |
+          $env:ADM_UI_SMOKE_FOCUS = 'updater'
+          node tests/desktop-ui/browser-smoke.cjs
+          $env:ADM_UI_SMOKE_FOCUS = 'updater-web'
+          node tests/desktop-ui/browser-smoke.cjs
+
       - name: Build Windows Desktop artifact
         id: windows_desktop
         shell: pwsh

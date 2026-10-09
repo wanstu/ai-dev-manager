@@ -251,6 +251,13 @@ See `.planning/post-1.0/PHASE-MAP.md` for the high-level phase sequence. Detaile
 - Linux CLI-only `adm-cli` package deliberately does **not** auto-install a second systemd unit. Fresh hosts use `sudo adm gateway install --remote --user USER --port 8001` to initialize keys and enable/start the existing managed `adm-gateway.service`. On hosts with an existing `adm.service`, inspect service and port ownership first: do not blindly create a second conflicting service. CLI-only and Desktop Debian packages both ship `/usr/bin/adm`, so they cannot coexist; package choice is server-vs-desktop.
 - Kit v0.11.3 pin is the only `go.mod` line intended for this upgrade commit; the pre-existing local updater WIP and its additional `go.mod` normalization must remain unstaged. The previous requirement for **second physical LAN device verification** is still open before calling stable v1.4.0 ready. Packaging guide: `docs/ADM_INSTALLATION.md`.
 
+## Desktop in-app updater integration (2026-10-09, next after Kit v0.11.3 baseline)
+
+- Local WIP now includes a Windows Desktop-only update manager bound through Kit Runtime and a dedicated "关于 → 软件更新" panel. GitHub Release Check (RC opt-in), SHA256-verified Setup download with progress/cancel, user-scope managed Install/Restart with confirmation, and Explorer file reveal for Portable/machine scope. Web Admin and non-Windows do not receive update installation controls.
+- Explicit guards reject installation without a completed verified download, reject duplicate install/check/download, reject canceled/late check results, and avoid closing the separately managed Gateway when the Desktop quits for update.
+- Added Windows integration unit tests for checksum mismatch, canceled/late provider, portable restriction and duplicate install, plus Chromium browser smoke with Wails bridge for the About updater panel. **Must not claim that an actual installed ADM was updated until a real Setup-to-Setup E2E passes.**
+- This integration is not part of the published v1.4.0-rc.3; no new tag or release has yet been published. The Kit v0.11.3 upgrade is separately committed at `2b788dc`, remote CI `37903279632` succeeded.
+
 ## Deferred
 
 - automatic Memory context composition;

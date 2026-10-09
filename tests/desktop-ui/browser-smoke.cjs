@@ -145,6 +145,32 @@ const fakeBridge = String.raw`<script>
     async SetLaunchAtLogin(value){ record('SetLaunchAtLogin',[value]); return {launch_at_login_supported:false, launch_at_login:false}; },
   };
   window.go = {desktop:{Adapter:adapter}};
+  if (new URLSearchParams(location.search).get('focus') === 'updater-web') window.ADMWebSurface = true;
+  if (['updater', 'updater-web'].includes(new URLSearchParams(location.search).get('focus'))) {
+    let updateState = {
+      current_version:'v1.4.0-rc.3', install_mode:'user', supported:true,
+      phase:'idle', update_available:false, install_ready:false, downloaded:0, total:0,
+    };
+    window.go.main = {UpdateManager:{
+      async GetDesktopUpdateStatus(){ record('GetDesktopUpdateStatus',[]); return {...updateState}; },
+      async CheckDesktopUpdate(includePrerelease) {
+        record('CheckDesktopUpdate',[includePrerelease]);
+        updateState = {...updateState, phase:'checked', update_available:true,
+          latest_version:'v1.4.0-rc.4', asset_name:'adm-desktop-v1.4.0-rc.4-windows-amd64-setup.exe',
+          release_page:'https://github.com/wanstu/ai-dev-manager/releases/tag/v1.4.0-rc.4'};
+        return {...updateState};
+      },
+      async DownloadDesktopUpdate() {
+        record('DownloadDesktopUpdate',[]);
+        updateState = {...updateState, phase:'downloaded', install_ready:true,
+          downloaded:2048, total:2048, download_path:'C:\\temp\\adm-update-fixture.exe'};
+        return {...updateState};
+      },
+      async CancelDesktopUpdate(){ record('CancelDesktopUpdate',[]); return {...updateState}; },
+      async OpenDesktopUpdateFolder(){ record('OpenDesktopUpdateFolder',[]); return null; },
+      async InstallDesktopUpdate(){ record('InstallDesktopUpdate',[]); return null; },
+    }};
+  }
   window.runtime = {EventsOn(){}, EventsEmit(){}};
   window.confirm = (message) => { confirmations.push(String(message || '')); return true; };
   Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{writeText:async(text)=>{ window.__copiedText=String(text || ''); }}});
@@ -175,6 +201,42 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('workspaceCount').textContent==='2', 'successful snapshot renders count');
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
+
+    if (new URLSearchParams(location.search).get('focus') === 'updater-web') {
+      await waitFor(() => document.getElementById('desktopUpdatePanel').hidden, 'Updater never exposed in Web admin');
+      check(!window.__fakeADM.calls.some(c=>c.name==='GetDesktopUpdateStatus'), 'Web admin does not call native Desktop updater');
+      result.ok=true;
+      return;
+    }
+    if (new URLSearchParams(location.search).get('focus') === 'updater') {
+      await clickRoute('about');
+      await waitFor(() => document.getElementById('desktopUpdateStatus').textContent.includes('v1.4.0-rc.3'), 'Desktop update status loads');
+      const panel=document.getElementById('desktopUpdatePanel');
+      check(!panel.hidden, 'Updater visible only on Desktop');
+      check(document.getElementById('desktopUpdatePrerelease').checked, 'RC build defaults to RC update channel');
+      const checkButton=document.getElementById('desktopUpdateCheck');
+      check(!checkButton.disabled, 'Check Update enabled in release build');
+      checkButton.click();
+      await waitFor(() => document.getElementById('desktopUpdateStatus').textContent.includes('发现新版本 v1.4.0-rc.4'), 'Update check renders latest release');
+      check(window.__fakeADM.calls.some(c=>c.name==='CheckDesktopUpdate'&&c.args[0]===true), 'RC channel forwarded to backend');
+      check(!document.getElementById('desktopUpdateRelease').hidden, 'Release notes link available for trusted GitHub URL');
+      const download=document.getElementById('desktopUpdateDownload');
+      download.click();
+      await waitFor(() => document.getElementById('desktopUpdateStatus').textContent.includes('SHA256 校验'), 'Verified download renders success');
+      check(document.getElementById('desktopUpdateProgress').value===100, 'Download progress reaches 100 percent');
+      const folder=document.getElementById('desktopUpdateOpenFolder');
+      check(!folder.hidden, 'Portable and installed Desktop can open verified setup location');
+      folder.click();
+      await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='OpenDesktopUpdateFolder'), 'Open-folder action is wired only to explicit user click');
+      const install=document.getElementById('desktopUpdateInstall');
+      check(!install.hidden, 'User-scope installation exposes Install and Restart');
+      install.click();
+      await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='InstallDesktopUpdate'), 'Manual confirmation invokes install only on user click');
+      check(window.__fakeADM.confirmations.some(v=>v.includes('安装 v1.4.0-rc.4')), 'Install has explicit confirmation');
+      check(window.__fakeADM.browserErrors.length===0, 'Updater UI has no browser exceptions');
+      result.ok=true;
+      return;
+    }
 
     if (new URLSearchParams(location.search).get('focus') === 'gateway-access') {
       const bridge=window.go.desktop.Adapter;
