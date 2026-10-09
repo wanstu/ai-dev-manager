@@ -97,6 +97,41 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  windows-installer-upgrade-e2e:
+    name: Windows real Setup rc.3 to current upgrade and data retention
+    needs: windows-test-vet-build
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download current Windows Setup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ github.ref_type == 'tag' && format('adm-desktop-{0}-windows-amd64', github.ref_name) || 'adm-desktop-windows-amd64' }}
+          path: dist/current
+
+      - name: Download published v1.4.0-rc.3 Setup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/previous | Out-Null
+          gh release download v1.4.0-rc.3 --repo wanstu/ai-dev-manager --dir dist/previous --pattern 'adm-desktop-v1.4.0-rc.3-windows-amd64-setup.exe*'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Real NSIS install, upgrade, uninstall and data retention
+        shell: pwsh
+        run: |
+          $nextVersion = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { 'dev' }
+          & ./.github/scripts/adm-windows-setup-upgrade-e2e.ps1 `
+            -PreviousSetup 'dist/previous/adm-desktop-v1.4.0-rc.3-windows-amd64-setup.exe' `
+            -NextSetup "dist/current/adm-desktop-$nextVersion-windows-amd64-setup.exe" `
+            -PreviousVersion 'v1.4.0-rc.3' -NextVersion $nextVersion
+
   macos-desktop-build:
     name: macOS Desktop universal build
     runs-on: macos-latest
@@ -324,6 +359,7 @@ jobs:
       - macos-desktop-build
       - linux-desktop-build
       - cli-cross-build
+      - windows-installer-upgrade-e2e
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
