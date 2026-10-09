@@ -54,8 +54,11 @@ function Assert-Installed([string]$version) {
 }
 
 function Invoke-Setup([string]$setup) {
-    & $setup '/S' "/D=$installDir"
-    if ($LASTEXITCODE -ne 0) { throw "NSIS Setup failed with code $LASTEXITCODE : $setup" }
+    # Windows GUI processes invoked with & need not block or populate LASTEXITCODE.
+    # Wait for NSIS explicitly before inspecting the installed files/registry.
+    $absolute = (Resolve-Path -LiteralPath $setup).Path
+    $process = Start-Process -FilePath $absolute -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
+    if ($process.ExitCode -ne 0) { throw "NSIS Setup failed with code $($process.ExitCode): $setup" }
 }
 
 if (-not $env:RUNNER_TEMP) { throw 'Only run on an isolated Windows CI runner with RUNNER_TEMP' }
@@ -83,8 +86,8 @@ try {
     }
 
     Write-Host '=== Silent uninstall preserves business data ==='
-    & $uninstall '/S'
-    if ($LASTEXITCODE -ne 0) { throw "Silent uninstall failed with $LASTEXITCODE" }
+    $process = Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
+    if ($process.ExitCode -ne 0) { throw "Silent uninstall failed with $($process.ExitCode)" }
     if (Test-Path -LiteralPath $exe) { throw 'Desktop executable retained after uninstall' }
     if ($null -ne (Get-ADMInstall)) { throw 'Uninstall registration retained after uninstall' }
     if ((Get-Content -LiteralPath $marker -Raw) -ne 'keep-business-data-across-kit-upgrade-and-uninstall') {
@@ -93,7 +96,7 @@ try {
     Write-Host 'PASS: real Windows install, overwrite, uninstall, registry, version and data retention'
 } finally {
     if (Test-Path -LiteralPath $uninstall -PathType Leaf) {
-        & $uninstall '/S' | Out-Null
+        $null = Start-Process -FilePath $uninstall -ArgumentList '/S' -Wait -PassThru
     }
     if (Test-Path -LiteralPath $marker -PathType Leaf) { Remove-Item -LiteralPath $marker -Force }
 }
