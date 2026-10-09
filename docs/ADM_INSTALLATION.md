@@ -34,6 +34,8 @@ adm gateway service status
 
 `--user` 改成实际运行 Gateway 的 Linux 用户。第二条命令使用 ADM 已有的 **受控 systemd 安装流程**：初始化 Admin/Agent 双 Key、写入 `adm-gateway.service`、启动并启用开机自启，默认绑定 `0.0.0.0` 且白名单关闭。首次输出的新 Key 必须保存好。
 
+**已有服务的服务器不要照抄首次安装命令。** 先执行 `systemctl status adm adm-gateway` 和 `command -v adm`，检查当前进程/服务路径。如果已有 `adm.service` 或其他程序监听 8001，不要再创建一个 `adm-gateway.service`；应先确认旧服务的安装方式、数据目录和迁移方案，防止双服务争抢端口。
+
 日常管理：
 
 ```bash

@@ -244,6 +244,13 @@ See `.planning/post-1.0/PHASE-MAP.md` for the high-level phase sequence. Detaile
 - The existing `AllowedHosts` checks HTTP Host, **not** client source IP. Preserve existing effective restrictions during upgrades and reject untrusted forwarded-header spoofing. Scope and negative acceptance tests: `docs/ADM_GATEWAY_NETWORK_POLICY.md`.
 - Gateway network policy shipped as v1.4.0-rc.1 (commit 7a1a4b5) and post-release CLI bind/help correction shipped as v1.4.0-rc.2 (commit 9fbb520). v1.4.0-rc.2 cross-platform release pipeline 37869585885 is green with all 14 published artifacts and SHA256SUMS. Local full Go/vet, Chrome 762 general + 39 Gateway-policy checks, and real Windows TCP via nonloopback 192.168.56.1 passed, including source-IP/Host filtering, unauthorized MCP and forged forwarded headers. Do not equate same-host NIC connectivity with a second LAN device: actual second-device verification remains open; do not claim stable v1.4.0 completion yet. Pre-existing dirty go.mod remains untouched.
 
+## Kit installation integration (2026-10-09)
+
+- **v1.4.0-rc.3 released** at commit `2526e6d`: https://github.com/wanstu/ai-dev-manager/releases/tag/v1.4.0-rc.3 ; release CI https://github.com/wanstu/ai-dev-manager/actions/runs/37883152142 green across 10 jobs. Public prerelease has 21 assets with SHA256SUMS, including Windows Desktop NSIS user-scope Setup, Portable EXE/ZIP, and Linux amd64/arm64 **headless CLI-only .deb**. Branch CI 37882677792 also succeeded.
+- Windows packaging uses standalone Kit v0.11.0 CLI; Linux CLI Debian packaging uses Kit v0.10.2 CLI. Existing Desktop Kit Go runtime dependency remains at v0.8.1 (not upgraded) and Desktop in-app Updater UI is **not yet integrated**; do not claim it is. Both Debian and Windows package generation/build pass real GitHub CI; ADM native installer lifecycle E2E has not yet been performed on a user's installed machine.
+- Linux CLI-only `adm-cli` package deliberately does **not** auto-install a second systemd unit. Fresh hosts use `sudo adm gateway install --remote --user USER --port 8001` to initialize keys and enable/start the existing managed `adm-gateway.service`. On hosts with an existing `adm.service`, inspect service and port ownership first: do not blindly create a second conflicting service. CLI-only and Desktop Debian packages both ship `/usr/bin/adm`, so they cannot coexist; package choice is server-vs-desktop.
+- Existing pre-release `go.mod` working-tree modification remains unstaged/untouched. The previous requirement for **second physical LAN device verification** is still open before calling stable v1.4.0 ready. Packaging guide: `docs/ADM_INSTALLATION.md`.
+
 ## Deferred
 
 - automatic Memory context composition;
