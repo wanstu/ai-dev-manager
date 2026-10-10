@@ -205,40 +205,31 @@
           <label class="filter-field compact-filter"><span>显示</span><select id="mcpStateFilter"><option value="all">全部</option><option value="selected">当前环境已启用</option><option value="unselected">当前环境未启用</option><option value="issues">需处理</option><option value="unobserved">尚未探测</option></select></label>
           <span class="visible-count">显示 <strong id="mcpVisibleCount">0</strong> / <strong id="mcpListTotalCount">0</strong></span>
         </div>
-        <div class="skill-bulk-toolbar batch-toolbar" id="mcpBulkToolbar" aria-label="MCP 批量管理">
-          <section class="batch-action-group batch-selection-group">
-            <div class="batch-group-heading"><strong>批量分配到 Workspace / Environment</strong><span>只处理勾选项，可以跨 MCP 和 Skill 选择</span></div>
-            <div class="skill-bulk-actions batch-primary">
-              <button id="mcpSelectVisibleButton" type="button" class="secondary-button small-button">勾选当前筛选结果</button>
-              <button id="mcpClearSelectionButton" type="button" class="secondary-button small-button">取消全部勾选</button>
-              <span class="visible-count batch-selected-count">已勾选 <strong id="mcpSelectedCount">0</strong> 项 MCP</span>
-              <button id="mcpAssignEnvironmentsButton" type="button" class="small-button" disabled title="请先勾选 MCP 或 Skill">批量启用 / 停用到目标…</button>
-            </div>
-          </section>
-          <section class="batch-action-group batch-filtered-group">
-            <div class="batch-group-heading"><strong>直接操作当前筛选结果（<span id="mcpBatchVisibleCount">0</span> 项）</strong><span>无需勾选；只修改搜索和显示条件匹配的项目</span></div>
-            <div class="skill-bulk-actions batch-action-line">
-              <span class="batch-action-label">新建环境默认</span>
-              <button id="mcpSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>设为默认启用</button>
-              <button id="mcpUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>取消默认启用</button>
-            </div>
-            <div class="skill-bulk-actions batch-action-line">
-              <span class="batch-action-label">当前 Environment 的显式选择</span>
-              <button id="mcpEnableVisibleButton" type="button" class="secondary-button small-button" disabled>显式启用</button>
-              <button id="mcpDisableVisibleButton" type="button" class="secondary-button small-button" disabled>取消显式启用</button>
-              <span id="mcpBatchEnvironmentName" class="batch-target-hint">未选择当前 Environment</span>
-            </div>
-          </section>
-          <div class="batch-maintenance-line">
-            <span>维护</span>
-            <button id="mcpClearMissingButton" type="button" class="secondary-button small-button" disabled>清理无效引用</button>
+        <div class="skill-bulk-toolbar batch-toolbar batch-simple-toolbar" id="mcpBulkToolbar" aria-label="MCP 批量操作">
+          <div class="batch-simple-heading"><strong>批量操作</strong><span>勾选 MCP（也可跨页勾选 Skill），再选择要修改的 Workspace / Environment</span></div>
+          <div class="skill-bulk-actions batch-primary">
+            <button id="mcpSelectVisibleButton" type="button" class="secondary-button small-button">全选筛选结果</button>
+            <button id="mcpClearSelectionButton" type="button" class="secondary-button small-button">取消选择</button>
+            <span class="visible-count batch-selected-count">已选 MCP <strong id="mcpSelectedCount">0</strong></span>
+            <button id="mcpAssignEnvironmentsButton" type="button" disabled title="先勾选 MCP 或 Skill">设置已选项的启用状态…</button>
           </div>
-          <p id="mcpBulkHint" class="skill-bulk-hint" role="status">筛选结果操作无需勾选；跨 Workspace / Environment 分配需要先勾选项目。</p>
+          <p id="mcpBulkHint" class="skill-bulk-hint" role="status">请先勾选要修改的 MCP，再点击“设置已选项的启用状态”。</p>
         </div>
         <div class="list-heading"><strong>全局 MCP 定义</strong><span>删除是全局操作；当前 Environment 开关只修改选择。</span></div>
 
         <div class="status-legend"><span><strong>配置</strong>：静态可激活性，不联网。</span><span><strong>全局探测</strong>：检查 MCP 连接，与 Environment 启用状态无关；刷新页面不会自动探测。</span></div>
         <div id="mcpList" class="resource-list filtered-resource-list empty">暂无 MCP 定义</div>
+        <section class="batch-settings-panel" aria-label="MCP 默认规则与维护">
+          <div class="batch-settings-heading"><strong>默认规则与维护</strong><span>以下默认设置只针对上方已勾选的 MCP，不会直接修改现有环境。</span></div>
+          <div class="skill-bulk-actions">
+            <span class="batch-action-label">新建环境默认启用</span>
+            <button id="mcpSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>启用已选项</button>
+            <button id="mcpUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>停用已选项</button>
+          </div>
+          <div class="batch-maintenance-line"><span>维护</span>
+            <button id="mcpClearMissingButton" type="button" class="secondary-button small-button" disabled>清理无效引用</button>
+          </div>
+        </section>
         <section class="subpanel mcp-secrets-panel" aria-label="MCP 加密密钥库">
           <div class="subpanel-heading"><div><h3>加密密钥库</h3><span>MCP 使用密钥名称引用凭据，明文不会写进 MCP 配置文件。</span></div><button id="mcpSecretsRefresh" type="button" class="secondary-button small-button">查看密钥</button></div>
           <form id="mcpSecretForm" class="manager-form mcp-secret-form" autocomplete="off">
@@ -276,41 +267,31 @@
               <label class="filter-field compact-filter"><span>显示</span><select id="skillStateFilter"><option value="all">全部</option><option value="selected">当前环境已启用</option><option value="unselected">当前环境未启用</option><option value="issues">需处理</option><option value="source">Source-managed</option><option value="legacy">Legacy</option></select></label>
               <span class="visible-count">显示 <strong id="skillVisibleCount">0</strong> / <strong id="skillListTotalCount">0</strong></span>
             </div>
-            <div class="skill-bulk-toolbar batch-toolbar" aria-label="Skill 批量管理">
-              <section class="batch-action-group batch-selection-group">
-                <div class="batch-group-heading"><strong>批量分配到 Workspace / Environment</strong><span>只处理勾选项，可跨 MCP 和 Skill 一起分配</span></div>
-                <div class="skill-bulk-actions batch-primary">
-                  <button id="skillSelectVisibleButton" type="button" class="secondary-button small-button">勾选当前筛选结果</button>
-                  <button id="skillClearSelectionButton" type="button" class="secondary-button small-button">取消全部勾选</button>
-                  <span class="visible-count batch-selected-count">已勾选 <strong id="skillSelectedCount">0</strong> 项 Skill</span>
-                  <button id="skillAssignEnvironmentsButton" type="button" class="small-button" disabled title="请先勾选 MCP 或 Skill">批量启用 / 停用到目标…</button>
-                </div>
-              </section>
-              <section class="batch-action-group batch-filtered-group">
-                <div class="batch-group-heading"><strong>直接操作当前筛选结果（<span id="skillBatchVisibleCount">0</span> 项）</strong><span>无需勾选；只修改搜索、Source 和显示条件匹配的项目</span></div>
-                <div class="skill-bulk-actions batch-action-line">
-                  <span class="batch-action-label">新建环境默认</span>
-                  <button id="skillSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>设为默认启用</button>
-                  <button id="skillUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>取消默认启用</button>
-                </div>
-                <div class="skill-bulk-actions batch-action-line">
-                  <span class="batch-action-label">当前 Environment 的显式选择</span>
-                  <button id="skillEnableVisibleButton" type="button" class="secondary-button small-button" disabled>显式启用</button>
-                  <button id="skillDisableVisibleButton" type="button" class="secondary-button small-button" disabled>取消显式启用</button>
-                  <span id="skillBatchEnvironmentName" class="batch-target-hint">未选择当前 Environment</span>
-                </div>
-              </section>
-              <div class="batch-maintenance-line">
-                <span>检查与清理</span>
+            <div class="skill-bulk-toolbar batch-toolbar batch-simple-toolbar" aria-label="Skill 批量操作">
+              <div class="batch-simple-heading"><strong>批量操作</strong><span>勾选 Skill（也可跨页勾选 MCP），再选择 Workspace / Environment</span></div>
+              <div class="skill-bulk-actions batch-primary">
+                <button id="skillSelectVisibleButton" type="button" class="secondary-button small-button">全选筛选结果</button>
+                <button id="skillClearSelectionButton" type="button" class="secondary-button small-button">取消选择</button>
+                <span class="visible-count batch-selected-count">已选 Skill <strong id="skillSelectedCount">0</strong></span>
+                <button id="skillAssignEnvironmentsButton" type="button" disabled title="先勾选 MCP 或 Skill">设置已选项的启用状态…</button>
+              </div>
+              <p id="skillBulkHint" class="skill-bulk-hint" role="status">请先勾选要修改的 Skill，再点击“设置已选项的启用状态”。</p>
+            </div>
+            <div id="skillList" class="resource-list filtered-resource-list empty">暂无已发现 Skill</div>
+            <section class="batch-settings-panel" aria-label="Skill 默认规则与维护">
+              <div class="batch-settings-heading"><strong>默认规则与维护</strong><span>新环境默认设置只作用于已勾选的 Skill，不改变已有环境。</span></div>
+              <div class="skill-bulk-actions">
+                <span class="batch-action-label">新建环境默认启用</span>
+                <button id="skillSetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>启用已选项</button>
+                <button id="skillUnsetVisibleDefaultButton" type="button" class="secondary-button small-button" disabled>停用已选项</button>
+              </div>
+              <div class="batch-maintenance-line"><span>检查与清理</span>
                 <button id="skillProbeAllButton" type="button" class="secondary-button small-button">检查全局可用性</button>
                 <button id="skillClearMissingButton" type="button" class="secondary-button small-button" disabled>清理无效引用</button>
-                <button id="skillDeleteSelectedButton" type="button" class="danger-button small-button" disabled>删除已勾选 Skill</button>
+                <button id="skillDeleteSelectedButton" type="button" class="danger-button small-button" disabled>删除已选 Skill</button>
                 <button id="skillClearUnavailableButton" type="button" class="danger-button small-button" disabled>清除不可用</button>
               </div>
-              <p id="skillBulkHint" class="skill-bulk-hint" role="status">筛选结果操作无需勾选；跨 Workspace / Environment 分配需要先勾选项目。</p>
-            </div>
-
-            <div id="skillList" class="resource-list filtered-resource-list empty">暂无已发现 Skill</div>
+            </section>
           </section>
           <section id="skillSourcesPanel" class="runtime-subview-panel skill-subview-panel" data-skill-subview-panel="sources" hidden>
             <div class="list-heading"><strong>Skill Sources</strong><span>Source 配置是全局定义；编辑不会自动刷新或扫描。</span></div>
@@ -636,9 +617,9 @@
           </form>
         </dialog>
 <dialog id="capabilityAssignmentDialog" class="editor-dialog bulk-assignment-dialog" aria-labelledby="capabilityAssignmentTitle">
-          <header class="dialog-heading"><div><p class="eyebrow">批量管理</p><h2 id="capabilityAssignmentTitle">批量启停 MCP / Skill</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header>
+          <header class="dialog-heading"><div><p class="eyebrow">批量管理</p><h2 id="capabilityAssignmentTitle">选择目标并启用或停用</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header>
           <p class="dialog-message" role="status" hidden></p>
-          <p id="capabilityAssignmentSummary" class="editor-hint">先选择 MCP / Skill，再选择要修改的 Workspace 或 Environment。</p>
+          <p id="capabilityAssignmentSummary" class="editor-hint">只会修改已经勾选的 MCP / Skill，选择目标并确认启用或停用。</p>
           <section class="bulk-target-group"><div class="bulk-target-header"><strong>Workspace · 项目统一启停</strong><span>影响该 Workspace 下环境的继承选择</span></div>
             <div class="skill-bulk-actions">
               <button id="capabilityWorkspaceSelectAllButton" type="button" class="secondary-button small-button">全选 Workspace</button>

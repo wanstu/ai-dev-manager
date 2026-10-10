@@ -33,11 +33,11 @@ const elements = {
   mcpImportApplyButton: document.getElementById('mcpImportApplyButton'), mcpImportPreview: document.getElementById('mcpImportPreview'), mcpList: document.getElementById('mcpList'),
   mcpSecretForm: document.getElementById('mcpSecretForm'), mcpSecretName: document.getElementById('mcpSecretName'), mcpSecretValue: document.getElementById('mcpSecretValue'), mcpSecretSave: document.getElementById('mcpSecretSave'), mcpSecretsRefresh: document.getElementById('mcpSecretsRefresh'), mcpSecretsResult: document.getElementById('mcpSecretsResult'),
   mcpFilter: document.getElementById('mcpFilter'), mcpStateFilter: document.getElementById('mcpStateFilter'), mcpVisibleCount: document.getElementById('mcpVisibleCount'), mcpListTotalCount: document.getElementById('mcpListTotalCount'),
-  mcpSelectVisibleButton: document.getElementById('mcpSelectVisibleButton'), mcpClearSelectionButton: document.getElementById('mcpClearSelectionButton'), mcpSelectedCount: document.getElementById('mcpSelectedCount'), mcpAssignEnvironmentsButton: document.getElementById('mcpAssignEnvironmentsButton'), mcpClearMissingButton: document.getElementById('mcpClearMissingButton'), mcpSetVisibleDefaultButton: document.getElementById('mcpSetVisibleDefaultButton'), mcpUnsetVisibleDefaultButton: document.getElementById('mcpUnsetVisibleDefaultButton'), mcpEnableVisibleButton: document.getElementById('mcpEnableVisibleButton'), mcpDisableVisibleButton: document.getElementById('mcpDisableVisibleButton'), mcpBulkHint: document.getElementById('mcpBulkHint'),
+  mcpSelectVisibleButton: document.getElementById('mcpSelectVisibleButton'), mcpClearSelectionButton: document.getElementById('mcpClearSelectionButton'), mcpSelectedCount: document.getElementById('mcpSelectedCount'), mcpAssignEnvironmentsButton: document.getElementById('mcpAssignEnvironmentsButton'), mcpClearMissingButton: document.getElementById('mcpClearMissingButton'), mcpSetVisibleDefaultButton: document.getElementById('mcpSetVisibleDefaultButton'), mcpUnsetVisibleDefaultButton: document.getElementById('mcpUnsetVisibleDefaultButton'), mcpBulkHint: document.getElementById('mcpBulkHint'),
   skillSourceCount: document.getElementById('skillSourceCount'), skillTotalCount: document.getElementById('skillTotalCount'), skillEnvironmentCount: document.getElementById('skillEnvironmentCount'), skillIssueCount: document.getElementById('skillIssueCount'),
   skillSourceForm: document.getElementById('skillSourceForm'), skillSourceID: document.getElementById('skillSourceID'), skillSourceDialogTitle: document.getElementById('skillSourceDialogTitle'), skillSourceRoot: document.getElementById('skillSourceRoot'), skillSupportRoots: document.getElementById('skillSupportRoots'), skillSourceDefault: document.getElementById('skillSourceDefault'), skillSourceSubmitButton: document.getElementById('skillSourceSubmitButton'), skillSubviewTabs: document.getElementById('skillSubviewTabs'), skillSubviewSkillCount: document.getElementById('skillSubviewSkillCount'), skillSubviewSourceCount: document.getElementById('skillSubviewSourceCount'), skillsPanel: document.getElementById('skillsPanel'), skillSourcesPanel: document.getElementById('skillSourcesPanel'), skillSourceList: document.getElementById('skillSourceList'), skillList: document.getElementById('skillList'),
   skillFilter: document.getElementById('skillFilter'), skillSourceFilter: document.getElementById('skillSourceFilter'), skillStateFilter: document.getElementById('skillStateFilter'), skillSourceFilterInput: document.getElementById('skillSourceFilterInput'), skillSourceVisibleCount: document.getElementById('skillSourceVisibleCount'), skillSourceListTotalCount: document.getElementById('skillSourceListTotalCount'), skillVisibleCount: document.getElementById('skillVisibleCount'), skillListTotalCount: document.getElementById('skillListTotalCount'),
-  skillProbeAllButton: document.getElementById('skillProbeAllButton'), skillSelectVisibleButton: document.getElementById('skillSelectVisibleButton'), skillClearSelectionButton: document.getElementById('skillClearSelectionButton'), skillSetVisibleDefaultButton: document.getElementById('skillSetVisibleDefaultButton'), skillUnsetVisibleDefaultButton: document.getElementById('skillUnsetVisibleDefaultButton'), skillEnableVisibleButton: document.getElementById('skillEnableVisibleButton'), skillDisableVisibleButton: document.getElementById('skillDisableVisibleButton'), skillSelectedCount: document.getElementById('skillSelectedCount'), skillAssignEnvironmentsButton: document.getElementById('skillAssignEnvironmentsButton'), skillClearMissingButton: document.getElementById('skillClearMissingButton'), skillDeleteSelectedButton: document.getElementById('skillDeleteSelectedButton'), skillClearUnavailableButton: document.getElementById('skillClearUnavailableButton'), skillBulkHint: document.getElementById('skillBulkHint'),
+  skillProbeAllButton: document.getElementById('skillProbeAllButton'), skillSelectVisibleButton: document.getElementById('skillSelectVisibleButton'), skillClearSelectionButton: document.getElementById('skillClearSelectionButton'), skillSetVisibleDefaultButton: document.getElementById('skillSetVisibleDefaultButton'), skillUnsetVisibleDefaultButton: document.getElementById('skillUnsetVisibleDefaultButton'), skillSelectedCount: document.getElementById('skillSelectedCount'), skillAssignEnvironmentsButton: document.getElementById('skillAssignEnvironmentsButton'), skillClearMissingButton: document.getElementById('skillClearMissingButton'), skillDeleteSelectedButton: document.getElementById('skillDeleteSelectedButton'), skillClearUnavailableButton: document.getElementById('skillClearUnavailableButton'), skillBulkHint: document.getElementById('skillBulkHint'),
   capabilityAssignmentDialog: document.getElementById('capabilityAssignmentDialog'), capabilityAssignmentSummary: document.getElementById('capabilityAssignmentSummary'), capabilityAssignmentSelectAllButton: document.getElementById('capabilityAssignmentSelectAllButton'), capabilityAssignmentClearButton: document.getElementById('capabilityAssignmentClearButton'), capabilityAssignmentEnvironmentList: document.getElementById('capabilityAssignmentEnvironmentList'), capabilityAssignmentWorkspaceList: document.getElementById('capabilityAssignmentWorkspaceList'), capabilityWorkspaceSelectAllButton: document.getElementById('capabilityWorkspaceSelectAllButton'), capabilityWorkspaceClearButton: document.getElementById('capabilityWorkspaceClearButton'), capabilityAssignmentEnableButton: document.getElementById('capabilityAssignmentEnableButton'), capabilityAssignmentDisableButton: document.getElementById('capabilityAssignmentDisableButton'), capabilityAssignmentResult: document.getElementById('capabilityAssignmentResult'),
   workspaceForm: document.getElementById('workspaceForm'), workspacePath: document.getElementById('workspacePath'), workspaceName: document.getElementById('workspaceName'), workspaceBrowseButton: document.getElementById('workspaceBrowseButton'), workspaceList: document.getElementById('workspaceList'), workspaceFilter: document.getElementById('workspaceFilter'), workspaceVisibleCount: document.getElementById('workspaceVisibleCount'), workspaceListTotalCount: document.getElementById('workspaceListTotalCount'),
   workspaceDiscoveryDialog: document.getElementById('workspaceDiscoveryDialog'), workspaceDiscoveryAdvanced: document.getElementById('workspaceDiscoveryAdvanced'), workspaceDiscoveryFilterToolbar: document.getElementById('workspaceDiscoveryFilterToolbar'), workspaceDiscoveryTitle: document.getElementById('workspaceDiscoveryTitle'), workspaceDiscoveryForm: document.getElementById('workspaceDiscoveryForm'), workspaceDiscoveryPath: document.getElementById('workspaceDiscoveryPath'), workspaceDiscoveryQuery: document.getElementById('workspaceDiscoveryQuery'), workspaceDiscoveryMaxDepth: document.getElementById('workspaceDiscoveryMaxDepth'), workspaceDiscoveryMaxEntries: document.getElementById('workspaceDiscoveryMaxEntries'), workspaceDiscoveryMaxCandidates: document.getElementById('workspaceDiscoveryMaxCandidates'), workspaceDiscoveryMaxDigestEntries: document.getElementById('workspaceDiscoveryMaxDigestEntries'), workspaceDiscoveryMaxOutputBytes: document.getElementById('workspaceDiscoveryMaxOutputBytes'), workspaceDiscoveryScanButton: document.getElementById('workspaceDiscoveryScanButton'), workspaceDiscoveryFilter: document.getElementById('workspaceDiscoveryFilter'), workspaceDiscoverySummary: document.getElementById('workspaceDiscoverySummary'), workspaceDiscoveryResult: document.getElementById('workspaceDiscoveryResult'),
@@ -2265,60 +2265,57 @@ async function clearMissingEnvironmentSelections(kind) {
 }
 function updateMCPBulkControls() {
   pruneMCPSelection();
-  const visibleCount = visibleResourceIDs(elements.mcpList).length;
-  const environment = currentEnvironment();
   const selectedCount = selectedMCPIDs.size;
-  document.getElementById('mcpBatchVisibleCount').textContent = String(visibleCount);
-  const disabled = mcpBulkBusy || capabilityAssignmentBusy || visibleCount === 0;
+  const allSelected = selectedCapabilityCount();
+  const targetsAvailable = Boolean(safeArray(currentSnapshot?.environments).length || safeArray(currentSnapshot?.workspaces).length);
+  const busy = mcpBulkBusy || capabilityAssignmentBusy;
+  const missing = missingSelectionOperations('mcp');
   elements.mcpSelectedCount.textContent = String(selectedCount);
-  elements.mcpSelectVisibleButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || visibleCount === 0;
-  elements.mcpClearSelectionButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
-  elements.mcpAssignEnvironmentsButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || selectedCapabilityCount() === 0 || !(safeArray(currentSnapshot?.environments).length || safeArray(currentSnapshot?.workspaces).length);
-  const missing = missingSelectionOperations('mcp'); elements.mcpClearMissingButton.disabled = mcpBulkBusy || capabilityAssignmentBusy || missing.length === 0; elements.mcpClearMissingButton.textContent = missing.length ? `清除不存在引用 (${missing.length})` : '清除不存在引用';
-  elements.mcpSetVisibleDefaultButton.title = visibleCount ? `无需勾选，将修改当前筛选出的 ${visibleCount} 项` : '当前筛选结果为空';
-  elements.mcpSetVisibleDefaultButton.disabled = disabled;
-  elements.mcpUnsetVisibleDefaultButton.disabled = disabled;
-  document.getElementById('mcpBatchEnvironmentName').textContent = environment
-    ? `目标：${environment.name || environment.environment_id}（不会改变 Workspace 继承）`
-    : '先在页面顶部选择当前 Environment';
-  elements.mcpEnableVisibleButton.title = environment ? `当前 Environment：${environment.name || environment.environment_id}；Workspace 继承不受影响` : '需要先选择当前 Environment';
-  elements.mcpDisableVisibleButton.title = elements.mcpEnableVisibleButton.title;
-  elements.mcpEnableVisibleButton.disabled = disabled || !environment;
-  elements.mcpDisableVisibleButton.disabled = disabled || !environment;
-  elements.mcpAssignEnvironmentsButton.title = selectedCapabilityCount()
-    ? '已选中资源，可选择 Workspace / Environment 执行批量启停'
-    : '先勾选 MCP 或 Skill 后再批量分配';
-  elements.mcpBulkHint.textContent = `上方筛选结果 ${visibleCount} 项的快捷操作无需勾选；跨 Workspace / Environment 分配使用已勾选的 MCP ${selectedMCPIDs.size} 项和 Skill ${selectedSkillIDs.size} 项。`;
+  elements.mcpSelectVisibleButton.disabled = busy || !visibleResourceIDs(elements.mcpList).length;
+  elements.mcpClearSelectionButton.disabled = busy || !selectedCount;
+  elements.mcpAssignEnvironmentsButton.disabled = busy || !allSelected || !targetsAvailable;
+  elements.mcpAssignEnvironmentsButton.title = !allSelected ? '请先勾选 MCP 或 Skill' : !targetsAvailable ? '请先添加 Workspace 或 Environment' : '选择目标后批量启用或停用已选项目';
+  elements.mcpSetVisibleDefaultButton.disabled = busy || !selectedCount;
+  elements.mcpUnsetVisibleDefaultButton.disabled = busy || !selectedCount;
+  elements.mcpSetVisibleDefaultButton.title = selectedCount ? `为已选 ${selectedCount} 个 MCP 设置新环境默认值` : '请先勾选 MCP';
+  elements.mcpUnsetVisibleDefaultButton.title = elements.mcpSetVisibleDefaultButton.title;
+  elements.mcpClearMissingButton.disabled = busy || !missing.length;
+  elements.mcpClearMissingButton.textContent = missing.length ? `清理无效引用 (${missing.length})` : '清理无效引用';
+  elements.mcpBulkHint.textContent = allSelected
+    ? `已选 MCP ${selectedCount}、Skill ${selectedSkillIDs.size}。点“设置已选项的启用状态”选择目标；仅操作已勾选项目。`
+    : '勾选列表里的 MCP（可跨页选 Skill），然后点击“设置已选项的启用状态”。';
 }
 function updateSkillBulkControls() {
   pruneSkillSelection();
-  const environment = currentEnvironment(); const selectedCount = selectedSkillIDs.size; const probeCurrent = explicitSkillProbeIsCurrent(); const summary = probeCurrent ? skillAvailabilitySummary() : null; const hasSkills = Boolean(safeArray(currentSnapshot?.skills).length); const visibleCount = visibleResourceIDs(elements.skillList).length;
+  const selectedCount = selectedSkillIDs.size;
+  const allSelected = selectedCapabilityCount();
+  const targetsAvailable = Boolean(safeArray(currentSnapshot?.environments).length || safeArray(currentSnapshot?.workspaces).length);
+  const busy = skillBulkBusy || capabilityAssignmentBusy;
+  const probeCurrent = explicitSkillProbeIsCurrent();
+  const summary = probeCurrent ? skillAvailabilitySummary() : null;
+  const missing = missingSelectionOperations('skill');
   elements.skillSelectedCount.textContent = String(selectedCount);
-  document.getElementById('skillBatchVisibleCount').textContent = String(visibleCount);
-  elements.skillProbeAllButton.disabled = skillBulkBusy || capabilityAssignmentBusy || !hasSkills;
-  elements.skillSelectVisibleButton.disabled = skillBulkBusy || capabilityAssignmentBusy || visibleCount === 0;
-  elements.skillClearSelectionButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
-  elements.skillAssignEnvironmentsButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCapabilityCount() === 0 || !(safeArray(currentSnapshot?.environments).length || safeArray(currentSnapshot?.workspaces).length);
-  const missing = missingSelectionOperations('skill'); elements.skillClearMissingButton.disabled = skillBulkBusy || capabilityAssignmentBusy || missing.length === 0; elements.skillClearMissingButton.textContent = missing.length ? `清除不存在引用 (${missing.length})` : '清除不存在引用';
-  elements.skillDeleteSelectedButton.disabled = skillBulkBusy || capabilityAssignmentBusy || selectedCount === 0;
-  elements.skillSetVisibleDefaultButton.title = visibleCount ? `无需勾选，将修改当前筛选出的 ${visibleCount} 项` : '当前筛选结果为空';
-  elements.skillSetVisibleDefaultButton.disabled = skillBulkBusy || visibleCount === 0;
-  elements.skillUnsetVisibleDefaultButton.disabled = skillBulkBusy || visibleCount === 0;
-  document.getElementById('skillBatchEnvironmentName').textContent = environment
-    ? `目标：${environment.name || environment.environment_id}（不会改变 Workspace 继承）`
-    : '先在页面顶部选择当前 Environment';
-  elements.skillEnableVisibleButton.title = environment ? `当前 Environment：${environment.name || environment.environment_id}；Workspace 继承不受影响` : '需要先选择当前 Environment';
-  elements.skillDisableVisibleButton.title = elements.skillEnableVisibleButton.title;
-  elements.skillEnableVisibleButton.disabled = skillBulkBusy || visibleCount === 0 || !environment;
-  elements.skillDisableVisibleButton.disabled = skillBulkBusy || visibleCount === 0 || !environment;
-  elements.skillClearUnavailableButton.disabled = skillBulkBusy || !probeCurrent || !summary?.cleanupIDs?.length;
-  elements.skillClearUnavailableButton.textContent = probeCurrent && summary?.cleanupIDs?.length ? `一键清除不可用 (${summary.cleanupIDs.length})` : '一键清除不可用';
-  elements.skillAssignEnvironmentsButton.title = selectedCapabilityCount()
-    ? '已选中资源，可选择 Workspace / Environment 执行批量启停'
-    : '先勾选 MCP 或 Skill 后再批量分配';
-  const filteredSummary = `上方筛选结果 ${visibleCount} 项的快捷操作无需勾选；跨 Workspace / Environment 分配使用已勾选的 Skill ${selectedSkillIDs.size} 项和 MCP ${selectedMCPIDs.size} 项。`;
-  if (!probeCurrent) elements.skillBulkHint.textContent = filteredSummary + ' 批量检查会检查全局 Skill catalog 的 source root、artifact 与 support roots；不依赖当前 Environment。';
-  else elements.skillBulkHint.textContent = filteredSummary + ` 最近全局检查：可用 ${summary.available} · 不可用 ${summary.unavailable} · 未知 ${summary.unknown}。清理只删除 ADM catalog metadata，不删除磁盘文件。`;
+  elements.skillSelectVisibleButton.disabled = busy || !visibleResourceIDs(elements.skillList).length;
+  elements.skillClearSelectionButton.disabled = busy || !selectedCount;
+  elements.skillAssignEnvironmentsButton.disabled = busy || !allSelected || !targetsAvailable;
+  elements.skillAssignEnvironmentsButton.title = !allSelected ? '请先勾选 MCP 或 Skill' : !targetsAvailable ? '请先添加 Workspace 或 Environment' : '选择目标后批量启用或停用已选项目';
+  elements.skillSetVisibleDefaultButton.disabled = busy || !selectedCount;
+  elements.skillUnsetVisibleDefaultButton.disabled = busy || !selectedCount;
+  elements.skillSetVisibleDefaultButton.title = selectedCount ? `为已选 ${selectedCount} 个 Skill 设置新环境默认值` : '请先勾选 Skill';
+  elements.skillUnsetVisibleDefaultButton.title = elements.skillSetVisibleDefaultButton.title;
+  elements.skillProbeAllButton.title = '检查全局 Skill catalog 的 source root、artifact 与 support roots；不依赖当前 Environment，不会修改配置';
+  elements.skillProbeAllButton.disabled = busy || !safeArray(currentSnapshot?.skills).length;
+  elements.skillClearMissingButton.disabled = busy || !missing.length;
+  elements.skillClearMissingButton.textContent = missing.length ? `清理无效引用 (${missing.length})` : '清理无效引用';
+  elements.skillDeleteSelectedButton.disabled = busy || !selectedCount;
+  elements.skillClearUnavailableButton.disabled = busy || !probeCurrent || !summary?.cleanupIDs?.length;
+  elements.skillClearUnavailableButton.textContent = probeCurrent && summary?.cleanupIDs?.length ? `清除不可用 (${summary.cleanupIDs.length})` : '清除不可用';
+  const selectionHint = allSelected
+    ? `已选 Skill ${selectedCount}、MCP ${selectedMCPIDs.size}。点“设置已选项的启用状态”选择目标；仅操作已勾选项目。`
+    : '勾选列表里的 Skill（可跨页选 MCP），然后点击“设置已选项的启用状态”。';
+  elements.skillBulkHint.textContent = selectionHint + (probeCurrent
+    ? ` 最近全局检查：可用 ${summary.available} · 不可用 ${summary.unavailable} · 未知 ${summary.unknown}；清理只删除 ADM catalog metadata。`
+    : '');
 }
 async function probeAllSkillAvailability() {
   const identity = currentSkillProbeIdentity();
@@ -2338,10 +2335,10 @@ async function probeAllSkillAvailability() {
     return false;
   } finally { skillBulkBusy = false; renderSkillManager(safeArray(currentSnapshot?.skills)); }
 }
-async function runVisibleBatch(kind, label, ids, mutate, rerender) {
+async function runSelectedBatch(kind, label, ids, mutate, rerender) {
   const uniqueIDs = [...new Set(safeArray(ids))].filter(Boolean);
-  if (!uniqueIDs.length) return setStatus('当前筛选结果为空，没有可批量操作的项目。', 'success');
-  if (!window.confirm(label + '：当前筛选结果中的 ' + uniqueIDs.length + ' 项？')) return;
+  if (!uniqueIDs.length) return setStatus('请先勾选需要批量操作的项目。', 'error');
+  if (!window.confirm(label + '：已勾选的 ' + uniqueIDs.length + ' 项？')) return;
   const requestGeneration = connectionGeneration;
   if (kind === 'mcp') mcpBulkBusy = true;
   else skillBulkBusy = true;
@@ -3328,24 +3325,24 @@ elements.mcpSelectVisibleButton.addEventListener('click', () => { for (const row
 elements.mcpClearSelectionButton.addEventListener('click', () => { selectedMCPIDs.clear(); renderMCPManager(safeArray(currentSnapshot?.mcps)); updateSkillBulkControls(); });
 elements.mcpAssignEnvironmentsButton.addEventListener('click', openCapabilityAssignmentDialog);
 elements.mcpClearMissingButton.addEventListener('click', () => clearMissingEnvironmentSelections('mcp'));
-elements.mcpSetVisibleDefaultButton.addEventListener('click', () => runVisibleBatch('mcp', '批量设置 MCP 新环境默认值', visibleResourceIDs(elements.mcpList), (id) => desktopAdapter().SetMCPDefault(id, true), () => renderMCPManager(safeArray(currentSnapshot?.mcps))));
-elements.mcpUnsetVisibleDefaultButton.addEventListener('click', () => runVisibleBatch('mcp', '批量取消 MCP 新环境默认值', visibleResourceIDs(elements.mcpList), (id) => desktopAdapter().SetMCPDefault(id, false), () => renderMCPManager(safeArray(currentSnapshot?.mcps))));
-elements.mcpEnableVisibleButton.addEventListener('click', () => { const environmentID = managementEnvironmentID; if (!environmentID) return setStatus('请先选择 Management Environment。', 'error'); return runVisibleBatch('mcp', '批量启用当前 Environment 显式 MCP', visibleResourceIDs(elements.mcpList), (id) => desktopAdapter().SetEnvironmentMCP(environmentID, id, true), () => renderMCPManager(safeArray(currentSnapshot?.mcps))); });
-elements.mcpDisableVisibleButton.addEventListener('click', () => { const environmentID = managementEnvironmentID; if (!environmentID) return setStatus('请先选择 Management Environment。', 'error'); return runVisibleBatch('mcp', '批量取消当前 Environment 显式 MCP', visibleResourceIDs(elements.mcpList), (id) => desktopAdapter().SetEnvironmentMCP(environmentID, id, false), () => renderMCPManager(safeArray(currentSnapshot?.mcps))); });
+elements.mcpSetVisibleDefaultButton.addEventListener('click', () => runSelectedBatch('mcp', '设置 MCP 新环境默认启用', [...selectedMCPIDs], (id) => desktopAdapter().SetMCPDefault(id, true), () => renderMCPManager(safeArray(currentSnapshot?.mcps))));
+elements.mcpUnsetVisibleDefaultButton.addEventListener('click', () => runSelectedBatch('mcp', '取消 MCP 新环境默认启用', [...selectedMCPIDs], (id) => desktopAdapter().SetMCPDefault(id, false), () => renderMCPManager(safeArray(currentSnapshot?.mcps))));
+
+
 elements.skillSubviewTabs.addEventListener('click', (event) => { const button = event.target.closest('[data-skill-subview]'); if (!button) return; setSkillSubview(button.dataset.skillSubview); });
 elements.skillFilter.addEventListener('input', () => renderSkillManager(safeArray(currentSnapshot?.skills)));
 elements.skillSourceFilter.addEventListener('change', () => renderSkillManager(safeArray(currentSnapshot?.skills)));
 elements.skillSourceFilterInput.addEventListener('input', () => renderSkillSources());
 elements.skillStateFilter.addEventListener('change', () => renderSkillManager(safeArray(currentSnapshot?.skills)));
 elements.skillProbeAllButton.addEventListener('click', () => probeAllSkillAvailability());
-elements.skillSelectVisibleButton.addEventListener('click', () => { for (const input of elements.skillList.querySelectorAll('input[data-action="select-skill"]')) selectedSkillIDs.add(input.dataset.id); renderSkillManager(safeArray(currentSnapshot?.skills)); });
-elements.skillClearSelectionButton.addEventListener('click', () => { selectedSkillIDs.clear(); renderSkillManager(safeArray(currentSnapshot?.skills)); });
+elements.skillSelectVisibleButton.addEventListener('click', () => { for (const input of elements.skillList.querySelectorAll('input[data-action="select-skill"]')) selectedSkillIDs.add(input.dataset.id); renderSkillManager(safeArray(currentSnapshot?.skills)); updateMCPBulkControls(); });
+elements.skillClearSelectionButton.addEventListener('click', () => { selectedSkillIDs.clear(); renderSkillManager(safeArray(currentSnapshot?.skills)); updateMCPBulkControls(); });
 elements.skillAssignEnvironmentsButton.addEventListener('click', openCapabilityAssignmentDialog);
 elements.skillClearMissingButton.addEventListener('click', () => clearMissingEnvironmentSelections('skill'));
-elements.skillSetVisibleDefaultButton.addEventListener('click', () => runVisibleBatch('skill', '批量设置 Skill 新环境默认值', visibleResourceIDs(elements.skillList), (id) => desktopAdapter().SetSkillDefault(id, true), () => renderSkillManager(safeArray(currentSnapshot?.skills))));
-elements.skillUnsetVisibleDefaultButton.addEventListener('click', () => runVisibleBatch('skill', '批量取消 Skill 新环境默认值', visibleResourceIDs(elements.skillList), (id) => desktopAdapter().SetSkillDefault(id, false), () => renderSkillManager(safeArray(currentSnapshot?.skills))));
-elements.skillEnableVisibleButton.addEventListener('click', () => { const environmentID = managementEnvironmentID; if (!environmentID) return setStatus('请先选择 Management Environment。', 'error'); return runVisibleBatch('skill', '批量启用当前 Environment 显式 Skill', visibleResourceIDs(elements.skillList), (id) => desktopAdapter().SetEnvironmentSkill(environmentID, id, true), () => renderSkillManager(safeArray(currentSnapshot?.skills))); });
-elements.skillDisableVisibleButton.addEventListener('click', () => { const environmentID = managementEnvironmentID; if (!environmentID) return setStatus('请先选择 Management Environment。', 'error'); return runVisibleBatch('skill', '批量取消当前 Environment 显式 Skill', visibleResourceIDs(elements.skillList), (id) => desktopAdapter().SetEnvironmentSkill(environmentID, id, false), () => renderSkillManager(safeArray(currentSnapshot?.skills))); });
+elements.skillSetVisibleDefaultButton.addEventListener('click', () => runSelectedBatch('skill', '设置 Skill 新环境默认启用', [...selectedSkillIDs], (id) => desktopAdapter().SetSkillDefault(id, true), () => renderSkillManager(safeArray(currentSnapshot?.skills))));
+elements.skillUnsetVisibleDefaultButton.addEventListener('click', () => runSelectedBatch('skill', '取消 Skill 新环境默认启用', [...selectedSkillIDs], (id) => desktopAdapter().SetSkillDefault(id, false), () => renderSkillManager(safeArray(currentSnapshot?.skills))));
+
+
 elements.skillDeleteSelectedButton.addEventListener('click', () => removeSkillCatalogEntries([...selectedSkillIDs], '批量删除'));
 elements.skillClearUnavailableButton.addEventListener('click', () => {
   if (!explicitSkillProbeIsCurrent()) return setStatus('当前 Skill 可用性检查结果已过期，请重新批量检查后再清理。', 'error');

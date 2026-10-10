@@ -1007,24 +1007,22 @@ textarea:focus,
 .index-change {display:flex; gap:8px; flex-wrap:wrap; padding:7px 0; border-bottom:1px solid var(--dk-border,#e5e7eb);}
 .index-change code {font-size:11px; overflow-wrap:anywhere; word-break:break-all; min-width:0;}
 .index-change small {color:var(--dk-text-secondary,#64748b);}
-/* A batch task must be discoverable without expanding a hidden menu. */
+/* Common primary task: select items, then choose targets and on/off. */
 .batch-toolbar {display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:12px 16px;min-width:0;}
-.batch-action-group {min-width:0;border:1px solid var(--dk-border,#e5e7eb);border-radius:var(--dk-radius-md,9px);padding:12px;display:grid;gap:10px;}
-.batch-selection-group {border-left:3px solid var(--dk-accent,#2563eb);}
-.batch-group-heading {display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:3px 12px;}
-.batch-group-heading strong {font-size:13px;color:var(--dk-text,#1f2937);}
-.batch-group-heading span {font-size:12px;line-height:1.5;color:var(--dk-text-secondary,#64748b);}
-.batch-toolbar .batch-primary {gap:8px;min-width:0;display:flex;align-items:center;flex-wrap:wrap;}
+.batch-simple-heading,.batch-settings-heading {display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;}
+.batch-simple-heading strong,.batch-settings-heading strong {font-size:13px;color:var(--dk-text,#1f2937);}
+.batch-simple-heading span,.batch-settings-heading span {font-size:12px;color:var(--dk-text-secondary,#64748b);line-height:1.5;}
+.batch-toolbar .batch-primary {display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
 .batch-toolbar .batch-selected-count {white-space:nowrap;font-size:12px;}
 .batch-toolbar .batch-primary button:last-child {margin-left:0;}
-.batch-action-line {display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
-.batch-action-label {flex:0 0 168px;max-width:100%;font-size:12px;color:var(--dk-text-secondary,#64748b);}
-.batch-target-hint {font-size:11px;color:var(--dk-text-secondary,#64748b);line-height:1.5;overflow-wrap:anywhere;min-width:0;}
-.batch-maintenance-line {display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:2px 4px;}
-.batch-maintenance-line > span {font-size:12px;font-weight:600;color:var(--dk-text-secondary,#64748b);margin-right:4px;}
+.batch-toolbar .skill-bulk-hint {font-size:12px;line-height:1.5;margin:0;}
+.batch-settings-panel {display:grid;gap:10px;padding:12px 18px;min-width:0;border-top:1px solid var(--dk-border,#e5e7eb);}
+.batch-settings-panel > .skill-bulk-actions {gap:8px;}
+.batch-action-label {font-size:12px;color:var(--dk-text-secondary,#64748b);min-width:120px;}
+.batch-maintenance-line {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.batch-maintenance-line > span {font-size:12px;color:var(--dk-text-secondary,#64748b);min-width:62px;}
 .batch-maintenance-line button.danger-button {margin-left:4px;}
-.batch-toolbar .skill-bulk-hint {margin:0;font-size:12px;line-height:1.55;}
-@media(max-width:650px){.batch-action-label{flex-basis:100%;}.batch-action-group{padding:10px;}}
+@media(max-width:650px){.batch-toolbar,.batch-settings-panel{padding:10px 12px;}.batch-simple-heading span{flex-basis:100%;}}
 .bulk-assignment-dialog {width:min(720px,calc(100vw - 32px));max-height:calc(100vh - 36px);overflow-x:hidden;}
 .bulk-target-group {padding:12px 16px;border-top:1px solid var(--dk-border,#e5e7eb);min-width:0;}
 .bulk-target-header {display:flex;justify-content:space-between;gap:7px 16px;flex-wrap:wrap;align-items:center;margin-bottom:9px;}
