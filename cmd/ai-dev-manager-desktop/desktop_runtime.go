@@ -106,17 +106,22 @@ func stopActiveLocalGatewayBeforeInstall(adapter *desktop.Adapter) error {
 	}
 	profile, ok := activeConnectionProfile(profiles)
 	if !ok || !isLoopbackGatewayBaseURL(profile.BaseURL) {
-		return nil
+		return ensureNoOtherDesktopProcesses()
 	}
 	status, err := adapter.InspectADMConnection(desktop.ADMConnectionInput{BaseURL: profile.BaseURL})
 	if err != nil {
 		return fmt.Errorf("检查本地 Gateway: %w", err)
 	}
 	if !shouldStopActiveLocalBackground(profile, status) {
-		return nil
+		return ensureNoOtherDesktopProcesses()
 	}
 	if status.PID <= 0 {
 		return fmt.Errorf("本地 Gateway 未报告有效 PID；为避免误停止服务，取消自动安装")
+	}
+	// Refuse unrelated same-name processes *before* interrupting the managed
+	// Gateway, so a blocked update does not needlessly stop local jobs.
+	if err := ensureNoOtherDesktopProcessesExcept(uint32(status.PID)); err != nil {
+		return err
 	}
 	if _, err := adapter.StopLocalADM(desktop.ADMConnectionInput{BaseURL: profile.BaseURL}); err != nil {
 		return fmt.Errorf("停止本地 Gateway: %w", err)
@@ -126,7 +131,9 @@ func stopActiveLocalGatewayBeforeInstall(adapter *desktop.Adapter) error {
 	if err := waitForGatewayProcessExit(status.PID); err != nil {
 		return fmt.Errorf("等待本地 Gateway 进程退出: %w", err)
 	}
-	return nil
+	// The Kit Setup checks every process named adm-desktop.exe, not just the
+	// active local Gateway. Refuse the update if any other instance remains.
+	return ensureNoOtherDesktopProcesses()
 }
 
 func isLoopbackGatewayBaseURL(raw string) bool {

@@ -76,7 +76,40 @@ try {
     New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
     Set-Content -LiteralPath $marker -Value 'keep-business-data-across-kit-upgrade-and-uninstall' -NoNewline
 
-    Write-Host "=== Silent overwrite upgrade $PreviousVersion -> $NextVersion ==="
+    Write-Host '=== Reproduce: same-EXE --gateway-child blocks silent Setup ==='
+    # Only a disposable CI runner enters this test. The child is started by
+    # this script from the freshly installed EXE; no user process is touched.
+    $testGateway = $null
+    $gatewayOutput = Join-Path $env:RUNNER_TEMP 'adm-gateway-upgrade-e2e.stdout.log'
+    $gatewayErrors = Join-Path $env:RUNNER_TEMP 'adm-gateway-upgrade-e2e.stderr.log'
+    try {
+        $testGateway = Start-Process -FilePath $exe -ArgumentList @('--gateway-child', '--listen', '127.0.0.1:0') -PassThru -RedirectStandardOutput $gatewayOutput -RedirectStandardError $gatewayErrors
+        Start-Sleep -Seconds 2
+        $testGateway.Refresh()
+        if ($testGateway.HasExited) {
+            throw "Test Gateway child exited unexpectedly ($($testGateway.ExitCode)): $(Get-Content -LiteralPath $gatewayErrors -Raw)"
+        }
+        $nextAbsolute = (Resolve-Path -LiteralPath $NextSetup).Path
+        $blockedSetup = Start-Process -FilePath $nextAbsolute -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
+        if ($blockedSetup.ExitCode -ne 3) {
+            throw "Expected Kit Setup to refuse running --gateway-child with exit 3, got $($blockedSetup.ExitCode)"
+        }
+        Assert-Installed $PreviousVersion
+        if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ne $before) {
+            throw 'Blocked Setup modified the installed Desktop EXE'
+        }
+    } finally {
+        if ($null -ne $testGateway) {
+            $testGateway.Refresh()
+            if (-not $testGateway.HasExited) {
+                $testGateway.Kill()  # Dedicated CI test child, never an existing service.
+                if (-not $testGateway.WaitForExit(10000)) { throw 'Test Gateway child did not exit' }
+            }
+            $testGateway.Dispose()
+        }
+    }
+
+    Write-Host "=== Silent overwrite upgrade $PreviousVersion -> $NextVersion after child exit ==="
     Invoke-Setup $NextSetup
     Assert-Installed $NextVersion
     $after = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
