@@ -35,17 +35,7 @@ jobs:
         run: go version
 
       - name: Download dependencies
-        run: |
-          go mod download
-          go mod download github.com/wanstu/wails-desktop-kit@v0.11.4
-
-      - name: Export resolved Go checksums (temporary Kit release migration)
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: adm-go-sum-resolved
-          path: go.sum
-          if-no-files-found: error
+        run: go mod download
 
       - name: Test
         run: go test -count=1 ./...
