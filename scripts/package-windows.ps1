@@ -45,10 +45,15 @@ $assetBase = "adm-desktop-$Version"
 $setupPath = Join-Path $OutputDir "$assetBase-windows-amd64-setup.exe"
 $zipPath = Join-Path $OutputDir "$assetBase-windows-amd64.zip"
 
+$kitPackagingRef = '3c0564ab10139213bc1b37ed0342872bb9d0a7bd' # Temporary feature-branch commit; replace with an official Kit release tag before tagging ADM.
+if ($Version -ne 'dev' -and $kitPackagingRef -notmatch '^v[0-9]+[.][0-9]+[.][0-9]+') {
+    throw 'Release packaging requires a tagged Kit CLI; wait for the Kit installer confirmation feature to be released.'
+}
+
 Push-Location $repoRoot
 try {
     # Only package the existing production Wails EXE; never rebuild it.
-    & go run 'github.com/wanstu/wails-desktop-kit/cmd/desktopkit@v0.11.3' package windows `
+    & go run "github.com/wanstu/wails-desktop-kit/cmd/desktopkit@$kitPackagingRef" package windows `
         --input $InputPath `
         --dist $OutputDir `
         --app-name 'adm-desktop' `
@@ -61,6 +66,7 @@ try {
         --install-scope 'user' `
         --start-menu-shortcut=true `
         --desktop-shortcut=false `
+        --confirm-stop-running=true `
         --nsis $NSISPath
     if ($LASTEXITCODE -ne 0) {
         throw "Desktop Kit installer packaging failed (exit code $LASTEXITCODE)"
