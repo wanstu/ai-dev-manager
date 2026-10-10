@@ -211,9 +211,9 @@
             <button id="mcpSelectVisibleButton" type="button" class="secondary-button small-button">全选筛选结果</button>
             <button id="mcpClearSelectionButton" type="button" class="secondary-button small-button">取消选择</button>
             <span class="visible-count batch-selected-count">已选 MCP <strong id="mcpSelectedCount">0</strong></span>
-            <button id="mcpAssignEnvironmentsButton" type="button" disabled title="先勾选 MCP 或 Skill">设置已选项的启用状态…</button>
+            <button id="mcpAssignEnvironmentsButton" type="button" class="secondary-button small-button batch-assignment-trigger" disabled title="先勾选 MCP 或 Skill">批量设置启停…</button>
           </div>
-          <p id="mcpBulkHint" class="skill-bulk-hint" role="status">请先勾选要修改的 MCP，再点击“设置已选项的启用状态”。</p>
+          <p id="mcpBulkHint" class="skill-bulk-hint" role="status">请先勾选要修改的 MCP，再点击“批量设置启停”。</p>
         </div>
         <div class="list-heading"><strong>全局 MCP 定义</strong><span>删除是全局操作；当前 Environment 开关只修改选择。</span></div>
 
@@ -273,9 +273,9 @@
                 <button id="skillSelectVisibleButton" type="button" class="secondary-button small-button">全选筛选结果</button>
                 <button id="skillClearSelectionButton" type="button" class="secondary-button small-button">取消选择</button>
                 <span class="visible-count batch-selected-count">已选 Skill <strong id="skillSelectedCount">0</strong></span>
-                <button id="skillAssignEnvironmentsButton" type="button" disabled title="先勾选 MCP 或 Skill">设置已选项的启用状态…</button>
+                <button id="skillAssignEnvironmentsButton" type="button" class="secondary-button small-button batch-assignment-trigger" disabled title="先勾选 MCP 或 Skill">批量设置启停…</button>
               </div>
-              <p id="skillBulkHint" class="skill-bulk-hint" role="status">请先勾选要修改的 Skill，再点击“设置已选项的启用状态”。</p>
+              <p id="skillBulkHint" class="skill-bulk-hint" role="status">请先勾选要修改的 Skill，再点击“批量设置启停”。</p>
             </div>
             <div id="skillList" class="resource-list filtered-resource-list empty">暂无已发现 Skill</div>
             <section class="batch-settings-panel" aria-label="Skill 默认规则与维护">
@@ -617,7 +617,7 @@
           </form>
         </dialog>
 <dialog id="capabilityAssignmentDialog" class="editor-dialog bulk-assignment-dialog" aria-labelledby="capabilityAssignmentTitle">
-          <header class="dialog-heading"><div><p class="eyebrow">批量管理</p><h2 id="capabilityAssignmentTitle">选择目标并启用或停用</h2></div><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header>
+          <header class="dialog-heading"><div><p class="eyebrow">批量管理</p><h2 id="capabilityAssignmentTitle">选择目标并启用或停用</h2></div><button id="capabilityAssignmentCloseButton" type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header>
           <p class="dialog-message" role="status" hidden></p>
           <p id="capabilityAssignmentSummary" class="editor-hint">只会修改已经勾选的 MCP / Skill，选择目标并确认启用或停用。</p>
           <section class="bulk-target-group"><div class="bulk-target-header"><strong>Workspace · 项目统一启停</strong><span>影响该 Workspace 下环境的继承选择</span></div>
@@ -638,6 +638,11 @@
             <button id="capabilityAssignmentEnableButton" type="button" disabled>在所选目标开启</button>
             <button id="capabilityAssignmentDisableButton" type="button" class="secondary-button" disabled>在所选目标关闭</button>
           </div>
+          <section id="capabilityAssignmentProgressPanel" class="bulk-assignment-progress" aria-label="批量操作处理进度" hidden>
+            <div class="bulk-progress-heading"><strong id="capabilityAssignmentProgressText">准备执行</strong><span id="capabilityAssignmentProgressCount">0 / 0</span></div>
+            <progress id="capabilityAssignmentProgress" max="1" value="0" aria-label="已完成设置数量"></progress>
+            <p id="capabilityAssignmentProgressDetail" class="editor-hint" role="status">等待开始</p>
+          </section>
           <div id="capabilityAssignmentResult" class="preview-panel empty">尚未执行批量操作。</div>
         </dialog>
 <dialog id="workspaceDialog" class="editor-dialog" aria-labelledby="workspaceDialogTitle"><header class="dialog-heading"><h2 id="workspaceDialogTitle">添加 Workspace</h2><button type="button" class="secondary-button" data-dialog-close aria-label="关闭">关闭</button></header><p class="dialog-message" role="status" hidden></p><form id="workspaceForm" class="inline-form">

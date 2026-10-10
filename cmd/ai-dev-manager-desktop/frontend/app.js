@@ -38,7 +38,7 @@ const elements = {
   skillSourceForm: document.getElementById('skillSourceForm'), skillSourceID: document.getElementById('skillSourceID'), skillSourceDialogTitle: document.getElementById('skillSourceDialogTitle'), skillSourceRoot: document.getElementById('skillSourceRoot'), skillSupportRoots: document.getElementById('skillSupportRoots'), skillSourceDefault: document.getElementById('skillSourceDefault'), skillSourceSubmitButton: document.getElementById('skillSourceSubmitButton'), skillSubviewTabs: document.getElementById('skillSubviewTabs'), skillSubviewSkillCount: document.getElementById('skillSubviewSkillCount'), skillSubviewSourceCount: document.getElementById('skillSubviewSourceCount'), skillsPanel: document.getElementById('skillsPanel'), skillSourcesPanel: document.getElementById('skillSourcesPanel'), skillSourceList: document.getElementById('skillSourceList'), skillList: document.getElementById('skillList'),
   skillFilter: document.getElementById('skillFilter'), skillSourceFilter: document.getElementById('skillSourceFilter'), skillStateFilter: document.getElementById('skillStateFilter'), skillSourceFilterInput: document.getElementById('skillSourceFilterInput'), skillSourceVisibleCount: document.getElementById('skillSourceVisibleCount'), skillSourceListTotalCount: document.getElementById('skillSourceListTotalCount'), skillVisibleCount: document.getElementById('skillVisibleCount'), skillListTotalCount: document.getElementById('skillListTotalCount'),
   skillProbeAllButton: document.getElementById('skillProbeAllButton'), skillSelectVisibleButton: document.getElementById('skillSelectVisibleButton'), skillClearSelectionButton: document.getElementById('skillClearSelectionButton'), skillSetVisibleDefaultButton: document.getElementById('skillSetVisibleDefaultButton'), skillUnsetVisibleDefaultButton: document.getElementById('skillUnsetVisibleDefaultButton'), skillSelectedCount: document.getElementById('skillSelectedCount'), skillAssignEnvironmentsButton: document.getElementById('skillAssignEnvironmentsButton'), skillClearMissingButton: document.getElementById('skillClearMissingButton'), skillDeleteSelectedButton: document.getElementById('skillDeleteSelectedButton'), skillClearUnavailableButton: document.getElementById('skillClearUnavailableButton'), skillBulkHint: document.getElementById('skillBulkHint'),
-  capabilityAssignmentDialog: document.getElementById('capabilityAssignmentDialog'), capabilityAssignmentSummary: document.getElementById('capabilityAssignmentSummary'), capabilityAssignmentSelectAllButton: document.getElementById('capabilityAssignmentSelectAllButton'), capabilityAssignmentClearButton: document.getElementById('capabilityAssignmentClearButton'), capabilityAssignmentEnvironmentList: document.getElementById('capabilityAssignmentEnvironmentList'), capabilityAssignmentWorkspaceList: document.getElementById('capabilityAssignmentWorkspaceList'), capabilityWorkspaceSelectAllButton: document.getElementById('capabilityWorkspaceSelectAllButton'), capabilityWorkspaceClearButton: document.getElementById('capabilityWorkspaceClearButton'), capabilityAssignmentEnableButton: document.getElementById('capabilityAssignmentEnableButton'), capabilityAssignmentDisableButton: document.getElementById('capabilityAssignmentDisableButton'), capabilityAssignmentResult: document.getElementById('capabilityAssignmentResult'),
+  capabilityAssignmentDialog: document.getElementById('capabilityAssignmentDialog'), capabilityAssignmentSummary: document.getElementById('capabilityAssignmentSummary'), capabilityAssignmentSelectAllButton: document.getElementById('capabilityAssignmentSelectAllButton'), capabilityAssignmentClearButton: document.getElementById('capabilityAssignmentClearButton'), capabilityAssignmentEnvironmentList: document.getElementById('capabilityAssignmentEnvironmentList'), capabilityAssignmentWorkspaceList: document.getElementById('capabilityAssignmentWorkspaceList'), capabilityWorkspaceSelectAllButton: document.getElementById('capabilityWorkspaceSelectAllButton'), capabilityWorkspaceClearButton: document.getElementById('capabilityWorkspaceClearButton'), capabilityAssignmentEnableButton: document.getElementById('capabilityAssignmentEnableButton'), capabilityAssignmentDisableButton: document.getElementById('capabilityAssignmentDisableButton'), capabilityAssignmentResult: document.getElementById('capabilityAssignmentResult'), capabilityAssignmentCloseButton: document.getElementById('capabilityAssignmentCloseButton'), capabilityAssignmentProgressPanel: document.getElementById('capabilityAssignmentProgressPanel'), capabilityAssignmentProgress: document.getElementById('capabilityAssignmentProgress'), capabilityAssignmentProgressText: document.getElementById('capabilityAssignmentProgressText'), capabilityAssignmentProgressCount: document.getElementById('capabilityAssignmentProgressCount'), capabilityAssignmentProgressDetail: document.getElementById('capabilityAssignmentProgressDetail'),
   workspaceForm: document.getElementById('workspaceForm'), workspacePath: document.getElementById('workspacePath'), workspaceName: document.getElementById('workspaceName'), workspaceBrowseButton: document.getElementById('workspaceBrowseButton'), workspaceList: document.getElementById('workspaceList'), workspaceFilter: document.getElementById('workspaceFilter'), workspaceVisibleCount: document.getElementById('workspaceVisibleCount'), workspaceListTotalCount: document.getElementById('workspaceListTotalCount'),
   workspaceDiscoveryDialog: document.getElementById('workspaceDiscoveryDialog'), workspaceDiscoveryAdvanced: document.getElementById('workspaceDiscoveryAdvanced'), workspaceDiscoveryFilterToolbar: document.getElementById('workspaceDiscoveryFilterToolbar'), workspaceDiscoveryTitle: document.getElementById('workspaceDiscoveryTitle'), workspaceDiscoveryForm: document.getElementById('workspaceDiscoveryForm'), workspaceDiscoveryPath: document.getElementById('workspaceDiscoveryPath'), workspaceDiscoveryQuery: document.getElementById('workspaceDiscoveryQuery'), workspaceDiscoveryMaxDepth: document.getElementById('workspaceDiscoveryMaxDepth'), workspaceDiscoveryMaxEntries: document.getElementById('workspaceDiscoveryMaxEntries'), workspaceDiscoveryMaxCandidates: document.getElementById('workspaceDiscoveryMaxCandidates'), workspaceDiscoveryMaxDigestEntries: document.getElementById('workspaceDiscoveryMaxDigestEntries'), workspaceDiscoveryMaxOutputBytes: document.getElementById('workspaceDiscoveryMaxOutputBytes'), workspaceDiscoveryScanButton: document.getElementById('workspaceDiscoveryScanButton'), workspaceDiscoveryFilter: document.getElementById('workspaceDiscoveryFilter'), workspaceDiscoverySummary: document.getElementById('workspaceDiscoverySummary'), workspaceDiscoveryResult: document.getElementById('workspaceDiscoveryResult'),
   environmentForm: document.getElementById('environmentForm'), environmentWorkspace: document.getElementById('environmentWorkspace'), environmentName: document.getElementById('environmentName'), environmentRoot: document.getElementById('environmentRoot'), environmentBrowseButton: document.getElementById('environmentBrowseButton'), environmentList: document.getElementById('environmentList'), environmentFilter: document.getElementById('environmentFilter'), environmentWorkspaceFilter: document.getElementById('environmentWorkspaceFilter'), environmentVisibleCount: document.getElementById('environmentVisibleCount'), environmentListTotalCount: document.getElementById('environmentListTotalCount'), environmentFilterHint: document.getElementById('environmentFilterHint'),
@@ -2371,6 +2371,7 @@ function renderCapabilityAssignmentDialog(){
  elements.capabilityAssignmentClearButton.disabled=capabilityAssignmentBusy||selectedAssignmentEnvironmentIDs.size===0;
  elements.capabilityWorkspaceSelectAllButton.disabled=capabilityAssignmentBusy||!workspaces.length;
  elements.capabilityWorkspaceClearButton.disabled=capabilityAssignmentBusy||selectedAssignmentWorkspaceIDs.size===0;
+ elements.capabilityAssignmentCloseButton.disabled=capabilityAssignmentBusy;
  elements.capabilityAssignmentEnableButton.disabled=capabilityAssignmentBusy||capabilityCount===0||!totalTargets;
  elements.capabilityAssignmentDisableButton.disabled=capabilityAssignmentBusy||capabilityCount===0||!totalTargets;
  const workspaceList=elements.capabilityAssignmentWorkspaceList;
@@ -2407,6 +2408,7 @@ function openCapabilityAssignmentDialog(){
  selectedAssignmentEnvironmentIDs=new Set();
  selectedAssignmentWorkspaceIDs=new Set();
  capabilityAssignmentBusy=false;
+ elements.capabilityAssignmentProgressPanel.hidden=true;
  emptyMessage(elements.capabilityAssignmentResult,'尚未执行批量操作。');
  renderCapabilityAssignmentDialog();
  openEditorDialog('capabilityAssignmentDialog');
@@ -2431,7 +2433,26 @@ function renderCapabilityAssignmentResult(results){
   row.append(title,detail);box.append(row);
  }
 }
+function updateCapabilityAssignmentProgress(completed, total, results, detail) {
+ const panel=elements.capabilityAssignmentProgressPanel;
+ panel.hidden=false;
+ const max=Math.max(1,total);
+ elements.capabilityAssignmentProgress.max=max;
+ elements.capabilityAssignmentProgress.value=Math.min(max,completed);
+ elements.capabilityAssignmentProgressCount.textContent=`${completed} / ${total}`;
+ const summary=window.ADMEnvironmentBulk?.summarizeResults(results)||{
+  changed:results.filter(x=>x.status==='changed').length,
+  unchanged:results.filter(x=>x.status==='unchanged').length,
+  failed:results.filter(x=>x.status==='failed').length
+ };
+ elements.capabilityAssignmentProgressText.textContent=completed===total
+  ? '处理完成'
+  : `正在处理 · ${Math.round(completed / max * 100)}%`;
+ elements.capabilityAssignmentProgressDetail.textContent=
+  `${detail} · 已修改 ${summary.changed} · 已跳过 ${summary.unchanged} · 失败 ${summary.failed}`;
+}
 async function runCapabilityAssignment(enabled){
+ if(capabilityAssignmentBusy)return;
  pruneMCPSelection();pruneSkillSelection();pruneAssignmentEnvironmentSelection();pruneAssignmentWorkspaceSelection();
  const envIDs=[...selectedAssignmentEnvironmentIDs],workspaceIDs=[...selectedAssignmentWorkspaceIDs];
  const operations=[
@@ -2443,29 +2464,49 @@ async function runCapabilityAssignment(enabled){
  if(!window.confirm(`将在 ${workspaceIDs.length} 个 Workspace、${envIDs.length} 个 Environment 中${actionLabel} MCP/Skill，共 ${operations.length} 组设置。Workspace 设置会被环境继承，关闭环境显式设置不会覆盖 Workspace 继承。继续？`))return;
  const requestGeneration=connectionGeneration;
  capabilityAssignmentBusy=true;renderCapabilityAssignmentDialog();updateMCPBulkControls();updateSkillBulkControls();
+ emptyMessage(elements.capabilityAssignmentResult,'正在执行，结果完成后将在这里显示。');
+ updateCapabilityAssignmentProgress(0, operations.length, [], `正在批量${actionLabel}…`);
+ elements.capabilityAssignmentProgressPanel.scrollIntoView({block:'nearest'});
  setStatus(`正在批量${actionLabel} MCP / Skill…`,'loading');
  const results=[];
  try{
   for(const op of operations){
    const base={...op,scope:op.scope||'environment'};
-   if(requestGeneration!==connectionGeneration){results.push({...base,status:'failed',error:'连接已切换'});continue}
-   if(op.noop){results.push({...base,status:'unchanged'});continue}
-   try{
-    if(op.scope==='workspace'){
-     if(op.kind==='mcp')await desktopAdapter().SetWorkspaceMCP(op.workspaceID,op.resourceID,enabled);
-     else await desktopAdapter().SetWorkspaceSkill(op.workspaceID,op.resourceID,enabled);
-    }else{
-     if(op.kind==='mcp')await desktopAdapter().SetEnvironmentMCP(op.environmentID,op.resourceID,enabled);
-     else await desktopAdapter().SetEnvironmentSkill(op.environmentID,op.resourceID,enabled);
-    }
-    results.push({...base,status:'changed'});
-   }catch(error){results.push({...base,status:'failed',error:errorText(error)});}
+   const target=op.workspaceName||op.environmentName||op.workspaceID||op.environmentID||'目标';
+   const item=`${target} · ${String(op.kind).toUpperCase()} · ${op.resourceID}`;
+   if(requestGeneration!==connectionGeneration){
+    results.push({...base,status:'failed',error:'连接已切换'});
+   }else if(op.noop){
+    results.push({...base,status:'unchanged'});
+   }else{
+    updateCapabilityAssignmentProgress(results.length,operations.length,results,`正在处理 ${item}`);
+    try{
+     if(op.scope==='workspace'){
+      if(op.kind==='mcp')await desktopAdapter().SetWorkspaceMCP(op.workspaceID,op.resourceID,enabled);
+      else await desktopAdapter().SetWorkspaceSkill(op.workspaceID,op.resourceID,enabled);
+     }else{
+      if(op.kind==='mcp')await desktopAdapter().SetEnvironmentMCP(op.environmentID,op.resourceID,enabled);
+      else await desktopAdapter().SetEnvironmentSkill(op.environmentID,op.resourceID,enabled);
+     }
+     results.push({...base,status:'changed'});
+    }catch(error){results.push({...base,status:'failed',error:errorText(error)});}
+   }
+   if(requestGeneration===connectionGeneration){
+    updateCapabilityAssignmentProgress(results.length,operations.length,results,`最近完成 ${item}`);
+   }
   }
   if(requestGeneration===connectionGeneration)await refreshSnapshot();
   const summary=window.ADMEnvironmentBulk?.summarizeResults(results)||{changed:0,unchanged:0,failed:0};
   if(requestGeneration===connectionGeneration){
    renderCapabilityAssignmentDialog();renderCapabilityAssignmentResult(results);
    setStatus(`批量${actionLabel}完成：修改 ${summary.changed} · 无需修改 ${summary.unchanged} · 失败 ${summary.failed}`,summary.failed?'error':'success');
+  }
+ }catch(error){
+  if(requestGeneration===connectionGeneration){
+   renderCapabilityAssignmentResult(results);
+   elements.capabilityAssignmentProgressText.textContent='操作已结束，状态刷新失败';
+   elements.capabilityAssignmentProgressDetail.textContent='已完成的设置请以重新加载后的实际状态为准：'+errorText(error);
+   setStatus('批量操作后的状态刷新失败：'+errorText(error),'error');
   }
  }finally{
   capabilityAssignmentBusy=false;updateMCPBulkControls();updateSkillBulkControls();
@@ -3371,6 +3412,9 @@ elements.capabilityWorkspaceClearButton.addEventListener('click',()=>{
 });
 elements.capabilityAssignmentSelectAllButton.addEventListener('click', () => { selectedAssignmentEnvironmentIDs = new Set(safeArray(currentSnapshot?.environments).map((environment) => environment.environment_id).filter(Boolean)); renderCapabilityAssignmentDialog(); });
 elements.capabilityAssignmentClearButton.addEventListener('click', () => { selectedAssignmentEnvironmentIDs.clear(); renderCapabilityAssignmentDialog(); });
+elements.capabilityAssignmentDialog.addEventListener('cancel', event => {
+ if(capabilityAssignmentBusy)event.preventDefault();
+});
 elements.capabilityAssignmentEnableButton.addEventListener('click', () => runCapabilityAssignment(true));
 elements.capabilityAssignmentDisableButton.addEventListener('click', () => runCapabilityAssignment(false));
 elements.managementWorkspace.addEventListener('change', async () => {

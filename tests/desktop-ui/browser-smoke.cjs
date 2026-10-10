@@ -132,7 +132,7 @@ const fakeBridge = String.raw`<script>
     async RemoveMCP(id){ record('RemoveMCP',[id]); const index=snapshotA.mcps.findIndex(item=>item.id===id); if(index>=0) snapshotA.mcps.splice(index,1); for(const workspace of snapshotA.workspaces) workspace.enabled_mcp_ids=(workspace.enabled_mcp_ids||[]).filter(value=>value!==id); for(const env of snapshotA.environments){ env.explicit_mcp_ids=(env.explicit_mcp_ids||[]).filter(value=>value!==id); recomputeEnvironment(env); } return null; },
     async SetSkillDefault(id,value){ record('SetSkillDefault',[id,value]); const entry=snapshotA.skills.find(item=>item.id===id); if(!entry) throw new Error('skill not found: '+id); entry.default_include_in_environment=Boolean(value); return structuredClone(entry); },
     async SetWorkspaceSkill(workspaceID,id,value){ record('SetWorkspaceSkill',[workspaceID,id,value]); const workspace=snapshotA.workspaces.find(item=>item.workspace_id===workspaceID); if(!workspace) throw new Error('workspace not found: '+workspaceID); const set=new Set(workspace.enabled_skill_ids || []); if(value) set.add(id); else set.delete(id); workspace.enabled_skill_ids=[...set].sort(); recomputeWorkspaceEnvironments(workspaceID); return structuredClone(workspace); },
-    async SetEnvironmentSkill(environmentID,id,value){ record('SetEnvironmentSkill',[environmentID,id,value]); if(state.failBulkSkillAssignment && environmentID==='env-b' && id==='skill-a') throw new Error('fixture bulk assignment failure'); const env=snapshotA.environments.find(item=>item.environment_id===environmentID); if(!env) throw new Error('env not found: '+environmentID); const set=new Set(env.explicit_skill_ids || []); if(value) set.add(id); else set.delete(id); env.explicit_skill_ids=[...set].sort(); recomputeEnvironment(env); return structuredClone(env); },
+    async SetEnvironmentSkill(environmentID,id,value){ record('SetEnvironmentSkill',[environmentID,id,value]); if(state.failBulkSkillAssignment && environmentID==='env-b' && id==='skill-a') { await new Promise(resolve=>setTimeout(resolve,100)); throw new Error('fixture bulk assignment failure'); } const env=snapshotA.environments.find(item=>item.environment_id===environmentID); if(!env) throw new Error('env not found: '+environmentID); const set=new Set(env.explicit_skill_ids || []); if(value) set.add(id); else set.delete(id); env.explicit_skill_ids=[...set].sort(); recomputeEnvironment(env); return structuredClone(env); },
     async RemoveSkill(id){ record('RemoveSkill',[id]); const index=snapshotA.skills.findIndex(skill=>skill.id===id); if(index<0) throw new Error('skill not found: '+id); snapshotA.skills.splice(index,1); for(const workspace of snapshotA.workspaces) workspace.enabled_skill_ids=(workspace.enabled_skill_ids||[]).filter(value=>value!==id); for(const env of snapshotA.environments){ env.explicit_skill_ids=(env.explicit_skill_ids||[]).filter(value=>value!==id); recomputeEnvironment(env); } return null; },
     async ListVerifiers(id){ record('ListVerifiers',[id]); if(state.failVerifiers) throw new Error('verifiers unavailable'); return [{verifier_id:id==='env-b'?'verifier-b':'verifier-a', name:id==='env-b'?'Verifier B':'Verifier A', kind:'test', executable:'go', args:['test','./...'], enabled:true}]; },
     async ListProcesses(id){ record('ListProcesses',[id]); if(state.failProcesses) throw new Error('processes unavailable'); if(state.hideProcess && id==='env-a') return []; return [{id:id==='env-b'?'proc-b':'proc-a', state:'running', pid:id==='env-b'?3333:2222, listening_ports:[8080]}]; },
@@ -791,6 +791,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     await clickRoute('mcp');
     const mcpBulkToolbar=document.getElementById('mcpBulkToolbar');
+    check(document.getElementById('mcpAssignEnvironmentsButton').classList.contains('secondary-button') && document.getElementById('mcpAssignEnvironmentsButton').classList.contains('small-button'), 'MCP bulk action uses compact neutral button styling');
     check(mcpBulkToolbar.querySelectorAll('.batch-action-group').length===0 && mcpBulkToolbar.querySelectorAll('button').length===3, 'MCP primary toolbar offers only selection and assignment');
     check(mcpBulkToolbar.textContent.includes('已选 MCP'), 'MCP selection scope shown');
     check(!mcpBulkToolbar.querySelector('details'), 'No hidden batch commands');
@@ -811,6 +812,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await clickRoute('skills');
     check(!document.getElementById('skillsPanel').hidden && document.getElementById('skillSourcesPanel').hidden, 'Skill route defaults to Skills subview');
     const skillBatchToolbar=document.querySelector('#skillsPanel .batch-toolbar');
+    check(document.getElementById('skillAssignEnvironmentsButton').classList.contains('secondary-button') && document.getElementById('skillAssignEnvironmentsButton').classList.contains('small-button'), 'Skill bulk action uses compact neutral button styling');
     check(skillBatchToolbar.querySelectorAll('button').length===3 && skillBatchToolbar.querySelectorAll('.batch-action-group').length===0, 'Skill primary toolbar offers only selection and assignment');
     check(skillBatchToolbar.textContent.includes('已选 Skill'), 'Skill selection scope shown');
     check(document.getElementById('skillSetVisibleDefaultButton').getBoundingClientRect().width>0, 'Skill optional default rules remain discoverable below list');
@@ -838,7 +840,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     const bulkSkillBefore=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentSkill').length;
     window.__fakeADM.state.failBulkSkillAssignment=true;
     document.getElementById('capabilityAssignmentEnableButton').click();
+    const bulkProgressPanel=document.getElementById('capabilityAssignmentProgressPanel');
+    const bulkProgress=document.getElementById('capabilityAssignmentProgress');
+    check(!bulkProgressPanel.hidden && bulkProgress.max===4, 'Batch progress starts with exact operation count');
+    check(document.getElementById('capabilityAssignmentCloseButton').disabled && document.getElementById('capabilityAssignmentEnableButton').disabled && document.getElementById('capabilityAssignmentDisableButton').disabled, 'Batch UI locks repeat actions while processing');
+    await waitFor(() => bulkProgress.value===3, 'Progress advances before final slow operation completes');
+    check(document.getElementById('capabilityAssignmentProgressCount').textContent==='3 / 4', 'Progress updates incrementally instead of only at end');
     await waitFor(() => document.getElementById('capabilityAssignmentResult').textContent.includes('失败 1'), 'bulk Environment assignment reports partial failure');
+    check(bulkProgress.value===4 && document.getElementById('capabilityAssignmentProgressCount').textContent==='4 / 4', 'Batch progress completes and counts no-op and failed pairs');
+    check(document.getElementById('capabilityAssignmentProgressDetail').textContent.includes('已修改 1') && document.getElementById('capabilityAssignmentProgressDetail').textContent.includes('已跳过 2') && document.getElementById('capabilityAssignmentProgressDetail').textContent.includes('失败 1'), 'Progress accurately reports changed, skipped and failed pairs');
+    await waitFor(() => !document.getElementById('capabilityAssignmentCloseButton').disabled, 'Dialog close becomes available again after operation');
     const bulkMCPCalls=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentMCP').slice(bulkMCPBefore);
     const bulkSkillCalls=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentSkill').slice(bulkSkillBefore);
     check(bulkMCPCalls.length===1 && bulkMCPCalls[0].args[0]==='env-b' && bulkMCPCalls[0].args[1]==='mcp-a' && bulkMCPCalls[0].args[2]===true, 'bulk assignment skips already-enabled MCP pair and mutates only the needed Environment');
@@ -854,6 +865,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const beforeWorkspaceCalls=window.__fakeADM.calls.filter(c=>c.name==='SetWorkspaceMCP'&&c.args[0]==='ws-b'&&c.args[1]==='mcp-a').length;
     const beforeEnvCalls=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentMCP').length;
     document.getElementById('capabilityAssignmentEnableButton').click();
+    check(document.getElementById('capabilityAssignmentProgress').max===2, 'Workspace-only progress reflects target-resource pair count');
     await waitFor(()=>window.__fakeADM.calls.filter(c=>c.name==='SetWorkspaceMCP'&&c.args[0]==='ws-b'&&c.args[1]==='mcp-a'&&c.args[2]===true).length>beforeWorkspaceCalls,'Workspace-only batch enable called');
     check(window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentMCP').length===beforeEnvCalls,'Workspace-only batch does not change Environment explicit settings');
     check(document.getElementById('capabilityAssignmentResult').textContent.includes('Workspace 1'),'batch result reports affected Workspace count');
