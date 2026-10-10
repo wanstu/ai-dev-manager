@@ -37,6 +37,14 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Export resolved Go checksums (temporary Kit release migration)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: adm-go-sum-resolved
+          path: go.sum
+          if-no-files-found: error
+
       - name: Test
         run: go test -count=1 ./...
 
@@ -318,7 +326,7 @@ jobs:
           else
             package_version="${package_version/-rc./~rc.}"
           fi
-          go run github.com/wanstu/wails-desktop-kit/cmd/desktopkit@v0.11.3 package linux \
+          go run github.com/wanstu/wails-desktop-kit/cmd/desktopkit@v0.11.4 package linux \
             --input "dist/adm$suffix-${{ matrix.name }}" \
             --dist dist \
             --app-name adm \
