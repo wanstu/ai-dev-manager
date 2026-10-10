@@ -1,6 +1,6 @@
 # ADM 安装与开机自启（Kit 集成）
 
-> v1.4.0-rc.3 已发布 Windows Setup、Portable 与 Linux CLI .deb；本开发分支现将 Go 依赖和 Windows/Linux 打包工具统一到 **Wails Desktop Kit v0.11.3**。这不会修改既有 RC 发布资产；新版本仍需重新运行对应发布 CI。
+> v1.4.0-rc.3 已发布 Windows Setup、Portable 与 Linux CLI .deb；本开发分支现将 Go 依赖和 Windows/Linux 打包工具统一到 **Wails Desktop Kit v0.11.4**。这不会修改既有 RC 发布资产；新版本仍需重新运行对应发布 CI。
 
 ## Windows Desktop
 
@@ -11,7 +11,7 @@
 - `adm-desktop-<version>-windows-amd64.zip`：便于携带的 Portable ZIP。
 - `SHA256SUMS-<version>.txt`：Release 文件 SHA256 总校验清单。
 
-本分支后续 Setup 使用 Kit v0.11.3 的 NSIS 安装功能（已发布的 v1.4.0-rc.3 使用 Kit v0.11.0）：默认 **当前用户安装**、无需管理员权限；固定卸载标识 `com.wanstu.adm-desktop`，支持覆盖安装、卸载与 `/S` 静默执行。**卸载不会删除** `~/.config/adm` 中的业务数据或 Gateway 配置。本开发分支已接入应用内更新 UI（尚未发布）。
+本分支后续 Setup 使用 Kit v0.11.4 的 NSIS 安装功能（已发布的 v1.4.0-rc.3 使用 Kit v0.11.0）：默认 **当前用户安装**、无需管理员权限；固定卸载标识 `com.wanstu.adm-desktop`，支持覆盖安装、卸载与 `/S` 静默执行。**卸载不会删除** `~/.config/adm` 中的业务数据或 Gateway 配置。本开发分支已接入应用内更新 UI（尚未发布）。
 
 本地只打包现有已构建的 Wails EXE（需要 NSIS）：
 
@@ -29,10 +29,10 @@ Windows Desktop 打开 **关于 → 软件更新**，可以选择是否包含 RC
 - **系统级安装版**：只提供下载和“打开安装包所在目录”，由用户手动执行 Setup 并处理权限，不自动提权重启。
 - **浏览器 Web 管理台、非 Windows、开发构建**：不会提供可用的 Desktop 自动更新功能。
 - 安装器来自项目官方 GitHub Release，Kit 必须验证 SHA256。Windows Setup 会检测所有同名的 `adm-desktop.exe` 进程（包括由 ADM 启动的 `--gateway-child` 本地后台），防止覆盖正在运行的可执行文件。
-- **手动运行 Setup**：必须先从托盘选择「退出（不保留后台）」，等 Desktop 与本地后台都退出后点击安装器「重试」。这不会清除配置；正在运行的本地任务会中断，不得无提示强行结束进程。
+- **手动运行新版 Setup（Kit v0.11.4 起）**：如检测到已安装的 ADM Desktop / 本地 Gateway 正在运行，将先提示是否关闭并继续安装；只有明确确认才会结束**该安装目录对应的** `adm-desktop.exe` 进程（包括 `--gateway-child`）。这会中断尚未保存的工作及后台任务；取消或发现不同目录的同名程序时不会强行停止。关闭失败会中止安装并保留旧版。旧版 Setup 仍需要手动退出。
 - **应用内安装并重启**（下次发行版起）：需要用户明确确认，先安全停止当前活动连接的本地 Gateway 并等待其进程真正退出，再让 Kit 启动安装器并退出 Desktop。远程 Gateway 不会被停止；安装前会检查其他同名 `adm-desktop.exe` 进程并提示阻塞 PID，由用户自行从对应实例正常退出，不会强制结束。若发现其他阻塞实例，会先拒绝更新而不停止活动 Gateway；停止失败时不启动安装器、Desktop 保持运行。安装后本地 Gateway 需手动重新启动。
 
-本次本地集成基于 Wails Desktop Kit v0.11.3，需经新的 ADM 发行版打包及真实安装版升级验收后才能宣告向最终用户交付。缓存文件位于当前用户缓存目录下的 `adm/updates`。
+ADM 运行时及 Windows/Linux 打包统一采用 Wails Desktop Kit v0.11.4。Windows Setup 使用已正式发布的 `--confirm-stop-running`；该功能已经通过 Windows 实机覆盖安装确认，CI 仍需在 ADM 发版时重新执行。当前发布的 rc.4 不包含这一能力。缓存文件位于当前用户缓存目录下的 `adm/updates`。
 
 ## Linux 无桌面服务器
 

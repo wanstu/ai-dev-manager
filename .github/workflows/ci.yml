@@ -318,7 +318,7 @@ jobs:
           else
             package_version="${package_version/-rc./~rc.}"
           fi
-          go run github.com/wanstu/wails-desktop-kit/cmd/desktopkit@v0.11.3 package linux \
+          go run github.com/wanstu/wails-desktop-kit/cmd/desktopkit@v0.11.4 package linux \
             --input "dist/adm$suffix-${{ matrix.name }}" \
             --dist dist \
             --app-name adm \

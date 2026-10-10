@@ -45,10 +45,12 @@ $assetBase = "adm-desktop-$Version"
 $setupPath = Join-Path $OutputDir "$assetBase-windows-amd64-setup.exe"
 $zipPath = Join-Path $OutputDir "$assetBase-windows-amd64.zip"
 
+$kitPackagingRef = 'v0.11.4' # Published Kit release; keep aligned with go.mod and Linux packaging.
+
 Push-Location $repoRoot
 try {
     # Only package the existing production Wails EXE; never rebuild it.
-    & go run 'github.com/wanstu/wails-desktop-kit/cmd/desktopkit@v0.11.3' package windows `
+    & go run "github.com/wanstu/wails-desktop-kit/cmd/desktopkit@$kitPackagingRef" package windows `
         --input $InputPath `
         --dist $OutputDir `
         --app-name 'adm-desktop' `
@@ -61,6 +63,7 @@ try {
         --install-scope 'user' `
         --start-menu-shortcut=true `
         --desktop-shortcut=false `
+        --confirm-stop-running=true `
         --nsis $NSISPath
     if ($LASTEXITCODE -ne 0) {
         throw "Desktop Kit installer packaging failed (exit code $LASTEXITCODE)"
