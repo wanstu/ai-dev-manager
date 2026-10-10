@@ -149,7 +149,7 @@
 
   installButton.addEventListener('click', async () => {
     if (busy || !lastState?.install_ready) return;
-    if (!window.confirm(`安装 ${lastState.latest_version} 并重启 ADM Desktop？当前 Gateway 后台服务不会停止。`)) return;
+    if (!window.confirm(`安装 ${lastState.latest_version} 并重启 ADM Desktop？\n\n安装期间必须退出使用同一程序文件的本机 Gateway。如果当前连接的是本地 Gateway，ADM 将先安全停止它，这会中断正在运行的后台任务；安装后需要重新启动该服务。\n\n其他 ADM 实例也必须退出。确定继续？`)) return;
     setBusy(true, 'installing');
     status.textContent = '正在启动安装器，完成后将重新启动 Desktop…';
     try {

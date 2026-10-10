@@ -111,7 +111,9 @@ func runDesktop(startHidden bool) error {
 				autoStart.setController(controller)
 				updateManager.onReady(func(status DesktopUpdateStatus) {
 					_ = controller.Emit("desktop:update-progress", status)
-				}, controller.Quit)
+				}, controller.Quit, func() error {
+					return stopActiveLocalGatewayBeforeInstall(adapter)
+				})
 			},
 		},
 		SingleInstance:       true,

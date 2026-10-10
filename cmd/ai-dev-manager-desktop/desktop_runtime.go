@@ -1,6 +1,10 @@
 package main
 
 import (
+	"fmt"
+	"net"
+	"net/url"
+	"strings"
 	"sync"
 
 	"ai-dev-manager-v2/internal/desktop"
@@ -87,6 +91,55 @@ func desktopTrayConfig(icon []byte, adapter *desktop.Adapter, autoStart desktopk
 			}),
 		},
 	}
+}
+
+// stopActiveLocalGatewayBeforeInstall prevents the Kit NSIS executable-name
+// guard from being blocked by ADM's detached --gateway-child subprocess.
+// Never stop a remote or incompatible service, nor an unknown local process.
+func stopActiveLocalGatewayBeforeInstall(adapter *desktop.Adapter) error {
+	if adapter == nil {
+		return fmt.Errorf("Desktop adapter 不可用")
+	}
+	profiles, err := adapter.GetConnectionProfiles()
+	if err != nil {
+		return fmt.Errorf("读取连接配置: %w", err)
+	}
+	profile, ok := activeConnectionProfile(profiles)
+	if !ok || !isLoopbackGatewayBaseURL(profile.BaseURL) {
+		return nil
+	}
+	status, err := adapter.InspectADMConnection(desktop.ADMConnectionInput{BaseURL: profile.BaseURL})
+	if err != nil {
+		return fmt.Errorf("检查本地 Gateway: %w", err)
+	}
+	if !shouldStopActiveLocalBackground(profile, status) {
+		return nil
+	}
+	if status.PID <= 0 {
+		return fmt.Errorf("本地 Gateway 未报告有效 PID；为避免误停止服务，取消自动安装")
+	}
+	if _, err := adapter.StopLocalADM(desktop.ADMConnectionInput{BaseURL: profile.BaseURL}); err != nil {
+		return fmt.Errorf("停止本地 Gateway: %w", err)
+	}
+	// HTTP shutdown may complete slightly before Windows releases the child
+	// executable image. Setup must not race with that process exit.
+	if err := waitForGatewayProcessExit(status.PID); err != nil {
+		return fmt.Errorf("等待本地 Gateway 进程退出: %w", err)
+	}
+	return nil
+}
+
+func isLoopbackGatewayBaseURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func quitAndStopLocalBackground(controller *desktopkit.Controller, adapter *desktop.Adapter) {

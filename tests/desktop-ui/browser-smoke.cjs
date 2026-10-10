@@ -232,7 +232,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       check(!install.hidden, 'User-scope installation exposes Install and Restart');
       install.click();
       await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='InstallDesktopUpdate'), 'Manual confirmation invokes install only on user click');
-      check(window.__fakeADM.confirmations.some(v=>v.includes('安装 v1.4.0-rc.4')), 'Install has explicit confirmation');
+      check(window.__fakeADM.confirmations.some(v=>v.includes('安装 v1.4.0-rc.4') && v.includes('停止它') && v.includes('后台任务')), 'Install warns about stopping the local Gateway and interruption before confirmation');
       check(window.__fakeADM.browserErrors.length===0, 'Updater UI has no browser exceptions');
       result.ok=true;
       return;

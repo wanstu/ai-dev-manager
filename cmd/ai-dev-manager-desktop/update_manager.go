@@ -36,20 +36,21 @@ type DesktopUpdateStatus struct {
 }
 
 type UpdateManager struct {
-	mu            sync.Mutex
-	version       string
-	phase         string
-	installing    bool
-	checked       updater.CheckResult
-	download      updater.DownloadResult
-	cancel        context.CancelFunc
-	bytes         int64
-	total         int64
-	emit          func(DesktopUpdateStatus)
-	quit          func()
-	clientFactory func(bool) *updater.Client
-	installation  func() (updater.Installation, error)
-	cacheDir      func() (string, error)
+	mu             sync.Mutex
+	version        string
+	phase          string
+	installing     bool
+	checked        updater.CheckResult
+	download       updater.DownloadResult
+	cancel         context.CancelFunc
+	bytes          int64
+	total          int64
+	emit           func(DesktopUpdateStatus)
+	quit           func()
+	prepareInstall func() error
+	clientFactory  func(bool) *updater.Client
+	installation   func() (updater.Installation, error)
+	cacheDir       func() (string, error)
 }
 
 func newUpdateManager(version string) *UpdateManager {
@@ -82,11 +83,12 @@ func newUpdateManager(version string) *UpdateManager {
 	}
 }
 
-func (m *UpdateManager) onReady(emit func(DesktopUpdateStatus), quit func()) {
+func (m *UpdateManager) onReady(emit func(DesktopUpdateStatus), quit func(), prepareInstall func() error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.emit = emit
 	m.quit = quit
+	m.prepareInstall = prepareInstall
 }
 
 func (m *UpdateManager) stateLocked(mode string) DesktopUpdateStatus {
@@ -286,8 +288,17 @@ func (m *UpdateManager) InstallDesktopUpdate() error {
 	}
 	m.installing = true
 	m.phase = "installing"
-	download, quit := m.download, m.quit
+	download, quit, prepare := m.download, m.quit, m.prepareInstall
 	m.mu.Unlock()
+	if prepare != nil {
+		if err := prepare(); err != nil {
+			m.mu.Lock()
+			m.installing = false
+			m.phase = "downloaded"
+			m.mu.Unlock()
+			return fmt.Errorf("安装前安全停止本地 Gateway 失败，请使用托盘“退出（不保留后台）”后手动安装：%w", err)
+		}
+	}
 	if _, err := updater.InstallAndRestart(desktopUpdateAppID, download); err != nil {
 		m.mu.Lock()
 		m.installing = false
@@ -295,8 +306,8 @@ func (m *UpdateManager) InstallDesktopUpdate() error {
 		m.mu.Unlock()
 		return err
 	}
-	// Kit Setup waits for the current process to quit; preserve any running
-	// Gateway exactly as with the existing 'exit keeping background' action.
+	// After user-confirmed local Gateway shutdown, Kit Setup waits for this
+	// Desktop PID to quit before replacing the installed executable.
 	quit()
 	return nil
 }
