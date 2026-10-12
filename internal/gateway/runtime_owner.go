@@ -14,6 +14,7 @@ import (
 	"ai-dev-manager-v2/internal/catalog"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpcenter "github.com/wanstu/mcp-center-core"
 )
 
 const (
@@ -91,7 +92,11 @@ func newRuntimeOwner(service *app.Service) *runtimeOwner {
 		indexWatchers:       map[string]context.CancelFunc{},
 	}
 	owner.connect = func(ctx context.Context, mcpID, endpoint string, headers map[string]string) (ownedMCPSession, error) {
-		return connectExternalMCP(ctx, mcpID, endpoint, headers)
+		session, err := mcpcenter.OpenSession(ctx, mcpcenter.Activation{MCPID: mcpID, Transport: mcpcenter.TransportStreamableHTTP, Endpoint: endpoint, Headers: headers})
+		if err != nil {
+			return nil, &app.MCPError{MCPID: mcpID, ErrorKind: app.ClassifyMCPError(err), Message: "external MCP connection failed"}
+		}
+		return session, nil
 	}
 	go owner.monitor()
 	go owner.restoreAutoIndexWatches()
