@@ -532,6 +532,12 @@ func (c *Client) EnvironmentTemporaryPromote(id, ownerID string) (model.Temporar
 	return callAdmin[model.TemporaryEnvironmentStatus](c, context.Background(), "environment_temporary_promote", map[string]any{"environment_id": id, "owner_id": ownerID})
 }
 
+func (c *Client) EnvironmentWorktreeCleanupStale(inactiveSeconds int64, environmentIDs []string, execute bool) (model.ManagedWorktreeCleanupResult, error) {
+	return callAdmin[model.ManagedWorktreeCleanupResult](c, context.Background(), "environment_worktree_cleanup_stale", map[string]any{
+		"inactive_seconds": inactiveSeconds, "environment_ids": environmentIDs, "execute": execute,
+	})
+}
+
 func (c *Client) EnvironmentTemporaryCleanupExpired(execute bool) (model.ResourceRetentionCleanupResult, error) {
 	return callAdmin[model.ResourceRetentionCleanupResult](c, context.Background(), "environment_temporary_cleanup_expired", map[string]any{"execute": execute})
 }

@@ -87,6 +87,10 @@ type managementBackend interface {
 	EnvironmentMemoryDelete(string, string) error
 }
 
+type staleWorktreeCleanupBackend interface {
+	EnvironmentWorktreeCleanupStale(int64, []string, bool) (model.ManagedWorktreeCleanupResult, error)
+}
+
 type temporaryEnvironmentBackend interface {
 	EnvironmentTemporaryStatus(string) (model.TemporaryEnvironmentStatus, error)
 	EnvironmentTemporaryPromote(string, string) (model.TemporaryEnvironmentStatus, error)

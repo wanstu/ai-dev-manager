@@ -3190,7 +3190,7 @@ function renderStaleWorktreeCleanupPreview(result) {
     checkbox.type = 'checkbox';
     checkbox.dataset.staleWorktreeId = item.environment_id || '';
     checkbox.disabled = !item.cleanup_eligible;
-    checkbox.checked = Boolean(item.cleanup_eligible);
+    checkbox.checked = false; // Require explicit selection; preview never preselects deletions.
     const body = document.createElement('span');
     body.className = 'selection-copy';
     const title = document.createElement('strong');
@@ -3210,7 +3210,7 @@ function renderStaleWorktreeCleanupPreview(result) {
   syncStaleWorktreeCleanupExecuteButton();
 }
 async function previewStaleWorktreeCleanup({openDialog = false} = {}) {
-  if (!window.ADMWebSurface) return setStatus('闲置 Worktree 清理当前仅在 Web 管理台开放。', 'error');
+  // The same ADM Admin MCP safety contract applies to Desktop and Web.
   if (openDialog) openEditorDialog('staleWorktreeCleanupDialog');
   elements.staleWorktreeCleanupRefreshButton.disabled = true;
   elements.staleWorktreeCleanupExecuteButton.disabled = true;

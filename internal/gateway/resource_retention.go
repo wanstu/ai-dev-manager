@@ -11,9 +11,24 @@ import (
 )
 
 func (o *runtimeOwner) ResourceRetentionReport(ctx context.Context) (model.ResourceRetentionReport, error) {
+	return o.retentionReportFiltered(ctx, nil)
+}
+
+// Filter before expensive worktree Git checks, while preserving safety checks
+// for every resource returned to callers.
+func (o *runtimeOwner) retentionReportFiltered(ctx context.Context, keep func(model.ResourceRetentionItem) bool) (model.ResourceRetentionReport, error) {
 	report, err := o.service.ResourceRetentionReport(ctx)
 	if err != nil {
 		return model.ResourceRetentionReport{}, err
+	}
+	if keep != nil {
+		filtered := make([]model.ResourceRetentionItem, 0, len(report.Resources))
+		for _, item := range report.Resources {
+			if keep(item) {
+				filtered = append(filtered, item)
+			}
+		}
+		report.Resources = filtered
 	}
 	now := time.Now().UTC()
 	for i := range report.Resources {
@@ -42,7 +57,9 @@ func (o *runtimeOwner) TemporaryEnvironmentStatus(ctx context.Context, environme
 	if err != nil {
 		return model.TemporaryEnvironmentStatus{}, err
 	}
-	report, err := o.ResourceRetentionReport(ctx)
+	report, err := o.retentionReportFiltered(ctx, func(item model.ResourceRetentionItem) bool {
+		return item.Kind == model.RetentionResourceEnvironment && item.ID == environment.ID
+	})
 	if err != nil {
 		return model.TemporaryEnvironmentStatus{}, err
 	}
@@ -88,7 +105,9 @@ func (o *runtimeOwner) TemporaryEnvironmentCleanup(ctx context.Context, environm
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}
-	report, err := o.ResourceRetentionReport(ctx)
+	report, err := o.retentionReportFiltered(ctx, func(item model.ResourceRetentionItem) bool {
+		return item.Kind == model.RetentionResourceEnvironment && item.ID == environment.ID
+	})
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}
@@ -164,30 +183,25 @@ func (o *runtimeOwner) enrichManagedWorktreeRetention(ctx context.Context, item 
 }
 
 func (o *runtimeOwner) ExpiredTemporaryEnvironmentsCleanup(ctx context.Context, execute bool) (model.ResourceRetentionCleanupResult, error) {
-	report, err := o.ResourceRetentionReport(ctx)
+	now := time.Now().UTC()
+	report, err := o.retentionReportFiltered(ctx, func(item model.ResourceRetentionItem) bool {
+		return item.Kind == model.RetentionResourceEnvironment &&
+			item.Retention.Persistence == model.PersistenceTemporary &&
+			item.Retention.ExpiresAt != nil &&
+			!now.Before(item.Retention.ExpiresAt.UTC())
+	})
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
-	}
-	now := time.Now().UTC()
-	filtered := model.ResourceRetentionReport{GeneratedAt: report.GeneratedAt, Resources: []model.ResourceRetentionItem{}}
-	for _, item := range report.Resources {
-		if item.Kind != model.RetentionResourceEnvironment || item.Retention.Persistence != model.PersistenceTemporary || item.Retention.ExpiresAt == nil {
-			continue
-		}
-		if now.Before(item.Retention.ExpiresAt.UTC()) {
-			continue
-		}
-		filtered.Resources = append(filtered.Resources, item)
 	}
 	request := model.ResourceRetentionCleanupRequest{Execute: execute}
 	if !execute {
-		return o.service.ResourceRetentionCleanupFromReport(filtered, request)
+		return o.service.ResourceRetentionCleanupFromReport(report, request)
 	}
-	result, err := o.service.ResourceRetentionCleanupFromRuntimeReport(ctx, filtered, request)
+	result, err := o.service.ResourceRetentionCleanupFromRuntimeReport(ctx, report, request)
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}
-	o.cleanupManagedWorktreeRetention(ctx, filtered, &result)
+	o.cleanupManagedWorktreeRetention(ctx, report, &result)
 	for _, mutation := range result.Removed {
 		if mutation.Kind == model.RetentionResourceEnvironment {
 			o.DropEnvironment(mutation.ID)
