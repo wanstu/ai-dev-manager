@@ -78,6 +78,11 @@ func (o *runtimeOwner) monitorOnce(now time.Time) {
 	}
 	desired := make(map[runtimeOwnerKey]struct{})
 	for _, environment := range environments {
+		// Idle MCP connections for expired temporary Environments should
+		// close instead of preventing cleanup indefinitely.
+		if expiredTemporaryEnvironment(environment, now) {
+			continue
+		}
 		for _, mcpID := range environment.EnabledMCPIDs {
 			key := runtimeOwnerKey{environmentID: environment.ID, mcpID: mcpID}
 			desired[key] = struct{}{}

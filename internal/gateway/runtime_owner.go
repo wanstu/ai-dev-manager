@@ -12,6 +12,7 @@ import (
 
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
+	"ai-dev-manager-v2/internal/model"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpcenter "github.com/wanstu/mcp-center-core"
@@ -60,6 +61,7 @@ type runtimeOwner struct {
 	mu                        sync.Mutex
 	closed                    bool
 	sessions                  map[runtimeOwnerKey]ownedMCPSession
+	activeMCPOperations       map[runtimeOwnerKey]int
 	observations              map[runtimeOwnerKey]app.MCPRuntimeObservation
 	inFlight                  map[runtimeOwnerKey]bool
 	generations               map[runtimeOwnerKey]uint64
@@ -82,6 +84,7 @@ func newRuntimeOwner(service *app.Service) *runtimeOwner {
 		ctx:                 ownerCtx,
 		cancel:              cancel,
 		sessions:            map[runtimeOwnerKey]ownedMCPSession{},
+		activeMCPOperations: map[runtimeOwnerKey]int{},
 		observations:        map[runtimeOwnerKey]app.MCPRuntimeObservation{},
 		inFlight:            map[runtimeOwnerKey]bool{},
 		generations:         map[runtimeOwnerKey]uint64{},
@@ -126,6 +129,10 @@ func (o *runtimeOwner) Reconcile(ctx context.Context) {
 	}
 	desired := make(map[runtimeOwnerKey]struct{})
 	for _, env := range environments {
+		// Expired temporary Environments must not be reactivated at startup.
+		if expiredTemporaryEnvironment(env, time.Now().UTC()) {
+			continue
+		}
 		for _, mcpID := range env.EnabledMCPIDs {
 			key := runtimeOwnerKey{environmentID: env.ID, mcpID: mcpID}
 			desired[key] = struct{}{}
@@ -138,11 +145,13 @@ func (o *runtimeOwner) Reconcile(ctx context.Context) {
 }
 
 func (o *runtimeOwner) Status(ctx context.Context, environmentID, mcpID string) (app.MCPHealthStatus, error) {
+	defer o.trackMCPOperation(runtimeOwnerKey{environmentID: environmentID, mcpID: mcpID})()
 	_, status, err := o.ensureHealthySession(ctx, environmentID, mcpID)
 	return status, err
 }
 
 func (o *runtimeOwner) ListTools(ctx context.Context, environmentID, mcpID string) ([]*mcp.Tool, error) {
+	defer o.trackMCPOperation(runtimeOwnerKey{environmentID: environmentID, mcpID: mcpID})()
 	session, status, err := o.ensureHealthySession(ctx, environmentID, mcpID)
 	if err != nil {
 		return nil, err
@@ -162,6 +171,7 @@ func (o *runtimeOwner) ListTools(ctx context.Context, environmentID, mcpID strin
 }
 
 func (o *runtimeOwner) CallTool(ctx context.Context, environmentID, mcpID, tool string, arguments map[string]any) (*mcp.CallToolResult, error) {
+	defer o.trackMCPOperation(runtimeOwnerKey{environmentID: environmentID, mcpID: mcpID})()
 	session, status, err := o.ensureHealthySession(ctx, environmentID, mcpID)
 	if err != nil {
 		return nil, err
@@ -245,6 +255,7 @@ func (o *runtimeOwner) Close() error {
 		verifierRuns = append(verifierRuns, run)
 	}
 	o.sessions = map[runtimeOwnerKey]ownedMCPSession{}
+	o.activeMCPOperations = map[runtimeOwnerKey]int{}
 	o.observations = map[runtimeOwnerKey]app.MCPRuntimeObservation{}
 	o.inFlight = map[runtimeOwnerKey]bool{}
 	o.desiredFingerprints = map[runtimeOwnerKey]string{}
@@ -437,6 +448,10 @@ func (o *runtimeOwner) drop(key runtimeOwnerKey) {
 }
 
 func (o *runtimeOwner) dropMatching(match func(runtimeOwnerKey) bool) {
+	o.dropMatchingInternal(match, false)
+}
+
+func (o *runtimeOwner) dropMatchingInternal(match func(runtimeOwnerKey) bool, protectActive bool) {
 	var sessions []ownedMCPSession
 	o.mu.Lock()
 	if !o.closed {
@@ -457,6 +472,9 @@ func (o *runtimeOwner) dropMatching(match func(runtimeOwnerKey) bool) {
 			}
 		}
 		for key := range keys {
+			if protectActive && (o.inFlight[key] || o.activeMCPOperations[key] > 0) {
+				continue
+			}
 			session := o.sessions[key]
 			if !match(key) {
 				continue
@@ -478,10 +496,33 @@ func (o *runtimeOwner) dropMatching(match func(runtimeOwnerKey) bool) {
 }
 
 func (o *runtimeOwner) pruneToDesired(desired map[runtimeOwnerKey]struct{}) {
-	o.dropMatching(func(key runtimeOwnerKey) bool {
+	o.dropMatchingInternal(func(key runtimeOwnerKey) bool {
 		_, ok := desired[key]
 		return !ok
-	})
+	}, true)
+}
+
+func expiredTemporaryEnvironment(environment model.Environment, now time.Time) bool {
+	return environment.Retention.Persistence == model.PersistenceTemporary &&
+		environment.Retention.ExpiresAt != nil &&
+		!now.Before(environment.Retention.ExpiresAt.UTC())
+}
+
+// Cached upstream sessions are not user activity. Track actual use separately
+// so expired worktrees can be cleaned without interrupting MCP calls.
+func (o *runtimeOwner) trackMCPOperation(key runtimeOwnerKey) func() {
+	o.mu.Lock()
+	o.activeMCPOperations[key]++
+	o.mu.Unlock()
+	return func() {
+		o.mu.Lock()
+		if o.activeMCPOperations[key] <= 1 {
+			delete(o.activeMCPOperations, key)
+		} else {
+			o.activeMCPOperations[key]--
+		}
+		o.mu.Unlock()
+	}
 }
 
 func (o *runtimeOwner) observedStatuses() []app.MCPHealthStatus {

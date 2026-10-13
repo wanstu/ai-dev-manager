@@ -305,19 +305,33 @@ func removeRetentionSkipped(result *model.ResourceRetentionCleanupResult, kind, 
 }
 
 func (o *runtimeOwner) runtimeRetentionBlockers(kind, id string) []string {
+	expiredEnvironment := false
+	if kind == model.RetentionResourceEnvironment && o.service != nil {
+		if env, err := o.service.Environments.Get(id); err == nil {
+			expiredEnvironment = expiredTemporaryEnvironment(env, time.Now().UTC())
+		}
+	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	blockers := []string{}
 	switch kind {
 	case model.RetentionResourceEnvironment:
-		for key, session := range o.sessions {
-			if key.environmentID == id && session != nil {
-				blockers = append(blockers, "active_mcp_session")
-				break
+		if !expiredEnvironment {
+			for key, session := range o.sessions {
+				if key.environmentID == id && session != nil {
+					blockers = append(blockers, "active_mcp_session")
+					break
+				}
 			}
 		}
 		for key, inFlight := range o.inFlight {
 			if key.environmentID == id && inFlight {
+				blockers = append(blockers, "mcp_operation_in_flight")
+				break
+			}
+		}
+		for key, count := range o.activeMCPOperations {
+			if key.environmentID == id && count > 0 {
 				blockers = append(blockers, "mcp_operation_in_flight")
 				break
 			}
