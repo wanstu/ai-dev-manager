@@ -3886,6 +3886,20 @@ elements.gatewayAccessSetAgentKey.addEventListener('click', setGatewayAgentAPIKe
 elements.gatewayAccessClearAgentKey.addEventListener('click', clearGatewayAgentAPIKey);
 elements.execAuthorizationSave.addEventListener('click', saveExecAuthorizationMode);
 elements.cleanupExpiredTemporaryEnvironmentsButton.addEventListener('click', cleanupExpiredTemporaryEnvironments);
+document.getElementById('migrateManagedWorktreesButton')?.addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const preview = await desktopAdapter().MigrateManagedWorktreesToTemporary(false);
+    const count = safeArray(preview?.candidates).length;
+    if (!count) { setStatus('没有需要迁移的持久化 worktree。', 'success'); return; }
+    if (!window.confirm(`将 ${count} 个历史持久化 worktree 转为临时 Env，赋予新的 30 天有效期。仅修改 ADM 生命周期元数据，不删除工作目录、代码或 Git 分支。到期清理仍逐项执行 Git 和运行状态安全检查。继续？`)) return;
+    const result = await desktopAdapter().MigrateManagedWorktreesToTemporary(true);
+    await refreshSnapshot();
+    setStatus(`已迁移 ${safeArray(result?.converted).length} 个 worktree；未删除文件或 Git 分支。`, 'success');
+  } catch (error) { setStatus('Worktree 生命周期迁移失败：' + errorText(error), 'error'); }
+  finally { button.disabled = false; }
+});
 elements.cleanupStaleWorktreesButton?.addEventListener('click', () => previewStaleWorktreeCleanup({openDialog: true}));
 elements.staleWorktreeCleanupRefreshButton?.addEventListener('click', () => previewStaleWorktreeCleanup());
 elements.staleWorktreeCleanupExecuteButton?.addEventListener('click', executeStaleWorktreeCleanup);

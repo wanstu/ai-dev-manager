@@ -167,6 +167,11 @@ func (s *Service) PromoteTemporaryEnvironment(environmentID, ownerID string) (mo
 			if environment.ID != environmentID {
 				continue
 			}
+			for _, managed := range state.ManagedWorktrees {
+				if managed.EnvironmentID == environmentID {
+					return fmt.Errorf("managed worktree Environment %s cannot be promoted to durable", environmentID)
+				}
+			}
 			if environment.Retention.Persistence != model.PersistenceTemporary {
 				return fmt.Errorf("environment %s is not temporary", environmentID)
 			}

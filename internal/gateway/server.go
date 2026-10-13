@@ -586,7 +586,7 @@ func isAdminOnlyTool(name string) bool {
 	switch name {
 	case "project_index_auto_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
-		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_worktree_create", "environment_worktree_cleanup_stale",
+		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
 		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_access_policy_set", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
 		"secret_list", "secret_set", "secret_delete", "mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
@@ -966,7 +966,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_create", Description: "Create a fresh ADM-managed Git worktree Environment under the configured worktree root. The agent must provide branch_name; ADM prepends the configured branch_prefix, validates the final ASCII Git ref, resolves base_ref to an exact commit, and never reuses/resets an old managed worktree. migrate_uncommitted_changes optionally carries tracked staged/unstaged/deleted/renamed plus untracked non-ignored source changes; conflicts fail and roll back creation."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_create", Description: "Create a fresh temporary ADM-managed Git worktree Environment (30-day TTL) under the configured worktree root. Admin-only. The caller must provide branch_name; ADM prepends the configured branch_prefix, validates the final ASCII Git ref, resolves base_ref to an exact commit, and never reuses/resets an old managed worktree. migrate_uncommitted_changes optionally carries tracked staged/unstaged/deleted/renamed plus untracked non-ignored source changes; conflicts fail and roll back creation."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentWorktreeCreateInput) (*mcp.CallToolResult, any, error) {
 			workspaceID := strings.TrimSpace(in.WorkspaceID)
 			sourceEnvironmentID := strings.TrimSpace(in.SourceEnvironmentID)
@@ -990,6 +990,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.ManagedWorktrees()
 			return toolResult(items, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_migrate_temporary", Description: "Admin-only preview or metadata-only migration of legacy durable managed worktree Environments to temporary lifecycle with a 30-day grace period. Does not delete files or branches."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCleanupExpiredInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.MigrateManagedWorktreeRetention(in.Execute)
+			return toolResult(value, err)
 		})
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_cleanup_stale", Description: "Admin-only conservative cleanup for stale durable managed worktrees. Preview is the default. execute=true requires explicit environment_ids and only removes candidates that remain inactive, have no active writer/runtime blockers, are clean, and have no unpublished commits. There is no force path; retained branches are preserved."},

@@ -547,6 +547,17 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, fmt.Errorf("persistent runtime owner is unavailable")
 		}
 		return h.owner.probeJetBrainsNativeSearch(ctx, s1, s2, limit)
+	case "MigrateManagedWorktreesToTemporary":
+		if h.owner == nil || h.owner.service == nil {
+			return nil, fmt.Errorf("persistent runtime owner is unavailable")
+		}
+		var execute bool
+		if len(call.Args) > 0 {
+			if err := arg(0, &execute); err != nil {
+				return nil, err
+			}
+		}
+		return h.owner.service.MigrateManagedWorktreeRetention(execute)
 	case "CleanupStaleManagedWorktrees":
 		var inactiveSeconds int64
 		var environmentIDs []string

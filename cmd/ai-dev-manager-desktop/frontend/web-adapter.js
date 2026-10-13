@@ -23,7 +23,7 @@
     'DeleteEnvironmentMemory','AcquireRuntimeWriter','ReleaseRuntimeWriter','ListVerifiers',
     'RunVerifier','ListProcesses','GetProcessLogs','StopProcess','ListRuns','CancelRun',
     'GetTemporaryEnvironmentStatus','PromoteTemporaryEnvironment','CleanupTemporaryEnvironment',
-    'CleanupExpiredTemporaryEnvironments','CleanupStaleManagedWorktrees'
+    'CleanupExpiredTemporaryEnvironments','CleanupStaleManagedWorktrees','MigrateManagedWorktreesToTemporary'
   ];
 
   async function call(method, ...args) {

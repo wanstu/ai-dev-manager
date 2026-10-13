@@ -161,12 +161,12 @@ func TestCreateTemporaryManagedWorktreePersistsRetentionAndKeepsSourceUnchanged(
 		t.Fatalf("source HEAD changed: got %q want %q", got, headBefore)
 	}
 
-	if _, err := service.PromoteTemporaryEnvironment(created.Environment.ID, "owner-managed"); err != nil {
-		t.Fatal(err)
+	if _, err := service.PromoteTemporaryEnvironment(created.Environment.ID, "owner-managed"); err == nil {
+		t.Fatal("managed worktree promotion to durable must be refused")
 	}
-	managedAfterPromotion, ok, err := service.Isolation.GetByEnvironment(created.Environment.ID)
-	if err != nil || !ok || managedAfterPromotion.ID != managed.ID || managedAfterPromotion.Branch != managed.Branch {
-		t.Fatalf("promotion changed managed worktree metadata: before=%+v after=%+v ok=%v err=%v", managed, managedAfterPromotion, ok, err)
+	managedAfterRefusal, ok, err := service.Isolation.GetByEnvironment(created.Environment.ID)
+	if err != nil || !ok || managedAfterRefusal.ID != managed.ID || managedAfterRefusal.Branch != managed.Branch {
+		t.Fatalf("refused promotion changed managed worktree metadata: before=%+v after=%+v ok=%v err=%v", managed, managedAfterRefusal, ok, err)
 	}
 
 	writerOwner := "test-cleanup-managed"

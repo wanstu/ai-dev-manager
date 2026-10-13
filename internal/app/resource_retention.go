@@ -37,6 +37,13 @@ func (s *Service) PromoteResourceRetention(request model.ResourceRetentionUpdate
 	now := time.Now().UTC()
 	result := model.ResourceRetentionUpdateResult{Action: model.RetentionUpdateActionPromoteDurable, GeneratedAt: now}
 	err = s.Store.Update(func(state *model.State) error {
+		if normalized.Kind == model.RetentionResourceEnvironment {
+			for _, managed := range state.ManagedWorktrees {
+				if managed.EnvironmentID == normalized.ID {
+					return fmt.Errorf("managed worktree Environment %s cannot be promoted to durable", normalized.ID)
+				}
+			}
+		}
 		updated, updateErr := updateResourceRetentionState(state, normalized, now, func(current model.ResourceRetention) model.ResourceRetention {
 			return promoteRetentionDurable(current, normalized, now)
 		})

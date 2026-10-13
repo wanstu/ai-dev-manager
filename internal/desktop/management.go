@@ -168,6 +168,18 @@ func (a *Adapter) PromoteTemporaryEnvironment(id, ownerID string) (model.Tempora
 	return backend.EnvironmentTemporaryPromote(id, ownerID)
 }
 
+// MigrateManagedWorktreesToTemporary converts only legacy retention metadata.
+func (a *Adapter) MigrateManagedWorktreesToTemporary(execute bool) (model.ManagedWorktreeRetentionMigrationResult, error) {
+	if err := a.ready(); err != nil {
+		return model.ManagedWorktreeRetentionMigrationResult{}, err
+	}
+	backend, ok := a.management.(managedWorktreeMigrationBackend)
+	if !ok {
+		return model.ManagedWorktreeRetentionMigrationResult{}, errors.New("worktree migration requires ADM Admin MCP")
+	}
+	return backend.EnvironmentWorktreeMigrateTemporary(execute)
+}
+
 // CleanupStaleManagedWorktrees is exposed to both Desktop and Web. ADM Admin
 // MCP enforces the final safety recheck and requires explicit IDs on execution.
 func (a *Adapter) CleanupStaleManagedWorktrees(inactiveSeconds int64, environmentIDs []string, execute bool) (model.ManagedWorktreeCleanupResult, error) {

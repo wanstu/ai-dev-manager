@@ -87,6 +87,10 @@ type managementBackend interface {
 	EnvironmentMemoryDelete(string, string) error
 }
 
+type managedWorktreeMigrationBackend interface {
+	EnvironmentWorktreeMigrateTemporary(bool) (model.ManagedWorktreeRetentionMigrationResult, error)
+}
+
 type staleWorktreeCleanupBackend interface {
 	EnvironmentWorktreeCleanupStale(int64, []string, bool) (model.ManagedWorktreeCleanupResult, error)
 }

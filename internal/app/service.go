@@ -295,14 +295,14 @@ func (s *Service) CreateManagedWorktree(ctx context.Context, workspaceID, name s
 	if s.Isolation == nil {
 		return isolation.CreateResult{}, fmt.Errorf("managed worktree isolation is unavailable")
 	}
-	return s.Isolation.Create(ctx, workspaceID, name, options)
+	return s.Isolation.CreateWithRetention(ctx, workspaceID, name, options, newAdminWorktreeRetention())
 }
 
 func (s *Service) CreateManagedWorktreeFromEnvironment(ctx context.Context, sourceEnvironmentID, name string, options isolation.CreateOptions) (isolation.CreateResult, error) {
 	if s.Isolation == nil {
 		return isolation.CreateResult{}, fmt.Errorf("managed worktree isolation is unavailable")
 	}
-	return s.Isolation.CreateFromEnvironment(ctx, sourceEnvironmentID, name, options)
+	return s.Isolation.CreateFromEnvironmentWithRetention(ctx, sourceEnvironmentID, name, options, newAdminWorktreeRetention())
 }
 
 func (s *Service) ManagedWorktrees() ([]model.ManagedWorktree, error) {
