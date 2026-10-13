@@ -285,7 +285,7 @@ func TestDestroyRefusesUnpublishedCommitAndRetainsCommittedWork(t *testing.T) {
 	if _, err := environments.AcquireWriter(created.Environment.ID, "writer"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Destroy(ctx, created.Environment.ID, "writer", false); err == nil || !strings.Contains(err.Error(), "not present in any remote-tracking ref") {
+	if _, err := service.Destroy(ctx, created.Environment.ID, "writer", false); err == nil || !strings.Contains(err.Error(), "not verified on any freshly fetched remote branch") {
 		t.Fatalf("unpublished local commit must block default destroy, got %v", err)
 	}
 	if _, err := service.Destroy(ctx, created.Environment.ID, "writer", true); err != nil {

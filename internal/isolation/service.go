@@ -64,6 +64,7 @@ type DestroyResult struct {
 
 type SafetyStatus struct {
 	Dirty       bool   `json:"dirty"`
+	Ignored     bool   `json:"ignored"`
 	Unpublished bool   `json:"unpublished"`
 	Head        string `json:"head"`
 }
@@ -359,20 +360,49 @@ func (s *Service) Safety(ctx context.Context, environmentID string) (SafetyStatu
 	if err != nil {
 		return SafetyStatus{}, err
 	}
+	// Git status excludes ignored files (build artifacts and local secrets).
+	// Those would also be removed with the worktree, so treat them as dirty.
+	ignored, err := s.gitOutput(ctx, managed.Root, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory")
+	if err != nil {
+		return SafetyStatus{}, err
+	}
 	head, err := s.gitOutput(ctx, managed.Root, "rev-parse", "HEAD")
 	if err != nil {
 		return SafetyStatus{}, err
 	}
 	head = strings.TrimSpace(head)
-	unpublished := false
-	if head != managed.BaseCommit {
-		remoteRefs, err := s.gitOutput(ctx, managed.Root, "branch", "-r", "--contains", head, "--format=%(refname:short)")
+	safety := SafetyStatus{Dirty: strings.TrimSpace(status) != "" || strings.TrimSpace(ignored) != "", Ignored: strings.TrimSpace(ignored) != "", Head: head}
+	if safety.Dirty || head == managed.BaseCommit {
+		return safety, nil
+	}
+	// Remote-tracking refs are a cache, not evidence of current publication.
+	remotes, err := s.gitOutput(ctx, managed.Root, "remote")
+	if err != nil {
+		return SafetyStatus{}, err
+	}
+	if strings.TrimSpace(remotes) == "" {
+		safety.Unpublished = true
+		return safety, nil
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	published := false
+	for _, remote := range strings.Fields(remotes) {
+		// Explicitly fetch configured remotes; skipFetchAll can leave stale refs.
+		if _, err := s.gitOutput(fetchCtx, managed.Root, "fetch", "--no-tags", "--prune", remote); err != nil {
+			return SafetyStatus{}, fmt.Errorf("cannot verify published commits against remote %q: %w", remote, err)
+		}
+		// Ignore cached refs belonging to a remote that no longer exists.
+		refs, err := s.gitOutput(ctx, managed.Root, "for-each-ref", "--contains="+head, "--format=%(refname:short)", "refs/remotes/"+remote+"/")
 		if err != nil {
 			return SafetyStatus{}, err
 		}
-		unpublished = strings.TrimSpace(remoteRefs) == ""
+		if strings.TrimSpace(refs) != "" {
+			published = true
+		}
 	}
-	return SafetyStatus{Dirty: strings.TrimSpace(status) != "", Unpublished: unpublished, Head: head}, nil
+	safety.Unpublished = !published
+	return safety, nil
 }
 
 func (s *Service) Destroy(ctx context.Context, environmentID, writerOwner string, force bool) (DestroyResult, error) {
@@ -400,7 +430,7 @@ func (s *Service) Destroy(ctx context.Context, environmentID, writerOwner string
 			reasons = append(reasons, "dirty worktree")
 		}
 		if safety.Unpublished {
-			reasons = append(reasons, "locally advanced HEAD is not present in any remote-tracking ref")
+			reasons = append(reasons, "locally advanced HEAD is not verified on any freshly fetched remote branch")
 		}
 		return DestroyResult{}, fmt.Errorf("managed worktree %s destroy refused: %s; retry with force=true only after review", managed.ID, strings.Join(reasons, ", "))
 	}

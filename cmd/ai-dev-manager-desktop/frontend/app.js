@@ -3158,6 +3158,7 @@ function staleWorktreeBlockerText(blocker) {
     active_run: 'Run 仍在运行',
     active_verifier_run: 'Verifier 仍在运行',
     managed_worktree_dirty: '存在未提交文件变更',
+    managed_worktree_ignored_files: '存在 Git 忽略的本地文件',
     managed_worktree_unpublished: '存在未发布提交',
     managed_worktree_safety_check_failed: 'Git 安全检查失败',
     candidate_inspection_failed: '候选检查失败',

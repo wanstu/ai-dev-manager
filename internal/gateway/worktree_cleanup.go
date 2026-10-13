@@ -74,6 +74,9 @@ func (o *runtimeOwner) StaleManagedWorktreeCleanup(ctx context.Context, inactive
 				fresh.Blockers = append(fresh.Blockers, "managed_worktree_dirty")
 				fresh.Dirty = true
 			}
+			if safety.Ignored {
+				fresh.Blockers = append(fresh.Blockers, "managed_worktree_ignored_files")
+			}
 			if safety.Unpublished {
 				fresh.Blockers = append(fresh.Blockers, "managed_worktree_unpublished")
 				fresh.Unpublished = true
@@ -199,6 +202,9 @@ func (o *runtimeOwner) managedWorktreeCleanupCandidate(ctx context.Context, envi
 		candidate.Unpublished = safety.Unpublished
 		if safety.Dirty {
 			candidate.Blockers = append(candidate.Blockers, "managed_worktree_dirty")
+		}
+		if safety.Ignored {
+			candidate.Blockers = append(candidate.Blockers, "managed_worktree_ignored_files")
 		}
 		if safety.Unpublished {
 			candidate.Blockers = append(candidate.Blockers, "managed_worktree_unpublished")

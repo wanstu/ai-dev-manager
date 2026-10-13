@@ -177,6 +177,9 @@ func (o *runtimeOwner) enrichManagedWorktreeRetention(ctx context.Context, item 
 	if safety.Dirty {
 		item.Blockers = append(item.Blockers, "managed_worktree_dirty")
 	}
+	if safety.Ignored {
+		item.Blockers = append(item.Blockers, "managed_worktree_ignored_files")
+	}
 	if safety.Unpublished {
 		item.Blockers = append(item.Blockers, "managed_worktree_unpublished")
 	}
