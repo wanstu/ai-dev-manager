@@ -296,6 +296,40 @@ func TestDestroyRefusesUnpublishedCommitAndRetainsCommittedWork(t *testing.T) {
 	}
 }
 
+func TestDestroyNestedManagedWorktreeAfterSourceWorktreeRemoved(t *testing.T) {
+	s, envs, ws, source := newGitIsolationService(t)
+	ctx := context.Background()
+	parent, err := s.Create(ctx, ws.ID, "parent", CreateOptions{BranchName: "test/parent-cleanup", BaseRef: "HEAD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.CreateFromEnvironment(ctx, parent.Environment.ID, "child", CreateOptions{BranchName: "test/child-cleanup", BaseRef: "HEAD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := envs.AcquireWriter(parent.Environment.ID, "parent-writer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Destroy(ctx, parent.Environment.ID, "parent-writer", false); err != nil {
+		t.Fatalf("remove parent worktree: %v", err)
+	}
+	if _, err := os.Stat(parent.ManagedWorktree.Root); !os.IsNotExist(err) {
+		t.Fatalf("parent directory should be gone: %v", err)
+	}
+	if _, err := envs.AcquireWriter(child.Environment.ID, "child-writer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Destroy(ctx, child.Environment.ID, "child-writer", false); err != nil {
+		t.Fatalf("remove child after its recorded source is gone: %v", err)
+	}
+	if _, err := os.Stat(child.ManagedWorktree.Root); !os.IsNotExist(err) {
+		t.Fatalf("child directory should be gone: %v", err)
+	}
+	for _, branch := range []string{parent.ManagedWorktree.Branch, child.ManagedWorktree.Branch} {
+		gitRun(t, source, "show-ref", "--verify", "refs/heads/"+branch)
+	}
+}
+
 func TestCleanDestroyNeedsWriterAndRetainsBranch(t *testing.T) {
 	service, environments, ws, source := newGitIsolationService(t)
 	ctx := context.Background()

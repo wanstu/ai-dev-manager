@@ -404,20 +404,9 @@ func (s *Service) Destroy(ctx context.Context, environmentID, writerOwner string
 		}
 		return DestroyResult{}, fmt.Errorf("managed worktree %s destroy refused: %s; retry with force=true only after review", managed.ID, strings.Join(reasons, ", "))
 	}
-	sourceRoot := strings.TrimSpace(managed.SourceRoot)
-	if sourceRoot == "" {
-		ws, getErr := s.workspaces.Get(managed.WorkspaceID)
-		if getErr != nil {
-			return DestroyResult{}, getErr
-		}
-		sourceRoot = ws.Path
-	}
-	args := []string{"worktree", "remove"}
-	if force {
-		args = append(args, "--force")
-	}
-	args = append(args, managed.Root)
-	if _, err := s.gitOutput(ctx, sourceRoot, args...); err != nil {
+	// The original source checkout may itself be a worktree that has been
+	// removed. The validated Git common directory remains authoritative.
+	if err := s.removeWorktreeViaCommonDir(ctx, managed, force); err != nil {
 		return DestroyResult{}, fmt.Errorf("remove managed worktree %s: %w", managed.ID, err)
 	}
 	if _, _, err := s.environments.RemoveManaged(env.ID); err != nil {
@@ -826,6 +815,25 @@ func normalizeBranchPrefix(value string) (string, error) {
 		return "", fmt.Errorf("invalid worktree branch prefix %q: %w", value, err)
 	}
 	return value, nil
+}
+
+func (s *Service) removeWorktreeViaCommonDir(ctx context.Context, managed model.ManagedWorktree, force bool) error {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return err
+	}
+	args := []string{"--git-dir=" + managed.GitCommonDir, "worktree", "remove"}
+	if force {
+		args = append(args, "--force")
+	}
+	args = append(args, managed.Root)
+	cmd := exec.CommandContext(ctx, git, args...)
+	configureProcessCommand(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git worktree remove: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 func (s *Service) gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
