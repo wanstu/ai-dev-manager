@@ -1543,12 +1543,29 @@ function showRuntimeOutput(kind, id, title, stdout = '', stderr = '', meta = '',
 function renderRuntimeListState(kind, emptyText, renderItems) {
   const container = runtimeContainer(kind), count = runtimeCountElement(kind), state = runtimeListStates[kind], items = safeArray(runtimeLists[kind]);
   setMetric(count, state === 'success' ? items.length : state === 'loading' ? '…' : '—');
+  if (runtimeSubview === kind && (!currentEnvironment() || state !== 'success')) {
+    setMetric(document.getElementById('runtimeVisibleCount'), state === 'loading' ? '…' : '—');
+    setMetric(document.getElementById('runtimeListTotalCount'), state === 'loading' ? '…' : '—');
+  }
   if (!currentEnvironment()) return emptyMessage(container, '请选择 Environment');
   if (state === 'loading') return emptyMessage(container, `正在读取 ${kind}…`);
   if (state === 'error') return emptyMessage(container, `${kind} 状态不可用：${runtimeListErrors[kind] || 'unknown error'}`);
   if (state !== 'success') return emptyMessage(container, `${kind} 尚未加载`);
+  const queryMatches = searchMatcher(filterValue('runtimeFilter', ''));
+  const stateFilter = filterValue('runtimeStateFilter');
+  const filtered = items.filter(item => {
+    const haystack = [item.name, item.id, item.verifier_id, item.executable, item.cwd, item.kind, item.pid, ...safeArray(item.args)].filter(Boolean).join(' ');
+    const state = kind === 'verifiers' ? (item.enabled === false ? 'disabled' : 'configured') : String(item.state || 'unknown');
+    const stateMatch = stateFilter === 'all' || (stateFilter === 'running' && state === 'running') || (stateFilter === 'not-running' && state !== 'running') || (stateFilter === 'disabled' && state === 'disabled');
+    return queryMatches(haystack) && stateMatch;
+  });
+  if (runtimeSubview === kind) {
+    setMetric(document.getElementById('runtimeVisibleCount'), filtered.length);
+    setMetric(document.getElementById('runtimeListTotalCount'), items.length);
+  }
   if (!items.length) return emptyMessage(container, emptyText);
-  container.replaceChildren(); container.classList.remove('empty'); renderItems(items, container);
+  if (!filtered.length) return emptyMessage(container, '当前运行视图没有符合筛选条件的项目。');
+  container.replaceChildren(); container.classList.remove('empty'); renderItems(filtered, container);
 }
 function renderRuntime() {
   syncRuntimeSubviewUI();
@@ -1632,6 +1649,54 @@ async function runRuntimeAction(label, actionKey, scope, action) {
     return result;
   } finally { runtimePendingActionKey = ''; renderRuntime(); }
 }
+function filterValue(id, fallback = 'all') {
+  return document.getElementById(id)?.value || fallback;
+}
+function defaultEnabledMatches(entry, filter) {
+  if (filter === 'enabled') return Boolean(entry?.default_include_in_environment);
+  if (filter === 'disabled') return !entry?.default_include_in_environment;
+  return true;
+}
+function sourceRefreshMatches(state, filter) {
+  return filter === 'all' || normalizedState(state || 'pending') === filter;
+}
+const managementFilterGroups = {
+  workspaces: ['workspaceFilter', 'workspaceEnvironmentFilter', 'workspaceSort'],
+  environments: ['environmentFilter', 'environmentWorkspaceFilter', 'environmentRetentionFilter', 'environmentKindFilter', 'environmentWriterFilter', 'environmentSort'],
+  mcp: ['mcpFilter', 'mcpStateFilter', 'mcpTransportFilter', 'mcpDefaultFilter'],
+  skills: ['skillFilter', 'skillSourceFilter', 'skillStateFilter', 'skillDefaultFilter'],
+  'skill-sources': ['skillSourceFilterInput', 'skillSourceStateFilter'],
+  runtime: ['runtimeFilter', 'runtimeStateFilter'],
+  'exec-lists': ['execListFilter']
+};
+function refreshManagementFilterGroup(group) {
+  if (group === 'workspaces') renderWorkspaces(safeArray(currentSnapshot?.workspaces));
+  else if (group === 'environments') renderEnvironments(safeArray(currentSnapshot?.environments));
+  else if (group === 'mcp') renderMCPManager(safeArray(currentSnapshot?.mcps));
+  else if (group === 'skills') renderSkillManager(safeArray(currentSnapshot?.skills));
+  else if (group === 'skill-sources') renderSkillSources();
+  else if (group === 'runtime') renderRuntime();
+  else if (group === 'exec-lists') renderExecUsageFromSnapshot();
+}
+for (const [group, ids] of Object.entries(managementFilterGroups)) {
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (el && !['workspaceFilter', 'environmentFilter', 'environmentWorkspaceFilter', 'mcpFilter', 'mcpStateFilter', 'skillFilter', 'skillSourceFilter', 'skillStateFilter', 'skillSourceFilterInput'].includes(id)) {
+      el.addEventListener(el.type === 'search' ? 'input' : 'change', () => refreshManagementFilterGroup(group));
+    }
+  }
+}
+document.addEventListener('click', (event) => {
+  const reset = event.target.closest('[data-clear-filters]');
+  if (!reset) return;
+  const group = reset.dataset.clearFilters;
+  for (const id of managementFilterGroups[group] || []) {
+    const element = document.getElementById(id);
+    if (!element) continue;
+    element.value = element.options ? element.options[0].value : '';
+  }
+  refreshManagementFilterGroup(group);
+});
 function renderEnvironmentWorkspaceFilter(workspaces) {
   const current = elements.environmentWorkspaceFilter.value;
   elements.environmentWorkspaceFilter.replaceChildren();
@@ -1646,7 +1711,7 @@ function renderEnvironmentWorkspaceFilter(workspaces) {
   elements.environmentFilterHint.textContent = exists ? '' : `Workspace 筛选 ${current} 已失效。请选择“全部 Workspace”或其他 Workspace 重置筛选。`;
 }
 function renderWorkspaces(workspaces) {
-  const model = window.ADMProjectPages?.workspaceListModel(workspaces, safeArray(currentSnapshot?.environments), elements.workspaceFilter.value) || {items: workspaces, total: workspaces.length, visible: workspaces.length, environmentCounts: {}};
+  const model = window.ADMProjectPages?.workspaceListModel(workspaces, safeArray(currentSnapshot?.environments), {query: elements.workspaceFilter.value, occupancy: filterValue('workspaceEnvironmentFilter'), sort: filterValue('workspaceSort', 'name')}) || {items: workspaces, total: workspaces.length, visible: workspaces.length, environmentCounts: {}};
   elements.workspaceBadge.textContent = String(model.total); renderWorkspaceOptions(workspaces); renderEnvironmentWorkspaceFilter(workspaces); setMetric(elements.workspaceVisibleCount, model.visible); setMetric(elements.workspaceListTotalCount, model.total);
   if (!model.total) return emptyMessage(elements.workspaceList, '暂无已登记 Workspace。添加现有目录即可；Git 不是前置条件。');
   if (!model.visible) return emptyMessage(elements.workspaceList, '没有符合当前筛选条件的 Workspace。');
@@ -1687,7 +1752,8 @@ function renderTemporaryLifecycleNote(content, environment) {
   const note = document.createElement('small'); note.className = 'environment-lifecycle-note';
   if (view.persistence !== 'temporary') { note.textContent = view.detail; content.append(note); return; }
   const retention = environment.retention || {}; const provenance = [retention.owner_id ? `Owner ${retention.owner_id}` : 'Owner 未知', retention.session_id ? `Session ${retention.session_id}` : '', retention.run_id ? `Run ${retention.run_id}` : ''].filter(Boolean);
-  const mode = status ? (status.managed_worktree ? 'Managed worktree' : 'Existing root') : 'Mode 未读取';
+  const managedIDs = currentSnapshot?.managed_worktree_environment_ids;
+  const mode = status ? (status.managed_worktree ? 'Managed worktree' : 'Existing root') : Array.isArray(managedIDs) ? (managedIDs.includes(environment.environment_id) ? 'Managed worktree' : '普通 Env') : 'Mode 未读取';
   const blockers = status && !status.cleanup_eligible ? safeArray(status.blockers).join(', ') : '';
   note.textContent = `${view.detail} · ${provenance.join(' · ')} · ${mode}${blockers ? ` · Blocked: ${blockers}` : ''}`;
   content.append(note);
@@ -1843,7 +1909,10 @@ async function applyEnvironmentWorkspaceRecommendations() {
 
 function renderEnvironments(environments) {
   const workspaces = safeArray(currentSnapshot?.workspaces); const workspaceID = elements.environmentWorkspaceFilter.value;
-  const model = window.ADMProjectPages?.environmentListModel(environments, workspaces, {query: elements.environmentFilter.value, workspaceID}) || {items: environments, total: environments.length, visible: environments.length, workspaceNames: {}, workspaceFilterValid: true};
+  const kindInfoLoaded = Array.isArray(currentSnapshot?.managed_worktree_environment_ids);
+  const kindControl = document.getElementById('environmentKindFilter');
+  if (kindControl) { kindControl.disabled = !kindInfoLoaded; kindControl.title = kindInfoLoaded ? '' : '当前 ADM Gateway 未提供 managed worktree 类型索引，请升级 Gateway'; }
+  const model = window.ADMProjectPages?.environmentListModel(environments, workspaces, {query: elements.environmentFilter.value, workspaceID, retention: filterValue('environmentRetentionFilter'), kind: kindInfoLoaded ? filterValue('environmentKindFilter') : 'all', managedIDs: safeArray(currentSnapshot?.managed_worktree_environment_ids), writer: filterValue('environmentWriterFilter'), sort: filterValue('environmentSort', 'recent')}) || {items: environments, total: environments.length, visible: environments.length, workspaceNames: {}, workspaceFilterValid: true};
   elements.environmentBadge.textContent = String(model.total); setMetric(elements.environmentVisibleCount, model.visible); setMetric(elements.environmentListTotalCount, model.total);
   elements.environmentFilterHint.hidden = model.workspaceFilterValid; if (model.workspaceFilterValid) elements.environmentFilterHint.textContent = '';
   if (!model.total) return emptyMessage(elements.environmentList, '暂无 Environment。可以从任意已登记 Workspace 创建，Git 不是前置条件。');
@@ -1980,10 +2049,13 @@ function renderExecutables(executables, blacklist = [], denials = [], usages = [
   elements.execUsageSurfaceSummary.textContent = usageCount ? ('本小时 ' + currentHourCount + ' · 近24小时 ' + recent24Count + ' · Surface：' + execSurfaceText(surfaceTotals) + (spikeNames.length ? ' · 突增：' + spikeNames.join(', ') : '')) : '暂无 surface 统计';
   elements.execClearAllBlockedButton.disabled = denials.length === 0;
 
-  if (!executables.length) emptyMessage(elements.execList, '暂无 allowed executable');
+  const executableMatcher = searchMatcher(filterValue('execListFilter', ''));
+  const visibleExecutables = executables.filter(name => executableMatcher(name));
+  const visibleBlacklist = blacklist.filter(name => executableMatcher(name));
+  if (!visibleExecutables.length) emptyMessage(elements.execList, executables.length ? '没有符合搜索的 Allowed executable。' : '暂无 allowed executable');
   else {
     elements.execList.replaceChildren(); elements.execList.classList.remove('empty');
-    for (const executable of executables) {
+    for (const executable of visibleExecutables) {
       const row = document.createElement('div'); row.className = 'managed-row exec-row';
       const content = document.createElement('div'); content.className = 'item-content';
       const title = document.createElement('div'); title.className = 'item-title-line';
@@ -1997,10 +2069,10 @@ function renderExecutables(executables, blacklist = [], denials = [], usages = [
     }
   }
 
-  if (!blacklist.length) emptyMessage(elements.execBlacklistList, '暂无黑名单 executable');
+  if (!visibleBlacklist.length) emptyMessage(elements.execBlacklistList, blacklist.length ? '没有符合搜索的黑名单 executable。' : '暂无黑名单 executable');
   else {
     elements.execBlacklistList.replaceChildren(); elements.execBlacklistList.classList.remove('empty');
-    for (const executable of blacklist) {
+    for (const executable of visibleBlacklist) {
       const row = document.createElement('div'); row.className = 'managed-row exec-row';
       const content = document.createElement('div'); content.className = 'item-content';
       const title = document.createElement('div'); title.className = 'item-title-line';
@@ -2149,7 +2221,7 @@ function renderMCPManagerContents(mcps) {
   const workspace = currentWorkspace(), environment = currentEnvironment(); const selected = new Set(safeArray(environment?.enabled_mcp_ids)); const explicitSelected = new Set(Array.isArray(environment?.explicit_mcp_ids) ? environment.explicit_mcp_ids : safeArray(environment?.enabled_mcp_ids)); const workspaceSelected = new Set(safeArray(workspace?.enabled_mcp_ids));
   const configIssueStates = new Set(['unavailable', 'degraded', 'unconfigured', 'error']);
   const runtimeIssueStates = new Set(['unavailable', 'degraded', 'unconfigured', 'error']);
-  const queryText = String(elements.mcpFilter?.value || '').trim(); const queryMatches = searchMatcher(queryText); const filter = elements.mcpStateFilter?.value || 'all';
+  const queryText = String(elements.mcpFilter?.value || '').trim(); const queryMatches = searchMatcher(queryText); const filter = elements.mcpStateFilter?.value || 'all'; const transportFilter = filterValue('mcpTransportFilter'); const defaultFilter = filterValue('mcpDefaultFilter');
   let issues = 0, visible = 0;
   elements.mcpBadge.textContent = String(mcps.length); setMetric(elements.mcpTotalCount, mcps.length); setMetric(elements.mcpListTotalCount, mcps.length); setMetric(elements.mcpDefaultCount, mcps.filter((mcp) => mcp.default_include_in_environment).length); setMetric(elements.mcpEnvironmentCount, environment ? mcps.filter((mcp) => selected.has(mcp.id)).length : 0);
   if (!mcps.length) { setMetric(elements.mcpIssueCount, 0); setMetric(elements.mcpVisibleCount, 0); emptyMessage(elements.mcpList, '暂无 MCP 定义。可以添加 typed MCP，或先预览再导入 JSON/JSONC。'); updateMCPBulkControls(); return; }
@@ -2162,7 +2234,7 @@ function renderMCPManagerContents(mcps) {
     const issue = Boolean(health?.error_kind) || configIssueStates.has(configNormalized) || runtimeIssueStates.has(runtimeNormalized); if (issue) issues++;
     const haystack = [entry.name, entry.id, entry.endpoint, entry.executable, entry.transport].filter(Boolean).join(' ');
     const filterMatch = filter === 'all' || (filter === 'selected' && Boolean(environment && enabled)) || (filter === 'unselected' && Boolean(environment && !enabled)) || (filter === 'issues' && issue) || (filter === 'unobserved' && runtimeNormalized === 'not_observed');
-    if (!queryMatches(haystack) || !filterMatch) continue;
+    if (!queryMatches(haystack) || !filterMatch || (transportFilter !== 'all' && entry.transport !== transportFilter) || !defaultEnabledMatches(entry, defaultFilter)) continue;
     visible++;
     const row = document.createElement('article'); row.className = 'resource-row'; row.dataset.id = entry.id || ''; if (entry.id === editingMCPID) row.dataset.editing = 'true';
     const main = document.createElement('div'); main.className = 'resource-main';
@@ -2615,7 +2687,7 @@ function renderSkillSources() {
   for (const source of skillSources) {
     const discovered = safeArray(currentSnapshot?.skills).filter((skill) => skill.source_id === source.skill_source_id);
     const haystack = [source.skill_source_id, source.root, ...safeArray(source.support_roots)].filter(Boolean).join(' ');
-    if (!queryMatches(haystack)) continue;
+    if (!queryMatches(haystack) || !sourceRefreshMatches(source.last_refresh_status || 'pending', filterValue('skillSourceStateFilter'))) continue;
     visible++;
     const status = source.last_refresh_status || 'pending';
     const row = document.createElement('article'); row.className = 'resource-row'; row.dataset.id = source.skill_source_id || '';
@@ -2640,7 +2712,7 @@ function renderSkillManager(skills) {
   syncSkillSubviewUI();
   renderSkillSourceFilterOptions(skills);
   const workspace = currentWorkspace(), environment = currentEnvironment(); const selected = new Set(safeArray(environment?.enabled_skill_ids)); const explicitSelected = new Set(Array.isArray(environment?.explicit_skill_ids) ? environment.explicit_skill_ids : safeArray(environment?.enabled_skill_ids)); const workspaceSelected = new Set(safeArray(workspace?.enabled_skill_ids));
-  const queryText = String(elements.skillFilter?.value || '').trim(); const queryMatches = searchMatcher(queryText); const filter = elements.skillStateFilter?.value || 'all'; const sourceFilter = elements.skillSourceFilter?.value || '';
+  const queryText = String(elements.skillFilter?.value || '').trim(); const queryMatches = searchMatcher(queryText); const filter = elements.skillStateFilter?.value || 'all'; const sourceFilter = elements.skillSourceFilter?.value || ''; const defaultFilter = filterValue('skillDefaultFilter');
   let issues = 0, visible = 0;
   elements.skillBadge.textContent = String(skills.length); setMetric(elements.skillTotalCount, skills.length); setMetric(elements.skillSubviewSkillCount, skills.length); setMetric(elements.skillListTotalCount, skills.length); setMetric(elements.skillEnvironmentCount, environment ? skills.filter((skill) => selected.has(skill.id)).length : 0);
   renderSkillSources();
@@ -2651,7 +2723,7 @@ function renderSkillManager(skills) {
     const haystack = [entry.name, entry.id, entry.relative_artifact_path, entry.artifact_path, entry.source_root, entry.source_id].filter(Boolean).join(' ');
     const sourceMatch = !sourceFilter || (sourceFilter === '__legacy__' ? !entry.source_id : entry.source_id === sourceFilter);
     const filterMatch = filter === 'all' || (filter === 'selected' && Boolean(environment && enabled)) || (filter === 'unselected' && Boolean(environment && !enabled)) || (filter === 'issues' && issue) || (filter === 'source' && Boolean(entry.source_id)) || (filter === 'legacy' && !entry.source_id);
-    if (!queryMatches(haystack) || !sourceMatch || !filterMatch) continue;
+    if (!queryMatches(haystack) || !sourceMatch || !filterMatch || !defaultEnabledMatches(entry, defaultFilter)) continue;
     visible++;
     const fact = managementCapabilityFacts.get('skill/' + entry.id); const row = document.createElement('article'); row.className = 'resource-row'; row.dataset.id = entry.id || ''; const main = document.createElement('div'); main.className = 'resource-main';
     const {header, id} = resourceHeader(entry.name || entry.id, entry.id, [stateBadge('可用性 · ' + humanRuntimeState(state), state), entry.source_id ? stateBadge('Source 管理', 'source') : stateBadge('Legacy', 'legacy')]);
@@ -2720,7 +2792,7 @@ function clearManagementData(message = 'ADM 未连接。连接 Admin MCP 后加�
   elements.mcpImportContent.value = ''; resetMCPImportPreview();
   managementWorkspaceID = ''; managementEnvironmentID = ''; currentSnapshot = null; lastSnapshotSuccessAt = 0;
   gatewayDiagnostics = null; renderGatewayDiagnostics(null);
-  elements.workspaceFilter.value = ''; elements.environmentFilter.value = ''; elements.environmentWorkspaceFilter.value = '';
+  for (const ids of Object.values(managementFilterGroups)) for (const id of ids) { const element = document.getElementById(id); if (element) element.value = element.options ? element.options[0].value : ''; }
   skillSources = []; skillSourcesState = 'unloaded'; skillSourcesError = ''; managementContextError = ''; managementSkillAvailabilityError = '';
   selectedMCPIDs = new Set(); selectedSkillIDs = new Set(); selectedAssignmentEnvironmentIDs = new Set(); capabilityAssignmentBusy = false; explicitSkillAvailabilityProbe = null; skillBulkBusy = false; mcpBulkBusy = false; editingSkillSourceID = ''; skillSubview = 'skills'; syncSkillSubviewUI();
   managementInspection = null; managementCapabilityFacts = new Map(); skillAvailabilityByID = new Map(); environmentSkillAvailabilityByID = new Map(); mcpHealthByKey = new Map(); temporaryLifecycleByEnvironmentID = new Map(); temporaryCleanupPreviewIDs = new Set(); mcpProbeRequests.clear();

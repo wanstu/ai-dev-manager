@@ -29,6 +29,7 @@ const fakeBridge = String.raw`<script>
   ];
   const longRoot = 'C:\\fixtures\\' + 'very-long-segment-'.repeat(18) + 'workspace-a';
   const snapshotA = {
+    managed_worktree_environment_ids: ['env-a'],
     workspaces: [
       {workspace_id:'ws-a', name:'Workspace A', path:longRoot, enabled_mcp_ids:[], enabled_skill_ids:[]},
 
@@ -201,6 +202,39 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('workspaceCount').textContent==='2', 'successful snapshot renders count');
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
+
+    if (new URLSearchParams(location.search).get('focus') === 'filters') {
+      const update=(id,value)=>{ const el=document.getElementById(id); el.value=value; el.dispatchEvent(new Event(el.tagName==='INPUT'?'input':'change',{bubbles:true})); };
+      const rows=(id)=>document.querySelectorAll('#'+id+' .list-item, #'+id+' .resource-row, #'+id+' .managed-row').length;
+      await clickRoute('workspaces');
+      check(rows('workspaceList')===2,'Workspace initial rows available');
+      update('workspaceEnvironmentFilter','with'); check(rows('workspaceList')===2,'Workspace occupancy with Environments');
+      update('workspaceEnvironmentFilter','empty'); check(rows('workspaceList')===0,'Workspace empty occupancy condition');
+      document.querySelector('[data-clear-filters="workspaces"]').click(); check(rows('workspaceList')===2,'Workspace filters reset');
+      await clickRoute('environments');
+      check(rows('environmentList')===2,'Environment initial rows available');
+      update('environmentRetentionFilter','expired'); check(rows('environmentList')===1,'Expired filter uses retention timestamp');
+      update('environmentWriterFilter','active'); check(rows('environmentList')===1,'Expired and Writer filters combine');
+      update('environmentWriterFilter','none'); check(rows('environmentList')===0,'Combined filters exclude nonmatches');
+      document.querySelector('[data-clear-filters="environments"]').click(); check(rows('environmentList')===2,'Environment filter reset');
+      update('environmentRetentionFilter','durable'); check(rows('environmentList')===1,'Durable retention selection');
+      update('environmentRetentionFilter','all'); update('environmentKindFilter','managed'); check(rows('environmentList')===1,'Managed worktree filter uses authoritative snapshot IDs');
+      update('environmentKindFilter','ordinary'); check(rows('environmentList')===1,'Ordinary Environment filter excludes managed worktrees');
+      await clickRoute('mcp');
+      update('mcpTransportFilter','sse'); check(rows('mcpList')===0,'SSE transport filter');
+      update('mcpTransportFilter','streamable-http'); check(rows('mcpList')===2,'Streamable HTTP transport filter');
+      update('mcpDefaultFilter','enabled'); check(rows('mcpList')===0,'MCP default-enabled facet');
+      document.querySelector('[data-clear-filters="mcp"]').click(); check(rows('mcpList')===2,'MCP filters reset');
+      await clickRoute('skills');
+      update('skillDefaultFilter','enabled'); check(rows('skillList')===0,'Skill default-enabled facet');
+      document.querySelector('[data-clear-filters="skills"]').click(); check(rows('skillList')===5,'Skill filters reset');
+      await clickRoute('exec-allowlist');
+      update('execListFilter','no-such-executable'); check(rows('execList')===0,'Executable filter matches allowed list');
+      document.querySelector('[data-clear-filters="exec-lists"]').click(); check(rows('execList')>0,'Executable filters reset');
+      check(document.documentElement.scrollWidth<=window.innerWidth+2,'Multi-condition toolbars do not overflow viewport');
+      result.ok=true;
+      return;
+    }
 
     if (new URLSearchParams(location.search).get('focus') === 'updater-web') {
       await waitFor(() => document.getElementById('desktopUpdatePanel').hidden, 'Updater never exposed in Web admin');

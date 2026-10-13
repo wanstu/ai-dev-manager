@@ -13,17 +13,18 @@ import (
 )
 
 type Snapshot struct {
-	Workspaces         []model.Workspace        `json:"workspaces"`
-	Environments       []app.EnvironmentSummary `json:"environments"`
-	WorktreeSettings   model.WorktreeSettings   `json:"worktree_settings"`
-	HostEnvironment    hostenv.Status           `json:"host_environment"`
-	AllowedExecutables []string                 `json:"allowed_executables"`
-	BlockedExecutables []string                 `json:"blocked_executables"`
-	ExecDenials        []model.ExecDenial       `json:"exec_denials"`
-	ExecUsages         []model.ExecUsage        `json:"exec_usages"`
-	MCPs               []model.MCPDefinition    `json:"mcps"`
-	Skills             []model.CatalogEntry     `json:"skills"`
-	GlobalMemoryCount  int                      `json:"global_memory_count"`
+	Workspaces                    []model.Workspace        `json:"workspaces"`
+	Environments                  []app.EnvironmentSummary `json:"environments"`
+	ManagedWorktreeEnvironmentIDs []string                 `json:"managed_worktree_environment_ids"`
+	WorktreeSettings              model.WorktreeSettings   `json:"worktree_settings"`
+	HostEnvironment               hostenv.Status           `json:"host_environment"`
+	AllowedExecutables            []string                 `json:"allowed_executables"`
+	BlockedExecutables            []string                 `json:"blocked_executables"`
+	ExecDenials                   []model.ExecDenial       `json:"exec_denials"`
+	ExecUsages                    []model.ExecUsage        `json:"exec_usages"`
+	MCPs                          []model.MCPDefinition    `json:"mcps"`
+	Skills                        []model.CatalogEntry     `json:"skills"`
+	GlobalMemoryCount             int                      `json:"global_memory_count"`
 }
 
 type Service struct {
@@ -370,6 +371,14 @@ func (s *Service) Snapshot() (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	managedWorktrees, err := s.app.ManagedWorktrees()
+	if err != nil {
+		return Snapshot{}, err
+	}
+	managedIDs := make([]string, 0, len(managedWorktrees))
+	for _, managed := range managedWorktrees {
+		managedIDs = append(managedIDs, managed.EnvironmentID)
+	}
 	hostEnvironment, err := s.app.HostEnvironmentStatus()
 	if err != nil {
 		return Snapshot{}, err
@@ -403,17 +412,18 @@ func (s *Service) Snapshot() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	return Snapshot{
-		Workspaces:         nonNilWorkspaces(workspaces),
-		Environments:       nonNilEnvironments(environments),
-		WorktreeSettings:   worktreeSettings,
-		HostEnvironment:    hostEnvironment,
-		AllowedExecutables: nonNilStrings(allowed),
-		BlockedExecutables: nonNilStrings(blocked),
-		ExecDenials:        nonNilExecDenials(execDenials),
-		ExecUsages:         nonNilExecUsages(execUsages),
-		MCPs:               nonNilMCP(mcps),
-		Skills:             nonNilCatalog(skills),
-		GlobalMemoryCount:  len(globalMemory),
+		Workspaces:                    nonNilWorkspaces(workspaces),
+		Environments:                  nonNilEnvironments(environments),
+		ManagedWorktreeEnvironmentIDs: nonNilStrings(managedIDs),
+		WorktreeSettings:              worktreeSettings,
+		HostEnvironment:               hostEnvironment,
+		AllowedExecutables:            nonNilStrings(allowed),
+		BlockedExecutables:            nonNilStrings(blocked),
+		ExecDenials:                   nonNilExecDenials(execDenials),
+		ExecUsages:                    nonNilExecUsages(execUsages),
+		MCPs:                          nonNilMCP(mcps),
+		Skills:                        nonNilCatalog(skills),
+		GlobalMemoryCount:             len(globalMemory),
 	}, nil
 }
 

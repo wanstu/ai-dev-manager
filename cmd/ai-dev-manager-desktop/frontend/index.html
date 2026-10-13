@@ -203,6 +203,9 @@
         <div class="list-toolbar">
           <label class="filter-field"><span>搜索</span><input id="mcpFilter" type="search" placeholder="名称 / ID / endpoint / executable；正则用 /pattern/i"></label>
           <label class="filter-field compact-filter"><span>显示</span><select id="mcpStateFilter"><option value="all">全部</option><option value="selected">当前环境已启用</option><option value="unselected">当前环境未启用</option><option value="issues">需处理</option><option value="unobserved">尚未探测</option></select></label>
+          <label class="filter-field compact-filter"><span>Transport</span><select id="mcpTransportFilter"><option value="all">全部</option><option value="stdio">stdio</option><option value="sse">SSE</option><option value="streamable-http">Streamable HTTP</option></select></label>
+          <label class="filter-field compact-filter"><span>新环境默认</span><select id="mcpDefaultFilter"><option value="all">全部</option><option value="enabled">已启用</option><option value="disabled">未启用</option></select></label>
+          <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="mcp">重置</button>
           <span class="visible-count">显示 <strong id="mcpVisibleCount">0</strong> / <strong id="mcpListTotalCount">0</strong></span>
         </div>
         <div class="skill-bulk-toolbar batch-toolbar batch-simple-toolbar" id="mcpBulkToolbar" aria-label="MCP 批量操作">
@@ -265,7 +268,9 @@
               <label class="filter-field"><span>搜索</span><input id="skillFilter" type="search" placeholder="名称 / ID / artifact 路径；正则用 /pattern/i"></label>
               <label class="filter-field compact-filter"><span>Source</span><select id="skillSourceFilter"><option value="">全部 Source</option></select></label>
               <label class="filter-field compact-filter"><span>显示</span><select id="skillStateFilter"><option value="all">全部</option><option value="selected">当前环境已启用</option><option value="unselected">当前环境未启用</option><option value="issues">需处理</option><option value="source">Source-managed</option><option value="legacy">Legacy</option></select></label>
-              <span class="visible-count">显示 <strong id="skillVisibleCount">0</strong> / <strong id="skillListTotalCount">0</strong></span>
+              <label class="filter-field compact-filter"><span>新环境默认</span><select id="skillDefaultFilter"><option value="all">全部</option><option value="enabled">已启用</option><option value="disabled">未启用</option></select></label>
+              <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="skills">重置</button>
+          <span class="visible-count">显示 <strong id="skillVisibleCount">0</strong> / <strong id="skillListTotalCount">0</strong></span>
             </div>
             <div class="skill-bulk-toolbar batch-toolbar batch-simple-toolbar" aria-label="Skill 批量操作">
               <div class="batch-simple-heading"><strong>批量操作</strong><span>勾选 Skill（也可跨页勾选 MCP），再选择 Workspace / Environment</span></div>
@@ -297,7 +302,9 @@
             <div class="list-heading"><strong>Skill Sources</strong><span>Source 配置是全局定义；编辑不会自动刷新或扫描。</span></div>
             <div class="list-toolbar">
               <label class="filter-field"><span>搜索 Source</span><input id="skillSourceFilterInput" type="search" placeholder="root / source ID / support root；正则用 /pattern/i"></label>
-              <span class="visible-count">显示 <strong id="skillSourceVisibleCount">0</strong> / <strong id="skillSourceListTotalCount">0</strong></span>
+              <label class="filter-field compact-filter"><span>刷新状态</span><select id="skillSourceStateFilter"><option value="all">全部</option><option value="pending">待刷新</option><option value="ok">成功</option><option value="error">失败</option></select></label>
+              <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="skill-sources">重置</button>
+          <span class="visible-count">显示 <strong id="skillSourceVisibleCount">0</strong> / <strong id="skillSourceListTotalCount">0</strong></span>
             </div>
             <div id="skillSourceList" class="resource-list filtered-resource-list empty">暂无 Skill source</div>
           </section>
@@ -311,6 +318,9 @@
         <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="workspaceDialog">添加 Workspace</button></div>
         <div class="list-toolbar project-list-toolbar">
           <label class="filter-field"><span>搜索</span><input id="workspaceFilter" type="search" placeholder="名称 / ID / 完整路径"></label>
+          <label class="filter-field compact-filter"><span>Environment</span><select id="workspaceEnvironmentFilter"><option value="all">全部</option><option value="with">有 Environment</option><option value="empty">无 Environment</option></select></label>
+          <label class="filter-field compact-filter"><span>排序</span><select id="workspaceSort"><option value="name">名称 A–Z</option><option value="count-desc">Environment 最多</option><option value="count-asc">Environment 最少</option></select></label>
+          <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="workspaces">重置</button>
           <span class="visible-count">显示 <strong id="workspaceVisibleCount">0</strong> / <strong id="workspaceListTotalCount">0</strong></span>
         </div>
         <div id="workspaceList" class="list filtered-project-list empty">暂无 Workspace</div>
@@ -321,6 +331,11 @@
         <div class="list-toolbar project-list-toolbar">
           <label class="filter-field"><span>搜索</span><input id="environmentFilter" type="search" placeholder="名称 / ID / Root / Workspace"></label>
           <label class="filter-field compact-filter"><span>Workspace</span><select id="environmentWorkspaceFilter"><option value="">全部 Workspace</option></select></label>
+          <label class="filter-field compact-filter"><span>生命周期</span><select id="environmentRetentionFilter"><option value="all">全部</option><option value="durable">持久化</option><option value="temporary">临时</option><option value="expired">已过期</option><option value="due7">7 天内到期</option><option value="noexpiry">无有效到期</option></select></label>
+          <label class="filter-field compact-filter"><span>类型</span><select id="environmentKindFilter"><option value="all">全部</option><option value="managed">Managed worktree</option><option value="ordinary">普通 Env</option></select></label>
+          <label class="filter-field compact-filter"><span>Writer</span><select id="environmentWriterFilter"><option value="all">全部</option><option value="active">有 Writer</option><option value="none">无 Writer</option></select></label>
+          <label class="filter-field compact-filter"><span>排序</span><select id="environmentSort"><option value="recent">最近活动</option><option value="expiry">最早到期</option><option value="name">名称 A–Z</option><option value="created">创建时间（最新）</option></select></label>
+          <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="environments">重置</button>
           <span class="visible-count">显示 <strong id="environmentVisibleCount">0</strong> / <strong id="environmentListTotalCount">0</strong></span>
           <p id="environmentFilterHint" class="project-filter-hint" hidden></p>
         </div>
@@ -403,6 +418,10 @@
           </section>
           <section class="subpanel">
             <div class="subpanel-heading"><div><h3>Allowed executables</h3><span>允许后立即可用于 exec / verifier / process / run；不会自动执行命令。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execDialog">允许 executable</button></div>
+            <div class="list-toolbar enhanced-filter-toolbar">
+              <label class="filter-field"><span>Executable 搜索</span><input id="execListFilter" type="search" placeholder="筛选 Allowed / Blacklist 中的名称"></label>
+              <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="exec-lists">重置</button>
+            </div>
             <div id="execList" class="managed-list empty">暂无 allowed executable</div>
           </section>
           <section class="subpanel">
@@ -457,6 +476,12 @@
         <button type="button" role="tab" aria-selected="true" data-runtime-subview="verifiers">Verifiers <span id="runtimeVerifierCount">0</span></button>
         <button type="button" role="tab" aria-selected="false" data-runtime-subview="processes">Processes <span id="runtimeProcessCount">0</span></button>
         <button type="button" role="tab" aria-selected="false" data-runtime-subview="runs">Runs <span id="runtimeRunCount">0</span></button>
+      </div>
+      <div class="list-toolbar enhanced-filter-toolbar">
+        <label class="filter-field"><span>搜索运行项</span><input id="runtimeFilter" type="search" placeholder="名称 / ID / executable / cwd"></label>
+        <label class="filter-field compact-filter"><span>状态</span><select id="runtimeStateFilter"><option value="all">全部</option><option value="running">运行中</option><option value="not-running">非运行中</option><option value="disabled">已禁用</option></select></label>
+        <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="runtime">重置</button>
+        <span class="visible-count">当前视图 <strong id="runtimeVisibleCount">0</strong> / <strong id="runtimeListTotalCount">0</strong></span>
       </div>
       <div class="runtime-subview-host">
         <section class="subpanel runtime-subview-panel" data-runtime-subview-panel="verifiers"><div class="subpanel-heading"><h3>Verifiers</h3><span>显式运行，不自动抢 Writer</span></div><div id="verifierList" class="resource-list empty">请选择 Environment</div></section>
