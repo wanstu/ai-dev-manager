@@ -40,7 +40,7 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/wailsapp/mimetype v1.4.1 // indirect
-	github.com/wanstu/mcp-center-core v0.1.2-rc.1
+	github.com/wanstu/mcp-center-core v0.1.2
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/crypto v0.57.0
 	golang.org/x/net v0.58.0 // indirect
