@@ -46,10 +46,16 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		for _, tool := range tools.Tools {
 			byName[tool.Name] = tool
 		}
-		for _, name := range []string{"environment_temporary_create", "environment_temporary_status", "environment_temporary_promote", "environment_temporary_cleanup"} {
+		for _, name := range []string{"environment_temporary_create", "environment_temporary_status", "environment_temporary_cleanup"} {
 			if byName[name] == nil {
 				t.Fatalf("%s surface missing %s", surface, name)
 			}
+		}
+		if surface == "agent" && byName["environment_temporary_promote"] != nil {
+			t.Fatal("Agent surface exposed durable Environment promotion")
+		}
+		if surface == "admin" && byName["environment_temporary_promote"] == nil {
+			t.Fatal("Admin surface missing Environment promotion")
 		}
 		encodedCleanup, err := json.Marshal(byName["environment_temporary_cleanup"])
 		if err != nil {
@@ -146,7 +152,18 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		t.Fatalf("temporary Environment ordinary read failed: %s", toolText(t, read))
 	}
 
-	wrongPromote := callGatewayTool(t, ctx, agent, "environment_temporary_promote", map[string]any{"environment_id": created.Environment.ID, "owner_id": "wrong-owner"})
+	unauthorizedPromote, unauthorizedErr := agent.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "environment_temporary_promote",
+		Arguments: map[string]any{"environment_id": created.Environment.ID, "owner_id": "lifecycle-owner-a"},
+	})
+	if unauthorizedErr == nil && unauthorizedPromote != nil && !unauthorizedPromote.IsError {
+		t.Fatalf("Agent promoted its own temporary Environment: %s", toolText(t, unauthorizedPromote))
+	}
+	unchanged, err := service.Environments.Get(created.Environment.ID)
+	if err != nil || unchanged.Retention.Persistence != model.PersistenceTemporary {
+		t.Fatalf("Agent promotion attempt modified Environment: env=%+v err=%v", unchanged, err)
+	}
+	wrongPromote := callGatewayTool(t, ctx, admin, "environment_temporary_promote", map[string]any{"environment_id": created.Environment.ID, "owner_id": "wrong-owner"})
 	if !wrongPromote.IsError {
 		t.Fatalf("wrong lifecycle owner promoted temporary Environment: %s", toolText(t, wrongPromote))
 	}
