@@ -583,8 +583,11 @@ func addScopedTool[In, Out any](server *mcp.Server, surface serverSurface, tool 
 }
 
 func isAdminOnlyTool(name string) bool {
+	// The Agent surface is not an OS sandbox. Any tool that can start host code
+	// must stay on the Admin surface until execution is isolated at the OS level.
 	switch name {
-	case "project_index_auto_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
+	case "global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "run_start", "process_start", "environment_verifier_run", "environment_verifier_run_start",
+		"project_index_auto_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
 		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
@@ -1346,6 +1349,9 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_status", Description: "Probe one MCP selected for an Environment and return configured, disabled, healthy, or error status. No writer is required."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPStatusInput) (*mcp.CallToolResult, app.MCPHealthStatus, error) {
+			if err := requireAgentSafeMCPTransport(service, surface, in.EnvironmentID, in.MCPID); err != nil {
+				return nil, app.MCPHealthStatus{}, err
+			}
 			var (
 				status app.MCPHealthStatus
 				err    error
@@ -1372,6 +1378,9 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_refresh", Description: "Explicitly discard one MCP session and observation, reconnect, Ping, and refresh its bounded public tool inventory."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPRuntimeInput) (*mcp.CallToolResult, any, error) {
+			if err := requireAgentSafeMCPTransport(service, surface, in.EnvironmentID, in.MCPID); err != nil {
+				return toolResult(nil, err)
+			}
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
 			}
@@ -1381,6 +1390,9 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_tools", Description: "List tools from one external MCP selected for the Environment after injection checks pass. Use environment_injection_plan first when deciding whether the MCP is currently injectable."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPRuntimeInput) (*mcp.CallToolResult, any, error) {
+			if err := requireAgentSafeMCPTransport(service, surface, in.EnvironmentID, in.MCPID); err != nil {
+				return toolResult(nil, err)
+			}
 			if owner != nil {
 				tools, err := owner.ListTools(ctx, in.EnvironmentID, in.MCPID)
 				return toolResult(map[string]any{"mcp_id": in.MCPID, "tools": tools}, err)
@@ -1418,6 +1430,9 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 		})
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_call", Description: "Call a tool on one external MCP that is enabled and healthy for the selected Environment."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPCallInput) (*mcp.CallToolResult, any, error) {
+			if err := requireAgentSafeMCPTransport(service, surface, in.EnvironmentID, in.MCPID); err != nil {
+				return toolResult(nil, err)
+			}
 			if strings.TrimSpace(in.Tool) == "" {
 				return toolResult(nil, &app.MCPError{MCPID: in.MCPID, ErrorKind: "missing_tool_name", Message: "external MCP tool name is required"})
 			}
@@ -1895,6 +1910,24 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 type externalMCPConnection struct {
 	endpoint string
 	headers  map[string]string
+}
+
+func requireAgentSafeMCPTransport(service *app.Service, surface serverSurface, environmentID, mcpID string) error {
+	if surface != serverSurfaceAgent {
+		return nil
+	}
+	activation, _, err := service.ResolveMCPActivation(environmentID, mcpID)
+	if err != nil || activation == nil {
+		return err
+	}
+	if activation.Transport == catalog.MCPTransportStdio {
+		return &app.MCPError{
+			MCPID:     mcpID,
+			ErrorKind: "agent_stdio_mcp_blocked",
+			Message:   "stdio MCP is unavailable on the Agent surface until OS-level host execution isolation is enabled",
+		}
+	}
+	return nil
 }
 
 func requireHealthyMCP(ctx context.Context, service *app.Service, environmentID, mcpID string) error {
