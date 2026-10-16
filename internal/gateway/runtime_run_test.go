@@ -24,7 +24,7 @@ func TestAgentRunLifecycleAcrossAgentSessions(t *testing.T) {
 
 	owner := newRuntimeOwner(service)
 	defer owner.Close()
-	server := newServer(service, owner)
+	server := newServerForSurface(service, owner, serverSurfaceAdmin)
 	ctx := context.Background()
 	first := connectInMemory(t, ctx, server)
 

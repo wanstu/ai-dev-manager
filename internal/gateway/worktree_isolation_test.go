@@ -49,20 +49,25 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := toolNames(tools.Tools)
-	for _, required := range []string{"environment_worktree_list", "environment_worktree_destroy"} {
+	for _, required := range []string{"environment_worktree_list"} {
 		if !contains(names, required) {
 			t.Fatalf("missing managed worktree tool %q in %v", required, names)
 		}
 	}
-	if contains(names, "environment_worktree_create") {
-		t.Fatalf("durable environment_worktree_create must be Admin-only: %v", names)
+	for _, adminOnly := range []string{"environment_worktree_create", "environment_worktree_destroy"} {
+		if contains(names, adminOnly) {
+			t.Fatalf("Agent surface exposed Admin-only managed worktree tool %q in %v", adminOnly, names)
+		}
 	}
 	adminTools, err := adminSession.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !contains(toolNames(adminTools.Tools), "environment_worktree_create") {
-		t.Fatalf("Admin MCP missing durable environment_worktree_create")
+	adminNames := toolNames(adminTools.Tools)
+	for _, required := range []string{"environment_worktree_create", "environment_worktree_destroy"} {
+		if !contains(adminNames, required) {
+			t.Fatalf("Admin MCP missing %s", required)
+		}
 	}
 
 	createdResult, err := adminSession.CallTool(ctx, &mcp.CallToolParams{
@@ -111,7 +116,7 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 	if err != nil || acquired.IsError {
 		t.Fatalf("managed writer acquire failed: err=%v result=%+v", err, acquired)
 	}
-	destroyed, err := session.CallTool(ctx, &mcp.CallToolParams{
+	destroyed, err := adminSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "environment_worktree_destroy",
 		Arguments: map[string]any{
 			"environment_id": managed.EnvironmentID,

@@ -939,3 +939,21 @@ func (s *Service) GitBranch(ctx context.Context, environmentID string) (any, err
 	}
 	return rt.GitBranch(ctx)
 }
+
+func (s *Service) GitCommit(ctx context.Context, environmentID, owner, message string) (any, error) {
+	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+		return nil, err
+	}
+	rt, _, err := s.Runtime(environmentID)
+	if err != nil {
+		return nil, err
+	}
+	result, err := rt.GitCommit(ctx, message)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Environments.Touch(environmentID, owner); err != nil {
+		return nil, err
+	}
+	return result, nil
+}

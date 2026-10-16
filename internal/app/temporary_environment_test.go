@@ -127,16 +127,20 @@ func TestCreateTemporaryManagedWorktreePersistsRetentionAndKeepsSourceUnchanged(
 	}
 	branchBefore := gitTemporaryOutput(t, workspaceRoot, "branch", "--show-current")
 	headBefore := gitTemporaryOutput(t, workspaceRoot, "rev-parse", "HEAD")
+	sourceEnvironment, err := service.Environments.Create(workspace.ID, "temporary-managed-source", "")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	created, err := service.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{
-		WorkspaceID: workspace.ID,
-		Name:        "task-managed",
-		OwnerID:     "owner-managed",
-		TTLSeconds:  3600,
-		Mode:        model.TemporaryEnvironmentModeManagedWorktree,
-		BranchName:  "test/temporary-managed",
-		BaseRef:     "HEAD",
-		RunID:       "run_external_managed",
+		SourceEnvironmentID: sourceEnvironment.ID,
+		Name:                "task-managed",
+		OwnerID:             "owner-managed",
+		TTLSeconds:          3600,
+		Mode:                model.TemporaryEnvironmentModeManagedWorktree,
+		BranchName:          "test/temporary-managed",
+		BaseRef:             "HEAD",
+		RunID:               "run_external_managed",
 	})
 	if err != nil {
 		t.Fatal(err)

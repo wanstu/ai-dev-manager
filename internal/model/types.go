@@ -64,14 +64,15 @@ type WriterLease struct {
 }
 
 type VerifierDefinition struct {
-	ID             string   `json:"verifier_id"`
-	Kind           string   `json:"kind"`
-	Enabled        bool     `json:"enabled"`
-	Executable     string   `json:"executable"`
-	Args           []string `json:"args,omitempty"`
-	Cwd            string   `json:"cwd,omitempty"`
-	TimeoutSeconds int64    `json:"timeout_seconds,omitempty"`
-	Name           string   `json:"name,omitempty"`
+	ID                        string   `json:"verifier_id"`
+	Kind                      string   `json:"kind"`
+	Enabled                   bool     `json:"enabled"`
+	AgentHostExecutionAllowed bool     `json:"agent_host_execution_allowed,omitempty"`
+	Executable                string   `json:"executable"`
+	Args                      []string `json:"args,omitempty"`
+	Cwd                       string   `json:"cwd,omitempty"`
+	TimeoutSeconds            int64    `json:"timeout_seconds,omitempty"`
+	Name                      string   `json:"name,omitempty"`
 }
 
 type Environment struct {

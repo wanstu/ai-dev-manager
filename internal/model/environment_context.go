@@ -90,13 +90,14 @@ type EnvironmentContextSkill struct {
 }
 
 type EnvironmentContextVerifier struct {
-	ID             string          `json:"id"`
-	Name           string          `json:"name,omitempty"`
-	Kind           string          `json:"kind"`
-	Enabled        bool            `json:"enabled"`
-	State          CapabilityState `json:"state"`
-	ReasonCode     string          `json:"reason_code,omitempty"`
-	RequiresWriter bool            `json:"requires_writer"`
+	ID                        string          `json:"id"`
+	Name                      string          `json:"name,omitempty"`
+	Kind                      string          `json:"kind"`
+	Enabled                   bool            `json:"enabled"`
+	AgentHostExecutionAllowed bool            `json:"agent_host_execution_allowed"`
+	State                     CapabilityState `json:"state"`
+	ReasonCode                string          `json:"reason_code,omitempty"`
+	RequiresWriter            bool            `json:"requires_writer"`
 }
 
 type EnvironmentContextGuidance struct {

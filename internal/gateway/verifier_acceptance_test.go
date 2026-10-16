@@ -54,12 +54,13 @@ func TestVerifierRealHTTPAcceptanceNonGitRepositoryCopy(t *testing.T) {
 
 	// V-R1: one trivial configured verifier runs successfully in a non-Git Environment.
 	trivial, err := service.AddVerifier(env.ID, model.VerifierDefinition{
-		Name:           "go-version",
-		Kind:           verifier.KindTest,
-		Enabled:        true,
-		Executable:     "go",
-		Args:           []string{"version"},
-		TimeoutSeconds: 15,
+		Name:                      "go-version",
+		Kind:                      verifier.KindTest,
+		Enabled:                   true,
+		AgentHostExecutionAllowed: true,
+		Executable:                "go",
+		Args:                      []string{"version"},
+		TimeoutSeconds:            15,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -73,12 +74,13 @@ func TestVerifierRealHTTPAcceptanceNonGitRepositoryCopy(t *testing.T) {
 	// recursively executing the whole test suite from inside an outer go test ./....
 	// V-R3 below covers actual go test failure/timeout/output behavior.
 	fullSuite, err := service.AddVerifier(env.ID, model.VerifierDefinition{
-		Name:           "v2-go-test-all-compile",
-		Kind:           verifier.KindTest,
-		Enabled:        true,
-		Executable:     "go",
-		Args:           []string{"test", "./...", "-run", "^$"},
-		TimeoutSeconds: 180,
+		Name:                      "v2-go-test-all-compile",
+		Kind:                      verifier.KindTest,
+		Enabled:                   true,
+		AgentHostExecutionAllowed: true,
+		Executable:                "go",
+		Args:                      []string{"test", "./...", "-run", "^$"},
+		TimeoutSeconds:            180,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -113,12 +115,13 @@ func TestDeliberateVerifierFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	failVerifier, err := service.AddVerifier(env.ID, model.VerifierDefinition{
-		Name:           "deliberate-fail",
-		Kind:           verifier.KindTest,
-		Enabled:        true,
-		Executable:     "go",
-		Args:           []string{"test", "./verifier_fail_fixture"},
-		TimeoutSeconds: 30,
+		Name:                      "deliberate-fail",
+		Kind:                      verifier.KindTest,
+		Enabled:                   true,
+		AgentHostExecutionAllowed: true,
+		Executable:                "go",
+		Args:                      []string{"test", "./verifier_fail_fixture"},
+		TimeoutSeconds:            30,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -153,12 +156,13 @@ func TestDeliberateVerifierTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	timeoutVerifier, err := service.AddVerifier(env.ID, model.VerifierDefinition{
-		Name:           "deliberate-timeout",
-		Kind:           verifier.KindTest,
-		Enabled:        true,
-		Executable:     "go",
-		Args:           []string{"test", "./verifier_timeout_fixture"},
-		TimeoutSeconds: 1,
+		Name:                      "deliberate-timeout",
+		Kind:                      verifier.KindTest,
+		Enabled:                   true,
+		AgentHostExecutionAllowed: true,
+		Executable:                "go",
+		Args:                      []string{"test", "./verifier_timeout_fixture"},
+		TimeoutSeconds:            1,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -417,7 +417,7 @@
             </div>
           </section>
           <section class="subpanel">
-            <div class="subpanel-heading"><div><h3>Allowed executables</h3><span>允许后立即可用于 exec / verifier / process / run；不会自动执行命令。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execDialog">允许 executable</button></div>
+            <div class="subpanel-heading"><div><h3>Allowed executables</h3><span>允许 executable 只是宿主机执行前提；Agent 不直接获得 exec / process / run，Verifier 还需单独允许 AI 运行。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execDialog">允许 executable</button></div>
             <div class="list-toolbar enhanced-filter-toolbar">
               <label class="filter-field"><span>Executable 搜索</span><input id="execListFilter" type="search" placeholder="筛选 Allowed / Blacklist 中的名称"></label>
               <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="exec-lists">重置</button>
@@ -484,7 +484,7 @@
         <span class="visible-count">当前视图 <strong id="runtimeVisibleCount">0</strong> / <strong id="runtimeListTotalCount">0</strong></span>
       </div>
       <div class="runtime-subview-host">
-        <section class="subpanel runtime-subview-panel" data-runtime-subview-panel="verifiers"><div class="subpanel-heading"><h3>Verifiers</h3><span>显式运行，不自动抢 Writer</span></div><div id="verifierList" class="resource-list empty">请选择 Environment</div></section>
+        <section class="subpanel runtime-subview-panel" data-runtime-subview-panel="verifiers"><div class="subpanel-heading"><h3>Verifiers</h3><span>Desktop 可显式运行；允许 AI 运行需逐个 Verifier 授权</span></div><div id="verifierList" class="resource-list empty">请选择 Environment</div></section>
         <section class="subpanel runtime-subview-panel" data-runtime-subview-panel="processes" hidden><div class="subpanel-heading"><h3>Processes</h3><span>owner-local 状态与日志</span></div><div id="processList" class="resource-list empty">请选择 Environment</div></section>
         <section class="subpanel runtime-subview-panel" data-runtime-subview-panel="runs" hidden><div class="subpanel-heading"><h3>Runs</h3><span>generic single-command lifecycle</span></div><div id="runList" class="resource-list empty">请选择 Environment</div></section>
       </div>

@@ -35,6 +35,12 @@ type EnvironmentInput struct {
 	EnvironmentID string `json:"environment_id"`
 }
 
+type GitCommitInput struct {
+	EnvironmentID string `json:"environment_id"`
+	WriterOwner   string `json:"writer_owner"`
+	Message       string `json:"message"`
+}
+
 type EnvironmentRenameInput struct {
 	EnvironmentID string `json:"environment_id"`
 	Name          string `json:"name"`
@@ -304,6 +310,12 @@ type EnvironmentVerifierAddInput struct {
 type EnvironmentVerifierRemoveInput struct {
 	EnvironmentID string `json:"environment_id"`
 	VerifierID    string `json:"verifier_id"`
+}
+
+type EnvironmentVerifierAgentHostExecutionInput struct {
+	EnvironmentID string `json:"environment_id"`
+	VerifierID    string `json:"verifier_id"`
+	Allowed       bool   `json:"allowed"`
 }
 
 type MemoryKeyInput struct {
@@ -586,10 +598,10 @@ func isAdminOnlyTool(name string) bool {
 	// The Agent surface is not an OS sandbox. Any tool that can start host code
 	// must stay on the Admin surface until execution is isolated at the OS level.
 	switch name {
-	case "global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "run_start", "process_start", "environment_verifier_run", "environment_verifier_run_start",
+	case "global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "run_start", "process_start",
 		"project_index_auto_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
-		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary",
+		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_verifier_agent_host_execution_set", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_temporary_cleanup", "environment_worktree_create", "environment_worktree_destroy", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
 		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_access_policy_set", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
 		"secret_list", "secret_set", "secret_delete", "mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
@@ -912,8 +924,13 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. This is the preferred Agent path for ordinary task isolation, including mode=managed_worktree; only administrators can promote a temporary Environment to durable. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration. existing_root mode uses a registered Workspace. managed_worktree mode also requires branch_name, applies the configured ADM branch prefix/root, optionally migrates non-ignored uncommitted source changes, and never pulls/resets/reuses the source checkout."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. This is the preferred Agent path for task isolation. Agent callers may only derive managed_worktree mode from an explicit source_environment_id; existing_root and workspace-derived authority remain administrative. Only administrators can promote a temporary Environment to durable. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCreateInput) (*mcp.CallToolResult, any, error) {
+			if surface == serverSurfaceAgent {
+				if strings.TrimSpace(in.Mode) != model.TemporaryEnvironmentModeManagedWorktree || strings.TrimSpace(in.SourceEnvironmentID) == "" || strings.TrimSpace(in.WorkspaceID) != "" || strings.TrimSpace(in.Root) != "" {
+					return toolResult(nil, fmt.Errorf("Agent temporary Environment creation requires managed_worktree mode with source_environment_id; existing_root and workspace-derived authority are Admin-only"))
+				}
+			}
 			value, err := service.CreateTemporaryEnvironment(ctx, string(surface), model.TemporaryEnvironmentCreateRequest{
 				WorkspaceID:               in.WorkspaceID,
 				SourceEnvironmentID:       in.SourceEnvironmentID,
@@ -934,7 +951,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_status", Description: "Inspect one temporary Environment lifecycle by stable environment_id, including retention provenance and current cleanup blockers. Read-only: it does not acquire or renew a writer and never returns Environment-private Memory values."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			if owner != nil {
-				value, err := owner.TemporaryEnvironmentStatus(ctx, in.EnvironmentID)
+				if surface == serverSurfaceAdmin {
+					value, err := owner.TemporaryEnvironmentStatus(ctx, in.EnvironmentID)
+					return toolResult(value, err)
+				}
+				value, err := owner.TemporaryEnvironmentStatusAgent(ctx, in.EnvironmentID)
 				return toolResult(value, err)
 			}
 			value, err := service.TemporaryEnvironmentStatus(ctx, in.EnvironmentID)
@@ -973,6 +994,9 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentWorktreeCreateInput) (*mcp.CallToolResult, any, error) {
 			workspaceID := strings.TrimSpace(in.WorkspaceID)
 			sourceEnvironmentID := strings.TrimSpace(in.SourceEnvironmentID)
+			if surface == serverSurfaceAgent && (sourceEnvironmentID == "" || workspaceID != "") {
+				return toolResult(isolation.CreateResult{}, fmt.Errorf("Agent worktree creation requires source_environment_id; workspace-derived authority is Admin-only"))
+			}
 			if (workspaceID == "") == (sourceEnvironmentID == "") {
 				return toolResult(isolation.CreateResult{}, fmt.Errorf("environment_worktree_create requires exactly one of workspace_id or source_environment_id"))
 			}
@@ -980,6 +1004,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				BranchName:                in.BranchName,
 				BaseRef:                   in.BaseRef,
 				MigrateUncommittedChanges: in.MigrateUncommittedChanges,
+				AgentSafe:                 surface == serverSurfaceAgent,
 			}
 			if sourceEnvironmentID != "" {
 				value, err := service.CreateManagedWorktreeFromEnvironment(ctx, sourceEnvironmentID, in.Name, options)
@@ -1010,8 +1035,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_destroy", Description: "Destroy one ADM-managed Git worktree Environment. Requires the matching writer_owner. Dirty or unpublished work is refused unless force=true; the managed branch is always retained."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_destroy", Description: "Admin-only destroy of one ADM-managed Git worktree Environment. Requires the matching writer_owner. Dirty or unpublished work is refused unless force=true; the managed branch is always retained."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentWorktreeDestroyInput) (*mcp.CallToolResult, any, error) {
+			if in.Force && surface != serverSurfaceAdmin {
+				return toolResult(nil, fmt.Errorf("force worktree destruction is only available on the administrative surface"))
+			}
 			value, err := service.DestroyManagedWorktree(ctx, in.EnvironmentID, in.WriterOwner, in.Force)
 			if err == nil {
 				if owner != nil {
@@ -1180,20 +1208,32 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(map[string]any{"removed": definition}, err)
 		})
 
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_agent_host_execution_set", Description: "Admin-only: explicitly allow or revoke Agent host execution for one configured verifier. Approval is required because verifier code runs with host-user permissions until OS-level sandboxing is available."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierAgentHostExecutionInput) (*mcp.CallToolResult, any, error) {
+			definition, err := service.VerifierAgentHostExecutionSet(in.EnvironmentID, in.VerifierID, in.Allowed)
+			return toolResult(definition, err)
+		})
+
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_list", Description: "List structured verifier definitions configured for one Environment. No writer is required."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.ListVerifiers(in.EnvironmentID)
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously through the existing Runtime execution policy. This call blocks until verification completes; use environment_verifier_run_start/status/cancel for long or heavy verification. Requires the matching writer_owner."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. This call blocks until completion; use environment_verifier_run_start/status/cancel for long or heavy verification. On the Agent surface, the verifier must be explicitly approved by an administrator with agent_host_execution_allowed=true because verifier code executes with host-user permissions until OS sandboxing is available. Requires the matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
+			if err := requireAgentVerifierExecution(service, surface, in.EnvironmentID, in.VerifierID); err != nil {
+				return toolResult(nil, err)
+			}
 			result, err := service.RunVerifier(ctx, in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
 			return toolResult(result, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_start", Description: "Start one configured Environment verifier asynchronously under the persistent Gateway owner. Preferred for long or heavy verifier/test/build work; returns immediately with a stable owner-local verifier_run identity. Requires the matching writer_owner."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_start", Description: "Start one configured Environment verifier asynchronously. On the Agent surface, the verifier must be explicitly approved by an administrator with agent_host_execution_allowed=true. Preferred for long test/build work; requires the matching writer_owner."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
+			if err := requireAgentVerifierExecution(service, surface, in.EnvironmentID, in.VerifierID); err != nil {
+				return toolResult(nil, err)
+			}
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
 			}
@@ -1904,6 +1944,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_commit", Description: "Create one controlled Git commit for all changes under the Environment root. Requires matching writer_owner and the Environment root to equal the Git top-level. ADM disables hooks/signing/fsmonitor and refuses Git filter attributes that could execute host code; arbitrary Git arguments are not accepted."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitCommitInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitCommit(ctx, in.EnvironmentID, in.WriterOwner, in.Message)
+			return toolResult(value, err)
+		})
+
 	return server
 }
 
@@ -1926,6 +1972,20 @@ func requireAgentSafeMCPTransport(service *app.Service, surface serverSurface, e
 			ErrorKind: "agent_stdio_mcp_blocked",
 			Message:   "stdio MCP is unavailable on the Agent surface until OS-level host execution isolation is enabled",
 		}
+	}
+	return nil
+}
+
+func requireAgentVerifierExecution(service *app.Service, surface serverSurface, environmentID, verifierID string) error {
+	if surface != serverSurfaceAgent {
+		return nil
+	}
+	definition, err := service.Verifiers.Get(environmentID, verifierID)
+	if err != nil {
+		return err
+	}
+	if !definition.AgentHostExecutionAllowed {
+		return fmt.Errorf("verifier %q is not approved for Agent host execution; an administrator must explicitly set agent_host_execution_allowed=true", verifierID)
 	}
 	return nil
 }

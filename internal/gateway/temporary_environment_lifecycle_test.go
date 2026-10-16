@@ -176,7 +176,7 @@ func TestTemporaryManagedWorktreeTargetedCleanupUsesDestroySafety(t *testing.T) 
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	created, err := service.CreateTemporaryEnvironment(ctx, "agent", model.TemporaryEnvironmentCreateRequest{
+	created, err := service.CreateTemporaryEnvironment(ctx, "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID,
 		Name:        "managed-cleanup",
 		OwnerID:     "owner-managed",
@@ -217,7 +217,7 @@ func TestTemporaryManagedWorktreeTargetedCleanupBlocksDirtyWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	created, err := service.CreateTemporaryEnvironment(ctx, "agent", model.TemporaryEnvironmentCreateRequest{
+	created, err := service.CreateTemporaryEnvironment(ctx, "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID,
 		Name:        "managed-dirty",
 		OwnerID:     "owner-dirty",

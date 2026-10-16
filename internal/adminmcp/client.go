@@ -330,6 +330,10 @@ func (c *Client) VerifierList(environmentID string) ([]model.VerifierDefinition,
 	return callAdmin[[]model.VerifierDefinition](c, context.Background(), "environment_verifier_list", map[string]any{"environment_id": environmentID})
 }
 
+func (c *Client) VerifierAgentHostExecutionSet(environmentID, verifierID string, allowed bool) (model.VerifierDefinition, error) {
+	return callAdmin[model.VerifierDefinition](c, context.Background(), "environment_verifier_agent_host_execution_set", map[string]any{"environment_id": environmentID, "verifier_id": verifierID, "allowed": allowed})
+}
+
 func (c *Client) VerifierRemove(environmentID, verifierID string) (model.VerifierDefinition, error) {
 	type removed struct {
 		Removed model.VerifierDefinition `json:"removed"`

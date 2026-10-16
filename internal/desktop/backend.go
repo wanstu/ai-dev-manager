@@ -106,6 +106,7 @@ type runtimeBackend interface {
 	WriterAcquire(string, string) (model.Environment, error)
 	WriterRelease(string, string, bool) (model.Environment, error)
 	VerifierList(string) ([]model.VerifierDefinition, error)
+	VerifierAgentHostExecutionSet(string, string, bool) (model.VerifierDefinition, error)
 	VerifierRun(string, string, string, int) (verifier.Result, error)
 	ProcessList(string) ([]adminmcp.ProcessStatus, error)
 	ProcessStatus(string, string) (adminmcp.ProcessStatus, error)

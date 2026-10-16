@@ -47,12 +47,12 @@ func TestGatewayDevelopsPlainDirectoryWithoutGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := toolNames(tools.Tools)
-	for _, required := range []string{"workspace_list", "workspace_inspect", "environment_list", "environment_inspect", "environment_capability_report", "environment_injection_plan", "environment_writer_acquire", "environment_writer_heartbeat", "environment_writer_release", "environment_verifier_list", "environment_verifier_run", "environment_mcp_inspect", "environment_mcp_refresh", "environment_mcp_status", "environment_mcp_tools", "environment_mcp_call", "environment_skill_list", "environment_skill_inspect", "environment_skill_files", "environment_skill_read", "memory_environment_write", "tree", "read", "compare_files", "project_analyze", "code_intelligence_info", "code_intelligence_query", "code_intelligence_status", "code_intelligence_references", "code_intelligence_hierarchy", "project_index_query", "project_investigate_php", "project_call_graph", "project_index_status", "search", "write", "edit", "delete", "exec", "git_status"} {
+	for _, required := range []string{"workspace_list", "workspace_inspect", "environment_list", "environment_inspect", "environment_capability_report", "environment_injection_plan", "environment_writer_acquire", "environment_writer_heartbeat", "environment_writer_release", "environment_verifier_list", "environment_verifier_run", "environment_mcp_inspect", "environment_mcp_refresh", "environment_mcp_status", "environment_mcp_tools", "environment_mcp_call", "environment_skill_list", "environment_skill_inspect", "environment_skill_files", "environment_skill_read", "memory_environment_write", "tree", "read", "compare_files", "project_analyze", "code_intelligence_info", "code_intelligence_query", "code_intelligence_status", "code_intelligence_references", "code_intelligence_hierarchy", "project_index_query", "project_investigate_php", "project_call_graph", "project_index_status", "search", "write", "edit", "delete", "git_status"} {
 		if !contains(names, required) {
 			t.Fatalf("missing Agent gateway tool %q in %v", required, names)
 		}
 	}
-	for _, adminOnly := range []string{"management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "workspace_rename", "workspace_remove", "environment_create", "environment_rename", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "mcp_list", "mcp_add", "mcp_update", "mcp_import_preview", "mcp_import_apply", "environment_mcp_set", "skill_list", "skill_add", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary", "environment_temporary_promote", "memory_global_write", "memory_global_delete"} {
+	for _, adminOnly := range []string{"global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "process_start", "run_start", "project_index_auto_set", "host_directory_list", "environment_worktree_create", "environment_worktree_destroy", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary", "environment_temporary_promote", "environment_temporary_cleanup", "environment_verifier_agent_host_execution_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "workspace_rename", "workspace_remove", "environment_create", "environment_rename", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "gateway_access_policy_set", "secret_list", "secret_set", "secret_delete", "mcp_list", "mcp_add", "mcp_update", "mcp_import_preview", "mcp_import_apply", "environment_mcp_set", "skill_list", "skill_add", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete"} {
 		if contains(names, adminOnly) {
 			t.Fatalf("Admin-only tool %q leaked into Agent gateway: %v", adminOnly, names)
 		}
@@ -364,41 +364,45 @@ func TestGatewayVerifierListAndRunAreEnvironmentScopedAndWriterGated(t *testing.
 	t.Setenv("ADM_V2_GATEWAY_VERIFIER_HELPER", "1")
 	helperArgs := []string{"-test.run=^TestGatewayVerifierHelperProcess$"}
 	passA, err := service.AddVerifier(envA.ID, model.VerifierDefinition{
-		Name:           "pass-a",
-		Kind:           verifier.KindTest,
-		Enabled:        true,
-		Executable:     exe,
-		Args:           helperArgs,
-		TimeoutSeconds: 5,
+		Name:                      "pass-a",
+		Kind:                      verifier.KindTest,
+		Enabled:                   true,
+		AgentHostExecutionAllowed: true,
+		Executable:                exe,
+		Args:                      helperArgs,
+		TimeoutSeconds:            5,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	disabledA, err := service.AddVerifier(envA.ID, model.VerifierDefinition{
-		Name:       "disabled-a",
-		Kind:       verifier.KindCustom,
-		Enabled:    false,
-		Executable: exe,
-		Args:       helperArgs,
+		Name:                      "disabled-a",
+		Kind:                      verifier.KindCustom,
+		Enabled:                   false,
+		AgentHostExecutionAllowed: true,
+		Executable:                exe,
+		Args:                      helperArgs,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	brokenA, err := service.AddVerifier(envA.ID, model.VerifierDefinition{
-		Name:       "broken-a",
-		Kind:       verifier.KindCustom,
-		Enabled:    true,
-		Executable: "adm-v2-gateway-verifier-not-allowlisted",
+		Name:                      "broken-a",
+		Kind:                      verifier.KindCustom,
+		Enabled:                   true,
+		AgentHostExecutionAllowed: true,
+		Executable:                "adm-v2-gateway-verifier-not-allowlisted",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	passB, err := service.AddVerifier(envB.ID, model.VerifierDefinition{
-		Name:       "pass-b",
-		Kind:       verifier.KindTest,
-		Enabled:    true,
-		Executable: exe,
-		Args:       helperArgs,
+		Name:                      "pass-b",
+		Kind:                      verifier.KindTest,
+		Enabled:                   true,
+		AgentHostExecutionAllowed: true,
+		Executable:                exe,
+		Args:                      helperArgs,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1257,7 +1261,7 @@ func TestHTTPGatewaySeparatesAgentAndAdminMCPPaths(t *testing.T) {
 			t.Fatalf("Agent MCP missing %q: %v", required, agentNames)
 		}
 	}
-	for _, adminOnly := range []string{"management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary", "environment_temporary_promote", "memory_global_write", "memory_global_delete"} {
+	for _, adminOnly := range []string{"global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "process_start", "run_start", "project_index_auto_set", "host_directory_list", "environment_worktree_create", "environment_worktree_destroy", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary", "environment_temporary_promote", "environment_temporary_cleanup", "environment_verifier_agent_host_execution_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "gateway_access_policy_set", "secret_list", "secret_set", "secret_delete", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete"} {
 		if contains(agentNames, adminOnly) {
 			t.Fatalf("Admin-only tool %q leaked into Agent MCP: %v", adminOnly, agentNames)
 		}

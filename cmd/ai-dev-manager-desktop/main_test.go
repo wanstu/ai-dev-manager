@@ -321,7 +321,7 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 		"SetEnvironmentMCP", "SetEnvironmentSkill",
 		"ListGlobalMemory", "WriteGlobalMemory", "DeleteGlobalMemory",
 		"currentEnvironmentMemoryScope", "environmentMemoryScopeIsCurrent", "resetEnvironmentMemoryScope", "renderEnvironmentMemoryScope", "ListEnvironmentMemory", "WriteEnvironmentMemory", "DeleteEnvironmentMemory",
-		"AcquireRuntimeWriter", "ReleaseRuntimeWriter", "ListVerifiers", "RunVerifier", "ListProcesses", "GetProcessLogs", "StopProcess", "ListRuns", "CancelRun", "refreshRuntimeContext", "GetLoggingStatus", "refreshLoggingStatus",
+		"AcquireRuntimeWriter", "ReleaseRuntimeWriter", "ListVerifiers", "SetVerifierAgentHostExecution", "RunVerifier", "ListProcesses", "GetProcessLogs", "StopProcess", "ListRuns", "CancelRun", "refreshRuntimeContext", "GetLoggingStatus", "refreshLoggingStatus",
 		"正在显式读取 Global Memory", "正在显式读取 Environment-private Memory",
 		"environmentDetailBackdrop", "statusPanel.hidden = false", "statusPanel.hidden = true", "生命周期", "preview-temporary-environment-cleanup", "execute-temporary-environment-cleanup", "没有 force 路径",
 		"只移除 ADM Workspace 记录，不删除目录", "只移除 ADM Environment 记录，不删除 root 或项目文件",

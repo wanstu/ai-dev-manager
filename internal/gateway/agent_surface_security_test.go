@@ -16,18 +16,19 @@ func TestAgentSurfaceHidesHostEscapeTools(t *testing.T) {
 	ctx := context.Background()
 
 	forbidden := map[string]bool{
-		"global_exec":                    true,
-		"global_mcp_status":              true,
-		"global_mcp_tools":               true,
-		"global_mcp_call":                true,
-		"global_skill_list":              true,
-		"global_skill_files":             true,
-		"global_skill_read":              true,
-		"exec":                           true,
-		"run_start":                      true,
-		"process_start":                  true,
-		"environment_verifier_run":       true,
-		"environment_verifier_run_start": true,
+		"global_exec":                   true,
+		"global_mcp_status":             true,
+		"global_mcp_tools":              true,
+		"global_mcp_call":               true,
+		"global_skill_list":             true,
+		"global_skill_files":            true,
+		"global_skill_read":             true,
+		"exec":                          true,
+		"run_start":                     true,
+		"process_start":                 true,
+		"environment_worktree_destroy":  true,
+		"environment_temporary_promote": true,
+		"environment_temporary_cleanup": true,
 	}
 
 	agent := connectInMemory(t, ctx, New(service))
@@ -36,9 +37,16 @@ func TestAgentSurfaceHidesHostEscapeTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	available := map[string]bool{}
 	for _, tool := range agentTools.Tools {
+		available[tool.Name] = true
 		if forbidden[tool.Name] {
 			t.Fatalf("Agent MCP must not expose host-escape tool %q", tool.Name)
+		}
+	}
+	for _, name := range []string{"environment_verifier_run", "environment_verifier_run_start"} {
+		if !available[name] {
+			t.Fatalf("Agent MCP must retain approved verifier automation tool %q", name)
 		}
 	}
 

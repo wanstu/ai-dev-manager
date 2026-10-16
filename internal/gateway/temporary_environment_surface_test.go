@@ -46,23 +46,30 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		for _, tool := range tools.Tools {
 			byName[tool.Name] = tool
 		}
-		for _, name := range []string{"environment_temporary_create", "environment_temporary_status", "environment_temporary_cleanup"} {
+		for _, name := range []string{"environment_temporary_create", "environment_temporary_status"} {
 			if byName[name] == nil {
 				t.Fatalf("%s surface missing %s", surface, name)
 			}
 		}
-		if surface == "agent" && byName["environment_temporary_promote"] != nil {
-			t.Fatal("Agent surface exposed durable Environment promotion")
-		}
-		if surface == "admin" && byName["environment_temporary_promote"] == nil {
-			t.Fatal("Admin surface missing Environment promotion")
-		}
-		encodedCleanup, err := json.Marshal(byName["environment_temporary_cleanup"])
-		if err != nil {
-			t.Fatal(err)
-		}
-		if strings.Contains(strings.ToLower(string(encodedCleanup)), `"force"`) {
-			t.Fatalf("%s temporary cleanup unexpectedly exposes force: %s", surface, encodedCleanup)
+		if surface == "agent" {
+			for _, name := range []string{"environment_temporary_promote", "environment_temporary_cleanup"} {
+				if byName[name] != nil {
+					t.Fatalf("Agent surface exposed destructive temporary lifecycle tool %s", name)
+				}
+			}
+		} else {
+			for _, name := range []string{"environment_temporary_promote", "environment_temporary_cleanup"} {
+				if byName[name] == nil {
+					t.Fatalf("Admin surface missing %s", name)
+				}
+			}
+			encodedCleanup, err := json.Marshal(byName["environment_temporary_cleanup"])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(strings.ToLower(string(encodedCleanup)), `"force"`) {
+				t.Fatalf("%s temporary cleanup unexpectedly exposes force: %s", surface, encodedCleanup)
+			}
 		}
 		if !strings.Contains(strings.ToLower(byName["environment_temporary_create"].Description), "provenance") || !strings.Contains(strings.ToLower(byName["environment_temporary_create"].Description), "not adm task orchestration") {
 			t.Fatalf("%s temporary create description lost provenance boundary: %q", surface, byName["environment_temporary_create"].Description)
@@ -76,7 +83,7 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		}
 	}
 
-	createdTool := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{
+	createdTool := callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{
 		"workspace_id": workspace.ID,
 		"name":         "phase22-http-temp",
 		"owner_id":     "lifecycle-owner-a",
@@ -88,7 +95,7 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		t.Fatalf("plain temporary create failed: %s", toolText(t, createdTool))
 	}
 	created := temporaryCreateFromTool(t, createdTool)
-	if created.Mode != model.TemporaryEnvironmentModeExistingRoot || created.Environment.Retention.Persistence != model.PersistenceTemporary || created.Environment.Retention.OwnerID != "lifecycle-owner-a" || created.Environment.Retention.SessionID != "session-provenance-a" || created.Environment.Retention.RunID != "run_nonexistent_provenance" || created.Environment.Retention.CreatorSurface != string(serverSurfaceAgent) || created.Environment.Retention.ExpiresAt == nil {
+	if created.Mode != model.TemporaryEnvironmentModeExistingRoot || created.Environment.Retention.Persistence != model.PersistenceTemporary || created.Environment.Retention.OwnerID != "lifecycle-owner-a" || created.Environment.Retention.SessionID != "session-provenance-a" || created.Environment.Retention.RunID != "run_nonexistent_provenance" || created.Environment.Retention.CreatorSurface != string(serverSurfaceAdmin) || created.Environment.Retention.ExpiresAt == nil {
 		t.Fatalf("plain temporary create lost retention/provenance: %+v", created)
 	}
 	if created.ManagedWorktree != nil || !pathutil.Same(created.Environment.Root, root) {
@@ -128,7 +135,7 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 	if readOnlyStatus.IsError {
 		t.Fatalf("read-only temporary status failed: %s", toolText(t, readOnlyStatus))
 	}
-	readOnlyPreview := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "lifecycle-owner-a"})
+	readOnlyPreview := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "lifecycle-owner-a"})
 	if readOnlyPreview.IsError {
 		t.Fatalf("read-only temporary cleanup preview failed: %s", toolText(t, readOnlyPreview))
 	}
@@ -167,7 +174,7 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 	if !wrongPromote.IsError {
 		t.Fatalf("wrong lifecycle owner promoted temporary Environment: %s", toolText(t, wrongPromote))
 	}
-	wrongCleanup := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "wrong-owner", "execute": true})
+	wrongCleanup := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "wrong-owner", "execute": true})
 	if !wrongCleanup.IsError {
 		t.Fatalf("wrong lifecycle owner executed temporary cleanup: %s", toolText(t, wrongCleanup))
 	}
@@ -206,10 +213,10 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 			t.Fatal(err)
 		}
 	}
-	first := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "target-one", "owner_id": "target-owner", "ttl_seconds": 1, "root": firstRoot}))
-	second := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "target-two", "owner_id": "target-owner", "ttl_seconds": 1, "root": secondRoot}))
+	first := temporaryCreateFromTool(t, callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "target-one", "owner_id": "target-owner", "ttl_seconds": 1, "root": firstRoot}))
+	second := temporaryCreateFromTool(t, callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "target-two", "owner_id": "target-owner", "ttl_seconds": 1, "root": secondRoot}))
 	time.Sleep(1200 * time.Millisecond)
-	preview := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": first.Environment.ID, "owner_id": "target-owner"})
+	preview := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": first.Environment.ID, "owner_id": "target-owner"})
 	if preview.IsError {
 		t.Fatalf("targeted cleanup preview failed: %s", toolText(t, preview))
 	}
@@ -244,7 +251,7 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 	t.Setenv("ADM_TEST_AGENT_RUN_MODE", "stream_large")
 	restartWriter := "phase22-restart-writer"
 	acquireTemporaryWriter(t, ctx, agent, second.Environment.ID, restartWriter)
-	restartRun := callGatewayTool(t, ctx, agent, "run_start", map[string]any{"environment_id": second.Environment.ID, "writer_owner": restartWriter, "executable": os.Args[0], "args": []string{"-test.run=^TestAgentRunCommandHelper$"}, "timeout_ms": 10000})
+	restartRun := callGatewayTool(t, ctx, admin, "run_start", map[string]any{"environment_id": second.Environment.ID, "writer_owner": restartWriter, "executable": os.Args[0], "args": []string{"-test.run=^TestAgentRunCommandHelper$"}, "timeout_ms": 10000})
 	if restartRun.IsError {
 		t.Fatalf("restart evidence Run start failed: %s", toolText(t, restartRun))
 	}
@@ -304,8 +311,10 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 	ctx := context.Background()
 	agent := connectHTTPWithRetry(t, ctx, server.URL+"/mcp")
 	defer agent.Close()
+	admin := connectHTTPWithRetry(t, ctx, server.URL+"/admin/mcp")
+	defer admin.Close()
 
-	created := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{
+	created := temporaryCreateFromTool(t, callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{
 		"workspace_id": workspace.ID,
 		"name":         "phase22-managed-clean",
 		"owner_id":     "managed-owner",
@@ -314,7 +323,7 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		"branch_name":  "test/phase22-clean",
 		"base_ref":     "HEAD",
 	}))
-	if created.ManagedWorktree == nil || created.Environment.Retention.Persistence != model.PersistenceTemporary || created.Environment.Retention.CreatorSurface != string(serverSurfaceAgent) {
+	if created.ManagedWorktree == nil || created.Environment.Retention.Persistence != model.PersistenceTemporary || created.Environment.Retention.CreatorSurface != string(serverSurfaceAdmin) {
 		t.Fatalf("managed temporary create lost identity/retention: %+v", created)
 	}
 	managed := *created.ManagedWorktree
@@ -322,11 +331,11 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		t.Fatal("managed temporary create changed source checkout")
 	}
 	time.Sleep(1200 * time.Millisecond)
-	preview := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "managed-owner"})
+	preview := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "managed-owner"})
 	if preview.IsError || !strings.Contains(toolText(t, preview), created.Environment.ID) {
 		t.Fatalf("managed cleanup preview failed: %s", toolText(t, preview))
 	}
-	executed := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "managed-owner", "execute": true})
+	executed := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "managed-owner", "execute": true})
 	if executed.IsError {
 		t.Fatalf("managed cleanup execute failed: %s", toolText(t, executed))
 	}
@@ -360,9 +369,9 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dirty := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-dirty", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-dirty"}))
-	unpublished := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-unpublished", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-unpublished"}))
-	tampered := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-tampered", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-tampered"}))
+	dirty := temporaryCreateFromTool(t, callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-dirty", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-dirty"}))
+	unpublished := temporaryCreateFromTool(t, callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-unpublished", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-unpublished"}))
+	tampered := temporaryCreateFromTool(t, callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-managed-tampered", "owner_id": "managed-owner", "ttl_seconds": 1, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/phase22-tampered"}))
 	defer func() {
 		for _, item := range []*model.ManagedWorktree{dirty.ManagedWorktree, unpublished.ManagedWorktree, tampered.ManagedWorktree} {
 			if item == nil {
@@ -390,11 +399,11 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		{unpublished.Environment.ID, "managed_worktree_unpublished"},
 		{tampered.Environment.ID, "managed_worktree_safety_check_failed"},
 	} {
-		preview := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": tc.id, "owner_id": "managed-owner"})
+		preview := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": tc.id, "owner_id": "managed-owner"})
 		if preview.IsError || !strings.Contains(toolText(t, preview), tc.blocker) {
 			t.Fatalf("managed blocker %s missing for %s: %s", tc.blocker, tc.id, toolText(t, preview))
 		}
-		execute := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": tc.id, "owner_id": "managed-owner", "execute": true})
+		execute := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": tc.id, "owner_id": "managed-owner", "execute": true})
 		if !execute.IsError {
 			t.Fatalf("unsafe managed Environment %s was cleanup-executable: %s", tc.id, toolText(t, execute))
 		}
@@ -408,11 +417,11 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	managedFailure := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": plainWS.ID, "name": "non-git-managed", "owner_id": "plain-owner", "ttl_seconds": 60, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/non-git-managed"})
+	managedFailure := callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{"workspace_id": plainWS.ID, "name": "non-git-managed", "owner_id": "plain-owner", "ttl_seconds": 60, "mode": model.TemporaryEnvironmentModeManagedWorktree, "branch_name": "test/non-git-managed"})
 	if !managedFailure.IsError {
 		t.Fatalf("non-Git Workspace unexpectedly accepted managed-worktree mode: %s", toolText(t, managedFailure))
 	}
-	plainSuccess := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": plainWS.ID, "name": "non-git-existing-root", "owner_id": "plain-owner", "ttl_seconds": 60})
+	plainSuccess := callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{"workspace_id": plainWS.ID, "name": "non-git-existing-root", "owner_id": "plain-owner", "ttl_seconds": 60})
 	if plainSuccess.IsError {
 		t.Fatalf("managed-worktree failure poisoned ordinary existing-root mode: %s", toolText(t, plainSuccess))
 	}
@@ -436,9 +445,11 @@ func TestTemporaryEnvironmentHTTPActiveRuntimeBlockers(t *testing.T) {
 	ctx := context.Background()
 	agent := connectHTTPWithRetry(t, ctx, server.URL+"/mcp")
 	defer agent.Close()
+	admin := connectHTTPWithRetry(t, ctx, server.URL+"/admin/mcp")
+	defer admin.Close()
 
-	created := temporaryCreateFromTool(t, callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-runtime", "owner_id": "runtime-owner", "ttl_seconds": 1}))
-	definition, err := service.AddVerifier(created.Environment.ID, model.VerifierDefinition{Name: "phase22-long", Kind: verifier.KindTest, Enabled: true, Executable: os.Args[0], Args: []string{"-test.run=^TestAsyncVerifierCommandHelper$"}, TimeoutSeconds: 30})
+	created := temporaryCreateFromTool(t, callGatewayTool(t, ctx, admin, "environment_temporary_create", map[string]any{"workspace_id": workspace.ID, "name": "phase22-runtime", "owner_id": "runtime-owner", "ttl_seconds": 1}))
+	definition, err := service.AddVerifier(created.Environment.ID, model.VerifierDefinition{Name: "phase22-long", Kind: verifier.KindTest, Enabled: true, AgentHostExecutionAllowed: true, Executable: os.Args[0], Args: []string{"-test.run=^TestAsyncVerifierCommandHelper$"}, TimeoutSeconds: 30})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +465,7 @@ func TestTemporaryEnvironmentHTTPActiveRuntimeBlockers(t *testing.T) {
 	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")
 	t.Setenv("ADM_TEST_DEV_PROCESS_PORT_FILE", portFile)
 	acquireTemporaryWriter(t, ctx, agent, created.Environment.ID, writerOwner)
-	processStart := callGatewayTool(t, ctx, agent, "process_start", map[string]any{"environment_id": created.Environment.ID, "writer_owner": writerOwner, "executable": os.Args[0], "args": []string{"-test.run=^TestDevProcessHelper$"}})
+	processStart := callGatewayTool(t, ctx, admin, "process_start", map[string]any{"environment_id": created.Environment.ID, "writer_owner": writerOwner, "executable": os.Args[0], "args": []string{"-test.run=^TestDevProcessHelper$"}})
 	if processStart.IsError {
 		t.Fatalf("process start failed: %s", toolText(t, processStart))
 	}
@@ -472,7 +483,7 @@ func TestTemporaryEnvironmentHTTPActiveRuntimeBlockers(t *testing.T) {
 	t.Setenv("ADM_TEST_AGENT_RUN_HELPER", "1")
 	t.Setenv("ADM_TEST_AGENT_RUN_MODE", "stream_large")
 	acquireTemporaryWriter(t, ctx, agent, created.Environment.ID, writerOwner)
-	runStart := callGatewayTool(t, ctx, agent, "run_start", map[string]any{"environment_id": created.Environment.ID, "writer_owner": writerOwner, "executable": os.Args[0], "args": []string{"-test.run=^TestAgentRunCommandHelper$"}, "timeout_ms": 10000})
+	runStart := callGatewayTool(t, ctx, admin, "run_start", map[string]any{"environment_id": created.Environment.ID, "writer_owner": writerOwner, "executable": os.Args[0], "args": []string{"-test.run=^TestAgentRunCommandHelper$"}, "timeout_ms": 10000})
 	if runStart.IsError {
 		t.Fatalf("Run start failed: %s", toolText(t, runStart))
 	}
@@ -498,7 +509,7 @@ func TestTemporaryEnvironmentHTTPActiveRuntimeBlockers(t *testing.T) {
 	waitVerifierHTTPOutput(t, ctx, agent, created.Environment.ID, verifierRunID, "phase21-long-ready")
 	releaseTemporaryWriter(t, ctx, agent, created.Environment.ID, writerOwner)
 	assertTemporaryStatusBlocker(t, ctx, agent, created.Environment.ID, "active_verifier_run", true)
-	blockedCleanup := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "runtime-owner", "execute": true})
+	blockedCleanup := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "runtime-owner", "execute": true})
 	if !blockedCleanup.IsError || !strings.Contains(toolText(t, blockedCleanup), "active_verifier_run") {
 		t.Fatalf("real vfrun did not block cleanup: %s", toolText(t, blockedCleanup))
 	}
@@ -510,7 +521,7 @@ func TestTemporaryEnvironmentHTTPActiveRuntimeBlockers(t *testing.T) {
 	releaseTemporaryWriter(t, ctx, agent, created.Environment.ID, writerOwner)
 	assertTemporaryStatusBlocker(t, ctx, agent, created.Environment.ID, "active_verifier_run", false)
 
-	cleanup := callGatewayTool(t, ctx, agent, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "runtime-owner", "execute": true})
+	cleanup := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": created.Environment.ID, "owner_id": "runtime-owner", "execute": true})
 	if cleanup.IsError {
 		t.Fatalf("cleanup remained blocked after explicit runtime teardown: %s", toolText(t, cleanup))
 	}

@@ -100,6 +100,10 @@ func (s *Service) VerifierList(environmentID string) ([]model.VerifierDefinition
 	return s.ListVerifiers(environmentID)
 }
 
+func (s *Service) VerifierAgentHostExecutionSet(environmentID, verifierID string, allowed bool) (model.VerifierDefinition, error) {
+	return s.Verifiers.SetAgentHostExecutionAllowed(environmentID, verifierID, allowed)
+}
+
 func (s *Service) VerifierRemove(environmentID, verifierID string) (model.VerifierDefinition, error) {
 	return s.RemoveVerifier(environmentID, verifierID)
 }

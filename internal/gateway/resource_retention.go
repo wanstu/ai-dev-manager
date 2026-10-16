@@ -14,9 +14,17 @@ func (o *runtimeOwner) ResourceRetentionReport(ctx context.Context) (model.Resou
 	return o.retentionReportFiltered(ctx, nil)
 }
 
+func (o *runtimeOwner) resourceRetentionReport(ctx context.Context, includeManagedSafety bool) (model.ResourceRetentionReport, error) {
+	return o.retentionReportFilteredWithSafety(ctx, nil, includeManagedSafety)
+}
+
 // Filter before expensive worktree Git checks, while preserving safety checks
 // for every resource returned to callers.
 func (o *runtimeOwner) retentionReportFiltered(ctx context.Context, keep func(model.ResourceRetentionItem) bool) (model.ResourceRetentionReport, error) {
+	return o.retentionReportFilteredWithSafety(ctx, keep, true)
+}
+
+func (o *runtimeOwner) retentionReportFilteredWithSafety(ctx context.Context, keep func(model.ResourceRetentionItem) bool, includeManagedSafety bool) (model.ResourceRetentionReport, error) {
 	report, err := o.service.ResourceRetentionReport(ctx)
 	if err != nil {
 		return model.ResourceRetentionReport{}, err
@@ -39,7 +47,7 @@ func (o *runtimeOwner) retentionReportFiltered(ctx context.Context, keep func(mo
 			item.Blockers = append(item.Blockers, o.runtimeRetentionBlockers(item.Kind, item.ID)...)
 			changed = true
 		}
-		if item.Kind == model.RetentionResourceEnvironment && hasRetentionBlocker(item.Blockers, "managed_worktree_requires_destroy_safety_check") {
+		if includeManagedSafety && item.Kind == model.RetentionResourceEnvironment && hasRetentionBlocker(item.Blockers, "managed_worktree_requires_destroy_safety_check") {
 			o.enrichManagedWorktreeRetention(ctx, item)
 			changed = true
 		}
@@ -53,13 +61,21 @@ func (o *runtimeOwner) retentionReportFiltered(ctx context.Context, keep func(mo
 }
 
 func (o *runtimeOwner) TemporaryEnvironmentStatus(ctx context.Context, environmentID string) (model.TemporaryEnvironmentStatus, error) {
+	return o.temporaryEnvironmentStatus(ctx, environmentID, true)
+}
+
+func (o *runtimeOwner) TemporaryEnvironmentStatusAgent(ctx context.Context, environmentID string) (model.TemporaryEnvironmentStatus, error) {
+	return o.temporaryEnvironmentStatus(ctx, environmentID, false)
+}
+
+func (o *runtimeOwner) temporaryEnvironmentStatus(ctx context.Context, environmentID string, includeManagedSafety bool) (model.TemporaryEnvironmentStatus, error) {
 	environment, err := o.service.Environments.Get(strings.TrimSpace(environmentID))
 	if err != nil {
 		return model.TemporaryEnvironmentStatus{}, err
 	}
-	report, err := o.retentionReportFiltered(ctx, func(item model.ResourceRetentionItem) bool {
+	report, err := o.retentionReportFilteredWithSafety(ctx, func(item model.ResourceRetentionItem) bool {
 		return item.Kind == model.RetentionResourceEnvironment && item.ID == environment.ID
-	})
+	}, includeManagedSafety)
 	if err != nil {
 		return model.TemporaryEnvironmentStatus{}, err
 	}
@@ -214,7 +230,7 @@ func (o *runtimeOwner) ExpiredTemporaryEnvironmentsCleanup(ctx context.Context, 
 }
 
 func (o *runtimeOwner) ResourceRetentionCleanup(ctx context.Context, request model.ResourceRetentionCleanupRequest) (model.ResourceRetentionCleanupResult, error) {
-	report, err := o.ResourceRetentionReport(ctx)
+	report, err := o.resourceRetentionReport(ctx, true)
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}

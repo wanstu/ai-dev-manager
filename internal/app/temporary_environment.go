@@ -101,6 +101,7 @@ func (s *Service) CreateTemporaryEnvironment(ctx context.Context, creatorSurface
 			BranchName:                request.BranchName,
 			BaseRef:                   request.BaseRef,
 			MigrateUncommittedChanges: request.MigrateUncommittedChanges,
+			AgentSafe:                 strings.EqualFold(creatorSurface, "agent"),
 		}
 		if request.SourceEnvironmentID != "" {
 			created, err = s.Isolation.CreateFromEnvironmentWithRetention(ctx, request.SourceEnvironmentID, request.Name, options, retention)

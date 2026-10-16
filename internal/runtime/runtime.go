@@ -29,6 +29,7 @@ const (
 	CapabilityGitStatus = "git.status"
 	CapabilityGitDiff   = "git.diff"
 	CapabilityGitBranch = "git.branch"
+	CapabilityGitCommit = "git.commit"
 )
 
 type Runtime struct {
@@ -75,6 +76,11 @@ type CommandResult struct {
 type GitStatusEntry struct {
 	Code string `json:"code"`
 	Path string `json:"path"`
+}
+
+type GitCommitResult struct {
+	Commit string `json:"commit"`
+	Branch string `json:"branch,omitempty"`
 }
 
 func New(root string, allowedExecutables []string) (*Runtime, error) {
@@ -143,7 +149,7 @@ func (r *Runtime) Capabilities(ctx context.Context) []string {
 		caps = append(caps, CapabilityExec)
 	}
 	if r.gitSupported(ctx) {
-		caps = append(caps, CapabilityGitStatus, CapabilityGitDiff, CapabilityGitBranch)
+		caps = append(caps, CapabilityGitStatus, CapabilityGitDiff, CapabilityGitBranch, CapabilityGitCommit)
 	}
 	sort.Strings(caps)
 	return caps
@@ -174,6 +180,13 @@ func (r *Runtime) Tree(path string, maxDepth, maxEntries int) ([]FileInfo, error
 			return walkErr
 		}
 		if current == start {
+			return nil
+		}
+		relFromRoot, _ := filepath.Rel(r.root, current)
+		if isReservedGitMetadataPath(relFromRoot) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		currentDepth := depth(current) - baseDepth
@@ -319,6 +332,22 @@ func (r *Runtime) Search(path, query string, maxFiles, maxMatches, maxBytesPerFi
 	var out []SearchMatch
 	files := 0
 	walkOne := func(target string) error {
+		displayTarget := target
+		resolved, err := filepath.EvalSymlinks(target)
+		if err != nil {
+			return err
+		}
+		// WalkDir does not follow directory symlinks, but a symlinked file is still
+		// handed to walkOne. Re-check the resolved file so search cannot read
+		// content outside the Environment root through an in-tree symlink.
+		if !within(r.root, resolved) {
+			return nil
+		}
+		resolvedRel, _ := filepath.Rel(r.root, resolved)
+		if isReservedGitMetadataPath(resolvedRel) {
+			return nil
+		}
+		target = filepath.Clean(resolved)
 		info, err := os.Stat(target)
 		if err != nil || !info.Mode().IsRegular() || info.Size() > int64(maxBytesPerFile) {
 			return err
@@ -340,7 +369,7 @@ func (r *Runtime) Search(path, query string, maxFiles, maxMatches, maxBytesPerFi
 			line++
 			text := scanner.Text()
 			if strings.Contains(text, query) {
-				rel, _ := filepath.Rel(r.root, target)
+				rel, _ := filepath.Rel(r.root, displayTarget)
 				out = append(out, SearchMatch{Path: filepath.ToSlash(rel), Line: line, Text: text})
 				if len(out) >= maxMatches {
 					return io.EOF
@@ -363,6 +392,13 @@ func (r *Runtime) Search(path, query string, maxFiles, maxMatches, maxBytesPerFi
 	err = filepath.WalkDir(start, func(current string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		relFromRoot, _ := filepath.Rel(r.root, current)
+		if isReservedGitMetadataPath(relFromRoot) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if entry.IsDir() {
 			return nil
@@ -510,7 +546,14 @@ func (r *Runtime) GitStatus(ctx context.Context) ([]GitStatusEntry, error) {
 	if !r.gitSupported(ctx) {
 		return nil, fmt.Errorf("git.status is unsupported for this environment root")
 	}
-	out, err := r.gitOutput(ctx, "status", "--porcelain=v1")
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return nil, err
+	}
+	if err := r.ensureGitFiltersInactive(ctx, git); err != nil {
+		return nil, err
+	}
+	out, err := r.gitOutput(ctx, "status", "--porcelain=v1", "--ignore-submodules=all")
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +572,14 @@ func (r *Runtime) GitDiff(ctx context.Context) (string, error) {
 	if !r.gitSupported(ctx) {
 		return "", fmt.Errorf("git.diff is unsupported for this environment root")
 	}
-	return r.gitOutput(ctx, "diff", "--no-ext-diff", "--binary", "HEAD")
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return "", err
+	}
+	if err := r.ensureGitFiltersInactive(ctx, git); err != nil {
+		return "", err
+	}
+	return r.gitOutput(ctx, "diff", "--no-ext-diff", "--no-textconv", "--ignore-submodules=all", "--binary", "HEAD")
 }
 
 func (r *Runtime) GitBranch(ctx context.Context) (string, error) {
@@ -547,8 +597,7 @@ func (r *Runtime) gitSupported(ctx context.Context) bool {
 	}
 	checkCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(checkCtx, git, "-C", r.root, "rev-parse", "--is-inside-work-tree")
-	configureCommand(cmd)
+	cmd := r.readOnlyGitCommand(checkCtx, git, "rev-parse", "--is-inside-work-tree")
 	out, err := cmd.Output()
 	return err == nil && strings.TrimSpace(string(out)) == "true"
 }
@@ -558,14 +607,263 @@ func (r *Runtime) gitOutput(ctx context.Context, args ...string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	fullArgs := append([]string{"-C", r.root}, args...)
-	cmd := exec.CommandContext(ctx, git, fullArgs...)
-	configureCommand(cmd)
+	cmd := r.readOnlyGitCommand(ctx, git, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
 	}
 	return string(out), nil
+}
+
+func (r *Runtime) readOnlyGitCommand(ctx context.Context, git string, args ...string) *exec.Cmd {
+	fullArgs := []string{
+		"--no-pager",
+		"-c", "core.fsmonitor=false",
+		"-c", "core.attributesFile=" + os.DevNull,
+		"-C", r.root,
+	}
+	fullArgs = append(fullArgs, args...)
+	cmd := exec.CommandContext(ctx, git, fullArgs...)
+	configureCommand(cmd)
+	cmd.Env = sanitizeGitEnvironment(r.baseEnvironment)
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_CONFIG_NOSYSTEM", "1")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_CONFIG_GLOBAL", os.DevNull)
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_ATTR_NOSYSTEM", "1")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_TERMINAL_PROMPT", "0")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_OPTIONAL_LOCKS", "0")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_EXTERNAL_DIFF", "")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_PAGER", "cat")
+	return cmd
+}
+
+func (r *Runtime) ensureGitFiltersInactive(ctx context.Context, git string) error {
+	list := r.readOnlyGitCommand(ctx, git, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--")
+	paths, err := list.Output()
+	if err != nil {
+		return fmt.Errorf("git ls-files for filter safety: %w", err)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	check := r.readOnlyGitCommand(ctx, git, "check-attr", "-z", "--stdin", "filter")
+	check.Stdin = bytes.NewReader(paths)
+	output, err := check.Output()
+	if err != nil {
+		return fmt.Errorf("git check-attr filter safety: %w", err)
+	}
+	fields := bytes.Split(output, []byte{0})
+	for i := 0; i+2 < len(fields); i += 3 {
+		path := strings.TrimSpace(string(fields[i]))
+		value := strings.TrimSpace(string(fields[i+2]))
+		if value == "" || value == "unspecified" || value == "unset" {
+			continue
+		}
+		return fmt.Errorf("Git operation refuses path %q because filter attribute %q may execute host code", path, value)
+	}
+	return nil
+}
+
+func (r *Runtime) GitCommit(ctx context.Context, message string) (GitCommitResult, error) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return GitCommitResult{}, fmt.Errorf("commit message is required")
+	}
+	if len(message) > 4096 {
+		return GitCommitResult{}, fmt.Errorf("commit message exceeds 4096 bytes")
+	}
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return GitCommitResult{}, err
+	}
+	topCommand := r.readOnlyGitCommand(ctx, git, "rev-parse", "--show-toplevel")
+	topOutput, err := topCommand.Output()
+	if err != nil {
+		return GitCommitResult{}, fmt.Errorf("git.commit is unsupported for this environment root")
+	}
+	top, err := canonicalDir(strings.TrimSpace(string(topOutput)))
+	if err != nil {
+		return GitCommitResult{}, err
+	}
+	if !samePath(top, r.root) {
+		return GitCommitResult{}, fmt.Errorf("git_commit requires the Environment root to equal the Git top-level")
+	}
+	if err := r.ensureGitFiltersInactive(ctx, git); err != nil {
+		return GitCommitResult{}, err
+	}
+
+	paths, err := r.gitChangedPaths(ctx, git)
+	if err != nil {
+		return GitCommitResult{}, err
+	}
+	if len(paths) == 0 {
+		return GitCommitResult{}, fmt.Errorf("no changes to commit")
+	}
+	if len(paths) > 512 {
+		return GitCommitResult{}, fmt.Errorf("git_commit refuses more than 512 changed paths; use an administrative Git workflow")
+	}
+	for _, path := range paths {
+		if _, err := r.lexical(path); err != nil {
+			return GitCommitResult{}, fmt.Errorf("unsafe changed path %q: %w", path, err)
+		}
+	}
+
+	add := r.controlledGitCommand(ctx, git, "add", "-A", "--", ".")
+	if output, err := add.CombinedOutput(); err != nil {
+		return GitCommitResult{}, fmt.Errorf("git add: %s", strings.TrimSpace(string(output)))
+	}
+	staged := r.readOnlyGitCommand(ctx, git, "diff", "--cached", "--name-only", "-z", "--no-ext-diff", "--no-textconv", "--ignore-submodules=all", "--", ".")
+	stagedOutput, err := staged.Output()
+	if err != nil {
+		return GitCommitResult{}, fmt.Errorf("git staged diff: %w", err)
+	}
+	if len(bytes.Trim(stagedOutput, "\x00\r\n\t ")) == 0 {
+		return GitCommitResult{}, fmt.Errorf("no changes to commit")
+	}
+
+	authorName, authorEmail, committerName, committerEmail, err := r.gitCommitIdentity(ctx, git)
+	if err != nil {
+		return GitCommitResult{}, err
+	}
+	commit := r.controlledGitCommand(ctx, git, "commit", "--no-gpg-sign", "-m", message)
+	commit.Env = replaceEnvironmentValue(commit.Env, "GIT_AUTHOR_NAME", authorName)
+	commit.Env = replaceEnvironmentValue(commit.Env, "GIT_AUTHOR_EMAIL", authorEmail)
+	commit.Env = replaceEnvironmentValue(commit.Env, "GIT_COMMITTER_NAME", committerName)
+	commit.Env = replaceEnvironmentValue(commit.Env, "GIT_COMMITTER_EMAIL", committerEmail)
+	if output, err := commit.CombinedOutput(); err != nil {
+		return GitCommitResult{}, fmt.Errorf("git commit: %s", strings.TrimSpace(string(output)))
+	}
+	head, err := r.gitOutput(ctx, "rev-parse", "HEAD")
+	if err != nil {
+		return GitCommitResult{}, err
+	}
+	branch, err := r.GitBranch(ctx)
+	if err != nil {
+		return GitCommitResult{}, err
+	}
+	return GitCommitResult{Commit: strings.TrimSpace(head), Branch: branch}, nil
+}
+
+func (r *Runtime) gitChangedPaths(ctx context.Context, git string) ([]string, error) {
+	command := r.readOnlyGitCommand(ctx, git, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=all", "--", ".")
+	output, err := command.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git status for commit: %w", err)
+	}
+	parts := bytes.Split(output, []byte{0})
+	paths := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for i := 0; i < len(parts); i++ {
+		entry := parts[i]
+		if len(entry) < 4 {
+			continue
+		}
+		status := entry[:2]
+		path := string(entry[3:])
+		if path != "" {
+			if _, ok := seen[path]; !ok {
+				seen[path] = struct{}{}
+				paths = append(paths, path)
+			}
+		}
+		if status[0] == 'R' || status[0] == 'C' || status[1] == 'R' || status[1] == 'C' {
+			i++
+		}
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func (r *Runtime) gitCommitIdentity(ctx context.Context, git string) (authorName, authorEmail, committerName, committerEmail string, err error) {
+	authorName = environmentValue(r.baseEnvironment, "GIT_AUTHOR_NAME")
+	authorEmail = environmentValue(r.baseEnvironment, "GIT_AUTHOR_EMAIL")
+	committerName = environmentValue(r.baseEnvironment, "GIT_COMMITTER_NAME")
+	committerEmail = environmentValue(r.baseEnvironment, "GIT_COMMITTER_EMAIL")
+
+	readConfig := func(key string) (string, error) {
+		cmd := exec.CommandContext(ctx, git, "--no-pager", "-C", r.root, "config", "--get", key)
+		configureCommand(cmd)
+		cmd.Env = sanitizeGitEnvironment(r.baseEnvironment)
+		cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_CONFIG_NOSYSTEM", "1")
+		cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_TERMINAL_PROMPT", "0")
+		cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_PAGER", "cat")
+		out, readErr := cmd.Output()
+		if readErr != nil {
+			if exitErr, ok := readErr.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+				return "", nil
+			}
+			return "", fmt.Errorf("read Git identity %s: %w", key, readErr)
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
+	if authorName == "" {
+		authorName, err = readConfig("user.name")
+		if err != nil {
+			return "", "", "", "", err
+		}
+	}
+	if authorEmail == "" {
+		authorEmail, err = readConfig("user.email")
+		if err != nil {
+			return "", "", "", "", err
+		}
+	}
+	if committerName == "" {
+		committerName = authorName
+	}
+	if committerEmail == "" {
+		committerEmail = authorEmail
+	}
+	if authorName == "" || authorEmail == "" || committerName == "" || committerEmail == "" {
+		return "", "", "", "", fmt.Errorf("Git commit identity is not configured; set user.name and user.email or GIT_AUTHOR/GIT_COMMITTER identity variables")
+	}
+	return authorName, authorEmail, committerName, committerEmail, nil
+}
+
+func (r *Runtime) controlledGitCommand(ctx context.Context, git string, args ...string) *exec.Cmd {
+	fullArgs := []string{
+		"--no-pager",
+		"-c", "core.fsmonitor=false",
+		"-c", "core.attributesFile=" + os.DevNull,
+		"-c", "core.hooksPath=" + os.DevNull,
+		"-c", "commit.gpgSign=false",
+		"-c", "gc.auto=0",
+		"-c", "maintenance.auto=false",
+		"-C", r.root,
+	}
+	fullArgs = append(fullArgs, args...)
+	cmd := exec.CommandContext(ctx, git, fullArgs...)
+	configureCommand(cmd)
+	cmd.Env = sanitizeGitEnvironment(r.baseEnvironment)
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_CONFIG_NOSYSTEM", "1")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_CONFIG_GLOBAL", os.DevNull)
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_ATTR_NOSYSTEM", "1")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_TERMINAL_PROMPT", "0")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_OPTIONAL_LOCKS", "1")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_EXTERNAL_DIFF", "")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_PAGER", "cat")
+	cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_EDITOR", "true")
+	return cmd
+}
+
+func sanitizeGitEnvironment(environment []string) []string {
+	result := make([]string, 0, len(environment))
+	for _, item := range environment {
+		index := strings.IndexByte(item, '=')
+		if index <= 0 {
+			continue
+		}
+		key := strings.ToUpper(item[:index])
+		if strings.HasPrefix(key, "GIT_") {
+			switch key {
+			case "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL":
+				result = append(result, item)
+			}
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func (r *Runtime) IsExplicitlyAllowed(executable string) bool {
@@ -740,6 +1038,10 @@ func (r *Runtime) existing(path string) (string, error) {
 	if !within(r.root, resolved) {
 		return "", fmt.Errorf("path escapes environment root")
 	}
+	resolvedRel, _ := filepath.Rel(r.root, resolved)
+	if isReservedGitMetadataPath(resolvedRel) {
+		return "", fmt.Errorf("Git metadata paths are reserved; use ADM Git tools instead")
+	}
 	return filepath.Clean(resolved), nil
 }
 
@@ -754,6 +1056,10 @@ func (r *Runtime) writeTarget(path string) (string, error) {
 		if resolveErr == nil {
 			if !within(r.root, resolvedParent) {
 				return "", fmt.Errorf("path escapes environment root")
+			}
+			resolvedRel, _ := filepath.Rel(r.root, resolvedParent)
+			if isReservedGitMetadataPath(resolvedRel) {
+				return "", fmt.Errorf("Git metadata paths are reserved; use ADM Git tools instead")
 			}
 			break
 		}
@@ -773,6 +1079,9 @@ func (r *Runtime) lexical(path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" || path == "." {
 		return r.root, nil
+	}
+	if isReservedGitMetadataPath(path) {
+		return "", fmt.Errorf("Git metadata paths are reserved; use ADM Git tools instead")
 	}
 	if filepath.IsAbs(path) {
 		return "", fmt.Errorf("absolute paths are not accepted; use environment-relative paths")
@@ -813,7 +1122,28 @@ func within(root, target string) bool {
 
 func samePath(a, b string) bool { return pathutil.Same(a, b) }
 
+func isReservedGitMetadataPath(path string) bool {
+	normalized := filepath.ToSlash(strings.ReplaceAll(filepath.Clean(path), "\\", "/"))
+	for _, segment := range strings.Split(normalized, "/") {
+		if strings.EqualFold(strings.TrimSpace(segment), ".git") {
+			return true
+		}
+	}
+	return false
+}
+
 func cleanRelative(path string) string { return filepath.ToSlash(filepath.Clean(path)) }
+
+func environmentValue(environment []string, key string) string {
+	for _, item := range environment {
+		index := strings.IndexByte(item, '=')
+		if index <= 0 || !strings.EqualFold(item[:index], key) {
+			continue
+		}
+		return strings.TrimSpace(item[index+1:])
+	}
+	return ""
+}
 
 func replaceEnvironmentValue(environment []string, key, value string) []string {
 	prefix := strings.ToUpper(key) + "="

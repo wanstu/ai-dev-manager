@@ -139,6 +139,13 @@ func (s *Service) CreateManagedWithRetention(workspaceID, name, root string, man
 		if createErr != nil {
 			return createErr
 		}
+		if sourceID := strings.TrimSpace(managed.SourceEnvironmentID); sourceID != "" {
+			sourceIndex := findEnvironment(state.Environments, sourceID)
+			if sourceIndex < 0 {
+				return fmt.Errorf("source environment %q not found while creating managed worktree", sourceID)
+			}
+			created.Verifiers = cloneVerifierDefinitions(state.Environments[sourceIndex].Verifiers)
+		}
 		managed.EnvironmentID = created.ID
 		managed.WorkspaceID = ws.ID
 		managed.Root = root
@@ -714,6 +721,18 @@ func within(base, target string) bool {
 		return false
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func cloneVerifierDefinitions(values []model.VerifierDefinition) []model.VerifierDefinition {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]model.VerifierDefinition, len(values))
+	for i := range values {
+		result[i] = values[i]
+		result[i].Args = append([]string(nil), values[i].Args...)
+	}
+	return result
 }
 
 func findEnvironment(values []model.Environment, id string) int {

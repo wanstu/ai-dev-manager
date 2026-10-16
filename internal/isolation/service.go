@@ -1,6 +1,7 @@
 package isolation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ type CreateOptions struct {
 	BranchName                string `json:"branch_name"`
 	BaseRef                   string `json:"base_ref,omitempty"`
 	MigrateUncommittedChanges bool   `json:"migrate_uncommitted_changes"`
+	AgentSafe                 bool   `json:"-"`
 }
 
 type MigrationSummary struct {
@@ -120,14 +122,23 @@ func (s *Service) CreateFromEnvironmentWithRetention(ctx context.Context, source
 
 func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEnvironmentID, name string, options CreateOptions, retention model.ResourceRetention) (CreateResult, error) {
 	var (
-		ws         model.Workspace
-		sourceRoot string
-		err        error
+		ws                     model.Workspace
+		sourceRoot             string
+		agentSafeManagedSource bool
+		err                    error
 	)
 	if sourceEnvironmentID != "" {
 		sourceEnvironment, getErr := s.environments.Get(sourceEnvironmentID)
 		if getErr != nil {
 			return CreateResult{}, getErr
+		}
+		if options.AgentSafe {
+			if err := s.ValidateEnvironment(ctx, sourceEnvironment); err != nil {
+				return CreateResult{}, fmt.Errorf("Agent-safe source Environment validation failed: %w", err)
+			}
+			if _, agentSafeManagedSource, err = s.GetByEnvironment(sourceEnvironment.ID); err != nil {
+				return CreateResult{}, err
+			}
 		}
 		ws, err = s.workspaces.Get(sourceEnvironment.WorkspaceID)
 		if err != nil {
@@ -141,6 +152,17 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 			return CreateResult{}, err
 		}
 		sourceRoot = ws.Path
+	}
+	if options.AgentSafe && sourceEnvironmentID == "" {
+		return CreateResult{}, fmt.Errorf("Agent-safe worktree creation requires source_environment_id")
+	}
+	if options.AgentSafe && options.MigrateUncommittedChanges {
+		return CreateResult{}, fmt.Errorf("Agent-safe worktree creation does not migrate uncommitted changes; apply changes inside the new Environment instead")
+	}
+	if options.AgentSafe && !agentSafeManagedSource {
+		if err := validateAgentSafeGitMetadataRoot(sourceRoot); err != nil {
+			return CreateResult{}, err
+		}
 	}
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -157,8 +179,12 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 	if _, err := exec.LookPath("git"); err != nil {
 		return CreateResult{}, fmt.Errorf("git worktree isolation is unavailable: %w", err)
 	}
+	gitOutput := s.gitOutput
+	if options.AgentSafe {
+		gitOutput = s.agentSafeGitOutput
+	}
 
-	top, err := s.gitOutput(ctx, sourceRoot, "rev-parse", "--show-toplevel")
+	top, err := gitOutput(ctx, sourceRoot, "rev-parse", "--show-toplevel")
 	if err != nil {
 		if sourceEnvironmentID != "" {
 			return CreateResult{}, fmt.Errorf("source environment %s is not a usable Git worktree: %w", sourceEnvironmentID, err)
@@ -175,7 +201,7 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 		}
 		return CreateResult{}, fmt.Errorf("managed worktree creation requires workspace root %s to be the Git top-level %s", sourceRoot, topDir)
 	}
-	commonRaw, err := s.gitOutput(ctx, sourceRoot, "rev-parse", "--git-common-dir")
+	commonRaw, err := gitOutput(ctx, sourceRoot, "rev-parse", "--git-common-dir")
 	if err != nil {
 		return CreateResult{}, err
 	}
@@ -183,30 +209,41 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 	if err != nil {
 		return CreateResult{}, fmt.Errorf("resolve Git common directory: %w", err)
 	}
-	if _, err := s.gitOutput(ctx, sourceRoot, "fetch", "--all", "--prune"); err != nil {
-		return CreateResult{}, fmt.Errorf("fetch source Git refs: %w", err)
+	if !options.AgentSafe {
+		if _, err := gitOutput(ctx, sourceRoot, "fetch", "--all", "--prune"); err != nil {
+			return CreateResult{}, fmt.Errorf("fetch source Git refs: %w", err)
+		}
 	}
 	resolvedBaseRef := options.BaseRef
 	if resolvedBaseRef == "" {
-		upstream, upstreamErr := s.gitOutput(ctx, sourceRoot, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
-		if upstreamErr == nil && strings.TrimSpace(upstream) != "" {
-			resolvedBaseRef = strings.TrimSpace(upstream)
-		} else {
-			remotes, remoteErr := s.gitOutput(ctx, sourceRoot, "remote")
-			if remoteErr != nil {
-				return CreateResult{}, fmt.Errorf("inspect source Git remotes: %w", remoteErr)
-			}
-			if strings.TrimSpace(remotes) != "" {
-				return CreateResult{}, fmt.Errorf("source Git branch has no upstream after fetch; pass base_ref explicitly")
-			}
+		if options.AgentSafe {
 			resolvedBaseRef = "HEAD"
+		} else {
+			upstream, upstreamErr := gitOutput(ctx, sourceRoot, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+			if upstreamErr == nil && strings.TrimSpace(upstream) != "" {
+				resolvedBaseRef = strings.TrimSpace(upstream)
+			} else {
+				remotes, remoteErr := gitOutput(ctx, sourceRoot, "remote")
+				if remoteErr != nil {
+					return CreateResult{}, fmt.Errorf("inspect source Git remotes: %w", remoteErr)
+				}
+				if strings.TrimSpace(remotes) != "" {
+					return CreateResult{}, fmt.Errorf("source Git branch has no upstream after fetch; pass base_ref explicitly")
+				}
+				resolvedBaseRef = "HEAD"
+			}
 		}
 	}
-	baseCommit, err := s.gitOutput(ctx, sourceRoot, "rev-parse", "--verify", "--end-of-options", resolvedBaseRef+"^{commit}")
+	baseCommit, err := gitOutput(ctx, sourceRoot, "rev-parse", "--verify", "--end-of-options", resolvedBaseRef+"^{commit}")
 	if err != nil {
 		return CreateResult{}, fmt.Errorf("resolve base_ref %q: %w", resolvedBaseRef, err)
 	}
 	baseCommit = strings.TrimSpace(baseCommit)
+	if options.AgentSafe {
+		if err := s.ensureAgentSafeCheckoutFiltersInactive(ctx, sourceRoot, baseCommit); err != nil {
+			return CreateResult{}, err
+		}
+	}
 
 	managedID, err := identity.New("wt")
 	if err != nil {
@@ -240,7 +277,7 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 		return CreateResult{}, err
 	}
 
-	if _, err := s.gitOutput(ctx, sourceRoot, "worktree", "add", "-b", branch, root, baseCommit); err != nil {
+	if _, err := gitOutput(ctx, sourceRoot, "worktree", "add", "-b", branch, root, baseCommit); err != nil {
 		return CreateResult{}, fmt.Errorf("create managed worktree: %w", err)
 	}
 	rollback := true
@@ -248,8 +285,8 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 		if !rollback {
 			return
 		}
-		_, _ = s.gitOutput(context.Background(), sourceRoot, "worktree", "remove", "--force", root)
-		_, _ = s.gitOutput(context.Background(), sourceRoot, "branch", "-D", branch)
+		_, _ = gitOutput(context.Background(), sourceRoot, "worktree", "remove", "--force", root)
+		_, _ = gitOutput(context.Background(), sourceRoot, "branch", "-D", branch)
 		_ = os.RemoveAll(root)
 	}()
 
@@ -803,19 +840,134 @@ func validateFinalBranch(ctx context.Context, sourceRoot, branch string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, git, "-C", sourceRoot, "check-ref-format", "--branch", branch)
-	configureProcessCommand(cmd)
+	cmd := agentSafeGitCommand(ctx, git, sourceRoot, "check-ref-format", "--branch", branch)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("invalid managed branch %q: %s", branch, strings.TrimSpace(string(out)))
 	}
-	exists := exec.CommandContext(ctx, git, "-C", sourceRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
-	configureProcessCommand(exists)
+	exists := agentSafeGitCommand(ctx, git, sourceRoot, "show-ref", "--verify", "--quiet", "refs/heads/"+branch)
 	if err := exists.Run(); err == nil {
 		return fmt.Errorf("managed branch %q already exists; choose a new branch_name", branch)
 	} else if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 1 {
 		return fmt.Errorf("check managed branch %q existence: %w", branch, err)
 	}
 	return nil
+}
+
+func validateAgentSafeGitMetadataRoot(sourceRoot string) error {
+	meta := filepath.Join(sourceRoot, ".git")
+	info, err := os.Lstat(meta)
+	if err != nil {
+		return fmt.Errorf("Agent-safe worktree creation requires Git metadata at %s: %w", meta, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("Agent-safe worktree creation requires an in-root .git directory unless the source is an ADM-managed worktree")
+	}
+	resolved, err := filepath.EvalSymlinks(meta)
+	if err != nil {
+		return fmt.Errorf("resolve Agent-safe Git metadata: %w", err)
+	}
+	if !within(sourceRoot, resolved) {
+		return fmt.Errorf("Agent-safe Git metadata escapes source Environment root")
+	}
+	return nil
+}
+
+func (s *Service) ensureAgentSafeCheckoutFiltersInactive(ctx context.Context, sourceRoot, baseCommit string) error {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return err
+	}
+	list := agentSafeGitCommand(ctx, git, sourceRoot, "ls-tree", "-r", "-z", "--name-only", baseCommit)
+	paths, err := list.Output()
+	if err != nil {
+		return fmt.Errorf("inspect Agent-safe worktree tree: %w", err)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	check := agentSafeGitCommand(ctx, git, sourceRoot, "check-attr", "-z", "--source="+baseCommit, "--stdin", "filter")
+	check.Stdin = bytes.NewReader(paths)
+	output, err := check.Output()
+	if err != nil {
+		return fmt.Errorf("Agent-safe worktree requires Git check-attr --source support: %w", err)
+	}
+	fields := bytes.Split(output, []byte{0})
+	for i := 0; i+2 < len(fields); i += 3 {
+		path := strings.TrimSpace(string(fields[i]))
+		value := strings.TrimSpace(string(fields[i+2]))
+		if value == "" || value == "unspecified" || value == "unset" {
+			continue
+		}
+		return fmt.Errorf("Agent-safe worktree creation refuses path %q because filter attribute %q may execute host code", path, value)
+	}
+	return nil
+}
+
+func (s *Service) agentSafeGitOutput(ctx context.Context, dir string, args ...string) (string, error) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return "", err
+	}
+	cmd := agentSafeGitCommand(ctx, git, dir, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+	}
+	return string(out), nil
+}
+
+func agentSafeGitCommand(ctx context.Context, git, dir string, args ...string) *exec.Cmd {
+	fullArgs := []string{
+		"--no-pager",
+		"-c", "core.fsmonitor=false",
+		"-c", "core.attributesFile=" + os.DevNull,
+		"-c", "core.hooksPath=" + os.DevNull,
+		"-c", "gc.auto=0",
+		"-c", "maintenance.auto=false",
+		"--work-tree=" + dir,
+		"-C", dir,
+	}
+	fullArgs = append(fullArgs, args...)
+	cmd := exec.CommandContext(ctx, git, fullArgs...)
+	configureProcessCommand(cmd)
+	cmd.Env = sanitizeIsolationGitEnvironment(os.Environ())
+	cmd.Env = replaceIsolationEnvironmentValue(cmd.Env, "GIT_CONFIG_NOSYSTEM", "1")
+	cmd.Env = replaceIsolationEnvironmentValue(cmd.Env, "GIT_CONFIG_GLOBAL", os.DevNull)
+	cmd.Env = replaceIsolationEnvironmentValue(cmd.Env, "GIT_ATTR_NOSYSTEM", "1")
+	cmd.Env = replaceIsolationEnvironmentValue(cmd.Env, "GIT_TERMINAL_PROMPT", "0")
+	cmd.Env = replaceIsolationEnvironmentValue(cmd.Env, "GIT_OPTIONAL_LOCKS", "1")
+	cmd.Env = replaceIsolationEnvironmentValue(cmd.Env, "GIT_EXTERNAL_DIFF", "")
+	cmd.Env = replaceIsolationEnvironmentValue(cmd.Env, "GIT_PAGER", "cat")
+	cmd.Env = replaceIsolationEnvironmentValue(cmd.Env, "GIT_EDITOR", "true")
+	return cmd
+}
+
+func sanitizeIsolationGitEnvironment(environment []string) []string {
+	result := make([]string, 0, len(environment))
+	for _, item := range environment {
+		index := strings.IndexByte(item, '=')
+		if index <= 0 {
+			continue
+		}
+		if strings.HasPrefix(strings.ToUpper(item[:index]), "GIT_") {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func replaceIsolationEnvironmentValue(environment []string, key, value string) []string {
+	prefix := strings.ToUpper(key) + "="
+	result := make([]string, 0, len(environment)+1)
+	for _, item := range environment {
+		index := strings.IndexByte(item, '=')
+		if index > 0 && strings.ToUpper(item[:index])+"=" == prefix {
+			continue
+		}
+		result = append(result, item)
+	}
+	return append(result, key+"="+value)
 }
 
 func (s *Service) gitInput(ctx context.Context, dir, input string, args ...string) error {

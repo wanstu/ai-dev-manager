@@ -155,13 +155,14 @@ func (s *Service) EnvironmentContextBundle(ctx context.Context, environmentID st
 	})
 	for _, definition := range verifiers {
 		item := model.EnvironmentContextVerifier{
-			ID:             definition.ID,
-			Name:           definition.Name,
-			Kind:           definition.Kind,
-			Enabled:        definition.Enabled,
-			State:          model.CapabilityStateUnavailable,
-			ReasonCode:     "capability_fact_missing",
-			RequiresWriter: true,
+			ID:                        definition.ID,
+			Name:                      definition.Name,
+			Kind:                      definition.Kind,
+			Enabled:                   definition.Enabled,
+			AgentHostExecutionAllowed: definition.AgentHostExecutionAllowed,
+			State:                     model.CapabilityStateUnavailable,
+			ReasonCode:                "capability_fact_missing",
+			RequiresWriter:            true,
 		}
 		if fact, ok := facts["verifier/"+definition.ID]; ok {
 			item.State = fact.State
@@ -291,7 +292,7 @@ func environmentContextGuidance(facts map[string]model.CapabilityFact, mcps []mo
 	}
 	guidance = append(guidance, model.EnvironmentContextGuidance{
 		Operation: "verifier.run", State: verifierState, RequiresWriter: true,
-		Message: "Run only an explicitly configured verifier ID when verification is relevant; use environment_verifier_run_start/status/cancel for long or heavy verification, while environment_verifier_run remains blocking for short/direct use. Verifier execution requires the writer lease and does not define task success policy.",
+		Message: "Run only an explicitly configured verifier ID when verification is relevant. Agent execution is permitted only when that verifier has agent_host_execution_allowed=true; this is explicit trusted host execution until OS sandboxing is available. Use environment_verifier_run_start/status/cancel for long or heavy verification, while environment_verifier_run remains blocking for short/direct use. Verifier execution requires the writer lease and does not define task success policy.",
 	})
 	runState := model.CapabilityStateUnconfigured
 	if fact, ok := facts["run.lifecycle"]; ok {

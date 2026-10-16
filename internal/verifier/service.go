@@ -107,6 +107,30 @@ func (s *Service) Add(environmentID string, definition model.VerifierDefinition)
 	return result, err
 }
 
+func (s *Service) SetAgentHostExecutionAllowed(environmentID, verifierID string, allowed bool) (model.VerifierDefinition, error) {
+	environmentID = strings.TrimSpace(environmentID)
+	verifierID = strings.TrimSpace(verifierID)
+	var result model.VerifierDefinition
+	err := s.store.Update(func(state *model.State) error {
+		idx := findEnvironment(state.Environments, environmentID)
+		if idx < 0 {
+			return fmt.Errorf("environment %q not found", environmentID)
+		}
+		env := &state.Environments[idx]
+		for i := range env.Verifiers {
+			if env.Verifiers[i].ID != verifierID {
+				continue
+			}
+			env.Verifiers[i].AgentHostExecutionAllowed = allowed
+			result = cloneDefinition(env.Verifiers[i])
+			env.UpdatedAt = time.Now().UTC()
+			return nil
+		}
+		return fmt.Errorf("verifier %q not found for environment %q", verifierID, environmentID)
+	})
+	return result, err
+}
+
 func (s *Service) Remove(environmentID, verifierID string) (model.VerifierDefinition, error) {
 	environmentID = strings.TrimSpace(environmentID)
 	verifierID = strings.TrimSpace(verifierID)

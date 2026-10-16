@@ -41,7 +41,7 @@ func TestDevProcessLifecycleAcrossRealGatewayRestart(t *testing.T) {
 	}
 	listen := listener.Addr().String()
 	_ = listener.Close()
-	endpoint := "http://" + listen + "/mcp"
+	endpoint := "http://" + listen + "/admin/mcp"
 
 	portFile := filepath.Join(projectRoot, "phase6-real.port")
 	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")

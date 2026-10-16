@@ -38,6 +38,13 @@ func (a *Adapter) ListVerifiers(environmentID string) ([]model.VerifierDefinitio
 	return a.runtime.VerifierList(environmentID)
 }
 
+func (a *Adapter) SetVerifierAgentHostExecution(environmentID, verifierID string, allowed bool) (model.VerifierDefinition, error) {
+	if err := a.readyRuntime(); err != nil {
+		return model.VerifierDefinition{}, err
+	}
+	return a.runtime.VerifierAgentHostExecutionSet(environmentID, verifierID, allowed)
+}
+
 func (a *Adapter) RunVerifier(environmentID, writerOwner, verifierID string) (verifier.Result, error) {
 	if err := a.readyRuntime(); err != nil {
 		return verifier.Result{}, err

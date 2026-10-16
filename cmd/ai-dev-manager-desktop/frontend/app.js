@@ -1585,8 +1585,11 @@ function renderRuntime() {
   renderRuntimeListState('verifiers', '没有配置 verifier', (verifiers, container) => {
     for (const verifier of verifiers) {
       const run = createActionButton('运行', 'run-verifier', verifier.verifier_id); run.disabled = pending || !writerAuthorized || verifier.enabled === false;
-      const args = safeArray(verifier.args).join(' '); const detail = `${verifier.kind || 'custom'} · ${verifier.executable || ''}${args ? ` ${args}` : ''}${verifier.cwd ? ` · cwd ${verifier.cwd}` : ''}`;
-      container.append(runtimeItem(verifier.name || verifier.verifier_id, verifier.verifier_id, verifier.enabled === false ? 'disabled' : 'configured', detail, [run]));
+      const agentAllowed = Boolean(verifier.agent_host_execution_allowed);
+      const agentToggle = createActionButton(agentAllowed ? '撤销 AI 运行' : '允许 AI 运行', 'toggle-verifier-agent', verifier.verifier_id, agentAllowed ? 'danger' : 'secondary');
+      agentToggle.disabled = pending || verifier.enabled === false; agentToggle.dataset.allowed = agentAllowed ? '1' : '0';
+      const args = safeArray(verifier.args).join(' '); const detail = `${verifier.kind || 'custom'} · ${verifier.executable || ''}${args ? ` ${args}` : ''}${verifier.cwd ? ` · cwd ${verifier.cwd}` : ''} · AI host ${agentAllowed ? '已允许' : '未允许'}`;
+      container.append(runtimeItem(verifier.name || verifier.verifier_id, verifier.verifier_id, verifier.enabled === false ? 'disabled' : 'configured', detail, [run, agentToggle]));
     }
   });
   renderRuntimeListState('processes', '当前 Gateway owner 没有 process', (processes, container) => {
@@ -3552,9 +3555,27 @@ elements.diagnosticsRefreshButton.addEventListener('click', async () => {
   } catch (error) { if (environmentScopeIsCurrent(scope)) setStatus('Environment 诊断刷新失败：' + errorText(error), 'error'); }
 });
 elements.verifierList.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-action="run-verifier"]'); if (!button) return;
-  const scope = captureEnvironmentScope(), environmentID = scope.environmentID, verifierID = button.dataset.id, owner = runtimeWriterOwner(), viewGeneration = runtimeSubviewGeneration;
-  if (!environmentID) return; if (!owner || !currentEnvironment()?.writer) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能运行 verifier。', 'error');
+  const button = event.target.closest('button[data-action]'); if (!button) return;
+  const scope = captureEnvironmentScope(), environmentID = scope.environmentID, verifierID = button.dataset.id, viewGeneration = runtimeSubviewGeneration;
+  if (!environmentID) return;
+  if (button.dataset.action === 'toggle-verifier-agent') {
+    if (runtimePendingActionKey) return;
+    const allowed = button.dataset.allowed !== '1';
+    if (allowed && !window.confirm('允许 AI 通过这个 Verifier 在宿主机执行项目代码？\n\n在 OS 沙箱完成前，这意味着该 Verifier 及其项目代码具有当前 Windows 用户可访问的文件权限。只应对你信任的 test / lint / build Verifier 开启。')) return;
+    const actionKey = `verifier-agent:${verifierID}`; runtimePendingActionKey = actionKey; renderRuntime();
+    setStatus(allowed ? '正在允许 AI 运行 Verifier…' : '正在撤销 AI 运行 Verifier…', 'loading');
+    try {
+      await desktopAdapter().SetVerifierAgentHostExecution(environmentID, verifierID, allowed);
+      if (!environmentScopeIsCurrent(scope)) return;
+      await refreshRuntimeContext(scope);
+      setStatus(allowed ? '已允许 AI 运行该 Verifier' : '已撤销 AI 运行该 Verifier', 'success');
+    } catch (error) { if (environmentScopeIsCurrent(scope)) setStatus('更新 Verifier AI 执行权限失败：' + errorText(error), 'error'); }
+    finally { if (runtimePendingActionKey === actionKey) { runtimePendingActionKey = ''; renderRuntime(); } }
+    return;
+  }
+  if (button.dataset.action !== 'run-verifier') return;
+  const owner = runtimeWriterOwner();
+  if (!owner || !currentEnvironment()?.writer) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能运行 verifier。', 'error');
   const result = await runRuntimeAction('运行 verifier', `verifier:${verifierID}`, scope, () => desktopAdapter().RunVerifier(environmentID, owner, verifierID));
   if (result && environmentScopeIsCurrent(scope) && runtimeSubview === 'verifiers' && runtimeSubviewGeneration === viewGeneration) {
     showRuntimeOutput('verifiers', verifierID, `Verifier ${verifierID} · ${result.status || 'unknown'}`, result.stdout || '', result.stderr || '', `${result.summary || ''}${result.exit_code !== undefined ? ` · exit ${result.exit_code}` : ''}`);

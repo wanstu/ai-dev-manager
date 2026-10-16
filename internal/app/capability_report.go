@@ -288,8 +288,8 @@ func verifierCapabilityFacts(ctx context.Context, env model.Environment, ws mode
 }
 
 func gitCapabilityFacts(ctx context.Context, env model.Environment, ws model.Workspace, rt *runtime.Runtime, rootErr error, inspectGit bool) []model.CapabilityFact {
-	keys := []string{runtime.CapabilityGitStatus, runtime.CapabilityGitDiff, runtime.CapabilityGitBranch}
-	facts := make([]model.CapabilityFact, 0, len(keys))
+	readKeys := []string{runtime.CapabilityGitStatus, runtime.CapabilityGitDiff, runtime.CapabilityGitBranch}
+	facts := make([]model.CapabilityFact, 0, len(readKeys)+1)
 	state := model.CapabilityStateAvailable
 	reason := ""
 	message := "Git is usable for this Environment root."
@@ -306,9 +306,14 @@ func gitCapabilityFacts(ctx context.Context, env model.Environment, ws model.Wor
 		reason = "git_unsupported"
 		message = "Environment root is not a Git worktree or git is unavailable."
 	}
-	for _, key := range keys {
+	for _, key := range readKeys {
 		facts = append(facts, capabilityFact(key, capabilityKindGit, state, reason, message, false, []model.CapabilityEvidence{environmentEvidence(env, ws)}))
 	}
+	commitMessage := message
+	if state == model.CapabilityStateAvailable {
+		commitMessage = "Controlled Git commit is available when the Environment root is the Git top-level; writer ownership is required and arbitrary Git arguments are not exposed."
+	}
+	facts = append(facts, capabilityFact(runtime.CapabilityGitCommit, capabilityKindGit, state, reason, commitMessage, true, []model.CapabilityEvidence{environmentEvidence(env, ws), writerEvidence(env)}))
 	return facts
 }
 
@@ -523,7 +528,7 @@ func legacyCapabilitiesFromFacts(facts []model.CapabilityFact) []string {
 			continue
 		}
 		switch fact.Key {
-		case runtime.CapabilityTree, runtime.CapabilityRead, runtime.CapabilitySearch, runtime.CapabilityWrite, runtime.CapabilityEdit, runtime.CapabilityDelete, runtime.CapabilityExec, runtime.CapabilityGitStatus, runtime.CapabilityGitDiff, runtime.CapabilityGitBranch:
+		case runtime.CapabilityTree, runtime.CapabilityRead, runtime.CapabilitySearch, runtime.CapabilityWrite, runtime.CapabilityEdit, runtime.CapabilityDelete, runtime.CapabilityExec, runtime.CapabilityGitStatus, runtime.CapabilityGitDiff, runtime.CapabilityGitBranch, runtime.CapabilityGitCommit:
 			seen[fact.Key] = struct{}{}
 		}
 	}
@@ -576,12 +581,13 @@ func writerEvidence(env model.Environment) model.CapabilityEvidence {
 
 func verifierEvidence(definition model.VerifierDefinition) model.CapabilityEvidence {
 	details := map[string]string{
-		"kind":        definition.Kind,
-		"enabled":     strconv.FormatBool(definition.Enabled),
-		"executable":  definition.Executable,
-		"args_count":  strconv.Itoa(len(definition.Args)),
-		"cwd":         definition.Cwd,
-		"timeout_sec": strconv.FormatInt(definition.TimeoutSeconds, 10),
+		"kind":                         definition.Kind,
+		"enabled":                      strconv.FormatBool(definition.Enabled),
+		"agent_host_execution_allowed": strconv.FormatBool(definition.AgentHostExecutionAllowed),
+		"executable":                   definition.Executable,
+		"args_count":                   strconv.Itoa(len(definition.Args)),
+		"cwd":                          definition.Cwd,
+		"timeout_sec":                  strconv.FormatInt(definition.TimeoutSeconds, 10),
 	}
 	return model.CapabilityEvidence{Kind: capabilityKindVerifier, ID: definition.ID, Name: definition.Name, Details: compactDetails(details)}
 }

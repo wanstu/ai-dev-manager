@@ -28,7 +28,7 @@ func TestRuntimeOwnerDevProcessLifecycleAcrossAgentSessions(t *testing.T) {
 
 	owner := newRuntimeOwner(service)
 	defer owner.Close()
-	server := newServer(service, owner)
+	server := newServerForSurface(service, owner, serverSurfaceAdmin)
 	ctx := context.Background()
 	first := connectInMemory(t, ctx, server)
 
@@ -178,7 +178,7 @@ func TestProcessStartRejectsForbiddenExecutableAndEscapedCwd(t *testing.T) {
 	service, environmentID, _ := devProcessTestService(t)
 	owner := newRuntimeOwner(service)
 	defer owner.Close()
-	session := connectInMemory(t, context.Background(), newServer(service, owner))
+	session := connectInMemory(t, context.Background(), newServerForSurface(service, owner, serverSurfaceAdmin))
 	defer session.Close()
 
 	for name, args := range map[string]map[string]any{

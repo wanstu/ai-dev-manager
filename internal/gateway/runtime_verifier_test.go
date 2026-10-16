@@ -250,13 +250,14 @@ func asyncVerifierTestService(t *testing.T) (*app.Service, string, string) {
 func addAsyncVerifier(t *testing.T, service *app.Service, environmentID, name string, enabled bool, executable, cwd string, timeoutSeconds int64) model.VerifierDefinition {
 	t.Helper()
 	definition, err := service.AddVerifier(environmentID, model.VerifierDefinition{
-		Name:           name,
-		Kind:           verifier.KindTest,
-		Enabled:        enabled,
-		Executable:     executable,
-		Args:           []string{"-test.run=^TestAsyncVerifierCommandHelper$"},
-		Cwd:            cwd,
-		TimeoutSeconds: timeoutSeconds,
+		Name:                      name,
+		Kind:                      verifier.KindTest,
+		Enabled:                   enabled,
+		AgentHostExecutionAllowed: true,
+		Executable:                executable,
+		Args:                      []string{"-test.run=^TestAsyncVerifierCommandHelper$"},
+		Cwd:                       cwd,
+		TimeoutSeconds:            timeoutSeconds,
 	})
 	if err != nil {
 		t.Fatal(err)
