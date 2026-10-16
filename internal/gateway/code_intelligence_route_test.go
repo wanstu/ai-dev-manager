@@ -144,7 +144,7 @@ func TestCodeIntelligenceGenericToolsRouteToHealthyPhpStormProvider(t *testing.T
 		t.Fatalf("prime PhpStorm provider: status=%+v err=%v", status, err)
 	}
 
-	session := connectInMemory(t, ctx, newServer(service, owner))
+	session := connectInMemory(t, ctx, newServerForSurface(service, owner, serverSurfaceAdmin))
 	defer session.Close()
 
 	info := callGatewayTool(t, ctx, session, "code_intelligence_info", map[string]any{"environment_id": environment.ID})
@@ -264,7 +264,7 @@ func TestCodeIntelligenceRelationsReportUnavailableWithoutCapableProvider(t *tes
 	}
 	owner := newRuntimeOwner(service)
 	defer owner.Close()
-	session := connectInMemory(t, ctx, newServer(service, owner))
+	session := connectInMemory(t, ctx, newServerForSurface(service, owner, serverSurfaceAdmin))
 	defer session.Close()
 
 	for _, call := range []struct {
@@ -347,7 +347,7 @@ func TestCodeIntelligenceProtocolMismatchFallsBackBeforeBusinessToolCall(t *test
 		t.Fatalf("prime PhpStorm provider: status=%+v err=%v", status, err)
 	}
 
-	session := connectInMemory(t, ctx, newServer(service, owner))
+	session := connectInMemory(t, ctx, newServerForSurface(service, owner, serverSurfaceAdmin))
 	defer session.Close()
 	query := callGatewayTool(t, ctx, session, "code_intelligence_query", map[string]any{
 		"environment_id": environment.ID,
@@ -427,7 +427,7 @@ func TestCodeIntelligenceGenericQueryFallsBackToStaticIndex(t *testing.T) {
 		t.Fatalf("prime PhpStorm provider: status=%+v err=%v", status, err)
 	}
 
-	session := connectInMemory(t, ctx, newServer(service, owner))
+	session := connectInMemory(t, ctx, newServerForSurface(service, owner, serverSurfaceAdmin))
 	defer session.Close()
 	query := callGatewayTool(t, ctx, session, "code_intelligence_query", map[string]any{
 		"environment_id": environment.ID,

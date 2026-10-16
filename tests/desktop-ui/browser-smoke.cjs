@@ -70,7 +70,7 @@ const fakeBridge = String.raw`<script>
   };
   const skillSourcesA = [{skill_source_id:'source-a', root:'C:\\fixtures\\skills', support_roots:[], last_refresh_status:'ok'}];
   const environmentMemory = {'env-a':[{key:'private-sentinel', value:'env-a-private-visible'}], 'env-b':[{key:'private-sentinel', value:'env-b-private-visible'}]};
-  const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false};
+  const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false, verifierAgentAllowed:false};
   const record = (name, args) => calls.push({name, args});
   const recomputeEnvironment = (env, snapshot=snapshotA) => {
     if(!env) return env;
@@ -135,7 +135,8 @@ const fakeBridge = String.raw`<script>
     async SetWorkspaceSkill(workspaceID,id,value){ record('SetWorkspaceSkill',[workspaceID,id,value]); const workspace=snapshotA.workspaces.find(item=>item.workspace_id===workspaceID); if(!workspace) throw new Error('workspace not found: '+workspaceID); const set=new Set(workspace.enabled_skill_ids || []); if(value) set.add(id); else set.delete(id); workspace.enabled_skill_ids=[...set].sort(); recomputeWorkspaceEnvironments(workspaceID); return structuredClone(workspace); },
     async SetEnvironmentSkill(environmentID,id,value){ record('SetEnvironmentSkill',[environmentID,id,value]); if(state.failBulkSkillAssignment && environmentID==='env-b' && id==='skill-a') { await new Promise(resolve=>setTimeout(resolve,100)); throw new Error('fixture bulk assignment failure'); } const env=snapshotA.environments.find(item=>item.environment_id===environmentID); if(!env) throw new Error('env not found: '+environmentID); const set=new Set(env.explicit_skill_ids || []); if(value) set.add(id); else set.delete(id); env.explicit_skill_ids=[...set].sort(); recomputeEnvironment(env); return structuredClone(env); },
     async RemoveSkill(id){ record('RemoveSkill',[id]); const index=snapshotA.skills.findIndex(skill=>skill.id===id); if(index<0) throw new Error('skill not found: '+id); snapshotA.skills.splice(index,1); for(const workspace of snapshotA.workspaces) workspace.enabled_skill_ids=(workspace.enabled_skill_ids||[]).filter(value=>value!==id); for(const env of snapshotA.environments){ env.explicit_skill_ids=(env.explicit_skill_ids||[]).filter(value=>value!==id); recomputeEnvironment(env); } return null; },
-    async ListVerifiers(id){ record('ListVerifiers',[id]); if(state.failVerifiers) throw new Error('verifiers unavailable'); return [{verifier_id:id==='env-b'?'verifier-b':'verifier-a', name:id==='env-b'?'Verifier B':'Verifier A', kind:'test', executable:'go', args:['test','./...'], enabled:true}]; },
+    async ListVerifiers(id){ record('ListVerifiers',[id]); if(state.failVerifiers) throw new Error('verifiers unavailable'); return [{verifier_id:id==='env-b'?'verifier-b':'verifier-a', name:id==='env-b'?'Verifier B':'Verifier A', kind:'test', executable:'go', args:['test','./...'], enabled:true, agent_host_execution_allowed:state.verifierAgentAllowed}]; },
+    async SetVerifierAgentHostExecution(id,verifierID,allowed){ record('SetVerifierAgentHostExecution',[id,verifierID,allowed]); state.verifierAgentAllowed=Boolean(allowed); return {verifier_id:verifierID, enabled:true, agent_host_execution_allowed:state.verifierAgentAllowed}; },
     async ListProcesses(id){ record('ListProcesses',[id]); if(state.failProcesses) throw new Error('processes unavailable'); if(state.hideProcess && id==='env-a') return []; return [{id:id==='env-b'?'proc-b':'proc-a', state:'running', pid:id==='env-b'?3333:2222, listening_ports:[8080]}]; },
     async GetProcessLogs(id,processID){ record('GetProcessLogs',[id,processID]); if(state.delayProcessLogs && id==='env-a') await new Promise(resolve=>setTimeout(resolve,180)); return {stdout:id==='env-b'?'PROCESS_B_LOG':'PROCESS_A_LOG', stderr:'', stdout_truncated:id==='env-a', stderr_truncated:false}; },
     async ListRuns(id){ record('ListRuns',[id]); return [{id:id==='env-b'?'run-b':'run-a', state:'succeeded', executable:'go', args:['test'], stdout:id==='env-b'?'RUN_B_OUTPUT':'RUN_A_OUTPUT', stderr:'', exit_code:0, stdout_truncated:false, stderr_truncated:false}]; },
@@ -998,8 +999,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.__fakeADM.state.failVerifiers=false;
 
     await clickRoute('runtime');
-    const runtimeCallsBeforeTabs=window.__fakeADM.calls.length;
+    document.getElementById('runtimeRefreshButton').click();
+    await waitFor(() => document.querySelector('#verifierList button[data-action="toggle-verifier-agent"][data-id="verifier-a"]'), 'Verifier list recovers after local failure');
     check(!document.querySelector('[data-runtime-subview-panel="verifiers"]').hidden && document.querySelector('[data-runtime-subview-panel="processes"]').hidden, 'Runtime starts on local Verifiers subview');
+    const verifierAgentButton=document.querySelector('#verifierList button[data-action="toggle-verifier-agent"][data-id="verifier-a"]');
+    check(verifierAgentButton && verifierAgentButton.textContent.includes('允许 AI 运行'), 'Verifier starts with Agent host execution disabled');
+    const verifierAgentCalls=window.__fakeADM.calls.filter(c=>c.name==='SetVerifierAgentHostExecution').length;
+    verifierAgentButton.click();
+    await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='SetVerifierAgentHostExecution').length>verifierAgentCalls, 'explicit Verifier Agent host execution approval call');
+    await waitFor(() => document.querySelector('#verifierList button[data-action="toggle-verifier-agent"][data-id="verifier-a"]')?.textContent.includes('撤销 AI 运行'), 'Verifier Agent host execution approval rerenders');
+    check(window.__fakeADM.confirmations.at(-1).includes('OS 沙箱') && window.__fakeADM.confirmations.at(-1).includes('Windows 用户'), 'Verifier Agent approval warns about unsandboxed host authority');
+    const runtimeCallsBeforeTabs=window.__fakeADM.calls.length;
     document.querySelector('#runtimeSubviewTabs [data-runtime-subview="processes"]').click(); await sleep();
     check(document.querySelector('[data-runtime-subview-panel="verifiers"]').hidden && !document.querySelector('[data-runtime-subview-panel="processes"]').hidden, 'Runtime switches to Processes subview locally');
     check(window.__fakeADM.calls.length===runtimeCallsBeforeTabs, 'Runtime subview switch makes no adapter calls');

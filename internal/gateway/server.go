@@ -1682,8 +1682,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_info", Description: "Report the code-intelligence provider currently preferred for this Environment and its capabilities such as definitions, references, and hierarchy. Read-only and provider-neutral."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_info", Description: "Report code-intelligence capabilities. Agent uses ADM native static indexes only so this tool cannot activate an external MCP process; Admin may negotiate an Environment-authorized external provider."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceInfoInput) (*mcp.CallToolResult, any, error) {
+			if surface == serverSurfaceAgent {
+				value, err := service.CodeIntelligenceInfo(in.EnvironmentID)
+				return toolResult(value, err)
+			}
 			if owner != nil {
 				value, err := owner.preferredCodeIntelligenceInfo(ctx, in.EnvironmentID)
 				return toolResult(value, err)
@@ -1692,11 +1696,19 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_query", Description: "Query symbol definitions through the preferred code-intelligence provider. A healthy Environment-authorized PhpStorm MCP is preferred when it exposes the required structured read-only tool; otherwise ADM static index is used. Provider failures fall back to static index and are reported in fallback_reason."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_query", Description: "Query symbol definitions. Agent uses ADM native static indexes only and never activates an external MCP provider; Admin may prefer a healthy Environment-authorized provider and fall back to the static index."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in ProjectIndexQueryInput) (*mcp.CallToolResult, any, error) {
 			query := projectanalysis.IndexQuery{
 				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
 				Exact: in.Exact, MaxResults: in.MaxResults,
+			}
+			if surface == serverSurfaceAgent {
+				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
+				if err != nil {
+					return toolResult(nil, err)
+				}
+				value, err := service.ProjectIndexQuery(in.EnvironmentID, query)
+				return toolResult(CodeIntelligenceQueryResult{Provider: provider, Result: value}, err)
 			}
 			if owner != nil {
 				value, err := owner.queryCodeIntelligence(ctx, in.EnvironmentID, query)
@@ -1710,8 +1722,16 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(CodeIntelligenceQueryResult{Provider: provider, Result: value}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_status", Description: "Check health/freshness through the preferred code-intelligence provider. A healthy Environment-authorized PhpStorm MCP is preferred when it exposes the required structured read-only tool; otherwise ADM static index is used."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_status", Description: "Check code-index health/freshness. Agent uses the ADM native static index only and never activates an external MCP provider; Admin may use an Environment-authorized external provider."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
+			if surface == serverSurfaceAgent {
+				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
+				if err != nil {
+					return toolResult(nil, err)
+				}
+				value, err := service.ProjectIndexStatus(in.EnvironmentID, in.MaxChanges)
+				return toolResult(CodeIntelligenceStatusResult{Provider: provider, Result: value}, err)
+			}
 			if owner != nil {
 				value, err := owner.statusCodeIntelligence(ctx, in.EnvironmentID, in.MaxChanges)
 				return toolResult(value, err)
@@ -1724,8 +1744,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(CodeIntelligenceStatusResult{Provider: provider, Result: value}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol through the preferred code-intelligence provider. The built-in static index supports bounded PHP references with kind, reason, and optional type_hint fields. Treat inherited_candidate and candidate_call as clues, not runtime-proven calls. Other languages require an external provider or return available=false."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol. Agent is restricted to ADM native static PHP reference evidence and never activates an external MCP provider; Admin may use an Environment-authorized external provider. Treat inherited_candidate and candidate_call as clues, not runtime-proven calls."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceReferencesInput) (*mcp.CallToolResult, any, error) {
+			if surface == serverSurfaceAgent {
+				value, err := agentStaticCodeIntelligenceReferences(owner, service, in.EnvironmentID, in.Symbol, in.MaxResults)
+				return toolResult(value, err)
+			}
 			if owner == nil {
 				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
 				if err != nil {
@@ -1737,8 +1761,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_hierarchy", Description: "Inspect parent/child/both symbol hierarchy through the preferred code-intelligence provider. The built-in static index currently does not support hierarchy; without a capable external provider the tool returns available=false with reason=provider_capability_unavailable."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_hierarchy", Description: "Inspect parent/child/both symbol hierarchy. Agent does not activate external MCP providers, so hierarchy currently returns unavailable on the Agent surface; Admin may use a capable Environment-authorized provider."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceHierarchyInput) (*mcp.CallToolResult, any, error) {
+			if surface == serverSurfaceAgent {
+				value, err := agentStaticCodeIntelligenceHierarchy(service, in.EnvironmentID, in.Symbol, in.Direction)
+				return toolResult(value, err)
+			}
 			if owner == nil {
 				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
 				if err != nil {

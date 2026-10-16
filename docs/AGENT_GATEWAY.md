@@ -651,6 +651,7 @@ AI 建议：**先用它调查具体方法，再依据实际代码决定修改什
 
 从 v1.4.6 起，Agent surface 不再暴露 `exec`、`run_start`、`process_start` 或 `global_exec`。这些工具会启动宿主机代码，Environment-relative cwd 不是 OS 沙箱，因此只保留在 Admin surface。
 Agent 的 test/lint/build 自动化应使用管理员预先配置并显式批准的 Verifier。
+Agent 的 `code_intelligence_*` 只使用 ADM 原生静态索引，不会隐式激活外部 MCP；外部代码智能 Provider 的连接/协商仅保留给 Admin surface，避免通过 stdio Provider 间接重新获得宿主机进程执行。
 
 输入：
 

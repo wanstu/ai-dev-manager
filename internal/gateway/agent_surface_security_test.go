@@ -26,6 +26,7 @@ func TestAgentSurfaceHidesHostEscapeTools(t *testing.T) {
 		"exec":                          true,
 		"run_start":                     true,
 		"process_start":                 true,
+		"environment_worktree_create":   true,
 		"environment_worktree_destroy":  true,
 		"environment_temporary_promote": true,
 		"environment_temporary_cleanup": true,
