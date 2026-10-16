@@ -620,6 +620,8 @@ func (r *Runtime) readOnlyGitCommand(ctx context.Context, git string, args ...st
 		"--no-pager",
 		"-c", "core.fsmonitor=false",
 		"-c", "core.attributesFile=" + os.DevNull,
+		"-c", "core.excludesFile=" + os.DevNull,
+		"--work-tree=" + r.root,
 		"-C", r.root,
 	}
 	fullArgs = append(fullArgs, args...)
@@ -825,11 +827,13 @@ func (r *Runtime) controlledGitCommand(ctx context.Context, git string, args ...
 		"--no-pager",
 		"-c", "core.fsmonitor=false",
 		"-c", "core.attributesFile=" + os.DevNull,
+		"-c", "core.excludesFile=" + os.DevNull,
 		"-c", "core.hooksPath=" + os.DevNull,
 		"-c", "commit.gpgSign=false",
 		"-c", "gc.auto=0",
 		"-c", "maintenance.auto=false",
 		"-C", r.root,
+		"--work-tree=" + r.root,
 	}
 	fullArgs = append(fullArgs, args...)
 	cmd := exec.CommandContext(ctx, git, fullArgs...)

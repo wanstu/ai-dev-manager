@@ -921,6 +921,7 @@ func agentSafeGitCommand(ctx context.Context, git, dir string, args ...string) *
 		"--no-pager",
 		"-c", "core.fsmonitor=false",
 		"-c", "core.attributesFile=" + os.DevNull,
+		"-c", "core.excludesFile=" + os.DevNull,
 		"-c", "core.hooksPath=" + os.DevNull,
 		"-c", "gc.auto=0",
 		"-c", "maintenance.auto=false",

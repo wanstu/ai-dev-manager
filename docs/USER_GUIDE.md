@@ -667,7 +667,9 @@ Environment list/inspect/context 默认只暴露安全 count/facts，不自动�
 
 ### 12.2 同步与异步执行
 
-Agent 面支持同步：
+Agent 面只允许运行管理员显式批准（`agent_host_execution_allowed=true`）的 Verifier；Agent 自己不能开启该权限。
+从 v1.4.6 起，`exec` / `run_start` / `process_start` 等任意宿主机执行能力不再暴露给 Agent。
+在 OS 沙箱完成前，批准 Verifier 代表显式信任该 test/lint/build 在当前宿主用户权限下执行。
 
 ```text
 environment_verifier_run

@@ -647,7 +647,10 @@ AI 建议：**先用它调查具体方法，再依据实际代码决定修改什
 
 只删除一个文件；Agent surface 不暴露递归目录删除。
 
-## 9. `exec`：同步本机命令
+## 9. Host execution：Admin-only
+
+从 v1.4.6 起，Agent surface 不再暴露 `exec`、`run_start`、`process_start` 或 `global_exec`。这些工具会启动宿主机代码，Environment-relative cwd 不是 OS 沙箱，因此只保留在 Admin surface。
+Agent 的 test/lint/build 自动化应使用管理员预先配置并显式批准的 Verifier。
 
 输入：
 
@@ -676,7 +679,9 @@ AI 建议：**先用它调查具体方法，再依据实际代码决定修改什
 
 ## 10. Verifier 工具
 
-Agent 可以运行已有 Verifier definition，但不能通过 Agent surface 添加/删除 definition。
+Agent 可以运行已有 Verifier definition，但不能通过 Agent surface 添加/删除 definition，也不能自行授予宿主机执行权限。
+只有 `agent_host_execution_allowed=true` 的 Verifier 才能由 Agent 运行；该批准只能从 Admin surface 设置或撤销。
+在 OS 级沙箱完成前，Verifier 仍以当前宿主用户权限执行项目代码，因此它是显式 trusted-host capability，而不是文件系统隔离边界。
 
 ### `environment_verifier_list`
 
@@ -1283,21 +1288,22 @@ Skill 细查：`environment_skill_inspect`。
 environment_writer_acquire
 -> read/search
 -> edit/write/delete
--> exec/verifier
+-> approved verifier (test/lint/build)
+-> git_commit
 -> environment_writer_release
 ```
 
 ### “我要跑短命令”
 
-`exec`。
+Agent 不提供任意短命令执行；需要开发验证时使用已批准 Verifier。任意 `exec` 仅在 Admin surface。
 
 ### “我要跑一个很久但最终结束的普通命令”
 
-`run_start/status/cancel`。
+Agent 不启动任意 host run；`run_start/status/cancel` 属于 Admin host-execution lifecycle。
 
 ### “我要启动 dev server”
 
-`process_start/status/logs/stop`。
+`process_start/status/logs/stop` 属于 Admin host-execution lifecycle；Agent 不直接启动宿主机 dev server。
 
 ### “我要跑结构化 test/build verifier”
 

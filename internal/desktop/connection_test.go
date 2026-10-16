@@ -105,7 +105,7 @@ func TestClientAdapterUsesAdminMCPAndDoesNotFallbackAfterDisconnect(t *testing.T
 	if err := os.MkdirAll(temporaryRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	createdTemporary, err := gatewayService.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{
+	createdTemporary, err := gatewayService.CreateTemporaryEnvironment(context.Background(), "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID, Name: "desktop-temporary", OwnerID: "desktop-owner", TTLSeconds: 60, Root: temporaryRoot,
 	})
 	if err != nil {

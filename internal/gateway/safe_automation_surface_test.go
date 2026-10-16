@@ -183,9 +183,12 @@ func TestAgentManagedWorktreeCreationDoesNotFetch(t *testing.T) {
 	ctx := context.Background()
 	agent := connectInMemory(t, ctx, New(service))
 	defer agent.Close()
-	created := callGatewayTool(t, ctx, agent, "environment_worktree_create", map[string]any{
+	created := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{
 		"source_environment_id": source.ID,
 		"name":                  "agent-safe-child",
+		"owner_id":              "agent-safe-owner",
+		"ttl_seconds":           3600,
+		"mode":                  model.TemporaryEnvironmentModeManagedWorktree,
 		"branch_name":           "test/agent-safe-no-fetch",
 	})
 	if created.IsError {
@@ -229,9 +232,12 @@ func TestAgentManagedWorktreeRejectsMigrationAndFilterCheckout(t *testing.T) {
 	agent := connectInMemory(t, ctx, New(service))
 	defer agent.Close()
 
-	migration := callGatewayTool(t, ctx, agent, "environment_worktree_create", map[string]any{
+	migration := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{
 		"source_environment_id":       source.ID,
 		"name":                        "agent-safe-migrate",
+		"owner_id":                    "agent-safe-owner",
+		"ttl_seconds":                 3600,
+		"mode":                        model.TemporaryEnvironmentModeManagedWorktree,
 		"branch_name":                 "test/agent-safe-migrate",
 		"migrate_uncommitted_changes": true,
 	})
@@ -245,10 +251,13 @@ func TestAgentManagedWorktreeRejectsMigrationAndFilterCheckout(t *testing.T) {
 	gatewayGitRun(t, root, "add", ".gitattributes")
 	gatewayGitRun(t, root, "commit", "-m", "add unsafe filter attribute")
 
-	filtered := callGatewayTool(t, ctx, agent, "environment_worktree_create", map[string]any{
+	filtered := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{
 		"source_environment_id": source.ID,
 		"name":                  "agent-safe-filter",
 		"branch_name":           "test/agent-safe-filter",
+		"owner_id":              "agent-safe-owner",
+		"ttl_seconds":           3600,
+		"mode":                  model.TemporaryEnvironmentModeManagedWorktree,
 	})
 	if !filtered.IsError || !strings.Contains(toolText(t, filtered), "may execute host code") {
 		t.Fatalf("Agent-safe filter checkout was not rejected: %s", toolText(t, filtered))

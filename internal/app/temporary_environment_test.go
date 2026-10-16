@@ -21,7 +21,7 @@ func TestCreateTemporaryEnvironmentExistingRootAndValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	created, err := service.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{
+	created, err := service.CreateTemporaryEnvironment(context.Background(), "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID,
 		Name:        "task-default",
 		OwnerID:     "owner-a",
@@ -36,7 +36,7 @@ func TestCreateTemporaryEnvironmentExistingRootAndValidation(t *testing.T) {
 		t.Fatalf("unexpected creation result: %+v", created)
 	}
 	retention := created.Environment.Retention
-	if retention.Persistence != model.PersistenceTemporary || retention.CreatorSurface != "agent" || retention.OwnerID != "owner-a" || retention.SessionID != "session-a" || retention.RunID != "run_external_a" || retention.ExpiresAt == nil {
+	if retention.Persistence != model.PersistenceTemporary || retention.CreatorSurface != "admin" || retention.OwnerID != "owner-a" || retention.SessionID != "session-a" || retention.RunID != "run_external_a" || retention.ExpiresAt == nil {
 		t.Fatalf("temporary retention = %+v", retention)
 	}
 	if !filepath.IsAbs(created.Environment.Root) || !sameTestPath(created.Environment.Root, workspaceRoot) {
@@ -47,7 +47,7 @@ func TestCreateTemporaryEnvironmentExistingRootAndValidation(t *testing.T) {
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	sub, err := service.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{
+	sub, err := service.CreateTemporaryEnvironment(context.Background(), "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID,
 		Name:        "task-subdir",
 		OwnerID:     "owner-a",
@@ -73,7 +73,7 @@ func TestCreateTemporaryEnvironmentExistingRootAndValidation(t *testing.T) {
 		{WorkspaceID: workspace.ID, Name: "outside-root", OwnerID: "owner-a", TTLSeconds: 60, Root: t.TempDir()},
 	}
 	for _, request := range invalid {
-		if _, err := service.CreateTemporaryEnvironment(context.Background(), "agent", request); err == nil {
+		if _, err := service.CreateTemporaryEnvironment(context.Background(), "admin", request); err == nil {
 			t.Fatalf("invalid request unexpectedly succeeded: %+v", request)
 		}
 	}
@@ -100,7 +100,7 @@ func TestCreateTemporaryEnvironmentRejectsDurableCollision(t *testing.T) {
 	if durable.Retention.Persistence != model.PersistenceDurable {
 		t.Fatalf("durable retention = %+v", durable.Retention)
 	}
-	if _, err := service.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{
+	if _, err := service.CreateTemporaryEnvironment(context.Background(), "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID,
 		Name:        "same",
 		OwnerID:     "owner-a",
@@ -189,7 +189,7 @@ func TestTemporaryEnvironmentPromotionRequiresOwnerAndPreservesContext(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := service.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{
+	created, err := service.CreateTemporaryEnvironment(context.Background(), "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID,
 		Name:        "promote-me",
 		OwnerID:     "owner-promote",
@@ -262,7 +262,7 @@ func TestTemporaryEnvironmentStatusShowsNotDueWithoutMutation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := service.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{
+	created, err := service.CreateTemporaryEnvironment(context.Background(), "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID,
 		Name:        "not-due",
 		OwnerID:     "owner-status",
@@ -294,7 +294,7 @@ func TestTemporaryEnvironmentTTLIsFuture(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := time.Now().UTC()
-	created, err := service.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{
+	created, err := service.CreateTemporaryEnvironment(context.Background(), "admin", model.TemporaryEnvironmentCreateRequest{
 		WorkspaceID: workspace.ID,
 		Name:        "ttl",
 		OwnerID:     "owner-ttl",

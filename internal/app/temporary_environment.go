@@ -50,6 +50,14 @@ func (s *Service) CreateTemporaryEnvironment(ctx context.Context, creatorSurface
 	if request.Mode == "" {
 		request.Mode = model.TemporaryEnvironmentModeExistingRoot
 	}
+	if strings.EqualFold(creatorSurface, "agent") {
+		if request.Mode != model.TemporaryEnvironmentModeManagedWorktree ||
+			request.SourceEnvironmentID == "" ||
+			request.WorkspaceID != "" ||
+			request.Root != "" {
+			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("Agent temporary Environment creation requires managed_worktree mode with source_environment_id; existing_root and workspace-derived authority are Admin-only")
+		}
+	}
 
 	now := time.Now().UTC()
 	expiresAt := now.Add(ttl)
