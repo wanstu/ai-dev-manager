@@ -676,7 +676,7 @@ func isAdminOnlyTool(name string) bool {
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
 		"resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote",
-		"git_fetch", "git_push", "git_tag_create", "git_tag_delete",
+		"git_tag_delete",
 		"memory_global_write", "memory_global_delete":
 		return true
 	default:
@@ -2070,7 +2070,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_tag_create", Description: "Create one lightweight or annotated local Git tag on an exact resolved commit. Requires matching writer_owner; force replacement and signing are not exposed."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_tag_create", Description: "Create one lightweight or annotated local Git tag on an exact resolved commit. Available to Agent and Admin with matching writer_owner; force replacement and signing are not exposed."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitTagCreateInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitTagCreate(ctx, in.EnvironmentID, in.WriterOwner, in.Name, in.Ref, in.Message, in.Annotated)
 			return toolResult(value, err)
@@ -2112,15 +2112,27 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_fetch", Description: "Admin-only remote fetch from one configured Git remote. Requires matching writer_owner. Submodules are disabled; arbitrary refspecs are not accepted."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_fetch", Description: "Fetch from one existing configured Git remote. Requires matching writer_owner. On the Agent surface only HTTPS remotes are allowed; SSH/local/file transports, arbitrary URLs/refspecs and submodule recursion are blocked. Authentication may use the host credential manager without returning credentials to the caller."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitFetchInput) (*mcp.CallToolResult, any, error) {
-			value, err := service.GitFetch(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Tags, in.Prune)
+			var value any
+			var err error
+			if surface == serverSurfaceAgent {
+				value, err = service.GitFetchAgent(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Tags, in.Prune)
+			} else {
+				value, err = service.GitFetch(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Tags, in.Prune)
+			}
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_push", Description: "Admin-only controlled remote push of one local branch and optional exact local tags. Requires matching writer_owner. No force push, remote deletion, arbitrary refspecs, or submodule recursion is exposed."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_push", Description: "Controlled push of one local branch and optional exact local tags to one existing configured Git remote. Requires matching writer_owner. On the Agent surface only HTTPS remotes are allowed. Force push, remote deletion, arbitrary refspecs, SSH/local/file transports and submodule recursion are not exposed; credentials are never returned to the caller."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitPushInput) (*mcp.CallToolResult, any, error) {
-			value, err := service.GitPush(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Branch, in.Tags, in.SetUpstream)
+			var value any
+			var err error
+			if surface == serverSurfaceAgent {
+				value, err = service.GitPushAgent(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Branch, in.Tags, in.SetUpstream)
+			} else {
+				value, err = service.GitPush(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Branch, in.Tags, in.SetUpstream)
+			}
 			return toolResult(value, err)
 		})
 
