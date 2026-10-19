@@ -121,6 +121,9 @@ func TestControlledGitPushBranchAndExactTag(t *testing.T) {
 	}
 	root := t.TempDir()
 	remote := filepath.Join(t.TempDir(), "remote.git")
+	if err := os.MkdirAll(remote, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	runGitForCommitTest(t, git, remote, "init", "--bare")
 	runGitForCommitTest(t, git, root, "init", "-b", "main")
 	runGitForCommitTest(t, git, root, "config", "user.name", "ADM Test")
@@ -161,6 +164,9 @@ func TestAgentSafeRemoteRejectsNonHTTPS(t *testing.T) {
 	}
 	root := t.TempDir()
 	remote := filepath.Join(t.TempDir(), "remote.git")
+	if err := os.MkdirAll(remote, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	runGitForCommitTest(t, git, remote, "init", "--bare")
 	runGitForCommitTest(t, git, root, "init", "-b", "main")
 	runGitForCommitTest(t, git, root, "remote", "add", "origin", remote)
