@@ -168,7 +168,7 @@ func verifierSandboxToolRoots(environment []string, executable string) []string 
 		if path == "" || !filepath.IsAbs(path) {
 			return
 		}
-		resolved, err := filepath.EvalSymlinks(filepath.Clean(path))
+		resolved, err := sandbox.ResolveExistingPath(filepath.Clean(path))
 		if err != nil {
 			return
 		}
@@ -216,7 +216,7 @@ func verifierSandboxGoRoot(environment []string, executable string) string {
 		if candidate == "" || !filepath.IsAbs(candidate) {
 			continue
 		}
-		resolved, err := filepath.EvalSymlinks(filepath.Clean(candidate))
+		resolved, err := sandbox.ResolveExistingPath(filepath.Clean(candidate))
 		if err != nil {
 			continue
 		}
