@@ -388,6 +388,18 @@ func (r *Runtime) GitMergeAbort(ctx context.Context) (GitMutationResult, error) 
 }
 
 func (r *Runtime) GitFetch(ctx context.Context, remote string, tags, prune bool, hostCredentials bool) (GitFetchResult, error) {
+	return r.gitFetch(ctx, remote, tags, prune, hostCredentials, !hostCredentials)
+}
+
+// GitFetchAgent keeps the Agent on an explicitly configured HTTPS remote while
+// allowing the host credential manager to satisfy authentication. Credentials
+// are never returned to the caller, arbitrary URLs/refspecs are not accepted,
+// and SSH/local/file transports remain blocked.
+func (r *Runtime) GitFetchAgent(ctx context.Context, remote string, tags, prune bool) (GitFetchResult, error) {
+	return r.gitFetch(ctx, remote, tags, prune, true, true)
+}
+
+func (r *Runtime) gitFetch(ctx context.Context, remote string, tags, prune, hostCredentials, requireSafeRemote bool) (GitFetchResult, error) {
 	git, err := r.gitExecutable()
 	if err != nil {
 		return GitFetchResult{}, err
@@ -402,7 +414,7 @@ func (r *Runtime) GitFetch(ctx context.Context, remote string, tags, prune bool,
 	if err := validateGitRemoteName(remote); err != nil {
 		return GitFetchResult{}, err
 	}
-	if !hostCredentials {
+	if requireSafeRemote {
 		if err := r.requireAgentSafeGitRemote(ctx, git, remote, false); err != nil {
 			return GitFetchResult{}, err
 		}
@@ -426,6 +438,17 @@ func (r *Runtime) GitFetch(ctx context.Context, remote string, tags, prune bool,
 }
 
 func (r *Runtime) GitPush(ctx context.Context, remote, branch string, tags []string, setUpstream, hostCredentials bool) (GitPushResult, error) {
+	return r.gitPush(ctx, remote, branch, tags, setUpstream, hostCredentials, !hostCredentials)
+}
+
+// GitPushAgent uses only an existing configured HTTPS remote and fixed branch/
+// tag refspecs. It may use the host credential manager for authentication, but
+// does not expose force push, deletion, SSH, local transports, or credentials.
+func (r *Runtime) GitPushAgent(ctx context.Context, remote, branch string, tags []string, setUpstream bool) (GitPushResult, error) {
+	return r.gitPush(ctx, remote, branch, tags, setUpstream, true, true)
+}
+
+func (r *Runtime) gitPush(ctx context.Context, remote, branch string, tags []string, setUpstream, hostCredentials, requireSafeRemote bool) (GitPushResult, error) {
 	git, err := r.gitExecutable()
 	if err != nil {
 		return GitPushResult{}, err
@@ -440,7 +463,7 @@ func (r *Runtime) GitPush(ctx context.Context, remote, branch string, tags []str
 	if err := validateGitRemoteName(remote); err != nil {
 		return GitPushResult{}, err
 	}
-	if !hostCredentials {
+	if requireSafeRemote {
 		if err := r.requireAgentSafeGitRemote(ctx, git, remote, true); err != nil {
 			return GitPushResult{}, err
 		}
