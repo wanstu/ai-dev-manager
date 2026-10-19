@@ -112,6 +112,10 @@ func TestWindowsAppContainerFileBoundaryE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The sandboxed child may create descendants of the same test binary.
+	// Grant the image directory as a read-only toolchain mount so CreateProcess
+	// can traverse and reopen the executable from inside AppContainer.
+	grant(filepath.Dir(executable), PathAccessReadOnly)
 	grant(executable, PathAccessReadOnly)
 
 	base := append([]string(nil), os.Environ()...)
@@ -145,15 +149,17 @@ func TestWindowsAppContainerFileBoundaryE2E(t *testing.T) {
 	}
 
 	grandchildPIDPath := filepath.Join(allowedRoot, "grandchild.pid")
+	jobDiagnosticPath := filepath.Join(allowedRoot, "job-diagnostic.txt")
 	jobEnvironment, err := BuildEnvironment(base, dirs, map[string]string{
 		sandboxE2EGrandchildPIDEnv: grandchildPIDPath,
+		sandboxE2EResultEnv:        jobDiagnosticPath,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	jobCtx, cancelJob := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancelJob()
-	_, launchErr = Launch(jobCtx, LaunchRequest{
+	jobResult, launchErr := Launch(jobCtx, LaunchRequest{
 		Executable:  executable,
 		Args:        []string{"-test.run=^TestWindowsAppContainerJobChildHelper$", "-test.v"},
 		Cwd:         allowedRoot,
@@ -161,7 +167,8 @@ func TestWindowsAppContainerFileBoundaryE2E(t *testing.T) {
 		ProfileSID:  profile.SID,
 	})
 	if !errors.Is(launchErr, context.DeadlineExceeded) {
-		t.Fatalf("expected AppContainer job cancellation deadline, got %v", launchErr)
+		diagnostic, _ := os.ReadFile(jobDiagnosticPath)
+		t.Fatalf("expected AppContainer job cancellation deadline, got err=%v exit=%d diagnostic=%q", launchErr, jobResult.ExitCode, diagnostic)
 	}
 	pidData, err := os.ReadFile(grandchildPIDPath)
 	if err != nil {
@@ -181,19 +188,26 @@ func TestWindowsAppContainerJobChildHelper(t *testing.T) {
 	if pidPath == "" {
 		t.Skip("AppContainer Job Object child helper")
 	}
+	diagnosticPath := os.Getenv(sandboxE2EResultEnv)
+	fail := func(message string) {
+		if diagnosticPath != "" {
+			_ = os.WriteFile(diagnosticPath, []byte(message), 0o644)
+		}
+		t.Fatal(message)
+	}
 	executable, err := os.Executable()
 	if err != nil {
-		t.Fatal(err)
+		fail("resolve child executable: " + err.Error())
 	}
 	cmd := exec.Command(executable, "-test.run=^TestWindowsAppContainerGrandchildHelper$", "-test.v")
 	cmd.Env = os.Environ()
 	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
+		fail("start grandchild: " + err.Error())
 	}
 	if err := cmd.Wait(); err != nil {
-		t.Fatal(err)
+		fail("wait grandchild: " + err.Error())
 	}
-	t.Fatal("grandchild exited before Job Object cancellation")
+	fail("grandchild exited before Job Object cancellation")
 }
 
 func TestWindowsAppContainerGrandchildHelper(t *testing.T) {
