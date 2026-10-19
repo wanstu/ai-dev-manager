@@ -25,7 +25,7 @@ import (
 const (
 	serverName             = "adm"
 	runtimeOwnerHeader     = "X-ADM-Runtime-Owner"
-	gatewayToolsetRevision = "2026-10-19.2"
+	gatewayToolsetRevision = "2026-10-19.3"
 )
 
 var serverVersion = productversion.Current()
@@ -655,21 +655,75 @@ func newServer(service *app.Service, owner *runtimeOwner) *mcp.Server {
 	return newServerForSurface(service, owner, serverSurfaceAgent)
 }
 
-func addScopedTool[In, Out any](server *mcp.Server, surface serverSurface, tool *mcp.Tool, handler mcp.ToolHandlerFor[In, Out]) {
-	if surface == serverSurfaceAgent && isAdminOnlyTool(tool.Name) {
-		return
+func addScopedTool[In, Out any](server *mcp.Server, surface serverSurface, service *app.Service, tool *mcp.Tool, handler mcp.ToolHandlerFor[In, Out]) {
+	permissionClass := agentToolPermission(tool.Name)
+	if surface == serverSurfaceAgent && permissionClass != agentToolPermissionAllowed {
+		switch permissionClass {
+		case agentToolPermissionAdminOnly:
+			tool.Description += " Agent permission note: this tool remains visible for discoverability, but invocation requires the Admin surface in both strong and v1.4.4-compatible modes."
+		case agentToolPermissionStrongOnly:
+			tool.Description += " Agent permission note: this tool remains visible. It is blocked while Strong Permission Control is enabled and becomes callable in v1.4.4-compatible relaxed mode."
+		}
 	}
-	mcp.AddTool(server, tool, handler)
+
+	wrapped := handler
+	if surface == serverSurfaceAgent && permissionClass != agentToolPermissionAllowed {
+		wrapped = func(ctx context.Context, request *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
+			status, err := service.StrongPermissionControlStatus()
+			if err != nil {
+				var zero Out
+				return nil, zero, fmt.Errorf("ADM permission check failed for tool %q; strong permission state could not be read, so the Agent request was denied fail-closed: %w", tool.Name, err)
+			}
+			if permissionClass == agentToolPermissionAdminOnly || status.Enabled {
+				var zero Out
+				return nil, zero, agentToolPermissionError(tool.Name, permissionClass, status)
+			}
+			return handler(ctx, request, in)
+		}
+	}
+	mcp.AddTool(server, tool, wrapped)
 }
 
-func isAdminOnlyTool(name string) bool {
-	// The Agent surface is not an OS sandbox. Any tool that can start host code
-	// must stay on the Admin surface until execution is isolated at the OS level.
+type agentToolPermissionClass string
+
+const (
+	agentToolPermissionAllowed    agentToolPermissionClass = ""
+	agentToolPermissionAdminOnly  agentToolPermissionClass = "admin_only"
+	agentToolPermissionStrongOnly agentToolPermissionClass = "blocked_by_strong_permission_control"
+)
+
+func agentToolPermissionError(toolName string, permissionClass agentToolPermissionClass, status app.StrongPermissionControlStatus) error {
+	if permissionClass == agentToolPermissionAdminOnly {
+		return fmt.Errorf("ADM permission denied for tool %q: the tool is intentionally visible to the Agent so it can understand available capabilities, but this operation requires the Admin surface. Strong Permission Control is %s. Use the Desktop/Web admin UI or /admin/mcp for this operation; the Agent must not attempt to bypass the Admin boundary", toolName, onOff(status.Enabled))
+	}
+	return fmt.Errorf("ADM permission denied for tool %q: Strong Permission Control is enabled, so this v1.4.4-compatible host-authority operation is blocked on the Agent surface. The tool remains visible by design so the Agent can understand why it is unavailable. Prefer a typed/sandboxed Agent-safe tool when possible. If the user explicitly wants the older v1.4.4-compatible relaxed behavior, they can manually turn off '强权限控制' in ADM Settings. The Agent must not disable that setting on the user's behalf", toolName)
+}
+
+func onOff(enabled bool) string {
+	if enabled {
+		return "enabled"
+	}
+	return "disabled"
+}
+
+func agentToolPermission(name string) agentToolPermissionClass {
+	if isV144AdminOnlyTool(name) {
+		return agentToolPermissionAdminOnly
+	}
 	switch name {
-	case "global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "run_start", "process_start",
-		"project_index_auto_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
+	case "global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read",
+		"exec", "run_start", "process_start", "environment_temporary_cleanup", "environment_worktree_destroy", "git_tag_delete":
+		return agentToolPermissionStrongOnly
+	default:
+		return agentToolPermissionAllowed
+	}
+}
+
+func isV144AdminOnlyTool(name string) bool {
+	switch name {
+	case "project_index_auto_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
-		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_verifier_agent_host_execution_set", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_temporary_cleanup", "environment_worktree_create", "environment_worktree_destroy", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary",
+		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_verifier_agent_host_execution_set", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
 		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_access_policy_set", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
 		"secret_list", "secret_set", "secret_delete", "mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
@@ -677,8 +731,8 @@ func isAdminOnlyTool(name string) bool {
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
 		"resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote",
-		"git_tag_delete",
-		"memory_global_write", "memory_global_delete":
+		"memory_global_write", "memory_global_delete",
+		"strong_permission_control_set":
 		return true
 	default:
 		return false
@@ -692,7 +746,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: implementationName, Version: serverVersion}, &mcp.ServerOptions{Instructions: gatewayAgentInstructions})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_info", Description: "Describe the ADM V2 Agent Gateway and its core semantics."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_info", Description: "Describe the ADM V2 Agent Gateway and its core semantics."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			role := "local AI development gateway"
 			if surface == serverSurfaceAdmin {
@@ -711,6 +765,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 					"MCP/Skill catalogs and Memory are optional development-context capabilities.",
 				},
 			}
+			permissionStatus, permissionErr := service.StrongPermissionControlStatus()
+			if permissionErr != nil {
+				return toolResult(nil, fmt.Errorf("read strong permission control status: %w", permissionErr))
+			}
+			info["strong_permission_control"] = permissionStatus
 			if owner != nil {
 				info["runtime_owner"] = owner.Info()
 			}
@@ -719,94 +778,105 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	registerGlobalTools(server, surface, service)
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "management_snapshot", Description: "Return a safe Desktop/CLI management overview without exposing Global or Environment-private Memory values."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "management_snapshot", Description: "Return a safe Desktop/CLI management overview without exposing Global or Environment-private Memory values."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, management.Snapshot, error) {
 			snapshot, err := management.New(service).Snapshot()
 			return nil, snapshot, err
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "logging_status", Description: "Return persistent ADM runtime log directory and fixed rotation/retention limits. No log contents or secrets are returned."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "logging_status", Description: "Return persistent ADM runtime log directory and fixed rotation/retention limits. No log contents or secrets are returned."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			return toolResult(service.LoggingStatus(), nil)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_access_status", Description: "Return configured remote Host allowlist and whether separate Admin MCP and Agent MCP API keys are configured; key values are never returned."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_access_status", Description: "Return configured remote Host allowlist and whether separate Admin MCP and Agent MCP API keys are configured; key values are never returned."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.GatewayAccessStatus()
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_diagnostics", Description: "Return admin-only Gateway runtime diagnostics including process identity, platform, state/config paths, remote-access readiness, and Linux systemd service metadata. No API key values are returned."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_diagnostics", Description: "Return admin-only Gateway runtime diagnostics including process identity, platform, state/config paths, remote-access readiness, and Linux systemd service metadata. No API key values are returned."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, management.GatewayDiagnostics, error) {
 			diagnostics, err := management.New(service).GatewayDiagnostics()
 			return nil, diagnostics, err
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_access_policy_set", Description: "Atomically enable or disable optional HTTP Host and TCP source IP allowlists."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_access_policy_set", Description: "Atomically enable or disable optional HTTP Host and TCP source IP allowlists."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAccessPolicyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetGatewayAccessPolicy(in.Enabled, in.Hosts, in.ClientIPs)
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_allowed_hosts_set", Description: "Replace the remote ADM Host/IP allowlist. Entries are DNS names or IP addresses without scheme or port; '*' allows any Host/IP while API-key authentication remains mandatory."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_allowed_hosts_set", Description: "Replace the remote ADM Host/IP allowlist. Entries are DNS names or IP addresses without scheme or port; '*' allows any Host/IP while API-key authentication remains mandatory."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAllowedHostsInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetGatewayAllowedHosts(in.Hosts)
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_set", Description: "Set the API key accepted only by /admin/mcp. The key is stored only as a SHA-256 hash and is never returned."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_admin_api_key_set", Description: "Set the API key accepted only by /admin/mcp. The key is stored only as a SHA-256 hash and is never returned."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAPIKeyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetGatewayAdminAPIKey(in.APIKey)
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_rotate", Description: "Generate and atomically rotate the /admin/mcp API key using the server CSPRNG. The plaintext key is returned once in this response and is not persisted."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_admin_api_key_rotate", Description: "Generate and atomically rotate the /admin/mcp API key using the server CSPRNG. The plaintext key is returned once in this response and is not persisted."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			result, err := service.RotateGatewayAdminAPIKey()
 			return toolResult(result, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_admin_api_key_clear", Description: "Clear the /admin/mcp API key. Remote MCP remains unauthorized until both Admin and Agent keys are configured; HTTP binding itself is independent."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_admin_api_key_clear", Description: "Clear the /admin/mcp API key. Remote MCP remains unauthorized until both Admin and Agent keys are configured; HTTP binding itself is independent."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.ClearGatewayAdminAPIKey()
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_agent_api_key_set", Description: "Set the API key accepted only by /mcp. The key is stored only as a SHA-256 hash and is never returned."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_agent_api_key_set", Description: "Set the API key accepted only by /mcp. The key is stored only as a SHA-256 hash and is never returned."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in GatewayAPIKeyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetGatewayAgentAPIKey(in.APIKey)
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_agent_api_key_rotate", Description: "Generate and atomically rotate the /mcp Agent API key using the server CSPRNG. The plaintext key is returned once in this response and is not persisted."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_agent_api_key_rotate", Description: "Generate and atomically rotate the /mcp Agent API key using the server CSPRNG. The plaintext key is returned once in this response and is not persisted."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			result, err := service.RotateGatewayAgentAPIKey()
 			return toolResult(result, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "gateway_agent_api_key_clear", Description: "Clear the /mcp API key. Remote Gateway listening remains refused until both Admin and Agent keys are configured."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "gateway_agent_api_key_clear", Description: "Clear the /mcp API key. Remote Gateway listening remains refused until both Admin and Agent keys are configured."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.ClearGatewayAgentAPIKey()
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_authorization_status", Description: "Return whether command execution is in strict allowlist mode or explicit full-authorization mode."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_authorization_status", Description: "Return whether command execution is in strict allowlist mode or explicit full-authorization mode."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.ExecAuthorizationStatus()
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_full_authorization_set", Description: "Enable or disable full command authorization. When enabled, unlisted executables may run and are recorded as authorization-bypass observations, but command-blacklist entries remain denied."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_full_authorization_set", Description: "Enable or disable full command authorization. When enabled, unlisted executables may run and are recorded as authorization-bypass observations, but command-blacklist entries remain denied."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ExecFullAuthorizationInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.SetExecFullAuthorization(in.Enabled)
 			return toolResult(status, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "worktree_settings_get", Description: "Return managed worktree storage root, branch prefix, and the system-managed Workspace ID. No project files are read."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "strong_permission_control_status", Description: "Return the current Agent permission-control mode. This read-only tool is available to Agent and Admin so clients can explain permission denials without guessing."},
+		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.StrongPermissionControlStatus()
+			return toolResult(status, err)
+		})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "strong_permission_control_set", Description: "Admin-only: enable or disable Strong Permission Control. Enabled is the default. Disabled uses the v1.4.4-compatible relaxed Agent permission boundary; the Agent may inspect this setting but must not change it itself."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in StrongPermissionControlInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.SetStrongPermissionControl(in.Enabled)
+			return toolResult(status, err)
+		})
+
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "worktree_settings_get", Description: "Return managed worktree storage root, branch prefix, and the system-managed Workspace ID. No project files are read."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, model.WorktreeSettings, error) {
 			settings, err := service.WorktreeSettings()
 			return nil, settings, err
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "worktree_settings_set", Description: "Update managed worktree storage root and branch prefix. The root is registered as a protected system Workspace; changing root is refused while managed worktrees exist."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "worktree_settings_set", Description: "Update managed worktree storage root and branch prefix. The root is registered as a protected system Workspace; changing root is refused while managed worktrees exist."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WorktreeSettingsInput) (*mcp.CallToolResult, model.WorktreeSettings, error) {
 			settings, err := service.UpdateWorktreeSettings(in.Root, in.BranchPrefix)
 			return nil, settings, err
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "host_environment_status", Description: "Return safe metadata for ADM's host-environment snapshot. Variable values are never returned."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "host_environment_status", Description: "Return safe metadata for ADM's host-environment snapshot. Variable values are never returned."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.HostEnvironmentStatus()
 			return toolResult(status, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "host_environment_refresh", Description: "Explicitly refresh ADM's host-environment snapshot. On Windows this re-reads machine/user environment registry values; existing MCP sessions are discarded and future MCP activations/process starts use the refreshed snapshot. Already-running OS processes are unchanged."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "host_environment_refresh", Description: "Explicitly refresh ADM's host-environment snapshot. On Windows this re-reads machine/user environment registry values; existing MCP sessions are discarded and future MCP activations/process starts use the refreshed snapshot. Already-running OS processes are unchanged."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			status, err := service.RefreshHostEnvironment()
 			if err == nil && owner != nil {
@@ -815,7 +885,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(status, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "resource_retention_inspect", Description: "Inspect durable/temporary retention metadata and conservative cleanup eligibility. Uses persisted state plus existing Gateway-owner activity only; it does not delete resources, probe Git worktrees, start processes, or call MCP tools."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "resource_retention_inspect", Description: "Inspect durable/temporary retention metadata and conservative cleanup eligibility. Uses persisted state plus existing Gateway-owner activity only; it does not delete resources, probe Git worktrees, start processes, or call MCP tools."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, ResourceRetentionReportOutput, error) {
 			var (
 				report model.ResourceRetentionReport
@@ -832,7 +902,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, report, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "resource_retention_cleanup", Description: "Return a cleanup plan for eligible temporary resources and execute only safe state-only cleanup when requested. It never deletes project directories, probes Git worktrees, starts processes, or calls MCP tools."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "resource_retention_cleanup", Description: "Return a cleanup plan for eligible temporary resources and execute only safe state-only cleanup when requested. It never deletes project directories, probes Git worktrees, starts processes, or calls MCP tools."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in model.ResourceRetentionCleanupRequest) (*mcp.CallToolResult, ResourceRetentionCleanupOutput, error) {
 			var (
 				result model.ResourceRetentionCleanupResult
@@ -849,7 +919,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, result, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "resource_retention_mark_temporary", Description: "Explicitly mark one Environment, MCP, Skill Source, or standalone Skill as temporary by updating retention metadata only. Source-owned Skills must be changed through their Skill Source."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "resource_retention_mark_temporary", Description: "Explicitly mark one Environment, MCP, Skill Source, or standalone Skill as temporary by updating retention metadata only. Source-owned Skills must be changed through their Skill Source."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in model.ResourceRetentionUpdateRequest) (*mcp.CallToolResult, ResourceRetentionUpdateOutput, error) {
 			result, err := service.MarkResourceTemporary(in)
 			if err != nil {
@@ -858,7 +928,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, result, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "resource_retention_promote", Description: "Promote one temporary Environment, MCP, Skill Source, or standalone Skill to durable retention metadata only. Skill Source promotion also updates source-owned Skills."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "resource_retention_promote", Description: "Promote one temporary Environment, MCP, Skill Source, or standalone Skill to durable retention metadata only. Skill Source promotion also updates source-owned Skills."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in model.ResourceRetentionUpdateRequest) (*mcp.CallToolResult, ResourceRetentionUpdateOutput, error) {
 			result, err := service.PromoteResourceRetention(in)
 			if err != nil {
@@ -867,31 +937,31 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, result, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "host_directory_list", Description: "List directories on the ADM Gateway host for authenticated management path selection. Empty path lists filesystem roots."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "host_directory_list", Description: "List directories on the ADM Gateway host for authenticated management path selection. Empty path lists filesystem roots."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in HostDirectoryListInput) (*mcp.CallToolResult, management.HostDirectoryListing, error) {
 			listing, err := management.New(service).HostDirectoryList(in.Path)
 			return nil, listing, err
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_list", Description: "List local directories explicitly registered as ADM Workspaces."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "workspace_list", Description: "List local directories explicitly registered as ADM Workspaces."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Workspaces.List()
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_add", Description: "Register an existing local directory as an ADM Workspace. Git is not required."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "workspace_add", Description: "Register an existing local directory as an ADM Workspace. Git is not required."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WorkspaceAddInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Workspaces.Add(in.Path, in.Name)
 			return toolResult(item, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_inspect", Description: "Inspect one registered ADM Workspace by stable ID."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "workspace_inspect", Description: "Inspect one registered ADM Workspace by stable ID."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WorkspaceInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Workspaces.Get(in.WorkspaceID)
 			return toolResult(item, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_discover", Description: "Explicitly scan bounded directory metadata under one registered Workspace and return project candidates plus a compact directory digest. No writer, Git, executable, MCP, Skill, verifier, file-content read, or Environment creation is required."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "workspace_discover", Description: "Explicitly scan bounded directory metadata under one registered Workspace and return project candidates plus a compact directory digest. No writer, Git, executable, MCP, Skill, verifier, file-content read, or Environment creation is required."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in WorkspaceDiscoveryInput) (*mcp.CallToolResult, model.DiscoveryReport, error) {
 			report, err := service.DiscoverWorkspace(ctx, in.WorkspaceID, discoveryRequest(in.Path, in.Query, in.MaxDepth, in.MaxEntries, in.MaxCandidates, in.MaxDigestEntries, in.MaxOutputBytes))
 			if err != nil {
@@ -900,19 +970,19 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, report, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_rename", Description: "Change one Workspace display name without moving or renaming its directory."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "workspace_rename", Description: "Change one Workspace display name without moving or renaming its directory."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WorkspaceRenameInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Workspaces.Rename(in.WorkspaceID, in.Name)
 			return toolResult(item, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_remove", Description: "Remove one ADM Workspace record without deleting project files. Existing Environment references block removal."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "workspace_remove", Description: "Remove one ADM Workspace record without deleting project files. Existing Environment references block removal."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WorkspaceInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Workspaces.Remove(in.WorkspaceID)
 			return toolResult(map[string]any{"removed": item}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_allow", Description: "Allow one executable for Environment command execution."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_allow", Description: "Allow one executable for Environment command execution."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ExecutableInput) (*mcp.CallToolResult, any, error) {
 			err := service.AllowExecutable(in.Executable)
 			if err != nil {
@@ -922,7 +992,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_allow_remove", Description: "Remove one executable from the Environment command execution allowlist."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_allow_remove", Description: "Remove one executable from the Environment command execution allowlist."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ExecutableInput) (*mcp.CallToolResult, any, error) {
 			err := service.RemoveAllowedExecutable(in.Executable)
 			if err != nil {
@@ -932,13 +1002,13 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_allow_list", Description: "List executables allowed for Environment command execution."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_allow_list", Description: "List executables allowed for Environment command execution."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.AllowedExecutables()
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_block", Description: "Add one executable to the command blacklist. Blacklisted executables are denied before allowlist/full-authorization checks and are removed from the allowlist."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_block", Description: "Add one executable to the command blacklist. Blacklisted executables are denied before allowlist/full-authorization checks and are removed from the allowlist."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ExecutableInput) (*mcp.CallToolResult, any, error) {
 			err := service.BlockExecutable(in.Executable)
 			if err != nil {
@@ -948,7 +1018,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_block_remove", Description: "Remove one executable from the command blacklist. This does not add it to the allowlist."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_block_remove", Description: "Remove one executable from the command blacklist. This does not add it to the allowlist."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ExecutableInput) (*mcp.CallToolResult, any, error) {
 			err := service.RemoveBlockedExecutable(in.Executable)
 			if err != nil {
@@ -958,43 +1028,43 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_block_list", Description: "List executables in the command blacklist. These entries remain denied even when full authorization is enabled."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_block_list", Description: "List executables in the command blacklist. These entries remain denied even when full authorization is enabled."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.BlockedExecutables()
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_deny_list", Description: "List executable authorization observations, including allowlist and command-blacklist denials, sorted by count."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_deny_list", Description: "List executable authorization observations, including allowlist and command-blacklist denials, sorted by count."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.ExecDenials()
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_deny_clear", Description: "Clear one blocked executable observation without changing the allowlist."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_deny_clear", Description: "Clear one blocked executable observation without changing the allowlist."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ExecDenyClearInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.ClearExecDenial(in.Executable)
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec_deny_clear_all", Description: "Clear all blocked executable observations without changing the allowlist."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec_deny_clear_all", Description: "Clear all blocked executable observations without changing the allowlist."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			err := service.ClearExecDenials()
 			return toolResult(map[string]any{"cleared": err == nil}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_list", Description: "List lightweight Environment summaries. Private Memory values are omitted; only the entry count is exposed."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_list", Description: "List lightweight Environment summaries. Private Memory values are omitted; only the entry count is exposed."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.EnvironmentSummaries()
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_create", Description: "Create a development Environment for a registered Workspace. Git, worktree and verifier are not prerequisites."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_create", Description: "Create a development Environment for a registered Workspace. Git, worktree and verifier are not prerequisites."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentCreateInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.Create(in.WorkspaceID, in.Name, in.Root)
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. This is the preferred Agent path for task isolation. Agent callers may only derive managed_worktree mode from an explicit source_environment_id; existing_root and workspace-derived authority remain administrative. Only administrators can promote a temporary Environment to durable. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. This is the preferred Agent path for task isolation. Agent callers may only derive managed_worktree mode from an explicit source_environment_id; existing_root and workspace-derived authority remain administrative. Only administrators can promote a temporary Environment to durable. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCreateInput) (*mcp.CallToolResult, any, error) {
 			if surface == serverSurfaceAgent {
 				if strings.TrimSpace(in.Mode) != model.TemporaryEnvironmentModeManagedWorktree || strings.TrimSpace(in.SourceEnvironmentID) == "" || strings.TrimSpace(in.WorkspaceID) != "" || strings.TrimSpace(in.Root) != "" {
@@ -1018,7 +1088,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_status", Description: "Inspect one temporary Environment lifecycle by stable environment_id, including retention provenance and current cleanup blockers. Read-only: it does not acquire or renew a writer and never returns Environment-private Memory values."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_status", Description: "Inspect one temporary Environment lifecycle by stable environment_id, including retention provenance and current cleanup blockers. Read-only: it does not acquire or renew a writer and never returns Environment-private Memory values."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			if owner != nil {
 				if surface == serverSurfaceAdmin {
@@ -1032,7 +1102,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_promote", Description: "Promote one temporary Environment to durable retention without changing its stable Environment/root/context. Admin-only. Requires the matching lifecycle owner_id; owner metadata is lifecycle provenance, not task orchestration."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_promote", Description: "Promote one temporary Environment to durable retention without changing its stable Environment/root/context. Admin-only. Requires the matching lifecycle owner_id; owner metadata is lifecycle provenance, not task orchestration."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentOwnerInput) (*mcp.CallToolResult, any, error) {
 			if owner != nil {
 				value, err := owner.PromoteTemporaryEnvironment(ctx, in.EnvironmentID, in.OwnerID)
@@ -1042,7 +1112,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_cleanup", Description: "Preview or execute safe cleanup for exactly one temporary Environment. execute=false/omitted is read-only preview; execute=true requires the matching lifecycle owner and a fresh runtime/Git safety check. There is no force path and unrelated resources are never swept."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_cleanup", Description: "Preview or execute safe cleanup for exactly one temporary Environment. execute=false/omitted is read-only preview; execute=true requires the matching lifecycle owner and a fresh runtime/Git safety check. There is no force path and unrelated resources are never swept."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCleanupInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1051,7 +1121,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_temporary_cleanup_expired", Description: "Preview or execute cleanup of all expired temporary Environments only. Runtime blockers and managed-worktree dirty/unpublished safety checks remain enforced."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_cleanup_expired", Description: "Preview or execute cleanup of all expired temporary Environments only. Runtime blockers and managed-worktree dirty/unpublished safety checks remain enforced."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCleanupExpiredInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1060,7 +1130,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_create", Description: "Create a fresh temporary ADM-managed Git worktree Environment (30-day TTL) under the configured worktree root. Admin-only. The caller must provide branch_name; ADM prepends the configured branch_prefix, validates the final ASCII Git ref, resolves base_ref to an exact commit, and never reuses/resets an old managed worktree. migrate_uncommitted_changes optionally carries tracked staged/unstaged/deleted/renamed plus untracked non-ignored source changes; conflicts fail and roll back creation."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_worktree_create", Description: "Create a fresh temporary ADM-managed Git worktree Environment (30-day TTL) under the configured worktree root. Admin-only. The caller must provide branch_name; ADM prepends the configured branch_prefix, validates the final ASCII Git ref, resolves base_ref to an exact commit, and never reuses/resets an old managed worktree. migrate_uncommitted_changes optionally carries tracked staged/unstaged/deleted/renamed plus untracked non-ignored source changes; conflicts fail and roll back creation."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentWorktreeCreateInput) (*mcp.CallToolResult, any, error) {
 			workspaceID := strings.TrimSpace(in.WorkspaceID)
 			sourceEnvironmentID := strings.TrimSpace(in.SourceEnvironmentID)
@@ -1084,19 +1154,19 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_list", Description: "List persisted ADM-managed Git worktree records. Ordinary Environments are not included."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_worktree_list", Description: "List persisted ADM-managed Git worktree records. Ordinary Environments are not included."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.ManagedWorktrees()
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_migrate_temporary", Description: "Admin-only preview or metadata-only migration of legacy durable managed worktree Environments to temporary lifecycle with a 30-day grace period. Does not delete files or branches."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_worktree_migrate_temporary", Description: "Admin-only preview or metadata-only migration of legacy durable managed worktree Environments to temporary lifecycle with a 30-day grace period. Does not delete files or branches."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCleanupExpiredInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.MigrateManagedWorktreeRetention(in.Execute)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_cleanup_stale", Description: "Admin-only conservative cleanup for stale durable managed worktrees. Preview is the default. execute=true requires explicit environment_ids and only removes candidates that remain inactive, have no active writer/runtime blockers, are clean, and have no unpublished commits. There is no force path; retained branches are preserved."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_worktree_cleanup_stale", Description: "Admin-only conservative cleanup for stale durable managed worktrees. Preview is the default. execute=true requires explicit environment_ids and only removes candidates that remain inactive, have no active writer/runtime blockers, are clean, and have no unpublished commits. There is no force path; retained branches are preserved."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in StaleManagedWorktreeCleanupInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1105,7 +1175,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_worktree_destroy", Description: "Admin-only destroy of one ADM-managed Git worktree Environment. Requires the matching writer_owner. Dirty or unpublished work is refused unless force=true; the managed branch is always retained."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_worktree_destroy", Description: "Admin-only destroy of one ADM-managed Git worktree Environment. Requires the matching writer_owner. Dirty or unpublished work is refused unless force=true; the managed branch is always retained."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentWorktreeDestroyInput) (*mcp.CallToolResult, any, error) {
 			if in.Force && surface != serverSurfaceAdmin {
 				return toolResult(nil, fmt.Errorf("force worktree destruction is only available on the administrative surface"))
@@ -1121,7 +1191,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_inspect", Description: "Inspect Workspace relation, structured capability facts, resolved/unresolved MCP and Skill selections, and private Memory entry count without exposing Memory values."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_inspect", Description: "Inspect Workspace relation, structured capability facts, resolved/unresolved MCP and Skill selections, and private Memory entry count without exposing Memory values."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, EnvironmentInfoOutput, error) {
 			info, err := service.InspectEnvironment(ctx, in.EnvironmentID)
 			if err != nil {
@@ -1130,7 +1200,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, info, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_tree_digest", Description: "Explicitly scan bounded directory metadata under one Runtime-authorized Environment root and return a compact directory digest. It never expands authority to Workspace siblings and requires no writer or optional capability."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_tree_digest", Description: "Explicitly scan bounded directory metadata under one Runtime-authorized Environment root and return a compact directory digest. It never expands authority to Workspace siblings and requires no writer or optional capability."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentTreeDigestInput) (*mcp.CallToolResult, model.DiscoveryReport, error) {
 			report, err := service.EnvironmentTreeDigest(ctx, in.EnvironmentID, discoveryRequest(in.Path, "", in.MaxDepth, in.MaxEntries, in.MaxCandidates, in.MaxDigestEntries, in.MaxOutputBytes))
 			if err != nil {
@@ -1139,7 +1209,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, report, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_injection_plan", Description: "Return the canonical passive MCP/Skill injection plan for one explicit Environment: selection provenance, default catalog flag, injectability, reason, and the next explicit Agent action. It does not connect MCPs, read Skill contents, acquire a writer, or expand authority."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_injection_plan", Description: "Return the canonical passive MCP/Skill injection plan for one explicit Environment: selection provenance, default catalog flag, injectability, reason, and the next explicit Agent action. It does not connect MCPs, read Skill contents, acquire a writer, or expand authority."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, model.EnvironmentInjectionPlan, error) {
 			var (
 				plan model.EnvironmentInjectionPlan
@@ -1156,7 +1226,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, plan, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_context_bundle", Description: "Return one explicit bounded read-only Environment context snapshot: root/tree, capabilities, selected MCP/Skill injection summaries, verifier summaries, and factual operation guidance. MCP/Skill fields reuse the canonical injection-plan semantics. It does not probe/connect MCPs, execute Git/verifiers/Runs/processes, read Memory values, or grant new authority."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_context_bundle", Description: "Return one explicit bounded read-only Environment context snapshot: root/tree, capabilities, selected MCP/Skill injection summaries, verifier summaries, and factual operation guidance. MCP/Skill fields reuse the canonical injection-plan semantics. It does not probe/connect MCPs, execute Git/verifiers/Runs/processes, read Memory values, or grant new authority."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentContextInput) (*mcp.CallToolResult, model.EnvironmentContextBundle, error) {
 			request := model.EnvironmentContextRequest{Path: in.Path, MaxDepth: in.MaxDepth, MaxEntries: in.MaxEntries, MaxDigestEntries: in.MaxDigestEntries, MaxOutputBytes: in.MaxOutputBytes}
 			var (
@@ -1174,7 +1244,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, bundle, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_capability_report", Description: "Return the canonical side-effect-free Environment capability report. With a Gateway runtime owner, owner-local MCP/process/run observations enrich the same CapabilityFact schema without reconnecting, probing, calling tools, or running verifiers."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_capability_report", Description: "Return the canonical side-effect-free Environment capability report. With a Gateway runtime owner, owner-local MCP/process/run observations enrich the same CapabilityFact schema without reconnecting, probing, calling tools, or running verifiers."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, EnvironmentCapabilityReportOutput, error) {
 			var (
 				report model.CapabilityReport
@@ -1191,7 +1261,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, report, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "investigation_provider_inspect", Description: "Inspect optional Environment-authorized code intelligence providers such as GitNexus. Uses desired configuration and existing Gateway-owner observations only; does not connect, refresh, index, call provider tools, run verifiers, or mutate files."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "investigation_provider_inspect", Description: "Inspect optional Environment-authorized code intelligence providers such as GitNexus. Uses desired configuration and existing Gateway-owner observations only; does not connect, refresh, index, call provider tools, run verifiers, or mutate files."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, InvestigationProviderReportOutput, error) {
 			var (
 				report model.InvestigationProviderReport
@@ -1208,31 +1278,31 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, report, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_rename", Description: "Rename one Environment in ADM metadata only. The root directory, selections, private memory, writer state, and project files are unchanged."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_rename", Description: "Rename one Environment in ADM metadata only. The root directory, selections, private memory, writer state, and project files are unchanged."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentRenameInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.Rename(in.EnvironmentID, in.Name)
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_workspace_options", Description: "List registered non-system Workspaces that contain one ordinary Environment root, ordered from most specific to broadest, and report the recommended/current binding. Managed-worktree Environments keep their logical source Workspace binding."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_workspace_options", Description: "List registered non-system Workspaces that contain one ordinary Environment root, ordered from most specific to broadest, and report the recommended/current binding. Managed-worktree Environments keep their logical source Workspace binding."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			options, err := service.Environments.WorkspaceOptions(in.EnvironmentID)
 			return toolResult(options, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_workspace_recommendations", Description: "List ordinary Environments whose current Workspace is broader than the most specific registered non-system Workspace containing their root. Read-only preview; it never changes Environment bindings."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_workspace_recommendations", Description: "List ordinary Environments whose current Workspace is broader than the most specific registered non-system Workspace containing their root. Read-only preview; it never changes Environment bindings."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Environments.WorkspaceRecommendations()
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_workspace_set", Description: "Rebind one ordinary Environment to a registered non-system Workspace that contains its root. Explicit MCP/Skill selections are preserved and inherited Workspace selections are recalculated. Managed-worktree Environments cannot be rebound by physical path."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_workspace_set", Description: "Rebind one ordinary Environment to a registered non-system Workspace that contains its root. Explicit MCP/Skill selections are preserved and inherited Workspace selections are recalculated. Managed-worktree Environments cannot be rebound by physical path."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentWorkspaceSetInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.SetWorkspace(in.EnvironmentID, in.WorkspaceID)
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_remove", Description: "Remove one ADM Environment record without deleting its root directory or project files. Active writers block removal."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_remove", Description: "Remove one ADM Environment record without deleting its root directory or project files. Active writers block removal."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.Remove(in.EnvironmentID)
 			if err == nil {
@@ -1245,19 +1315,19 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(map[string]any{"removed": env}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_writer_acquire", Description: "Acquire or renew the single writer lease for an Environment physical root. Use this only immediately before an operation that explicitly requires writer_owner; do not acquire a writer for tree/read/search or other read-only inspection."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_acquire", Description: "Acquire or renew the single writer lease for an Environment physical root. Use this only immediately before an operation that explicitly requires writer_owner; do not acquire a writer for tree/read/search or other read-only inspection."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.AcquireWriter(in.EnvironmentID, in.Owner)
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_writer_heartbeat", Description: "Renew an active writer lease without performing a file mutation."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_heartbeat", Description: "Renew an active writer lease without performing a file mutation."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.HeartbeatWriter(in.EnvironmentID, in.Owner)
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_writer_release", Description: "Release an Environment writer lease."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_release", Description: "Release an Environment writer lease."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterReleaseInput) (*mcp.CallToolResult, any, error) {
 			if in.Force && surface != serverSurfaceAdmin {
 				return toolResult(nil, fmt.Errorf("force writer release is only available on the administrative surface"))
@@ -1266,31 +1336,31 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_add", Description: "Add one structured verifier definition for an Environment. Admin surface only; this does not modify the executable allowlist."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_add", Description: "Add one structured verifier definition for an Environment. Admin surface only; this does not modify the executable allowlist."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierAddInput) (*mcp.CallToolResult, any, error) {
 			definition, err := service.AddVerifier(in.EnvironmentID, in.Definition)
 			return toolResult(definition, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_remove", Description: "Remove one structured verifier definition from an Environment. Admin surface only."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_remove", Description: "Remove one structured verifier definition from an Environment. Admin surface only."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRemoveInput) (*mcp.CallToolResult, any, error) {
 			definition, err := service.RemoveVerifier(in.EnvironmentID, in.VerifierID)
 			return toolResult(map[string]any{"removed": definition}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_agent_host_execution_set", Description: "Admin-only: explicitly allow or revoke Agent host execution for one configured verifier. Approval is required because verifier code runs with host-user permissions until OS-level sandboxing is available."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_agent_host_execution_set", Description: "Admin-only: explicitly allow or revoke Agent host execution for one configured verifier. Approval is required because verifier code runs with host-user permissions until OS-level sandboxing is available."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierAgentHostExecutionInput) (*mcp.CallToolResult, any, error) {
 			definition, err := service.VerifierAgentHostExecutionSet(in.EnvironmentID, in.VerifierID, in.Allowed)
 			return toolResult(definition, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_list", Description: "List structured verifier definitions configured for one Environment. No writer is required."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_list", Description: "List structured verifier definitions configured for one Environment. No writer is required."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.ListVerifiers(in.EnvironmentID)
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. This call blocks until completion; use environment_verifier_run_start/status/cancel for long or heavy verification. Agent execution uses the strong OS sandbox by default when available. agent_host_execution_allowed=true is an explicit trusted-host override. Sandbox setup failures never fall back to host execution automatically. Requires the matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. This call blocks until completion; use environment_verifier_run_start/status/cancel for long or heavy verification. Agent execution uses the strong OS sandbox by default when available. agent_host_execution_allowed=true is an explicit trusted-host override. Sandbox setup failures never fall back to host execution automatically. Requires the matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
 			mode, err := agentVerifierExecutionMode(service, surface, in.EnvironmentID, in.VerifierID)
 			if err != nil {
@@ -1304,7 +1374,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(result, runErr)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_start", Description: "Start one configured Environment verifier asynchronously. Agent execution uses the strong OS sandbox by default when available; agent_host_execution_allowed=true is an explicit trusted-host override. Sandbox setup failures never fall back to host execution automatically. Preferred for long test/build work; requires the matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_run_start", Description: "Start one configured Environment verifier asynchronously. Agent execution uses the strong OS sandbox by default when available; agent_host_execution_allowed=true is an explicit trusted-host override. Sandbox setup failures never fall back to host execution automatically. Preferred for long test/build work; requires the matching writer_owner."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
 			mode, err := agentVerifierExecutionMode(service, surface, in.EnvironmentID, in.VerifierID)
 			if err != nil {
@@ -1321,7 +1391,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, startErr)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_list", Description: "List owner-local asynchronous verifier runs for one Environment. Read-only; does not acquire or renew the writer lease and observations are not persisted across Gateway restart."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_run_list", Description: "List owner-local asynchronous verifier runs for one Environment. Read-only; does not acquire or renew the writer lease and observations are not persisted across Gateway restart."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1330,7 +1400,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_status", Description: "Inspect one owner-local asynchronous verifier run by stable verifier_run_id, including bounded live output and terminal verifier result when available. Read-only; does not renew the writer lease."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_run_status", Description: "Inspect one owner-local asynchronous verifier run by stable verifier_run_id, including bounded live output and terminal verifier result when available. Read-only; does not renew the writer lease."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunStatusInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1339,7 +1409,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_cancel", Description: "Cancel one running owner-local verifier run by stable verifier_run_id. Requires the matching current writer and the same writer owner that launched the run; raw PIDs are not accepted."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_verifier_run_cancel", Description: "Cancel one running owner-local verifier run by stable verifier_run_id. Requires the matching current writer and the same writer owner that launched the run; raw PIDs are not accepted."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunCancelInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1348,17 +1418,17 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_list", Description: "List global MCP catalog entries."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "mcp_list", Description: "List global MCP catalog entries."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.MCPs.List()
 			return toolResult(items, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "secret_list", Description: "List encrypted MCP credential names only; never returns values. Admin-only."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "secret_list", Description: "List encrypted MCP credential names only; never returns values. Admin-only."},
 		func(_ context.Context, _ *mcp.CallToolRequest, _ EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.SecretList()
 			return toolResult(items, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "secret_set", Description: "Store or replace one encrypted MCP credential in ADM Secret Vault. Admin-only. Never returns the credential value."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "secret_set", Description: "Store or replace one encrypted MCP credential in ADM Secret Vault. Admin-only. Never returns the credential value."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in SecretSetInput) (*mcp.CallToolResult, any, error) {
 			meta, err := service.SecretSet(in.Name, in.Value)
 			if err == nil {
@@ -1366,12 +1436,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			}
 			return toolResult(meta, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "secret_delete", Description: "Delete an unused encrypted MCP credential. Referenced credentials cannot be deleted. Admin-only."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "secret_delete", Description: "Delete an unused encrypted MCP credential. Referenced credentials cannot be deleted. Admin-only."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in SecretDeleteInput) (*mcp.CallToolResult, any, error) {
 			err := service.SecretDelete(in.Name)
 			return toolResult(map[string]string{"deleted": in.Name}, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_add", Description: "Add one typed global MCP definition using streamable-http or stdio configuration."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "mcp_add", Description: "Add one typed global MCP definition using streamable-http or stdio configuration."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in MCPAddInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.MCPs.AddMCPConfig(in.Name, catalog.MCPConfig{
 				Transport:      in.Transport,
@@ -1386,7 +1456,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			})
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_update", Description: "Atomically update one global MCP definition while preserving its stable ID; owned runtime state is invalidated so new configuration takes effect without a Gateway restart."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "mcp_update", Description: "Atomically update one global MCP definition while preserving its stable ID; owned runtime state is invalidated so new configuration takes effect without a Gateway restart."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in MCPUpdateInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.MCPs.UpdateMCPConfig(in.ID, in.Name, catalog.MCPConfig{
 				Transport:      in.Transport,
@@ -1404,12 +1474,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			}
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_import_preview", Description: "Preview sanitized MCP JSON/JSONC import candidates without persisting source content or changing Environment selections."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "mcp_import_preview", Description: "Preview sanitized MCP JSON/JSONC import candidates without persisting source content or changing Environment selections."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in app.MCPImportInput) (*mcp.CallToolResult, any, error) {
 			preview, err := service.PreviewMCPImport(in)
 			return toolResult(preview, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_import_apply", Description: "Reparse and atomically apply selected MCP JSON/JSONC candidates to the global MCP catalog using explicit conflict policy."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "mcp_import_apply", Description: "Reparse and atomically apply selected MCP JSON/JSONC candidates to the global MCP catalog using explicit conflict policy."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in app.MCPImportInput) (*mcp.CallToolResult, any, error) {
 			result, err := service.ApplyMCPImport(in)
 			if err == nil && owner != nil {
@@ -1421,7 +1491,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			}
 			return toolResult(result, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_remove", Description: "Remove one global MCP catalog entry and clear that MCP ID from every Environment selection in the same persisted update."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "mcp_remove", Description: "Remove one global MCP catalog entry and clear that MCP ID from every Environment selection in the same persisted update."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogIDInput) (*mcp.CallToolResult, any, error) {
 			err := service.MCPs.Remove(in.ID)
 			if err == nil && owner != nil {
@@ -1429,12 +1499,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			}
 			return toolResult(map[string]any{"removed": in.ID}, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_set_default", Description: "Change whether a global MCP is selected by newly created Environments."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "mcp_set_default", Description: "Change whether a global MCP is selected by newly created Environments."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogDefaultInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.MCPs.SetDefault(in.ID, in.DefaultInclude)
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_mcp_set", Description: "Enable or disable one global MCP ID for a Workspace. Enabled Workspace MCPs are inherited by every Environment in that Workspace."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "workspace_mcp_set", Description: "Enable or disable one global MCP ID for a Workspace. Enabled Workspace MCPs are inherited by every Environment in that Workspace."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WorkspaceSelectionInput) (*mcp.CallToolResult, any, error) {
 			workspace, err := service.SetWorkspaceMCP(in.WorkspaceID, in.ID, in.Enabled)
 			if err == nil && owner != nil && !in.Enabled {
@@ -1448,7 +1518,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			}
 			return toolResult(workspace, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_set", Description: "Enable or disable one global MCP ID explicitly for one Environment. Workspace-enabled MCPs remain inherited."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_mcp_set", Description: "Enable or disable one global MCP ID explicitly for one Environment. Workspace-enabled MCPs remain inherited."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentSelectionInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.SetEnvironmentMCP(in.EnvironmentID, in.ID, in.Enabled)
 			if err == nil && owner != nil && !in.Enabled {
@@ -1457,7 +1527,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "mcp_probe", Description: "Explicitly probe one global MCP definition without an Environment. Stdio obeys the executable allowlist in a temporary working directory; no selections or business tools are changed."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "mcp_probe", Description: "Explicitly probe one global MCP definition without an Environment. Stdio obeys the executable allowlist in a temporary working directory; no selections or business tools are changed."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogIDInput) (*mcp.CallToolResult, app.MCPHealthStatus, error) {
 			// A real HTTP Admin MCP tool context carries inbound MCP session values.
 			// Reusing it for a nested outbound MCP client can make the SDK reject the
@@ -1467,7 +1537,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, status, err
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_status", Description: "Probe one MCP selected for an Environment and return configured, disabled, healthy, or error status. No writer is required."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_mcp_status", Description: "Probe one MCP selected for an Environment and return configured, disabled, healthy, or error status. No writer is required."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPStatusInput) (*mcp.CallToolResult, app.MCPHealthStatus, error) {
 			if err := requireAgentSafeMCPTransport(service, surface, in.EnvironmentID, in.MCPID); err != nil {
 				return nil, app.MCPHealthStatus{}, err
@@ -1487,7 +1557,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return nil, status, nil
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_inspect", Description: "Inspect sanitized desired MCP configuration and owner-local runtime health, recovery, and tool inventory evidence."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_mcp_inspect", Description: "Inspect sanitized desired MCP configuration and owner-local runtime health, recovery, and tool inventory evidence."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPRuntimeInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1496,7 +1566,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(inspection, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_refresh", Description: "Explicitly discard one MCP session and observation, reconnect, Ping, and refresh its bounded public tool inventory."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_mcp_refresh", Description: "Explicitly discard one MCP session and observation, reconnect, Ping, and refresh its bounded public tool inventory."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPRuntimeInput) (*mcp.CallToolResult, any, error) {
 			if err := requireAgentSafeMCPTransport(service, surface, in.EnvironmentID, in.MCPID); err != nil {
 				return toolResult(nil, err)
@@ -1508,7 +1578,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(observation, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_tools", Description: "List tools from one external MCP selected for the Environment after injection checks pass. Use environment_injection_plan first when deciding whether the MCP is currently injectable."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_mcp_tools", Description: "List tools from one external MCP selected for the Environment after injection checks pass. Use environment_injection_plan first when deciding whether the MCP is currently injectable."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPRuntimeInput) (*mcp.CallToolResult, any, error) {
 			if err := requireAgentSafeMCPTransport(service, surface, in.EnvironmentID, in.MCPID); err != nil {
 				return toolResult(nil, err)
@@ -1548,7 +1618,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			}
 			return toolResult(map[string]any{"mcp_id": in.MCPID, "tools": tools}, nil)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_mcp_call", Description: "Call a tool on one external MCP that is enabled and healthy for the selected Environment."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_mcp_call", Description: "Call a tool on one external MCP that is enabled and healthy for the selected Environment."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentMCPCallInput) (*mcp.CallToolResult, any, error) {
 			if err := requireAgentSafeMCPTransport(service, surface, in.EnvironmentID, in.MCPID); err != nil {
 				return toolResult(nil, err)
@@ -1583,102 +1653,102 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(result, nil)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_list", Description: "List global Skill catalog entries."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_list", Description: "List global Skill catalog entries."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Skills.List()
 			return toolResult(items, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_add", Description: "Compatibility helper: register one explicit Skill source and refresh it once. Optional support roots authorize Skill-owned supporting files."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_add", Description: "Compatibility helper: register one explicit Skill source and refresh it once. Optional support roots authorize Skill-owned supporting files."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogAddInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Skills.AddSkillRoot(in.Root, in.SupportRoots, in.DefaultInclude)
 			return toolResult(items, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_source_list", Description: "List explicit persisted Skill sources without scanning host paths."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_source_list", Description: "List explicit persisted Skill sources without scanning host paths."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Skills.ListSkillSources()
 			return toolResult(items, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_source_add", Description: "Register one explicit Skill source root and support roots without refreshing or scanning outside the source."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_source_add", Description: "Register one explicit Skill source root and support roots without refreshing or scanning outside the source."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogAddInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Skills.AddSkillSource(in.Root, in.SupportRoots, in.DefaultInclude)
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_source_update", Description: "Edit one persisted Skill source root, support roots, and default include setting without refreshing or scanning host paths."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_source_update", Description: "Edit one persisted Skill source root, support roots, and default include setting without refreshing or scanning host paths."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in SkillSourceUpdateInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Skills.UpdateSkillSource(in.ID, in.Root, in.SupportRoots, in.DefaultInclude)
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_source_refresh", Description: "Atomically refresh one Skill source and replace only that source-owned discovered Skill snapshot."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_source_refresh", Description: "Atomically refresh one Skill source and replace only that source-owned discovered Skill snapshot."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogIDInput) (*mcp.CallToolResult, any, error) {
 			result, err := service.Skills.RefreshSkillSource(in.ID)
 			return toolResult(result, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_source_remove", Description: "Remove one Skill source and its source-owned discovered Skills, clearing those removed Skill IDs from every Environment selection."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_source_remove", Description: "Remove one Skill source and its source-owned discovered Skills, clearing those removed Skill IDs from every Environment selection."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogIDInput) (*mcp.CallToolResult, any, error) {
 			result, err := service.Skills.RemoveSkillSource(in.ID)
 			return toolResult(result, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_remove", Description: "Remove one global Skill catalog entry and clear that Skill ID from every Environment selection in the same persisted update."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_remove", Description: "Remove one global Skill catalog entry and clear that Skill ID from every Environment selection in the same persisted update."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogIDInput) (*mcp.CallToolResult, any, error) {
 			err := service.Skills.Remove(in.ID)
 			return toolResult(map[string]any{"removed": in.ID}, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_set_default", Description: "Change whether a global Skill is selected by newly created Environments."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_set_default", Description: "Change whether a global Skill is selected by newly created Environments."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CatalogDefaultInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Skills.SetDefault(in.ID, in.DefaultInclude)
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "skill_availability_list", Description: "List global Skill catalog structural availability by checking configured source, artifact and support roots without using Environment selections or interpreting Skill instructions."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "skill_availability_list", Description: "List global Skill catalog structural availability by checking configured source, artifact and support roots without using Environment selections or interpreting Skill instructions."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			availability, err := service.SkillAvailabilities()
 			return toolResult(availability, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "workspace_skill_set", Description: "Enable or disable one global Skill ID for a Workspace. Enabled Workspace Skills are inherited by every Environment in that Workspace."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "workspace_skill_set", Description: "Enable or disable one global Skill ID for a Workspace. Enabled Workspace Skills are inherited by every Environment in that Workspace."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WorkspaceSelectionInput) (*mcp.CallToolResult, any, error) {
 			workspace, err := service.SetWorkspaceSkill(in.WorkspaceID, in.ID, in.Enabled)
 			return toolResult(workspace, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_skill_set", Description: "Enable or disable one global Skill ID explicitly for one Environment. Workspace-enabled Skills remain inherited."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_skill_set", Description: "Enable or disable one global Skill ID explicitly for one Environment. Workspace-enabled Skills remain inherited."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentSelectionInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.SetEnvironmentSkill(in.EnvironmentID, in.ID, in.Enabled)
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_skill_list", Description: "List Environment-specific Skill availability for enabled selections and known disabled Skills without interpreting Skill instructions."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_skill_list", Description: "List Environment-specific Skill availability for enabled selections and known disabled Skills without interpreting Skill instructions."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			availability, err := service.EnvironmentSkillAvailabilities(in.EnvironmentID)
 			return toolResult(availability, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_skill_inspect", Description: "Inspect one Skill's Environment-specific availability, source/artifact facts and structured unavailability reason."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_skill_inspect", Description: "Inspect one Skill's Environment-specific availability, source/artifact facts and structured unavailability reason."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentSkillReadInput) (*mcp.CallToolResult, any, error) {
 			availability, err := service.InspectEnvironmentSkill(in.EnvironmentID, in.SkillID)
 			return toolResult(availability, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_skill_files", Description: "List a bounded inventory under an enabled Skill's artifact directory or one explicit support root."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_skill_files", Description: "List a bounded inventory under an enabled Skill's artifact directory or one explicit support root."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentSkillFilesInput) (*mcp.CallToolResult, any, error) {
 			inventory, err := service.EnvironmentSkillFiles(in.EnvironmentID, in.SkillID, in.RootKind, in.MaxEntries)
 			return toolResult(inventory, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_skill_read", Description: "Read a selected and available Skill's SKILL.md or a file contained by its explicitly configured artifact/support roots. Use environment_injection_plan first when deciding whether the Skill is currently injectable."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_skill_read", Description: "Read a selected and available Skill's SKILL.md or a file contained by its explicitly configured artifact/support roots. Use environment_injection_plan first when deciding whether the Skill is currently injectable."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentSkillReadInput) (*mcp.CallToolResult, any, error) {
 			content, err := service.ReadEnvironmentSkill(in.EnvironmentID, in.SkillID, in.Path, in.MaxBytes)
 			return toolResult(content, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "memory_global_list", Description: "List global durable memory entries."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_list", Description: "List global durable memory entries."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Memory.GlobalList()
 			return toolResult(items, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "memory_global_read", Description: "Read one global durable memory entry."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_read", Description: "Read one global durable memory entry."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in MemoryKeyInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Memory.GlobalRead(in.Key)
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "memory_global_write", Description: "Write one global durable memory entry; scope is explicit."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_write", Description: "Write one global durable memory entry; scope is explicit."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in MemoryWriteInput) (*mcp.CallToolResult, any, error) {
 			err := service.Memory.GlobalWrite(in.Key, in.Value)
 			if err != nil {
@@ -1687,23 +1757,23 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			item, err := service.Memory.GlobalRead(in.Key)
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "memory_global_delete", Description: "Delete one global durable memory entry."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_delete", Description: "Delete one global durable memory entry."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in MemoryKeyInput) (*mcp.CallToolResult, any, error) {
 			err := service.Memory.GlobalDelete(in.Key)
 			return toolResult(map[string]any{"deleted": in.Key}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "memory_environment_list", Description: "List private memory entries for one Environment."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_list", Description: "List private memory entries for one Environment."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Memory.EnvironmentList(in.EnvironmentID)
 			return toolResult(items, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "memory_environment_read", Description: "Read one private memory entry from one Environment only."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_read", Description: "Read one private memory entry from one Environment only."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryKeyInput) (*mcp.CallToolResult, any, error) {
 			item, err := service.Memory.EnvironmentRead(in.EnvironmentID, in.Key)
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "memory_environment_write", Description: "Write one Environment-private memory entry; scope is explicit."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_write", Description: "Write one Environment-private memory entry; scope is explicit."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryWriteInput) (*mcp.CallToolResult, any, error) {
 			err := service.Memory.EnvironmentWrite(in.EnvironmentID, in.Key, in.Value)
 			if err != nil {
@@ -1712,19 +1782,19 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			item, err := service.Memory.EnvironmentRead(in.EnvironmentID, in.Key)
 			return toolResult(item, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "memory_environment_delete", Description: "Delete one private memory entry from one Environment only."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_delete", Description: "Delete one private memory entry from one Environment only."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryKeyInput) (*mcp.CallToolResult, any, error) {
 			err := service.Memory.EnvironmentDelete(in.EnvironmentID, in.Key)
 			return toolResult(map[string]any{"deleted": in.Key}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "tree", Description: "List files under an Environment root. Read-only: no reader lease or writer lease is required, and a writer must not be acquired solely for this operation. Works in ordinary non-Git directories."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "tree", Description: "List files under an Environment root. Read-only: no reader lease or writer lease is required, and a writer must not be acquired solely for this operation. Works in ordinary non-Git directories."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in TreeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Tree(in.EnvironmentID, in.Path, in.MaxDepth, in.MaxEntries)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "read", Description: "Read a text file or a 1-based inclusive line range under an Environment root. start_line/end_line are optional; range reads can inspect a small portion of a large file while max_bytes bounds selected output. Read-only: no reader lease or writer lease is required."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "read", Description: "Read a text file or a 1-based inclusive line range under an Environment root. start_line/end_line are optional; range reads can inspect a small portion of a large file while max_bytes bounds selected output. Read-only: no reader lease or writer lease is required."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ReadInput) (*mcp.CallToolResult, any, error) {
 			if in.StartLine != 0 || in.EndLine != 0 {
 				value, err := service.ReadLines(in.EnvironmentID, in.Path, in.StartLine, in.EndLine, in.MaxBytes)
@@ -1734,7 +1804,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "compare_files", Description: "Compare two text file ranges under one Environment and return a bounded unified line diff. left/right can select different files and 1-based inclusive line ranges. Read-only: no reader lease or writer lease is required."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "compare_files", Description: "Compare two text file ranges under one Environment and return a bounded unified line diff. left/right can select different files and 1-based inclusive line ranges. Read-only: no reader lease or writer lease is required."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in CompareFilesInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.CompareFiles(
 				in.EnvironmentID,
@@ -1745,24 +1815,24 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_job_start", Description: "Start a background index refresh and return immediately with a job ID. Repeated requests reuse the in-progress job. The job survives closing a Desktop/Web detail window."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_index_job_start", Description: "Start a background index refresh and return immediately with a job ID. Repeated requests reuse the in-progress job. The job survives closing a Desktop/Web detail window."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.StartProjectIndexJob(in.EnvironmentID)
 			return toolResult(value, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_job_status", Description: "Read the latest Environment index job status, processed and total file counts, phase and result; no source writer lease required."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_index_job_status", Description: "Read the latest Environment index job status, processed and total file counts, phase and result; no source writer lease required."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectIndexJobStatus(in.EnvironmentID)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_analyze", Description: "Read-only project source analysis stored in ADM-owned per-Environment immutable index generations. No Environment writer lease or writer_owner is required; separate index locking prevents concurrent refresh corruption. Does not write to project source."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_analyze", Description: "Read-only project source analysis stored in ADM-owned per-Environment immutable index generations. No Environment writer lease or writer_owner is required; separate index locking prevents concurrent refresh corruption. Does not write to project source."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectAnalyzeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.AnalyzeProject(in.EnvironmentID, in.WriterOwner, in.MaxFiles, in.MaxSymbols)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_info", Description: "Report code-intelligence capabilities. Agent uses ADM native static indexes only so this tool cannot activate an external MCP process; Admin may negotiate an Environment-authorized external provider."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "code_intelligence_info", Description: "Report code-intelligence capabilities. Agent uses ADM native static indexes only so this tool cannot activate an external MCP process; Admin may negotiate an Environment-authorized external provider."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceInfoInput) (*mcp.CallToolResult, any, error) {
 			if surface == serverSurfaceAgent {
 				value, err := service.CodeIntelligenceInfo(in.EnvironmentID)
@@ -1776,7 +1846,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_query", Description: "Query symbol definitions. Agent uses ADM native static indexes only and never activates an external MCP provider; Admin may prefer a healthy Environment-authorized provider and fall back to the static index."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "code_intelligence_query", Description: "Query symbol definitions. Agent uses ADM native static indexes only and never activates an external MCP provider; Admin may prefer a healthy Environment-authorized provider and fall back to the static index."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in ProjectIndexQueryInput) (*mcp.CallToolResult, any, error) {
 			query := projectanalysis.IndexQuery{
 				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
@@ -1802,7 +1872,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(CodeIntelligenceQueryResult{Provider: provider, Result: value}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_status", Description: "Check code-index health/freshness. Agent uses the ADM native static index only and never activates an external MCP provider; Admin may use an Environment-authorized external provider."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "code_intelligence_status", Description: "Check code-index health/freshness. Agent uses the ADM native static index only and never activates an external MCP provider; Admin may use an Environment-authorized external provider."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
 			if surface == serverSurfaceAgent {
 				provider, err := service.CodeIntelligenceInfo(in.EnvironmentID)
@@ -1824,7 +1894,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(CodeIntelligenceStatusResult{Provider: provider, Result: value}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol. Agent is restricted to ADM native static PHP reference evidence and never activates an external MCP provider; Admin may use an Environment-authorized external provider. Treat inherited_candidate and candidate_call as clues, not runtime-proven calls."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "code_intelligence_references", Description: "Find references to one symbol. Agent is restricted to ADM native static PHP reference evidence and never activates an external MCP provider; Admin may use an Environment-authorized external provider. Treat inherited_candidate and candidate_call as clues, not runtime-proven calls."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceReferencesInput) (*mcp.CallToolResult, any, error) {
 			if surface == serverSurfaceAgent {
 				value, err := agentStaticCodeIntelligenceReferences(owner, service, in.EnvironmentID, in.Symbol, in.MaxResults)
@@ -1841,7 +1911,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "code_intelligence_hierarchy", Description: "Inspect parent/child/both symbol hierarchy. Agent does not activate external MCP providers, so hierarchy currently returns unavailable on the Agent surface; Admin may use a capable Environment-authorized provider."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "code_intelligence_hierarchy", Description: "Inspect parent/child/both symbol hierarchy. Agent does not activate external MCP providers, so hierarchy currently returns unavailable on the Agent surface; Admin may use a capable Environment-authorized provider."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in CodeIntelligenceHierarchyInput) (*mcp.CallToolResult, any, error) {
 			if surface == serverSurfaceAgent {
 				value, err := agentStaticCodeIntelligenceHierarchy(service, in.EnvironmentID, in.Symbol, in.Direction)
@@ -1858,7 +1928,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_query", Description: "Query ADM-owned generated symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256. Check index_complete and coverage_warning before concluding that a symbol does not exist. Run project_analyze first when missing or stale."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_index_query", Description: "Query ADM-owned generated symbol index by name/qualified_name with optional path, kind, and language filters. Read-only and bounded; verifies symbols.jsonl against manifest SHA-256. Check index_complete and coverage_warning before concluding that a symbol does not exist. Run project_analyze first when missing or stale."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexQueryInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectIndexQuery(in.EnvironmentID, projectanalysis.IndexQuery{
 				Query: in.Query, Path: in.Path, Kind: in.Kind, Language: in.Language,
@@ -1867,7 +1937,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_investigate_php", Description: "Recommended first call for AI investigating PHP behavior: find one uniquely identified function/method, show its definition, bounded caller/callee edges with confidence reasons, and representative source ranges together. Reuses only ADM native indexes and safe read; no IDE required. Missing, stale or ambiguous indexes require project_analyze, project_index_status or project_index_query."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_investigate_php", Description: "Recommended first call for AI investigating PHP behavior: find one uniquely identified function/method, show its definition, bounded caller/callee edges with confidence reasons, and representative source ranges together. Reuses only ADM native indexes and safe read; no IDE required. Missing, stale or ambiguous indexes require project_analyze, project_index_status or project_index_query."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectInvestigatePHPInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectInvestigatePHP(in.EnvironmentID, app.ProjectPHPInvestigationOptions{
 				Query: projectanalysis.PHPCallGraphQuery{
@@ -1879,7 +1949,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_call_graph", Description: "For PHP investigation or change-impact analysis, query ADM's native persisted code index to answer who calls a function/method and what it calls. Returns definition nodes, call sites (file/line/column), cross-file edges, and evidence labels: resolved_call is lexical ownership, inherited_candidate is a direct extends clue, candidate_call may include an advisory declared parameter type. Use edge.reason and edge.type_hint to assess confidence. For ambiguous names supply fully qualified symbol and definition path. Read-only; no IDE or other provider needed. Run project_analyze if v5 index is missing/stale; project_index_status detects content-only changes."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_call_graph", Description: "For PHP investigation or change-impact analysis, query ADM's native persisted code index to answer who calls a function/method and what it calls. Returns definition nodes, call sites (file/line/column), cross-file edges, and evidence labels: resolved_call is lexical ownership, inherited_candidate is a direct extends clue, candidate_call may include an advisory declared parameter type. Use edge.reason and edge.type_hint to assess confidence. For ambiguous names supply fully qualified symbol and definition path. Read-only; no IDE or other provider needed. Run project_analyze if v5 index is missing/stale; project_index_status detects content-only changes."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectCallGraphInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectPHPCallGraph(in.EnvironmentID, projectanalysis.PHPCallGraphQuery{
 				Symbol: in.Symbol, Path: in.Path, Direction: in.Direction,
@@ -1888,7 +1958,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_auto_status", Description: "Read the persistent automatic index watcher setting and runtime state for one Environment. No writer lease required."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_index_auto_status", Description: "Read the persistent automatic index watcher setting and runtime state for one Environment. No writer lease required."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(service.IndexAutoStatus(in.EnvironmentID))
@@ -1896,7 +1966,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			value, err := owner.AutoIndexStatus(in.EnvironmentID)
 			return toolResult(value, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_auto_set", Description: "Admin-only: enable or disable a persistent native source watcher for one Environment. When enabled, source changes trigger debounced incremental index refresh in ADM-managed storage, without obtaining the Environment writer lease."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_index_auto_set", Description: "Admin-only: enable or disable a persistent native source watcher for one Environment. When enabled, source changes trigger debounced incremental index refresh in ADM-managed storage, without obtaining the Environment writer lease."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexAutoInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return nil, nil, fmt.Errorf("automatic index watcher is unavailable")
@@ -1905,19 +1975,19 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "project_index_status", Description: "Check generated project-index integrity and freshness against current Environment files. Returns fresh, stale, partial, missing, or invalid with bounded changed paths. Read-only and does not require a writer."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "project_index_status", Description: "Check generated project-index integrity and freshness against current Environment files. Returns fresh, stale, partial, missing, or invalid with bounded changed paths. Read-only and does not require a writer."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProjectIndexStatusInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.ProjectIndexStatus(in.EnvironmentID, in.MaxChanges)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "search", Description: "Search literal text under an Environment root. Read-only: no reader lease or writer lease is required, and a writer must not be acquired solely for this operation."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "search", Description: "Search literal text under an Environment root. Read-only: no reader lease or writer lease is required, and a writer must not be acquired solely for this operation."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in SearchInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Search(in.EnvironmentID, in.Path, in.Query, in.MaxFiles, in.MaxMatches, in.MaxBytesPerFile)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "investigate_endpoint", Description: "Resolve one URL/path to bounded static route evidence with confidence and uncertainties. Does not execute project code, call the endpoint, run verifiers, or mutate state."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "investigate_endpoint", Description: "Resolve one URL/path to bounded static route evidence with confidence and uncertainties. Does not execute project code, call the endpoint, run verifiers, or mutate state."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EndpointInvestigateInput) (*mcp.CallToolResult, any, error) {
 			report, err := service.InvestigateEndpoint(in.EnvironmentID, model.EndpointInvestigationRequest{
 				Target:          in.Target,
@@ -1929,31 +1999,31 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			})
 			return toolResult(report, err)
 		})
-	addScopedTool(server, surface, &mcp.Tool{Name: "write", Description: "Write a text file under an Environment root. Requires the matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "write", Description: "Write a text file under an Environment root. Requires the matching writer_owner."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriteInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Write(in.EnvironmentID, in.WriterOwner, in.Path, in.Content, in.CreateParents)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "edit", Description: "Apply an exact text replacement. Requires the matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "edit", Description: "Apply an exact text replacement. Requires the matching writer_owner."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EditInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Edit(in.EnvironmentID, in.WriterOwner, in.Path, in.OldText, in.NewText, in.ExpectedReplacements)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "delete", Description: "Delete one file. Requires the matching writer_owner; recursive directory deletion is not exposed."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "delete", Description: "Delete one file. Requires the matching writer_owner; recursive directory deletion is not exposed."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in DeleteInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Delete(in.EnvironmentID, in.WriterOwner, in.Path)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "exec", Description: "Run one explicitly allowlisted executable inside an Environment root. Requires the matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec", Description: "Run one explicitly allowlisted executable inside an Environment root. Requires the matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in ExecInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.Exec(ctx, in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "process_start", Description: "Start one allowlisted long-running development process owned by this Gateway. Requires the matching Environment writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_start", Description: "Start one allowlisted long-running development process owned by this Gateway. Requires the matching Environment writer_owner."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProcessStartInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1962,7 +2032,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "process_list", Description: "List development processes owned by this Gateway for one Environment."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_list", Description: "List development processes owned by this Gateway for one Environment."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1971,7 +2041,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "process_status", Description: "Inspect one Gateway-owned development process by stable ADM process identity."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_status", Description: "Inspect one Gateway-owned development process by stable ADM process identity."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProcessInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1980,7 +2050,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "process_logs", Description: "Read bounded stdout/stderr tails from one Gateway-owned development process."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_logs", Description: "Read bounded stdout/stderr tails from one Gateway-owned development process."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProcessInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1989,7 +2059,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "process_stop", Description: "Stop one Gateway-owned development process. Requires the matching Environment writer_owner; arbitrary OS PIDs are not accepted."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_stop", Description: "Stop one Gateway-owned development process. Requires the matching Environment writer_owner; arbitrary OS PIDs are not accepted."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProcessStopInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -1998,7 +2068,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "run_start", Description: "Start one asynchronous single-command Agent Run owned by this Gateway. Requires the matching Environment writer_owner and reuses the existing Runtime allowlist/cwd policy."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "run_start", Description: "Start one asynchronous single-command Agent Run owned by this Gateway. Requires the matching Environment writer_owner and reuses the existing Runtime allowlist/cwd policy."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in RunStartInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -2007,7 +2077,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "run_list", Description: "List Agent Runs owned by this Gateway for one Environment. Run observations are owner-local and are not persisted across restart."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "run_list", Description: "List Agent Runs owned by this Gateway for one Environment. Run observations are owner-local and are not persisted across restart."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -2016,7 +2086,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "run_status", Description: "Inspect one Gateway-owned Agent Run by stable ADM run identity."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "run_status", Description: "Inspect one Gateway-owned Agent Run by stable ADM run identity."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in RunInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -2025,7 +2095,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "run_cancel", Description: "Cancel one running Gateway-owned Agent Run. Requires the matching Environment writer_owner and stable run identity."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "run_cancel", Description: "Cancel one running Gateway-owned Agent Run. Requires the matching Environment writer_owner and stable run identity."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in RunCancelInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
@@ -2034,101 +2104,105 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_status", Description: "Optional read-only Git status tool. No reader lease or writer lease is required; do not acquire a writer solely to inspect status. Fails locally when the Environment root is not a Git repository."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_status", Description: "Optional read-only Git status tool. No reader lease or writer lease is required; do not acquire a writer solely to inspect status. Fails locally when the Environment root is not a Git repository."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitStatus(ctx, in.EnvironmentID)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_diff", Description: "Optional read-only Git diff tool. No reader lease or writer lease is required; do not acquire a writer solely to review changes. Git is never required for Environment creation or file development."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_diff", Description: "Optional read-only Git diff tool. No reader lease or writer lease is required; do not acquire a writer solely to review changes. Git is never required for Environment creation or file development."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitDiff(ctx, in.EnvironmentID)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_branch", Description: "Optional read-only Git branch inspection tool. No reader lease or writer lease is required; do not acquire a writer solely to inspect the current branch."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_branch", Description: "Optional read-only Git branch inspection tool. No reader lease or writer lease is required; do not acquire a writer solely to inspect the current branch."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitBranch(ctx, in.EnvironmentID)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_commit", Description: "Create one controlled Git commit for all changes under the Environment root. Requires matching writer_owner and the Environment root to equal the Git top-level. ADM disables hooks/signing/fsmonitor and refuses Git filter attributes that could execute host code; arbitrary Git arguments are not accepted."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_commit", Description: "Create one controlled Git commit for all changes under the Environment root. Requires matching writer_owner and the Environment root to equal the Git top-level. ADM disables hooks/signing/fsmonitor and refuses Git filter attributes that could execute host code; arbitrary Git arguments are not accepted."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitCommitInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitCommit(ctx, in.EnvironmentID, in.WriterOwner, in.Message)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_log", Description: "Read a bounded structured Git commit log from HEAD or one explicit commit-ish. Read-only; arbitrary Git arguments are not accepted."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_log", Description: "Read a bounded structured Git commit log from HEAD or one explicit commit-ish. Read-only; arbitrary Git arguments are not accepted."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitLogInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitLog(ctx, in.EnvironmentID, in.Ref, in.MaxCount)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_show", Description: "Show one resolved commit with bounded metadata/stat/patch output. ADM disables external diff and textconv execution."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_show", Description: "Show one resolved commit with bounded metadata/stat/patch output. ADM disables external diff and textconv execution."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitShowInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitShow(ctx, in.EnvironmentID, in.Ref, in.MaxOutputBytes)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_remote_list", Description: "List configured Git remote names plus fetch/push URLs without contacting the network."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_remote_list", Description: "List configured Git remote names plus fetch/push URLs without contacting the network."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitRemoteList(ctx, in.EnvironmentID)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_tag_list", Description: "List bounded local Git tags and their peeled commit targets. Read-only."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_tag_list", Description: "List bounded local Git tags and their peeled commit targets. Read-only."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitTagListInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitTagList(ctx, in.EnvironmentID, in.MaxCount)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_tag_create", Description: "Create one lightweight or annotated local Git tag on an exact resolved commit. Available to Agent and Admin with matching writer_owner; force replacement and signing are not exposed."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_tag_create", Description: "Create one lightweight or annotated local Git tag on an exact resolved commit. Available to Agent and Admin with matching writer_owner; force replacement and signing are not exposed."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitTagCreateInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitTagCreate(ctx, in.EnvironmentID, in.WriterOwner, in.Name, in.Ref, in.Message, in.Annotated)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_tag_delete", Description: "Admin-only: delete one exact local Git tag. Remote tag deletion is not exposed."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_tag_delete", Description: "Admin-only: delete one exact local Git tag. Remote tag deletion is not exposed."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitTagDeleteInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitTagDelete(ctx, in.EnvironmentID, in.WriterOwner, in.Name)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_cherry_pick", Description: "Cherry-pick 1-20 explicitly resolved commits into a clean Environment root. Requires matching writer_owner. Hooks/signing are disabled; commits that change .gitattributes or activate filters/custom merge drivers are refused. Conflicts are returned as structured state rather than hidden."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_cherry_pick", Description: "Cherry-pick 1-20 explicitly resolved commits into a clean Environment root. Requires matching writer_owner. Hooks/signing are disabled; commits that change .gitattributes or activate filters/custom merge drivers are refused. Conflicts are returned as structured state rather than hidden."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitCherryPickInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitCherryPick(ctx, in.EnvironmentID, in.WriterOwner, in.Commits)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_cherry_pick_continue", Description: "Continue the current controlled cherry-pick after conflicts have been resolved/staged. Requires matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_cherry_pick_continue", Description: "Continue the current controlled cherry-pick after conflicts have been resolved/staged. Requires matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitWriterInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitCherryPickContinue(ctx, in.EnvironmentID, in.WriterOwner)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_cherry_pick_abort", Description: "Abort the current controlled cherry-pick and restore its pre-operation state. Requires matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_cherry_pick_abort", Description: "Abort the current controlled cherry-pick and restore its pre-operation state. Requires matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitWriterInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitCherryPickAbort(ctx, in.EnvironmentID, in.WriterOwner)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_merge", Description: "Merge one explicitly resolved commit-ish into a clean Environment root. Requires matching writer_owner. Hooks/signing are disabled; incoming .gitattributes, filters and custom merge drivers are refused."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_merge", Description: "Merge one explicitly resolved commit-ish into a clean Environment root. Requires matching writer_owner. Hooks/signing are disabled; incoming .gitattributes, filters and custom merge drivers are refused."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitMergeInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitMerge(ctx, in.EnvironmentID, in.WriterOwner, in.Ref, in.NoFF)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_merge_abort", Description: "Abort the current controlled merge and restore its pre-operation state. Requires matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_merge_abort", Description: "Abort the current controlled merge and restore its pre-operation state. Requires matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitWriterInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitMergeAbort(ctx, in.EnvironmentID, in.WriterOwner)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_fetch", Description: "Fetch from one existing configured Git remote. Requires matching writer_owner. On the Agent surface only HTTPS remotes are allowed; SSH/local/file transports, arbitrary URLs/refspecs and submodule recursion are blocked. Authentication may use the host credential manager without returning credentials to the caller."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_fetch", Description: "Fetch from one existing configured Git remote. Requires matching writer_owner. With Strong Permission Control enabled, Agent fetch is restricted to safe configured HTTPS remotes and blocks SSH/local/file transports; v1.4.4-compatible relaxed mode uses the host Git remote path."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitFetchInput) (*mcp.CallToolResult, any, error) {
+			strong, modeErr := strongAgentRestrictions(service, surface)
+			if modeErr != nil {
+				return toolResult(nil, modeErr)
+			}
 			var value any
 			var err error
-			if surface == serverSurfaceAgent {
+			if strong {
 				value, err = service.GitFetchAgent(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Tags, in.Prune)
 			} else {
 				value, err = service.GitFetch(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Tags, in.Prune)
@@ -2136,11 +2210,15 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "git_push", Description: "Controlled push of one local branch and optional exact local tags to one existing configured Git remote. Requires matching writer_owner. On the Agent surface only HTTPS remotes are allowed. Force push, remote deletion, arbitrary refspecs, SSH/local/file transports and submodule recursion are not exposed; credentials are never returned to the caller."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_push", Description: "Controlled push of one local branch and optional exact local tags to one existing configured Git remote. Requires matching writer_owner. With Strong Permission Control enabled, Agent push is restricted to safe configured HTTPS remotes; v1.4.4-compatible relaxed mode uses the host Git remote path. Force push, remote deletion and arbitrary refspecs are not exposed by this typed tool."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitPushInput) (*mcp.CallToolResult, any, error) {
+			strong, modeErr := strongAgentRestrictions(service, surface)
+			if modeErr != nil {
+				return toolResult(nil, modeErr)
+			}
 			var value any
 			var err error
-			if surface == serverSurfaceAgent {
+			if strong {
 				value, err = service.GitPushAgent(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Branch, in.Tags, in.SetUpstream)
 			} else {
 				value, err = service.GitPush(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Branch, in.Tags, in.SetUpstream)
@@ -2156,8 +2234,23 @@ type externalMCPConnection struct {
 	headers  map[string]string
 }
 
-func requireAgentSafeMCPTransport(service *app.Service, surface serverSurface, environmentID, mcpID string) error {
+func strongAgentRestrictions(service *app.Service, surface serverSurface) (bool, error) {
 	if surface != serverSurfaceAgent {
+		return false, nil
+	}
+	enabled, err := service.StrongPermissionControlEnabled()
+	if err != nil {
+		return true, fmt.Errorf("read Strong Permission Control state: %w", err)
+	}
+	return enabled, nil
+}
+
+func requireAgentSafeMCPTransport(service *app.Service, surface serverSurface, environmentID, mcpID string) error {
+	strong, err := strongAgentRestrictions(service, surface)
+	if err != nil {
+		return err
+	}
+	if !strong {
 		return nil
 	}
 	activation, _, err := service.ResolveMCPActivation(environmentID, mcpID)
@@ -2168,14 +2261,18 @@ func requireAgentSafeMCPTransport(service *app.Service, surface serverSurface, e
 		return &app.MCPError{
 			MCPID:     mcpID,
 			ErrorKind: "agent_stdio_mcp_blocked",
-			Message:   "stdio MCP is unavailable on the Agent surface until OS-level host execution isolation is enabled",
+			Message:   "stdio MCP is blocked because Strong Permission Control is enabled. The tool remains visible; prefer a streamable HTTP MCP or ask the user to manually switch ADM to v1.4.4-compatible relaxed mode when host stdio execution is explicitly desired",
 		}
 	}
 	return nil
 }
 
 func agentVerifierExecutionMode(service *app.Service, surface serverSurface, environmentID, verifierID string) (string, error) {
-	if surface != serverSurfaceAgent {
+	strong, err := strongAgentRestrictions(service, surface)
+	if err != nil {
+		return "", err
+	}
+	if !strong {
 		return "host", nil
 	}
 	definition, err := service.Verifiers.Get(environmentID, verifierID)
@@ -2189,7 +2286,7 @@ func agentVerifierExecutionMode(service *app.Service, surface serverSurface, env
 		return "sandbox", nil
 	}
 	support := service.SandboxVerifierSupport()
-	return "", fmt.Errorf("verifier %q cannot run on the Agent surface: strong OS sandbox is unavailable on %s and trusted host execution is not approved", verifierID, support.Platform)
+	return "", fmt.Errorf("verifier %q cannot run on the Agent surface while Strong Permission Control is enabled: strong OS sandbox is unavailable on %s and trusted host execution is not approved. The Agent must not silently fall back to host execution", verifierID, support.Platform)
 }
 
 func requireHealthyMCP(ctx context.Context, service *app.Service, environmentID, mcpID string) error {
