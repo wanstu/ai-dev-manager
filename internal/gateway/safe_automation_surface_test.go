@@ -14,7 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestAgentVerifierRequiresExplicitHostExecutionApproval(t *testing.T) {
+func TestAgentVerifierUsesSandboxOrExplicitHostApproval(t *testing.T) {
 	service := app.New(filepath.Join(t.TempDir(), "state.json"))
 	root := t.TempDir()
 	workspace, err := service.Workspaces.Add(root, "verifier-approval")
@@ -68,16 +68,15 @@ func TestAgentVerifierRequiresExplicitHostExecutionApproval(t *testing.T) {
 		t.Fatal("Admin surface lost verifier host-execution approval mutation")
 	}
 
-	run := func() *mcp.CallToolResult {
-		return callGatewayTool(t, ctx, agent, "environment_verifier_run", map[string]any{
-			"environment_id": environment.ID,
-			"writer_owner":   "verifier-approval-writer",
-			"verifier_id":    definition.ID,
-		})
-	}
-	blocked := run()
-	if !blocked.IsError || !strings.Contains(toolText(t, blocked), "agent_host_execution_allowed=true") {
-		t.Fatalf("unapproved verifier was not blocked: %s", toolText(t, blocked))
+	mode, routeErr := agentVerifierExecutionMode(service, serverSurfaceAgent, environment.ID, definition.ID)
+	if service.SandboxVerifierAvailable() {
+		if routeErr != nil || mode != "sandbox" {
+			t.Fatalf("unapproved Agent verifier route = %q err=%v, want sandbox", mode, routeErr)
+		}
+	} else {
+		if routeErr == nil || !strings.Contains(routeErr.Error(), "trusted host execution is not approved") {
+			t.Fatalf("unapproved Agent verifier was not fail-closed: mode=%q err=%v", mode, routeErr)
+		}
 	}
 
 	allowed := callGatewayTool(t, ctx, admin, "environment_verifier_agent_host_execution_set", map[string]any{
@@ -88,9 +87,17 @@ func TestAgentVerifierRequiresExplicitHostExecutionApproval(t *testing.T) {
 	if allowed.IsError || !strings.Contains(toolText(t, allowed), "\"agent_host_execution_allowed\":true") {
 		t.Fatalf("Admin could not approve verifier: %s", toolText(t, allowed))
 	}
-	passed := run()
+	mode, routeErr = agentVerifierExecutionMode(service, serverSurfaceAgent, environment.ID, definition.ID)
+	if routeErr != nil || mode != "host" {
+		t.Fatalf("approved Agent verifier route = %q err=%v, want host", mode, routeErr)
+	}
+	passed := callGatewayTool(t, ctx, agent, "environment_verifier_run", map[string]any{
+		"environment_id": environment.ID,
+		"writer_owner":   "verifier-approval-writer",
+		"verifier_id":    definition.ID,
+	})
 	if passed.IsError || !strings.Contains(toolText(t, passed), "GATEWAY_VERIFIER_OK") {
-		t.Fatalf("approved verifier did not run: %s", toolText(t, passed))
+		t.Fatalf("approved verifier did not run on trusted host path: %s", toolText(t, passed))
 	}
 
 	revoked := callGatewayTool(t, ctx, admin, "environment_verifier_agent_host_execution_set", map[string]any{
@@ -101,9 +108,13 @@ func TestAgentVerifierRequiresExplicitHostExecutionApproval(t *testing.T) {
 	if revoked.IsError {
 		t.Fatalf("Admin could not revoke verifier approval: %s", toolText(t, revoked))
 	}
-	blockedAgain := run()
-	if !blockedAgain.IsError {
-		t.Fatalf("revoked verifier remained Agent-runnable: %s", toolText(t, blockedAgain))
+	mode, routeErr = agentVerifierExecutionMode(service, serverSurfaceAgent, environment.ID, definition.ID)
+	if service.SandboxVerifierAvailable() {
+		if routeErr != nil || mode != "sandbox" {
+			t.Fatalf("revoked Agent verifier route = %q err=%v, want sandbox", mode, routeErr)
+		}
+	} else if routeErr == nil {
+		t.Fatalf("revoked verifier remained host-runnable: mode=%q", mode)
 	}
 }
 
