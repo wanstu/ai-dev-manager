@@ -68,12 +68,15 @@ func TestWindowsAppContainerFileBoundaryE2E(t *testing.T) {
 	if err := os.MkdirAll(allowedRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	grant(allowedRoot, PathAccessReadWrite)
 	allowedInput := filepath.Join(allowedRoot, "input.txt")
 	allowedResult := filepath.Join(allowedRoot, "result.txt")
+	// The real verifier worktree already exists before its AppContainer grant.
+	// Create this file first so the E2E proves the grant reaches existing
+	// descendants instead of only newly-created inherited children.
 	if err := os.WriteFile(allowedInput, []byte("allowed-data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	grant(allowedRoot, PathAccessReadWrite)
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -130,12 +133,16 @@ func TestWindowsAppContainerFileBoundaryE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var sandboxStdout strings.Builder
+	var sandboxStderr strings.Builder
 	result, launchErr := Launch(context.Background(), LaunchRequest{
 		Executable:  executable,
 		Args:        []string{"-test.run=^TestWindowsAppContainerChildHelper$", "-test.v"},
 		Cwd:         allowedRoot,
 		Environment: environment,
 		ProfileSID:  profile.SID,
+		Stdout:      &sandboxStdout,
+		Stderr:      &sandboxStderr,
 	})
 	diagnostic, _ := os.ReadFile(allowedResult)
 	if launchErr != nil {
@@ -146,6 +153,9 @@ func TestWindowsAppContainerFileBoundaryE2E(t *testing.T) {
 	}
 	if strings.TrimSpace(string(diagnostic)) != "ok" {
 		t.Fatalf("unexpected AppContainer child result %q", diagnostic)
+	}
+	if !strings.Contains(sandboxStdout.String(), "PASS") {
+		t.Fatalf("sandbox stdout was not captured: stdout=%q stderr=%q", sandboxStdout.String(), sandboxStderr.String())
 	}
 
 	grandchildPIDPath := filepath.Join(allowedRoot, "grandchild.pid")
