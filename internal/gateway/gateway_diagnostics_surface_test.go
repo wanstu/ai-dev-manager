@@ -33,8 +33,12 @@ func TestGatewayDiagnosticsToolIsAdminOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if contains(toolNames(agentTools.Tools), "gateway_diagnostics") {
-		t.Fatal("gateway_diagnostics leaked into Agent MCP")
+	if !contains(toolNames(agentTools.Tools), "gateway_diagnostics") {
+		t.Fatal("gateway_diagnostics must remain discoverable in Agent MCP")
+	}
+	denied := callGatewayTool(t, ctx, agent, "gateway_diagnostics", map[string]any{})
+	if !denied.IsError || !strings.Contains(toolText(t, denied), "requires the Admin surface") {
+		t.Fatalf("Agent diagnostics denial must explain Admin requirement: %s", toolText(t, denied))
 	}
 
 	admin := connect("/admin/mcp", "diagnostics-admin-surface-test")
