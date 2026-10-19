@@ -43,7 +43,9 @@ func TestAgentUnapprovedVerifierDefaultsToWindowsSandbox(t *testing.T) {
 	t.Setenv("ADM_SANDBOX_TEST_SECRET", "must-not-cross-agent-boundary")
 
 	ctx := context.Background()
-	agent := connectInMemory(t, ctx, New(service))
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	agent := connectInMemory(t, ctx, newServer(service, owner))
 	defer agent.Close()
 
 	syncResult := callGatewayTool(t, ctx, agent, "environment_verifier_run", map[string]any{

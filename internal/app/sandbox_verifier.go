@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,6 +59,7 @@ func (s *Service) PrepareSandboxVerifierExecution(ctx context.Context, environme
 			Args:            args,
 			Cwd:             cmd.Dir,
 			BaseEnvironment: append([]string(nil), cmd.Env...),
+			ReadOnlyRoots:   sandboxVerifierToolRoots(cmd.Env, cmd.Path),
 			Environment: map[string]string{
 				sandboxVerifierActiveEnv: "1",
 			},
@@ -133,6 +138,99 @@ func (s *Service) RunVerifierSandboxed(ctx context.Context, environmentID, owner
 		return verifier.Result{}, err
 	}
 	return result, nil
+}
+
+func sandboxVerifierToolRoots(environment []string, executable string) []string {
+	systemRoots := []string{
+		sandboxEnvironmentValue(environment, "SYSTEMROOT"),
+		sandboxEnvironmentValue(environment, "WINDIR"),
+		sandboxEnvironmentValue(environment, "ProgramFiles"),
+		sandboxEnvironmentValue(environment, "ProgramFiles(x86)"),
+	}
+	candidates := []string{
+		sandboxEnvironmentValue(environment, "GOROOT"),
+		sandboxEnvironmentValue(environment, "JAVA_HOME"),
+		sandboxEnvironmentValue(environment, "MAVEN_HOME"),
+		sandboxEnvironmentValue(environment, "GRADLE_HOME"),
+		sandboxEnvironmentValue(environment, "DOTNET_ROOT"),
+	}
+	executable = strings.TrimSpace(executable)
+	if filepath.IsAbs(executable) {
+		name := strings.ToLower(strings.TrimSuffix(filepath.Base(executable), filepath.Ext(executable)))
+		if name == "go" {
+			binDir := filepath.Dir(executable)
+			candidates = append(candidates, filepath.Dir(binDir))
+		}
+	}
+	var roots []string
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || !filepath.IsAbs(candidate) {
+			continue
+		}
+		resolved, err := filepath.EvalSymlinks(filepath.Clean(candidate))
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(resolved)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		alreadySystemReadable := false
+		for _, systemRoot := range systemRoots {
+			if sandboxPathWithin(systemRoot, resolved) {
+				alreadySystemReadable = true
+				break
+			}
+		}
+		if alreadySystemReadable {
+			continue
+		}
+		duplicate := false
+		for _, existing := range roots {
+			if sandboxSamePath(existing, resolved) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			roots = append(roots, resolved)
+		}
+	}
+	return roots
+}
+
+func sandboxEnvironmentValue(environment []string, key string) string {
+	for _, item := range environment {
+		index := strings.IndexByte(item, '=')
+		if index <= 0 || !strings.EqualFold(strings.TrimSpace(item[:index]), key) {
+			continue
+		}
+		return strings.TrimSpace(item[index+1:])
+	}
+	return ""
+}
+
+func sandboxPathWithin(root, target string) bool {
+	root = strings.TrimSpace(root)
+	target = strings.TrimSpace(target)
+	if root == "" || target == "" || !filepath.IsAbs(root) || !filepath.IsAbs(target) {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func sandboxSamePath(left, right string) bool {
+	left = filepath.Clean(left)
+	right = filepath.Clean(right)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
 }
 
 type sandboxVerifierOutputBuffer struct {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -89,6 +90,62 @@ func TestRunVerifierSandboxedWindowsE2E(t *testing.T) {
 	}
 	if string(generated) != "sandbox-write-ok" {
 		t.Fatalf("sandbox generated content = %q", generated)
+	}
+}
+
+func TestRunVerifierSandboxedGoToolchainE2E(t *testing.T) {
+	if os.Getenv("CI") == "" {
+		t.Skip("Windows Go toolchain sandbox E2E runs in CI")
+	}
+	goExecutable, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go executable is unavailable")
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module sandboxfixture\n\ngo 1.26.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fixture_test.go"), []byte("package sandboxfixture\n\nimport \"testing\"\n\nfunc TestPass(t *testing.T) {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(root, "sandbox-go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "sandbox-go", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const writer = "sandbox-go-writer"
+	if _, err := service.Environments.AcquireWriter(env.ID, writer); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AllowExecutable(goExecutable); err != nil {
+		t.Fatal(err)
+	}
+	definition, err := service.AddVerifier(env.ID, model.VerifierDefinition{
+		Name:           "sandbox-go-test",
+		Kind:           verifier.KindTest,
+		Enabled:        true,
+		Executable:     goExecutable,
+		Args:           []string{"test", "./..."},
+		TimeoutSeconds: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := service.RunVerifierSandboxed(context.Background(), env.ID, writer, definition.ID, 256*1024)
+	if err != nil {
+		t.Fatalf("sandboxed go test failed: %v", err)
+	}
+	if result.Status != verifier.StatusPassed || result.ExitCode != 0 {
+		t.Fatalf("sandboxed go test result = %+v", result)
+	}
+	if !strings.Contains(result.Stdout, "ok") {
+		t.Fatalf("sandboxed go test output missing package result: %q stderr=%q", result.Stdout, result.Stderr)
 	}
 }
 

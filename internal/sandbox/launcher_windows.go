@@ -231,6 +231,11 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 	var waitErr error
 	select {
 	case waitErr = <-waitDone:
+		// Verifier processes are single-run resources. If the main process
+		// exits after spawning a detached descendant, terminate the remainder
+		// of the Job before draining pipes so no child can outlive the run or
+		// keep inherited stdout/stderr handles open indefinitely.
+		_ = windows.TerminateJobObject(job, 1)
 	case <-ctx.Done():
 		_ = windows.TerminateJobObject(job, 1)
 		waitErr = <-waitDone
