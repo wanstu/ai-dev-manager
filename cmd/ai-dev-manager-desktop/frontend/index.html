@@ -409,6 +409,16 @@
         </div>
         <div class="system-control-grid single-column-grid exec-authority-grid">
           <section class="subpanel">
+            <div class="subpanel-heading"><div><h3>强权限控制</h3><span id="strongPermissionControlModeLabel">Strong · 默认开启</span></div></div>
+            <div class="subpanel-body">
+              <label class="desktop-toggle" title="控制 Agent 是否启用当前强权限边界；关闭后使用 v1.4.4 兼容的宽松 Agent 权限行为">
+                <input id="strongPermissionControl" type="checkbox" checked>
+                <span><strong>开启强权限控制</strong><small>默认开启；关闭后进入 v1.4.4 兼容模式</small></span>
+              </label>
+              <p id="strongPermissionControlHint" class="subpanel-note">强权限开启时，所有工具仍会保留在 Agent 工具列表中；无权限工具调用会返回明确原因和操作建议，不会无提示消失。关闭后 raw exec、stdio MCP、verifier host execution、Git SSH 等恢复 v1.4.4 兼容行为，但原本就属于 Admin 的密钥/管理操作仍保持 Admin 权限。</p>
+            </div>
+          </section>
+          <section class="subpanel">
             <div class="subpanel-heading"><div><h3>Command authorization mode</h3><span>默认 Strict</span></div></div>
             <div class="subpanel-body">
               <label class="gateway-profile-field"><span>执行模式</span><select id="execAuthorizationMode"><option value="strict">Strict · 仅显式 allowlist</option><option value="full">Full · 允许未列入 allowlist，但继续审计</option></select></label>
