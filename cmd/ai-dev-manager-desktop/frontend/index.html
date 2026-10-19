@@ -531,6 +531,17 @@
             <p class="subpanel-note">ADM 按 debug / info / warn / error 分文件记录；敏感字段会被过滤。这里仅显示目录和固定轮转/保留策略，不读取日志正文。</p>
           </div>
         </section>
+        <section class="subpanel" id="sandboxHostPreparationPanel">
+          <div class="subpanel-heading"><div><h3>Windows 强沙盒</h3><span>AppContainer · Host preparation</span></div><span id="sandboxHostPreparationBadge" class="resource-badge" data-state="unconfigured">未读取</span></div>
+          <div class="subpanel-body">
+            <p id="sandboxHostPreparationSummary" class="subpanel-note">正在读取本机强沙盒准备状态…</p>
+            <div class="gateway-actions">
+              <button id="sandboxHostPreparationEnable" type="button">启用强沙盒</button>
+              <button id="sandboxHostPreparationRefresh" type="button" class="secondary-button">刷新状态</button>
+            </div>
+            <p class="subpanel-note">首次启用会请求一次 Windows 管理员确认，准备 <code>\Device\Null</code> 并注册开机恢复任务。开机任务只运行位于 Program Files 的受保护副本，不会以 SYSTEM 身份执行用户可写目录中的程序。</p>
+          </div>
+        </section>
         <section class="subpanel">
           <div class="subpanel-heading"><h3>Desktop shell preferences</h3><span>主题与 Desktop 外壳行为</span></div>
           <div class="subpanel-body desktop-preferences-grid">
