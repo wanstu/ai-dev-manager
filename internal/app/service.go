@@ -912,6 +912,7 @@ func (s *Service) RunVerifier(ctx context.Context, environmentID, owner, verifie
 	if classifyErr != nil {
 		return verifier.Result{}, classifyErr
 	}
+	result.ExecutionMode = "host"
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return verifier.Result{}, err
 	}
