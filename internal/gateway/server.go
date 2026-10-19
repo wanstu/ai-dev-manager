@@ -698,10 +698,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				role = "local ADM management gateway"
 			}
 			info := map[string]any{
-				"name":        implementationName,
-				"api_version": "v2-dev",
-				"surface":     string(surface),
-				"role":        role,
+				"name":             implementationName,
+				"api_version":      "v2-dev",
+				"surface":          string(surface),
+				"role":             role,
+				"toolset_revision": serverVersion,
 				"notes": []string{
 					"Workspace is a registered local directory; Git is optional.",
 					"Environment is a persistent development context; worktree is not a prerequisite.",
