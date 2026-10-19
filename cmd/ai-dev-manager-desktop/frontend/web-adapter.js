@@ -10,7 +10,7 @@
     'GetGatewayAccessStatus','GetGatewayDiagnostics','SetGatewayAccessPolicy','SetGatewayAllowedHosts',
     'RotateGatewayAdminAPIKey','RotateGatewayAgentAPIKey','ClearGatewayAdminAPIKey',
     'SetGatewayAgentAPIKey','ClearGatewayAgentAPIKey','GetExecAuthorizationStatus',
-    'SetExecFullAuthorization','ListSkillSources','ListSkillAvailability','BrowseHostDirectories','AddWorkspace',
+    'SetExecFullAuthorization','GetStrongPermissionControlStatus','SetStrongPermissionControl','ListSkillSources','ListSkillAvailability','BrowseHostDirectories','AddWorkspace',
     'RenameWorkspace','RemoveWorkspace','DiscoverWorkspace','CreateEnvironment',
     'RenameEnvironment','RemoveEnvironment','InspectEnvironment','AnalyzeProject','ProjectIndexStatus','CodeIntelligenceOverview','ProbeJetBrainsNativeSearch','EnvironmentTreeDigest',
     'EnvironmentWorkspaceOptions','EnvironmentWorkspaceRecommendations','SetEnvironmentWorkspace',
