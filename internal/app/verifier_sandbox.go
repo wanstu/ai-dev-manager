@@ -61,6 +61,14 @@ func (s *Service) RunPreparedVerifierSandbox(
 	if s.HostEnvironment != nil {
 		baseEnvironment = s.HostEnvironment.Environ()
 	}
+	extraEnvironment := map[string]string{
+		"ADM_SANDBOX_MODE":   "strong",
+		"ADM_SANDBOX_ACTIVE": "1",
+	}
+	if goRoot := verifierSandboxGoRoot(baseEnvironment, prepared.ExecutablePath); goRoot != "" {
+		extraEnvironment["GOROOT"] = goRoot
+		extraEnvironment["GOTELEMETRY"] = "off"
+	}
 
 	result, err := sandbox.Execute(ctx, sandbox.ExecutionRequest{
 		Scope:            prepared.Environment.ID + ":" + executionID,
@@ -70,7 +78,7 @@ func (s *Service) RunPreparedVerifierSandbox(
 		Args:             append([]string(nil), prepared.Definition.Args...),
 		Cwd:              prepared.CwdPath,
 		BaseEnvironment:  baseEnvironment,
-		ExtraEnvironment: map[string]string{"ADM_SANDBOX_MODE": "strong", "ADM_SANDBOX_ACTIVE": "1"},
+		ExtraEnvironment: extraEnvironment,
 		ToolRoots:        verifierSandboxToolRoots(baseEnvironment, prepared.ExecutablePath),
 		MaxOutputBytes:   normalizeVerifierOutputLimit(maxOutputBytes),
 		Stdout:           stdout,
@@ -181,10 +189,7 @@ func verifierSandboxToolRoots(environment []string, executable string) []string 
 	name := strings.ToLower(strings.TrimSuffix(filepath.Base(executable), filepath.Ext(executable)))
 	switch name {
 	case "go":
-		add(environmentLookup(environment, "GOROOT"))
-		if filepath.IsAbs(executable) {
-			add(filepath.Dir(filepath.Dir(executable)))
-		}
+		add(verifierSandboxGoRoot(environment, executable))
 	case "java", "javac":
 		add(environmentLookup(environment, "JAVA_HOME"))
 	case "dotnet":
@@ -195,6 +200,32 @@ func verifierSandboxToolRoots(environment []string, executable string) []string 
 		add(environmentLookup(environment, "GRADLE_HOME"))
 	}
 	return roots
+}
+
+func verifierSandboxGoRoot(environment []string, executable string) string {
+	executable = strings.TrimSpace(executable)
+	if strings.ToLower(strings.TrimSuffix(filepath.Base(executable), filepath.Ext(executable))) != "go" {
+		return ""
+	}
+	candidates := []string{environmentLookup(environment, "GOROOT")}
+	if filepath.IsAbs(executable) {
+		candidates = append(candidates, filepath.Dir(filepath.Dir(executable)))
+	}
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || !filepath.IsAbs(candidate) {
+			continue
+		}
+		resolved, err := filepath.EvalSymlinks(filepath.Clean(candidate))
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(resolved)
+		if err == nil && info.IsDir() {
+			return filepath.Clean(resolved)
+		}
+	}
+	return ""
 }
 
 func environmentLookup(environment []string, key string) string {
