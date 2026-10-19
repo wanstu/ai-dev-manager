@@ -126,9 +126,13 @@ func RunSandboxHostPreparationBoot() error {
 }
 
 func sandboxHostPrepMachineExecutable() (string, error) {
-	root := strings.TrimSpace(os.Getenv("ProgramFiles"))
-	if root == "" {
-		return "", fmt.Errorf("ProgramFiles is unavailable")
+	root, err := windows.KnownFolderPath(windows.FOLDERID_ProgramFiles, windows.KF_FLAG_DEFAULT)
+	if err != nil {
+		return "", fmt.Errorf("resolve protected Program Files directory: %w", err)
+	}
+	root = strings.TrimSpace(root)
+	if root == "" || !filepath.IsAbs(root) {
+		return "", fmt.Errorf("Windows Program Files known folder is unavailable")
 	}
 	return filepath.Join(root, sandboxHostPrepMachineDirName, sandboxHostPrepMachineExeName), nil
 }
