@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -142,7 +141,7 @@ func BuildEnvironment(base []string, dirs RuntimeDirs, extra map[string]string) 
 	// Git must not load the interactive user's global configuration, helpers,
 	// hooks, or credential setup from their real profile.
 	set("GIT_CONFIG_NOSYSTEM", "1")
-	set("GIT_CONFIG_GLOBAL", os.DevNull)
+	set("GIT_CONFIG_GLOBAL", filepath.Join(dirs.ProfileRoot, ".gitconfig"))
 	set("GIT_TERMINAL_PROMPT", "0")
 
 	for key, value := range extra {
