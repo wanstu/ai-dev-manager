@@ -5,18 +5,25 @@ package sandbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 const (
-	sandboxE2EChildEnv   = "ADM_SANDBOX_E2E_CHILD"
-	sandboxE2EAllowedEnv = "ADM_SANDBOX_E2E_ALLOWED"
-	sandboxE2EBlockedEnv = "ADM_SANDBOX_E2E_BLOCKED"
-	sandboxE2EResultEnv  = "ADM_SANDBOX_E2E_RESULT"
-	sandboxE2ESecretEnv  = "ADM_SANDBOX_TEST_SECRET"
+	sandboxE2EChildEnv         = "ADM_SANDBOX_E2E_CHILD"
+	sandboxE2EAllowedEnv       = "ADM_SANDBOX_E2E_ALLOWED"
+	sandboxE2EBlockedEnv       = "ADM_SANDBOX_E2E_BLOCKED"
+	sandboxE2EResultEnv        = "ADM_SANDBOX_E2E_RESULT"
+	sandboxE2ESecretEnv        = "ADM_SANDBOX_TEST_SECRET"
+	sandboxE2EGrandchildPIDEnv = "ADM_SANDBOX_E2E_GRANDCHILD_PID"
 )
 
 func TestWindowsAppContainerFileBoundaryE2E(t *testing.T) {
@@ -135,6 +142,93 @@ func TestWindowsAppContainerFileBoundaryE2E(t *testing.T) {
 	}
 	if strings.TrimSpace(string(diagnostic)) != "ok" {
 		t.Fatalf("unexpected AppContainer child result %q", diagnostic)
+	}
+
+	grandchildPIDPath := filepath.Join(allowedRoot, "grandchild.pid")
+	jobEnvironment, err := BuildEnvironment(base, dirs, map[string]string{
+		sandboxE2EGrandchildPIDEnv: grandchildPIDPath,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jobCtx, cancelJob := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancelJob()
+	_, launchErr = Launch(jobCtx, LaunchRequest{
+		Executable:  executable,
+		Args:        []string{"-test.run=^TestWindowsAppContainerJobChildHelper$", "-test.v"},
+		Cwd:         allowedRoot,
+		Environment: jobEnvironment,
+		ProfileSID:  profile.SID,
+	})
+	if !errors.Is(launchErr, context.DeadlineExceeded) {
+		t.Fatalf("expected AppContainer job cancellation deadline, got %v", launchErr)
+	}
+	pidData, err := os.ReadFile(grandchildPIDPath)
+	if err != nil {
+		t.Fatalf("grandchild did not publish PID before cancellation: %v", err)
+	}
+	pid64, err := strconv.ParseUint(strings.TrimSpace(string(pidData)), 10, 32)
+	if err != nil {
+		t.Fatalf("invalid grandchild PID %q: %v", pidData, err)
+	}
+	if err := waitWindowsProcessTerminated(uint32(pid64), 3*time.Second); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWindowsAppContainerJobChildHelper(t *testing.T) {
+	pidPath := os.Getenv(sandboxE2EGrandchildPIDEnv)
+	if pidPath == "" {
+		t.Skip("AppContainer Job Object child helper")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(executable, "-test.run=^TestWindowsAppContainerGrandchildHelper$", "-test.v")
+	cmd.Env = os.Environ()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatal("grandchild exited before Job Object cancellation")
+}
+
+func TestWindowsAppContainerGrandchildHelper(t *testing.T) {
+	pidPath := os.Getenv(sandboxE2EGrandchildPIDEnv)
+	if pidPath == "" {
+		t.Skip("AppContainer Job Object grandchild helper")
+	}
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(30 * time.Second)
+}
+
+func waitWindowsProcessTerminated(pid uint32, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		handle, err := windows.OpenProcess(windows.SYNCHRONIZE|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+		if err != nil {
+			if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+				return nil
+			}
+			return fmt.Errorf("open grandchild process %d: %w", pid, err)
+		}
+		status, waitErr := windows.WaitForSingleObject(handle, 0)
+		_ = windows.CloseHandle(handle)
+		if waitErr != nil {
+			return fmt.Errorf("wait grandchild process %d: %w", pid, waitErr)
+		}
+		if status == windows.WAIT_OBJECT_0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("grandchild process %d survived AppContainer Job Object cancellation", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
