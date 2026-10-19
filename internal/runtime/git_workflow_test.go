@@ -116,6 +116,63 @@ func TestControlledCherryPickRefusesIncomingGitAttributes(t *testing.T) {
 	}
 }
 
+func TestControlledCherryPickContinueRechecksStagedAttributes(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not available")
+	}
+	root := t.TempDir()
+	runGitForCommitTest(t, git, root, "init", "-b", "main")
+	runGitForCommitTest(t, git, root, "config", "core.autocrlf", "false")
+	runGitForCommitTest(t, git, root, "config", "user.name", "ADM Test")
+	runGitForCommitTest(t, git, root, "config", "user.email", "adm-test@example.invalid")
+	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForCommitTest(t, git, root, "add", "tracked.txt")
+	runGitForCommitTest(t, git, root, "commit", "-m", "base")
+
+	runGitForCommitTest(t, git, root, "checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForCommitTest(t, git, root, "commit", "-am", "feature")
+	featureCommit := runGitForCommitTest(t, git, root, "rev-parse", "HEAD")
+
+	runGitForCommitTest(t, git, root, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForCommitTest(t, git, root, "commit", "-am", "main")
+
+	rt, err := NewWithEnvironment(root, nil, os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := rt.GitCherryPick(context.Background(), []string{featureCommit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != "conflict" || len(result.Conflicts) == 0 {
+		t.Fatalf("expected cherry-pick conflict, got %+v", result)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("resolved\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.txt filter=blocked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForCommitTest(t, git, root, "add", "tracked.txt", ".gitattributes")
+
+	if _, err := rt.GitCherryPickContinue(context.Background()); err == nil || !strings.Contains(err.Error(), ".gitattributes") {
+		t.Fatalf("expected staged .gitattributes refusal, got %v", err)
+	}
+	if !rt.gitPseudoRefExists(context.Background(), git, "CHERRY_PICK_HEAD") {
+		t.Fatal("refused continuation unexpectedly ended cherry-pick")
+	}
+}
+
 func TestControlledGitPushBranchAndExactTag(t *testing.T) {
 	git, err := exec.LookPath("git")
 	if err != nil {

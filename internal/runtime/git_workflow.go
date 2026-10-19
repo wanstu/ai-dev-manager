@@ -304,6 +304,9 @@ func (r *Runtime) GitCherryPickContinue(ctx context.Context) (GitMutationResult,
 	} else if len(conflicts) != 0 {
 		return GitMutationResult{State: "conflict", Conflicts: conflicts}, fmt.Errorf("cherry-pick still has unresolved conflicts")
 	}
+	if err := r.ensureGitContinuationSafe(ctx, git); err != nil {
+		return GitMutationResult{}, err
+	}
 	cmd, err := r.committerGitCommand(ctx, git, "cherry-pick", "--continue")
 	if err != nil {
 		return GitMutationResult{}, err
@@ -592,6 +595,20 @@ func (r *Runtime) ensureGitMutationCommitSafe(ctx context.Context, git, commit s
 	}
 	paths := splitNULPaths(out)
 	return r.ensureGitIncomingPathsSafe(ctx, git, paths)
+}
+
+func (r *Runtime) ensureGitContinuationSafe(ctx context.Context, git string) error {
+	if err := r.ensureGitFiltersInactive(ctx, git); err != nil {
+		return err
+	}
+	staged := r.readOnlyGitCommand(ctx, git,
+		"diff", "--cached", "--name-only", "-z",
+		"--no-ext-diff", "--no-textconv", "--ignore-submodules=all", "--")
+	out, err := staged.Output()
+	if err != nil {
+		return fmt.Errorf("inspect staged cherry-pick paths: %w", err)
+	}
+	return r.ensureGitIncomingPathsSafe(ctx, git, splitNULPaths(out))
 }
 
 func (r *Runtime) ensureGitMergeTargetSafe(ctx context.Context, git, target string) error {
