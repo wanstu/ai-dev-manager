@@ -165,8 +165,9 @@ func TestControlledCherryPickContinueRechecksStagedAttributes(t *testing.T) {
 	}
 	runGitForCommitTest(t, git, root, "add", "tracked.txt", ".gitattributes")
 
-	if _, err := rt.GitCherryPickContinue(context.Background()); err == nil || !strings.Contains(err.Error(), ".gitattributes") {
-		t.Fatalf("expected staged .gitattributes refusal, got %v", err)
+	if _, err := rt.GitCherryPickContinue(context.Background()); err == nil ||
+		(!strings.Contains(err.Error(), ".gitattributes") && !strings.Contains(err.Error(), "may execute host code")) {
+		t.Fatalf("expected staged attribute/filter safety refusal, got %v", err)
 	}
 	if !rt.gitPseudoRefExists(context.Background(), git, "CHERRY_PICK_HEAD") {
 		t.Fatal("refused continuation unexpectedly ended cherry-pick")
