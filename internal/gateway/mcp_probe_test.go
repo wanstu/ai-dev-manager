@@ -34,14 +34,12 @@ func TestGlobalMCPProbeAdminOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tool := range inventory.Tools {
-		if tool.Name == "mcp_probe" {
-			t.Fatal("global management probe exposed to Agent")
-		}
+	if !contains(toolNames(inventory.Tools), "mcp_probe") {
+		t.Fatal("global management probe must remain discoverable to Agent")
 	}
-	denied, err := agent.CallTool(ctx, &mcp.CallToolParams{Name: "mcp_probe", Arguments: map[string]any{"id": entry.ID}})
-	if err == nil && denied != nil && !denied.IsError {
-		t.Fatal("Agent invoked Admin-only probe")
+	denied := callGatewayTool(t, ctx, agent, "mcp_probe", map[string]any{"id": entry.ID})
+	if !denied.IsError || !strings.Contains(toolText(t, denied), "requires the Admin surface") {
+		t.Fatalf("Agent probe denial must explain Admin requirement: %s", toolText(t, denied))
 	}
 	ws, err := s.Workspaces.Add(t.TempDir(), "plain")
 	if err != nil {
