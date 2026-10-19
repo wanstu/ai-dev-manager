@@ -56,8 +56,16 @@ func TestAgentVerifierUsesSandboxOrExplicitHostApproval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if contains(toolNames(agentTools.Tools), "environment_verifier_agent_host_execution_set") {
-		t.Fatal("Agent surface exposed verifier host-execution approval mutation")
+	if !contains(toolNames(agentTools.Tools), "environment_verifier_agent_host_execution_set") {
+		t.Fatal("Agent surface must keep verifier host-execution approval mutation discoverable")
+	}
+	agentApprovalDenied := callGatewayTool(t, ctx, agent, "environment_verifier_agent_host_execution_set", map[string]any{
+		"environment_id": environment.ID,
+		"verifier_id":    definition.ID,
+		"allowed":        true,
+	})
+	if !agentApprovalDenied.IsError || !strings.Contains(toolText(t, agentApprovalDenied), "requires the Admin surface") {
+		t.Fatalf("Agent approval mutation denial must explain Admin requirement: %s", toolText(t, agentApprovalDenied))
 	}
 	adminTools, err := admin.ListTools(ctx, nil)
 	if err != nil {
@@ -76,6 +84,17 @@ func TestAgentVerifierUsesSandboxOrExplicitHostApproval(t *testing.T) {
 		if routeErr == nil || !strings.Contains(routeErr.Error(), "trusted host execution is not approved") {
 			t.Fatalf("unapproved Agent verifier was not fail-closed: mode=%q err=%v", mode, routeErr)
 		}
+	}
+
+	if _, err := service.SetStrongPermissionControl(false); err != nil {
+		t.Fatal(err)
+	}
+	mode, routeErr = agentVerifierExecutionMode(service, serverSurfaceAgent, environment.ID, definition.ID)
+	if routeErr != nil || mode != "host" {
+		t.Fatalf("v1.4.4-compatible mode must restore unapproved host verifier route: mode=%q err=%v", mode, routeErr)
+	}
+	if _, err := service.SetStrongPermissionControl(true); err != nil {
+		t.Fatal(err)
 	}
 
 	allowed := callGatewayTool(t, ctx, admin, "environment_verifier_agent_host_execution_set", map[string]any{
@@ -146,8 +165,18 @@ func TestAgentControlledGitCommitWithoutRawExec(t *testing.T) {
 	if !contains(names, "git_commit") {
 		t.Fatalf("Agent surface lost controlled git_commit: %v", names)
 	}
-	if contains(names, "exec") || contains(names, "run_start") || contains(names, "process_start") {
-		t.Fatalf("Agent surface exposed raw host execution alongside git_commit: %v", names)
+	for _, raw := range []string{"exec", "run_start", "process_start"} {
+		if !contains(names, raw) {
+			t.Fatalf("Agent surface must keep raw host tool %q discoverable: %v", raw, names)
+		}
+	}
+	rawDenied := callGatewayTool(t, ctx, agent, "exec", map[string]any{
+		"environment_id": environment.ID,
+		"writer_owner":   "controlled-commit-writer",
+		"executable":     os.Args[0],
+	})
+	if !rawDenied.IsError || !strings.Contains(toolText(t, rawDenied), "Strong Permission Control is enabled") {
+		t.Fatalf("raw host execution denial must explain strong permission mode: %s", toolText(t, rawDenied))
 	}
 
 	committed := callGatewayTool(t, ctx, agent, "git_commit", map[string]any{
