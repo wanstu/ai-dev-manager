@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -166,14 +165,8 @@ func verifierSandboxToolRoots(environment []string, executable string) []string 
 			return
 		}
 		info, err := os.Stat(resolved)
-		if err != nil {
+		if err != nil || !info.IsDir() {
 			return
-		}
-		if !info.IsDir() {
-			resolved = filepath.Dir(resolved)
-			if info, err = os.Stat(resolved); err != nil || !info.IsDir() {
-				return
-			}
 		}
 		path = filepath.Clean(resolved)
 		key := strings.ToLower(path)
@@ -184,29 +177,22 @@ func verifierSandboxToolRoots(environment []string, executable string) []string 
 		roots = append(roots, path)
 	}
 
-	for _, key := range []string{"GOROOT", "JAVA_HOME", "DOTNET_ROOT", "MAVEN_HOME", "GRADLE_HOME"} {
-		add(environmentLookup(environment, key))
-	}
 	executable = strings.TrimSpace(executable)
-	if filepath.IsAbs(executable) {
-		resolved := executable
-		if value, err := filepath.EvalSymlinks(executable); err == nil {
-			resolved = value
+	name := strings.ToLower(strings.TrimSuffix(filepath.Base(executable), filepath.Ext(executable)))
+	switch name {
+	case "go":
+		add(environmentLookup(environment, "GOROOT"))
+		if filepath.IsAbs(executable) {
+			add(filepath.Dir(filepath.Dir(executable)))
 		}
-		name := strings.ToLower(strings.TrimSuffix(filepath.Base(resolved), filepath.Ext(resolved)))
-		if name == "go" {
-			add(filepath.Dir(filepath.Dir(resolved)))
-		} else {
-			add(filepath.Dir(resolved))
-		}
-	}
-	for _, name := range []string{
-		"go", "git", "node", "npm", "pnpm", "bun", "wails",
-		"java", "javac", "dotnet", "gcc", "g++", "pkg-config",
-	} {
-		if resolved, err := exec.LookPath(name); err == nil {
-			add(filepath.Dir(resolved))
-		}
+	case "java", "javac":
+		add(environmentLookup(environment, "JAVA_HOME"))
+	case "dotnet":
+		add(environmentLookup(environment, "DOTNET_ROOT"))
+	case "mvn":
+		add(environmentLookup(environment, "MAVEN_HOME"))
+	case "gradle", "gradlew":
+		add(environmentLookup(environment, "GRADLE_HOME"))
 	}
 	return roots
 }
