@@ -10,7 +10,7 @@ func PlatformSupport() Support {
 	notes := []string{
 		"Windows 10 backend uses classic AppContainer isolation with explicit filesystem ACL grants",
 		"sanitized environment redirects profile, temp, and build caches away from the interactive user profile",
-		"process-tree cleanup will use a Windows Job Object before Verifier integration is enabled",
+		"process trees are contained in a Windows Job Object with kill-on-close semantics",
 		"Windows 11 experimental CreateProcessInSandbox may become an optional backend when available, but ADM does not depend on it",
 	}
 	if !supported {
@@ -20,7 +20,7 @@ func PlatformSupport() Support {
 		Platform:                    "windows",
 		Supported:                   supported,
 		EnvironmentSanitization:     true,
-		ProcessTreeBoundary:         false,
+		ProcessTreeBoundary:         supported,
 		DedicatedIdentitySupported:  false,
 		StrongFileBoundarySupported: supported && WindowsAppContainerAvailable(),
 		RequiresAdminSetup:          false,
