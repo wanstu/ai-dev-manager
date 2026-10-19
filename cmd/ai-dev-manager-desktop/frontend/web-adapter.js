@@ -108,6 +108,15 @@
   };
 
   adapter.GetDesktopPreferences = async () => webPreferences();
+  adapter.GetSandboxHostPreparationStatus = async () => ({
+    platform: 'web',
+    supported: false,
+    null_device_prepared: false,
+    boot_task_installed: false,
+    requires_admin_setup: false,
+    message: 'Windows 强沙盒只能在本机 Desktop 中配置。',
+  });
+  adapter.EnableSandboxHostPreparation = async () => { throw new Error('Windows 强沙盒只能在本机 Desktop 中启用'); };
   adapter.SetLaunchAtLogin = async () => webPreferences();
   adapter.SetDesktopTheme = async (mode, pack) => {
     if (mode) localStorage.setItem('adm-web-theme-mode', mode);
