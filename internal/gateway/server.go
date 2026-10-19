@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	serverName         = "adm"
-	runtimeOwnerHeader = "X-ADM-Runtime-Owner"
+	serverName             = "adm"
+	runtimeOwnerHeader     = "X-ADM-Runtime-Owner"
+	gatewayToolsetRevision = "2026-10-19.2"
 )
 
 var serverVersion = productversion.Current()
@@ -698,10 +699,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				role = "local ADM management gateway"
 			}
 			info := map[string]any{
-				"name":        implementationName,
-				"api_version": "v2-dev",
-				"surface":     string(surface),
-				"role":        role,
+				"name":             implementationName,
+				"api_version":      "v2-dev",
+				"surface":          string(surface),
+				"role":             role,
+				"toolset_revision": gatewayToolsetRevision,
 				"notes": []string{
 					"Workspace is a registered local directory; Git is optional.",
 					"Environment is a persistent development context; worktree is not a prerequisite.",
@@ -1288,25 +1290,35 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. This call blocks until completion; use environment_verifier_run_start/status/cancel for long or heavy verification. On the Agent surface, the verifier must be explicitly approved by an administrator with agent_host_execution_allowed=true because verifier code executes with host-user permissions until OS sandboxing is available. Requires the matching writer_owner."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. This call blocks until completion; use environment_verifier_run_start/status/cancel for long or heavy verification. Agent execution uses the strong OS sandbox by default when available. agent_host_execution_allowed=true is an explicit trusted-host override. Sandbox setup failures never fall back to host execution automatically. Requires the matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
-			if err := requireAgentVerifierExecution(service, surface, in.EnvironmentID, in.VerifierID); err != nil {
+			mode, err := agentVerifierExecutionMode(service, surface, in.EnvironmentID, in.VerifierID)
+			if err != nil {
 				return toolResult(nil, err)
 			}
-			result, err := service.RunVerifier(ctx, in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
-			return toolResult(result, err)
+			if mode == "sandbox" {
+				result, runErr := service.RunVerifierSandboxed(ctx, in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
+				return toolResult(result, runErr)
+			}
+			result, runErr := service.RunVerifier(ctx, in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
+			return toolResult(result, runErr)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_start", Description: "Start one configured Environment verifier asynchronously. On the Agent surface, the verifier must be explicitly approved by an administrator with agent_host_execution_allowed=true. Preferred for long test/build work; requires the matching writer_owner."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_start", Description: "Start one configured Environment verifier asynchronously. Agent execution uses the strong OS sandbox by default when available; agent_host_execution_allowed=true is an explicit trusted-host override. Sandbox setup failures never fall back to host execution automatically. Preferred for long test/build work; requires the matching writer_owner."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
-			if err := requireAgentVerifierExecution(service, surface, in.EnvironmentID, in.VerifierID); err != nil {
+			mode, err := agentVerifierExecutionMode(service, surface, in.EnvironmentID, in.VerifierID)
+			if err != nil {
 				return toolResult(nil, err)
 			}
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
 			}
-			value, err := owner.StartVerifierRun(in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
-			return toolResult(value, err)
+			if mode == "sandbox" {
+				value, startErr := owner.StartVerifierRunSandboxed(in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
+				return toolResult(value, startErr)
+			}
+			value, startErr := owner.StartVerifierRun(in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
+			return toolResult(value, startErr)
 		})
 
 	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_list", Description: "List owner-local asynchronous verifier runs for one Environment. Read-only; does not acquire or renew the writer lease and observations are not persisted across Gateway restart."},
@@ -2162,18 +2174,22 @@ func requireAgentSafeMCPTransport(service *app.Service, surface serverSurface, e
 	return nil
 }
 
-func requireAgentVerifierExecution(service *app.Service, surface serverSurface, environmentID, verifierID string) error {
+func agentVerifierExecutionMode(service *app.Service, surface serverSurface, environmentID, verifierID string) (string, error) {
 	if surface != serverSurfaceAgent {
-		return nil
+		return "host", nil
 	}
 	definition, err := service.Verifiers.Get(environmentID, verifierID)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if !definition.AgentHostExecutionAllowed {
-		return fmt.Errorf("verifier %q is not approved for Agent host execution; an administrator must explicitly set agent_host_execution_allowed=true", verifierID)
+	if definition.AgentHostExecutionAllowed {
+		return "host", nil
 	}
-	return nil
+	if service.SandboxVerifierAvailable() {
+		return "sandbox", nil
+	}
+	support := service.SandboxVerifierSupport()
+	return "", fmt.Errorf("verifier %q cannot run on the Agent surface: strong OS sandbox is unavailable on %s and trusted host execution is not approved", verifierID, support.Platform)
 }
 
 func requireHealthyMCP(ctx context.Context, service *app.Service, environmentID, mcpID string) error {

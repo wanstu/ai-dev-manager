@@ -29,9 +29,10 @@ type Service struct {
 }
 
 type Result struct {
-	ID         string `json:"verifier_id"`
-	Kind       string `json:"kind"`
-	Status     string `json:"status"`
+	ID            string `json:"verifier_id"`
+	Kind          string `json:"kind"`
+	ExecutionMode string `json:"execution_mode,omitempty"`
+	Status        string `json:"status"`
 	ExitCode   int    `json:"exit_code"`
 	DurationMs int64  `json:"duration_ms"`
 	TimedOut   bool   `json:"timed_out"`

@@ -37,6 +37,14 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Prepare Windows AppContainer host
+        shell: pwsh
+        run: |
+          go run ./cmd/adm-sandbox-host-prep prepare-null-device
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go run ./cmd/adm-sandbox-host-prep verify-null-device
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Test
         run: go test -count=1 ./...
 
