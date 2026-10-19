@@ -24,9 +24,6 @@ func GrantWindowsAppContainerPath(path, sidText string, access PathAccess) error
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() {
-		return fmt.Errorf("sandbox path grant requires a directory: %s", path)
-	}
 	sid, err := windows.StringToSid(sidText)
 	if err != nil {
 		return fmt.Errorf("parse AppContainer SID: %w", err)
@@ -52,10 +49,14 @@ func GrantWindowsAppContainerPath(path, sidText string, access PathAccess) error
 		return fmt.Errorf("unsupported sandbox path access %q", access)
 	}
 
+	inheritance := uint32(windows.NO_INHERITANCE)
+	if info.IsDir() {
+		inheritance = windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT
+	}
 	entry := windows.EXPLICIT_ACCESS{
 		AccessPermissions: mask,
 		AccessMode:        windows.GRANT_ACCESS,
-		Inheritance:       windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+		Inheritance:       inheritance,
 		Trustee: windows.TRUSTEE{
 			MultipleTrusteeOperation: windows.NO_MULTIPLE_TRUSTEE,
 			TrusteeForm:              windows.TRUSTEE_IS_SID,
