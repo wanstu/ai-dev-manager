@@ -256,6 +256,14 @@ func (c *Client) ExecFullAuthorizationSet(enabled bool) (app.ExecAuthorizationSt
 	return callAdmin[app.ExecAuthorizationStatus](c, context.Background(), "exec_full_authorization_set", map[string]any{"enabled": enabled})
 }
 
+func (c *Client) StrongPermissionControlStatus() (app.StrongPermissionControlStatus, error) {
+	return callAdmin[app.StrongPermissionControlStatus](c, context.Background(), "strong_permission_control_status", map[string]any{})
+}
+
+func (c *Client) StrongPermissionControlSet(enabled bool) (app.StrongPermissionControlStatus, error) {
+	return callAdmin[app.StrongPermissionControlStatus](c, context.Background(), "strong_permission_control_set", map[string]any{"enabled": enabled})
+}
+
 func (c *Client) Snapshot() (management.Snapshot, error) {
 	return callAdmin[management.Snapshot](c, context.Background(), "management_snapshot", map[string]any{})
 }
