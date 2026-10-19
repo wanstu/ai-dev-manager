@@ -92,9 +92,21 @@ func (s *Service) GitFetch(ctx context.Context, environmentID, owner, remote str
 	})
 }
 
+func (s *Service) GitFetchAgent(ctx context.Context, environmentID, owner, remote string, tags, prune bool) (any, error) {
+	return withGitWriter(ctx, s, environmentID, owner, func(commandCtx context.Context, rt *runtime.Runtime) (any, error) {
+		return rt.GitFetchAgent(commandCtx, remote, tags, prune)
+	})
+}
+
 func (s *Service) GitPush(ctx context.Context, environmentID, owner, remote, branch string, tags []string, setUpstream bool) (any, error) {
 	return withGitWriter(ctx, s, environmentID, owner, func(commandCtx context.Context, rt *runtime.Runtime) (any, error) {
 		return rt.GitPush(commandCtx, remote, branch, tags, setUpstream, true)
+	})
+}
+
+func (s *Service) GitPushAgent(ctx context.Context, environmentID, owner, remote, branch string, tags []string, setUpstream bool) (any, error) {
+	return withGitWriter(ctx, s, environmentID, owner, func(commandCtx context.Context, rt *runtime.Runtime) (any, error) {
+		return rt.GitPushAgent(commandCtx, remote, branch, tags, setUpstream)
 	})
 }
 
