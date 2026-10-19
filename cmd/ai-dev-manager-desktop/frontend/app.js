@@ -1,6 +1,7 @@
 const elements = {
   refreshButton: document.getElementById('refreshButton'),
   launchAtLogin: document.getElementById('launchAtLogin'), desktopShellHint: document.getElementById('desktopShellHint'), desktopThemeMode: document.getElementById('desktopThemeMode'), desktopThemePack: document.getElementById('desktopThemePack'), desktopThemeHint: document.getElementById('desktopThemeHint'), desktopThemeRefreshButton: document.getElementById('desktopThemeRefreshButton'),
+  sandboxHostPreparationBadge: document.getElementById('sandboxHostPreparationBadge'), sandboxHostPreparationSummary: document.getElementById('sandboxHostPreparationSummary'), sandboxHostPreparationEnable: document.getElementById('sandboxHostPreparationEnable'), sandboxHostPreparationRefresh: document.getElementById('sandboxHostPreparationRefresh'),
   worktreeSettingsForm: document.getElementById('worktreeSettingsForm'), worktreeRoot: document.getElementById('worktreeRoot'), worktreeBranchPrefix: document.getElementById('worktreeBranchPrefix'), worktreeSettingsSaveButton: document.getElementById('worktreeSettingsSaveButton'), worktreeSettingsHint: document.getElementById('worktreeSettingsHint'), hostEnvironmentSummary: document.getElementById('hostEnvironmentSummary'), hostEnvironmentRefreshButton: document.getElementById('hostEnvironmentRefreshButton'), loggingStatusSummary: document.getElementById('loggingStatusSummary'),
   statusPanel: document.getElementById('statusPanel'),
   dashboardDataState: document.getElementById('dashboardDataState'), dashboardLastSuccess: document.getElementById('dashboardLastSuccess'), dashboardDataDetail: document.getElementById('dashboardDataDetail'),
@@ -1066,6 +1067,67 @@ async function updateLaunchAtLogin() {
     elements.launchAtLogin.disabled = false;
   }
 }
+function renderSandboxHostPreparation(status) {
+  const supported = Boolean(status?.supported);
+  const prepared = Boolean(status?.null_device_prepared);
+  const bootTask = Boolean(status?.boot_task_installed);
+  const ready = supported && prepared && bootTask;
+  elements.sandboxHostPreparationBadge.dataset.state = ready ? 'available' : (supported ? 'degraded' : 'unconfigured');
+  elements.sandboxHostPreparationBadge.textContent = ready ? '已启用' : (supported ? (prepared ? '待配置开机恢复' : '未启用') : '不适用');
+  elements.sandboxHostPreparationEnable.hidden = !supported || ready;
+  elements.sandboxHostPreparationEnable.textContent = prepared ? '配置开机自动恢复' : '启用强沙盒';
+  elements.sandboxHostPreparationEnable.disabled = !supported || ready;
+  elements.sandboxHostPreparationRefresh.disabled = false;
+  if (!supported) {
+    elements.sandboxHostPreparationSummary.textContent = status?.message || '当前平台不使用 Windows AppContainer 强沙盒。';
+    return;
+  }
+  if (ready) {
+    elements.sandboxHostPreparationSummary.textContent = status?.message || 'Windows AppContainer 强沙盒已准备，开机后会自动恢复所需的系统权限。';
+    return;
+  }
+  if (prepared) {
+    elements.sandboxHostPreparationSummary.textContent = status?.message || '当前 Windows 会话已经具备强沙盒条件，但还没有开机自动恢复任务。';
+    return;
+  }
+  elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒需要一次管理员准备；未准备时 Agent verifier 会 fail-closed，不会自动退回宿主执行。';
+}
+async function loadSandboxHostPreparation(showMessage = false) {
+  elements.sandboxHostPreparationRefresh.disabled = true;
+  try {
+    const status = await desktopAdapter().GetSandboxHostPreparationStatus();
+    renderSandboxHostPreparation(status);
+    if (showMessage) setStatus('强沙盒状态已刷新', 'success');
+    return status;
+  } catch (error) {
+    elements.sandboxHostPreparationBadge.dataset.state = 'unconfigured';
+    elements.sandboxHostPreparationBadge.textContent = '读取失败';
+    elements.sandboxHostPreparationSummary.textContent = `强沙盒状态读取失败：${error?.message || String(error)}`;
+    elements.sandboxHostPreparationEnable.disabled = true;
+    if (showMessage) setStatus(`强沙盒状态读取失败：${error?.message || String(error)}`, 'error');
+    return null;
+  } finally {
+    elements.sandboxHostPreparationRefresh.disabled = false;
+  }
+}
+async function enableSandboxHostPreparation() {
+  if (elements.sandboxHostPreparationEnable.disabled) return;
+  if (!window.confirm('启用 Windows 强沙盒需要一次管理员权限确认，并会注册 SYSTEM 开机任务以恢复 AppContainer 所需的 Null Device 权限。任务只运行 Program Files 中的受保护副本。继续？')) return;
+  elements.sandboxHostPreparationEnable.disabled = true;
+  elements.sandboxHostPreparationRefresh.disabled = true;
+  elements.sandboxHostPreparationSummary.textContent = '正在等待 Windows 管理员确认并配置强沙盒…';
+  try {
+    const status = await desktopAdapter().EnableSandboxHostPreparation();
+    renderSandboxHostPreparation(status);
+    setStatus('Windows 强沙盒已启用，并已配置开机自动恢复', 'success');
+  } catch (error) {
+    await loadSandboxHostPreparation(false);
+    setStatus(`强沙盒启用失败：${error?.message || String(error)}`, 'error');
+  } finally {
+    elements.sandboxHostPreparationRefresh.disabled = false;
+  }
+}
+
 function renderGatewayAccessStatus(status) {
   gatewayAccessStatus = status || null;
   const hosts = safeArray(status?.allowed_hosts);
@@ -3962,10 +4024,12 @@ elements.hostEnvironmentRefreshButton?.addEventListener('click', async () => {
   } finally { elements.hostEnvironmentRefreshButton.disabled = false; }
 });
 elements.launchAtLogin.addEventListener('change', updateLaunchAtLogin);
+elements.sandboxHostPreparationEnable?.addEventListener('click', enableSandboxHostPreparation);
+elements.sandboxHostPreparationRefresh?.addEventListener('click', () => loadSandboxHostPreparation(true));
 elements.desktopThemeMode.addEventListener('change', updateDesktopTheme);
 elements.desktopThemePack.addEventListener('change', updateDesktopTheme);
 elements.desktopThemeRefreshButton.addEventListener('click', refreshDesktopThemeCatalog);
-window.addEventListener('focus', () => { loadDesktopPreferences(false); });
+window.addEventListener('focus', () => { loadDesktopPreferences(false); loadSandboxHostPreparation(false); });
 window.addEventListener('keydown', (event) => { if (event.key !== 'Escape' || activeEditorDialog()) return; if (selectedEnvironmentID) closeEnvironmentDetail(); else if (editingMCPID) resetMCPEditor(true); });
 elements.gatewayAccessSaveHosts.addEventListener('click', saveGatewayAllowedHosts);
 elements.gatewayDiagnosticsCopyButton.addEventListener('click', copyGatewayDiagnosticsReport);
@@ -4001,4 +4065,4 @@ elements.gatewayRefreshButton.addEventListener('click', () => refreshConnectedAD
 elements.gatewayStartButton.addEventListener('click', () => runGatewayAction('启动本地 ADM', (input) => desktopAdapter().StartLocalADM(input)));
 elements.gatewayStopButton.addEventListener('click', () => runGatewayAction('强制停止 ADM', (input) => desktopAdapter().StopLocalADM(input)));
 elements.refreshButton.addEventListener('click', () => refreshConnectedADM(false).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));
-window.addEventListener('DOMContentLoaded', () => { window.runtime?.EventsOn?.('desktop:preferences-changed', () => loadDesktopPreferences(false)); initializeManagementNavigation(); initializeConnectionProfiles(); syncMCPTransportForm(); clearManagementData(); loadDesktopPreferences(false); loadAboutInfo(); });
+window.addEventListener('DOMContentLoaded', () => { window.runtime?.EventsOn?.('desktop:preferences-changed', () => loadDesktopPreferences(false)); initializeManagementNavigation(); initializeConnectionProfiles(); syncMCPTransportForm(); clearManagementData(); loadDesktopPreferences(false); loadSandboxHostPreparation(false); loadAboutInfo(); });
