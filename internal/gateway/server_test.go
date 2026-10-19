@@ -1261,10 +1261,14 @@ func TestHTTPGatewaySeparatesAgentAndAdminMCPPaths(t *testing.T) {
 			t.Fatalf("Agent MCP missing %q: %v", required, agentNames)
 		}
 	}
-	for _, adminOnly := range []string{"global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "process_start", "run_start", "project_index_auto_set", "host_directory_list", "environment_worktree_create", "environment_worktree_destroy", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary", "environment_temporary_promote", "environment_temporary_cleanup", "environment_verifier_agent_host_execution_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "gateway_access_policy_set", "secret_list", "secret_set", "secret_delete", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete"} {
-		if contains(agentNames, adminOnly) {
-			t.Fatalf("Admin-only tool %q leaked into Agent MCP: %v", adminOnly, agentNames)
+	for _, permissionGated := range []string{"global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "process_start", "run_start", "project_index_auto_set", "host_directory_list", "environment_worktree_create", "environment_worktree_destroy", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary", "environment_temporary_promote", "environment_temporary_cleanup", "environment_verifier_agent_host_execution_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "gateway_access_policy_set", "secret_list", "secret_set", "secret_delete", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete", "strong_permission_control_set"} {
+		if !contains(agentNames, permissionGated) {
+			t.Fatalf("permission-gated tool %q must remain visible in Agent MCP: %v", permissionGated, agentNames)
 		}
+	}
+	deniedAdminTool := callGatewayTool(t, ctx, agentSession, "gateway_diagnostics", map[string]any{})
+	if !deniedAdminTool.IsError || !strings.Contains(toolText(t, deniedAdminTool), "requires the Admin surface") {
+		t.Fatalf("Agent permission denial must explain Admin requirement: %s", toolText(t, deniedAdminTool))
 	}
 	agentInfo, err := agentSession.CallTool(ctx, &mcp.CallToolParams{Name: "gateway_info", Arguments: map[string]any{}})
 	if err != nil || agentInfo.IsError || !strings.Contains(toolText(t, agentInfo), "agent") {
