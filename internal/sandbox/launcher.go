@@ -3,20 +3,24 @@ package sandbox
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 )
 
 type LaunchRequest struct {
-	Executable string   `json:"executable"`
-	Args       []string `json:"args,omitempty"`
-	Cwd        string   `json:"cwd"`
-	Environment []string `json:"environment,omitempty"`
-	ProfileSID string   `json:"profile_sid"`
+	Executable  string    `json:"executable"`
+	Args        []string  `json:"args,omitempty"`
+	Cwd         string    `json:"cwd"`
+	Environment []string  `json:"environment,omitempty"`
+	ProfileSID  string    `json:"profile_sid"`
+	Stdout      io.Writer `json:"-"`
+	Stderr      io.Writer `json:"-"`
 }
 
 type LaunchResult struct {
-	ExitCode int `json:"exit_code"`
+	ExitCode int  `json:"exit_code"`
+	Started  bool `json:"started"`
 }
 
 func (r LaunchRequest) Validate() error {
