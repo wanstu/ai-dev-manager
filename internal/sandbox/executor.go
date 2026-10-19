@@ -209,14 +209,38 @@ func canonicalExistingPath(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resolved, err := filepath.EvalSymlinks(absolute)
-	if err != nil {
+	if _, err := os.Stat(absolute); err != nil {
 		return "", err
 	}
-	if _, err := os.Stat(resolved); err != nil {
-		return "", err
+	resolved, resolveErr := filepath.EvalSymlinks(absolute)
+	if resolveErr == nil {
+		if _, err := os.Stat(resolved); err != nil {
+			return "", err
+		}
+		return filepath.Clean(resolved), nil
 	}
-	return filepath.Clean(resolved), nil
+
+	// Windows hosted tool caches commonly expose version directories through
+	// junctions. EvalSymlinks on the final executable can fail even while the
+	// path is valid. Resolve the nearest ancestor that Windows can canonicalize,
+	// then re-attach the relative suffix and require that final path to exist.
+	for ancestor := filepath.Dir(absolute); ; ancestor = filepath.Dir(ancestor) {
+		resolvedAncestor, err := filepath.EvalSymlinks(ancestor)
+		if err == nil {
+			rel, relErr := filepath.Rel(ancestor, absolute)
+			if relErr == nil {
+				candidate := filepath.Join(resolvedAncestor, rel)
+				if _, statErr := os.Stat(candidate); statErr == nil {
+					return filepath.Clean(candidate), nil
+				}
+			}
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			break
+		}
+	}
+	return "", resolveErr
 }
 
 func canonicalExistingDirectory(path string) (string, error) {
