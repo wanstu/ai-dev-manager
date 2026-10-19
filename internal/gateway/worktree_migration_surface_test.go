@@ -20,12 +20,12 @@ func TestManagedWorktreeMigrationIsAdminOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if contains(toolNames(agentTools.Tools), "environment_worktree_migrate_temporary") {
-		t.Fatal("Agent must not be able to migrate managed worktree retention")
+	if !contains(toolNames(agentTools.Tools), "environment_worktree_migrate_temporary") {
+		t.Fatal("Agent must keep managed worktree migration tool discoverable")
 	}
-	forbidden, forbiddenErr := agent.CallTool(ctx, &mcp.CallToolParams{Name: "environment_worktree_migrate_temporary", Arguments: map[string]any{"execute": true}})
-	if forbiddenErr == nil && forbidden != nil && !forbidden.IsError {
-		t.Fatalf("Agent migration unexpectedly succeeded: %+v", forbidden)
+	forbidden := callGatewayTool(t, ctx, agent, "environment_worktree_migrate_temporary", map[string]any{"execute": true})
+	if !forbidden.IsError || !strings.Contains(toolText(t, forbidden), "requires the Admin surface") {
+		t.Fatalf("Agent migration denial must explain Admin requirement: %s", toolText(t, forbidden))
 	}
 	admin := connectInMemory(t, ctx, NewAdmin(service))
 	defer admin.Close()
