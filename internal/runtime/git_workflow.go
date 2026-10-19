@@ -136,7 +136,11 @@ func (r *Runtime) GitRemoteList(ctx context.Context) ([]GitRemoteInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, GitRemoteInfo{Name: name, FetchURLs: fetchURLs, PushURLs: pushURLs})
+		result = append(result, GitRemoteInfo{
+			Name:      name,
+			FetchURLs: sanitizeGitRemoteDisplayURLs(fetchURLs),
+			PushURLs:  sanitizeGitRemoteDisplayURLs(pushURLs),
+		})
 	}
 	return result, nil
 }
@@ -753,6 +757,42 @@ func (r *Runtime) gitRemoteURLs(ctx context.Context, git, remote string, push bo
 		}
 	}
 	return urls, nil
+}
+
+func sanitizeGitRemoteDisplayURLs(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, sanitizeGitRemoteDisplayURL(value))
+	}
+	return out
+}
+
+func sanitizeGitRemoteDisplayURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if filepath.IsAbs(raw) || strings.HasPrefix(raw, ".") || strings.HasPrefix(strings.ToLower(raw), "file://") {
+		return "<local-path>"
+	}
+	if strings.Contains(raw, "://") {
+		parsed, err := url.Parse(raw)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return "<redacted-remote>"
+		}
+		parsed.User = nil
+		parsed.RawQuery = ""
+		parsed.ForceQuery = false
+		parsed.Fragment = ""
+		return parsed.String()
+	}
+	if at := strings.LastIndex(raw, "@"); at >= 0 {
+		raw = raw[at+1:]
+	}
+	if strings.Contains(raw, ":") && !strings.ContainsAny(raw, "\r\n\x00") {
+		return raw
+	}
+	return "<redacted-remote>"
 }
 
 func (r *Runtime) requireAgentSafeGitRemote(ctx context.Context, git, remote string, push bool) error {

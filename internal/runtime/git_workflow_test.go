@@ -181,6 +181,43 @@ func TestAgentSafeRemoteRejectsNonHTTPS(t *testing.T) {
 	}
 }
 
+
+
+func TestGitRemoteListRedactsCredentialsAndLocalPaths(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not available")
+	}
+	root := t.TempDir()
+	runGitForCommitTest(t, git, root, "init", "-b", "main")
+	runGitForCommitTest(t, git, root, "remote", "add", "origin", "https://secret-token@example.com/org/repo.git?access_token=leak#fragment")
+	runGitForCommitTest(t, git, root, "remote", "set-url", "--add", "--push", "origin", filepath.Join(t.TempDir(), "remote.git"))
+
+	rt, err := NewWithEnvironment(root, nil, os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	remotes, err := rt.GitRemoteList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remotes) != 1 {
+		t.Fatalf("unexpected remotes: %+v", remotes)
+	}
+	got := strings.Join(append(remotes[0].FetchURLs, remotes[0].PushURLs...), "\n")
+	for _, secret := range []string{"secret-token", "access_token", "leak"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("remote metadata leaked %q: %s", secret, got)
+		}
+	}
+	if !strings.Contains(got, "https://example.com/org/repo.git") {
+		t.Fatalf("sanitized HTTPS remote missing: %s", got)
+	}
+	if !strings.Contains(got, "<local-path>") {
+		t.Fatalf("local remote path was not redacted: %s", got)
+	}
+}
+
 func mustReadFile(t *testing.T, path string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(path)
