@@ -51,9 +51,13 @@ func TestEnvironmentWorkspaceRebindIsAdminOnlyAndUsesMostSpecificContainingWorks
 	}
 	agentNames := toolNames(agentTools.Tools)
 	for _, adminOnly := range []string{"environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set"} {
-		if contains(agentNames, adminOnly) {
-			t.Fatalf("Admin-only Environment Workspace tool %q leaked into Agent surface: %v", adminOnly, agentNames)
+		if !contains(agentNames, adminOnly) {
+			t.Fatalf("Admin-only Environment Workspace tool %q must remain discoverable on Agent surface: %v", adminOnly, agentNames)
 		}
+	}
+	agentDenied := callGatewayTool(t, ctx, agent, "environment_workspace_options", map[string]any{"environment_id": env.ID})
+	if !agentDenied.IsError || !strings.Contains(toolText(t, agentDenied), "requires the Admin surface") {
+		t.Fatalf("Agent permission denial must explain Admin requirement: %s", toolText(t, agentDenied))
 	}
 
 	admin := connectInMemory(t, ctx, NewAdmin(service))
