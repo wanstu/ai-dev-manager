@@ -117,6 +117,17 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 		return ExecutionResult{}, err
 	}
 	result.ProfileName = profile.Name
+
+	// Windows virtualizes GetTempPath for AppContainer processes to the
+	// package-local AC\Temp directory, even when TEMP/TMP point elsewhere.
+	// Create that private location inside the sandbox profile before launch.
+	appContainerTemp := filepath.Join(
+		dirs.ProfileRoot,
+		"AppData", "Local", "Packages", profile.Name, "AC", "Temp",
+	)
+	if err := os.MkdirAll(appContainerTemp, 0o755); err != nil {
+		return ExecutionResult{}, fmt.Errorf("create AppContainer temp directory: %w", err)
+	}
 	defer func() {
 		if deleteErr := DeleteWindowsAppContainerProfile(profile.Name); deleteErr != nil {
 			err = errors.Join(err, fmt.Errorf("delete sandbox profile: %w", deleteErr))
