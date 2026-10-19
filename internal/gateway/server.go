@@ -1276,7 +1276,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(map[string]any{"removed": definition}, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_agent_host_execution_set", Description: "Admin-only: explicitly allow or revoke Agent host execution for one configured verifier. Approval is required because verifier code runs with host-user permissions until OS-level sandboxing is available."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_agent_host_execution_set", Description: "Admin-only trusted-host override: explicitly allow or revoke direct Agent host execution for one configured verifier. When revoked, supported Windows hosts use the strong AppContainer sandbox instead; sandbox failure never falls back to host execution automatically."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierAgentHostExecutionInput) (*mcp.CallToolResult, any, error) {
 			definition, err := service.VerifierAgentHostExecutionSet(in.EnvironmentID, in.VerifierID, in.Allowed)
 			return toolResult(definition, err)
@@ -1288,22 +1288,32 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. This call blocks until completion; use environment_verifier_run_start/status/cancel for long or heavy verification. On the Agent surface, the verifier must be explicitly approved by an administrator with agent_host_execution_allowed=true because verifier code executes with host-user permissions until OS sandboxing is available. Requires the matching writer_owner."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. This call blocks until completion; use environment_verifier_run_start/status/cancel for long or heavy verification. Agent verifiers use the strong Windows AppContainer sandbox by default when available. An administrator may explicitly opt one verifier into trusted host execution with agent_host_execution_allowed=true. Sandbox failure never auto-falls back to host execution. Requires the matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
-			if err := requireAgentVerifierExecution(service, surface, in.EnvironmentID, in.VerifierID); err != nil {
+			useSandbox, err := agentVerifierUsesSandbox(service, surface, in.EnvironmentID, in.VerifierID)
+			if err != nil {
 				return toolResult(nil, err)
+			}
+			if useSandbox {
+				result, err := service.RunVerifierSandboxed(ctx, in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
+				return toolResult(result, err)
 			}
 			result, err := service.RunVerifier(ctx, in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
 			return toolResult(result, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_start", Description: "Start one configured Environment verifier asynchronously. On the Agent surface, the verifier must be explicitly approved by an administrator with agent_host_execution_allowed=true. Preferred for long test/build work; requires the matching writer_owner."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run_start", Description: "Start one configured Environment verifier asynchronously. Agent verifiers use the strong Windows AppContainer sandbox by default when available; trusted host execution requires explicit administrator approval. Preferred for long test/build work; sandbox failure never auto-falls back to host execution. Requires the matching writer_owner."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
-			if err := requireAgentVerifierExecution(service, surface, in.EnvironmentID, in.VerifierID); err != nil {
+			useSandbox, err := agentVerifierUsesSandbox(service, surface, in.EnvironmentID, in.VerifierID)
+			if err != nil {
 				return toolResult(nil, err)
 			}
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			if useSandbox {
+				value, err := owner.StartSandboxVerifierRun(in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
+				return toolResult(value, err)
 			}
 			value, err := owner.StartVerifierRun(in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
 			return toolResult(value, err)
@@ -2150,18 +2160,23 @@ func requireAgentSafeMCPTransport(service *app.Service, surface serverSurface, e
 	return nil
 }
 
-func requireAgentVerifierExecution(service *app.Service, surface serverSurface, environmentID, verifierID string) error {
+func agentVerifierUsesSandbox(service *app.Service, surface serverSurface, environmentID, verifierID string) (bool, error) {
 	if surface != serverSurfaceAgent {
-		return nil
+		return false, nil
 	}
 	definition, err := service.Verifiers.Get(environmentID, verifierID)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if !definition.AgentHostExecutionAllowed {
-		return fmt.Errorf("verifier %q is not approved for Agent host execution; an administrator must explicitly set agent_host_execution_allowed=true", verifierID)
+	// Explicit trusted-host approval preserves the compatibility escape hatch.
+	// Otherwise supported Windows hosts fail closed into AppContainer execution.
+	if definition.AgentHostExecutionAllowed {
+		return false, nil
 	}
-	return nil
+	if service.SandboxVerifierAvailable() {
+		return true, nil
+	}
+	return false, fmt.Errorf("verifier %q is not approved for Agent host execution and strong sandbox execution is unavailable; an administrator may explicitly enable agent_host_execution_allowed for trusted-host execution", verifierID)
 }
 
 func requireHealthyMCP(ctx context.Context, service *app.Service, environmentID, mcpID string) error {

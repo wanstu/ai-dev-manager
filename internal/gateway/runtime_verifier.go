@@ -13,6 +13,7 @@ import (
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/identity"
 	runtimepkg "ai-dev-manager-v2/internal/runtime"
+	"ai-dev-manager-v2/internal/sandbox"
 	"ai-dev-manager-v2/internal/verifier"
 )
 
@@ -108,6 +109,47 @@ func (o *runtimeOwner) StartVerifierRun(environmentID, writerOwner, verifierID s
 		return verifierRunStatus{}, err
 	}
 	go o.executeVerifierRun(run, cmd)
+	go o.heartbeatVerifierRun(run)
+	return o.verifierRunStatus(run), nil
+}
+
+func (o *runtimeOwner) StartSandboxVerifierRun(environmentID, writerOwner, verifierID string, maxOutputBytes int) (verifierRunStatus, error) {
+	if o == nil || o.service == nil {
+		return verifierRunStatus{}, fmt.Errorf("runtime owner is not initialized")
+	}
+	prepared, err := o.service.PrepareSandboxVerifierExecution(o.processContext(), environmentID, writerOwner, verifierID)
+	if err != nil {
+		return verifierRunStatus{}, err
+	}
+	runCtx, cancel := context.WithTimeout(o.processContext(), prepared.Timeout)
+	id, err := identity.New("vfrun")
+	if err != nil {
+		cancel()
+		return verifierRunStatus{}, err
+	}
+	run := &ownedVerifierRun{
+		id:            id,
+		environmentID: environmentID,
+		writerOwner:   writerOwner,
+		prepared: app.PreparedVerifierExecution{
+			Definition: prepared.Definition,
+			Timeout:    prepared.Timeout,
+		},
+		ctx:       runCtx,
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		state:     verifierRunRunning,
+		startedAt: time.Now().UTC(),
+		stdout:    newOwnerOutputBuffer(maxOutputBytes),
+		stderr:    newOwnerOutputBuffer(maxOutputBytes),
+	}
+	prepared.Request.Stdout = run.stdout
+	prepared.Request.Stderr = run.stderr
+	if err := o.installVerifierRun(run); err != nil {
+		cancel()
+		return verifierRunStatus{}, err
+	}
+	go o.executeSandboxVerifierRun(run, prepared)
 	go o.heartbeatVerifierRun(run)
 	return o.verifierRunStatus(run), nil
 }
@@ -208,6 +250,72 @@ func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) 
 		run.state = verifierRunFailed
 		if run.errorKind == "" {
 			run.errorKind = "verifier_execution_failed"
+		}
+		if run.message == "" {
+			run.message = classifyErr.Error()
+		}
+	default:
+		run.result = &result
+		if result.Status == verifier.StatusPassed {
+			run.state = verifierRunSucceeded
+		} else {
+			run.state = verifierRunFailed
+		}
+		if result.TimedOut && run.errorKind == "" {
+			run.errorKind = "timeout"
+		}
+	}
+	run.completedAt = &now
+	run.mu.Unlock()
+
+	run.cancel()
+	close(run.done)
+}
+
+func (o *runtimeOwner) executeSandboxVerifierRun(run *ownedVerifierRun, prepared app.PreparedSandboxVerifierExecution) {
+	started := time.Now()
+	launchResult, execErr := sandbox.Execute(run.ctx, prepared.Request)
+	duration := time.Since(started)
+	if launchResult.Started {
+		_ = o.service.RecordExecUsage(run.environmentID, prepared.Definition.Executable, "verifier_sandbox_async")
+	}
+
+	stdout, _ := run.stdout.Snapshot()
+	stderr, _ := run.stderr.Snapshot()
+	commandResult := runtimepkg.CommandResult{
+		Started:  launchResult.Started,
+		ExitCode: launchResult.ExitCode,
+		Stdout:   stdout,
+		Stderr:   stderr,
+	}
+
+	run.mu.Lock()
+	canceled := run.cancelRequested || errors.Is(run.ctx.Err(), context.Canceled)
+	timedOut := errors.Is(run.ctx.Err(), context.DeadlineExceeded)
+	run.mu.Unlock()
+
+	var (
+		result      verifier.Result
+		classifyErr error
+	)
+	if !canceled {
+		result, classifyErr = verifier.Classify(prepared.Definition, commandResult, duration, timedOut, execErr)
+		if classifyErr == nil {
+			if touchErr := o.service.Environments.Touch(run.environmentID, run.writerOwner); touchErr != nil {
+				classifyErr = fmt.Errorf("writer touch failed: %w", touchErr)
+			}
+		}
+	}
+
+	now := time.Now().UTC()
+	run.mu.Lock()
+	switch {
+	case canceled:
+		run.state = verifierRunCanceled
+	case classifyErr != nil:
+		run.state = verifierRunFailed
+		if run.errorKind == "" {
+			run.errorKind = "sandbox_verifier_execution_failed"
 		}
 		if run.message == "" {
 			run.message = classifyErr.Error()

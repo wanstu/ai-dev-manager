@@ -14,7 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestAgentVerifierRequiresExplicitHostExecutionApproval(t *testing.T) {
+func TestAgentVerifierSandboxDefaultAndExplicitHostOverride(t *testing.T) {
 	service := app.New(filepath.Join(t.TempDir(), "state.json"))
 	root := t.TempDir()
 	workspace, err := service.Workspaces.Add(root, "verifier-approval")
@@ -75,9 +75,13 @@ func TestAgentVerifierRequiresExplicitHostExecutionApproval(t *testing.T) {
 			"verifier_id":    definition.ID,
 		})
 	}
-	blocked := run()
-	if !blocked.IsError || !strings.Contains(toolText(t, blocked), "agent_host_execution_allowed=true") {
-		t.Fatalf("unapproved verifier was not blocked: %s", toolText(t, blocked))
+	unapproved := run()
+	if service.SandboxVerifierAvailable() {
+		if unapproved.IsError || !strings.Contains(toolText(t, unapproved), "\"status\":\"passed\"") {
+			t.Fatalf("unapproved verifier did not use strong sandbox: %s", toolText(t, unapproved))
+		}
+	} else if !unapproved.IsError || !strings.Contains(toolText(t, unapproved), "agent_host_execution_allowed") {
+		t.Fatalf("unapproved verifier must fail closed when sandbox is unavailable: %s", toolText(t, unapproved))
 	}
 
 	allowed := callGatewayTool(t, ctx, admin, "environment_verifier_agent_host_execution_set", map[string]any{
@@ -101,9 +105,13 @@ func TestAgentVerifierRequiresExplicitHostExecutionApproval(t *testing.T) {
 	if revoked.IsError {
 		t.Fatalf("Admin could not revoke verifier approval: %s", toolText(t, revoked))
 	}
-	blockedAgain := run()
-	if !blockedAgain.IsError {
-		t.Fatalf("revoked verifier remained Agent-runnable: %s", toolText(t, blockedAgain))
+	revokedRun := run()
+	if service.SandboxVerifierAvailable() {
+		if revokedRun.IsError || !strings.Contains(toolText(t, revokedRun), "\"status\":\"passed\"") {
+			t.Fatalf("revoked verifier did not return to strong sandbox execution: %s", toolText(t, revokedRun))
+		}
+	} else if !revokedRun.IsError {
+		t.Fatalf("revoked verifier remained host-runnable without sandbox: %s", toolText(t, revokedRun))
 	}
 }
 
