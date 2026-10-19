@@ -71,7 +71,7 @@ func (s *Service) RunPreparedVerifierSandbox(
 		Args:             append([]string(nil), prepared.Definition.Args...),
 		Cwd:              prepared.CwdPath,
 		BaseEnvironment:  baseEnvironment,
-		ExtraEnvironment: map[string]string{"ADM_SANDBOX_MODE": "strong"},
+		ExtraEnvironment: map[string]string{"ADM_SANDBOX_MODE": "strong", "ADM_SANDBOX_ACTIVE": "1"},
 		ToolRoots:        verifierSandboxToolRoots(baseEnvironment, prepared.ExecutablePath),
 		MaxOutputBytes:   normalizeVerifierOutputLimit(maxOutputBytes),
 		Stdout:           stdout,
