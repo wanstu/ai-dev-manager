@@ -1290,7 +1290,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(items, err)
 		})
 
-	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. Agent execution uses the strong OS sandbox by default when available. agent_host_execution_allowed=true is an explicit trusted-host override. Sandbox setup failures never fall back to host execution automatically. Requires the matching writer_owner."},
+	addScopedTool(server, surface, &mcp.Tool{Name: "environment_verifier_run", Description: "Run one configured Environment verifier synchronously. This call blocks until completion; use environment_verifier_run_start/status/cancel for long or heavy verification. Agent execution uses the strong OS sandbox by default when available. agent_host_execution_allowed=true is an explicit trusted-host override. Sandbox setup failures never fall back to host execution automatically. Requires the matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentVerifierRunInput) (*mcp.CallToolResult, any, error) {
 			mode, err := agentVerifierExecutionMode(service, surface, in.EnvironmentID, in.VerifierID)
 			if err != nil {
