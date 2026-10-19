@@ -3,6 +3,7 @@ package main
 import (
 	"io/fs"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -90,5 +91,56 @@ func TestFrontendElementsObjectHasUniqueKeys(t *testing.T) {
 			continue
 		}
 		seen[key] = struct{}{}
+	}
+}
+
+
+func TestWorkspacePageUsesChineseCompactContract(t *testing.T) {
+	assets, err := frontendAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	html, err := fs.ReadFile(assets, "index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	javascript, err := fs.ReadFile(assets, "app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	styles, err := fs.ReadFile(assets, "styles.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	htmlText := string(html)
+	for _, expected := range []string{"data-management-page=\"workspaces\"", ">工作区</h2>", ">添加工作区</button>", "<span>环境</span>", "环境数量最多", "暂无工作区"} {
+		if !strings.Contains(htmlText, expected) {
+			t.Fatalf("workspace HTML missing localized contract %q", expected)
+		}
+	}
+	for _, legacy := range []string{">Workspaces</h2>", ">添加 Workspace</button>", "<span>Environment</span>", "Environment 最多", "暂无 Workspace"} {
+		if strings.Contains(htmlText, legacy) {
+			t.Fatalf("workspace HTML still exposes mixed-language label %q", legacy)
+		}
+	}
+
+	jsText := string(javascript)
+	for _, expected := range []string{"workspace-item", "workspace-path", "发现项目", "查看环境", "meta.textContent = `环境 "} {
+		if !strings.Contains(jsText, expected) {
+			t.Fatalf("workspace renderer missing compact/localized contract %q", expected)
+		}
+	}
+	for _, legacy := range []string{"Discover projects", "查看 Environments", "`Environments ${safeNumber"} {
+		if strings.Contains(jsText, legacy) {
+			t.Fatalf("workspace renderer still exposes mixed-language label %q", legacy)
+		}
+	}
+
+	cssText := string(styles)
+	for _, expected := range []string{"container-type: inline-size", "@container (max-width: 720px)", ".workspace-item .workspace-path", ".workspace-list-toolbar"} {
+		if !strings.Contains(cssText, expected) {
+			t.Fatalf("workspace CSS missing responsive contract %q", expected)
+		}
 	}
 }
