@@ -39,6 +39,7 @@ type Service struct {
 	Memory                  *memory.Service
 	Logger                  *logging.Logger
 	Verifiers               *verifier.Service
+	SandboxRoot             string
 	CodeIntelligence        codeintel.Provider
 	indexStore              *projectIndexStore
 	indexJobsMu             sync.Mutex
@@ -78,6 +79,7 @@ func New(statePath string) *Service {
 		Memory:                  memory.New(s),
 		Logger:                  logging.New(filepath.Join(filepath.Dir(statePath), "logs"), 5*1024*1024, 7),
 		Verifiers:               verifier.New(s),
+		SandboxRoot:             defaultSandboxRoot(statePath),
 		CodeIntelligence:        codeintel.NewStaticIndexProvider(),
 		indexStore:              newProjectIndexStore(statePath),
 		writerHeartbeatInterval: defaultWriterHeartbeatInterval,

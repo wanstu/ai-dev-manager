@@ -14,9 +14,12 @@ import (
 // both blocking execution and Gateway-owner asynchronous verifier runs. It is
 // intentionally process-local and contains no persisted runtime observation.
 type PreparedVerifierExecution struct {
-	Definition model.VerifierDefinition
-	Runtime    *runtime.Runtime
-	Timeout    time.Duration
+	Definition     model.VerifierDefinition
+	Environment    model.Environment
+	Runtime        *runtime.Runtime
+	ExecutablePath string
+	CwdPath        string
+	Timeout        time.Duration
 }
 
 const BlockingVerifierRequestInterruptedKind = "blocking_request_interrupted"
@@ -42,20 +45,24 @@ func (s *Service) PrepareVerifierExecution(ctx context.Context, environmentID, o
 	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
 		return PreparedVerifierExecution{}, err
 	}
-	rt, _, err := s.Runtime(environmentID)
+	rt, env, err := s.Runtime(environmentID)
 	if err != nil {
 		return PreparedVerifierExecution{}, err
 	}
 	s.recordFullAuthorizationBypass(rt, environmentID, definition.Executable, "verifier")
-	if _, err := rt.PrepareCommand(ctx, definition.Executable, definition.Args, definition.Cwd); err != nil {
+	cmd, err := rt.PrepareCommand(ctx, definition.Executable, definition.Args, definition.Cwd)
+	if err != nil {
 		if isExecutableNotAllowedError(err) {
 			s.recordExecDenial(environmentID, definition.Executable, "verifier", err.Error())
 		}
 		return PreparedVerifierExecution{}, err
 	}
 	return PreparedVerifierExecution{
-		Definition: definition,
-		Runtime:    rt,
-		Timeout:    verifier.Timeout(definition),
+		Definition:     definition,
+		Environment:    env,
+		Runtime:        rt,
+		ExecutablePath: cmd.Path,
+		CwdPath:        cmd.Dir,
+		Timeout:        verifier.Timeout(definition),
 	}, nil
 }
