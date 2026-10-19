@@ -75,6 +75,23 @@ jobs:
           "desktop_name=$desktopName" >> $env:GITHUB_OUTPUT
           "desktop_artifact=adm-desktop$tagSuffix-windows-amd64" >> $env:GITHUB_OUTPUT
 
+      - name: Test Desktop sandbox host-prep install mode
+        shell: pwsh
+        run: |
+          $desktop = Join-Path $PWD "dist/${{ steps.windows_desktop.outputs.desktop_name }}"
+          & $desktop --sandbox-host-prep-install
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          schtasks.exe /Query /TN "AI Dev Manager Sandbox Host Prep" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Sandbox host-prep boot task was not registered" }
+          $helper = Join-Path $env:ProgramFiles 'AI Dev Manager\adm-sandbox-host-prep.exe'
+          if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { throw "Protected sandbox host-prep helper is missing: $helper" }
+          schtasks.exe /Delete /TN "AI Dev Manager Sandbox Host Prep" /F | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "Could not remove sandbox host-prep CI task" }
+          Remove-Item -LiteralPath $helper -Force
+          $helperDir = Split-Path -Parent $helper
+          if (Test-Path -LiteralPath $helperDir -PathType Container) {
+            Remove-Item -LiteralPath $helperDir -Force -ErrorAction SilentlyContinue
+          }
       - name: Ensure NSIS for Windows Setup
         shell: pwsh
         run: |
