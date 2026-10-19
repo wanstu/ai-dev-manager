@@ -257,6 +257,20 @@ func (a *Adapter) SetExecFullAuthorization(enabled bool) (app.ExecAuthorizationS
 	return a.management.ExecFullAuthorizationSet(enabled)
 }
 
+func (a *Adapter) GetStrongPermissionControlStatus() (app.StrongPermissionControlStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.StrongPermissionControlStatus{}, err
+	}
+	return a.management.StrongPermissionControlStatus()
+}
+
+func (a *Adapter) SetStrongPermissionControl(enabled bool) (app.StrongPermissionControlStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.StrongPermissionControlStatus{}, err
+	}
+	return a.management.StrongPermissionControlSet(enabled)
+}
+
 func (a *Adapter) GetLoggingStatus() (logging.Status, error) {
 	if err := a.ready(); err != nil {
 		return logging.Status{}, err
