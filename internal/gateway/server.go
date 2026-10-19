@@ -41,6 +41,73 @@ type GitCommitInput struct {
 	Message       string `json:"message"`
 }
 
+type GitLogInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Ref           string `json:"ref,omitempty" jsonschema:"optional commit-ish; defaults to HEAD"`
+	MaxCount      int    `json:"max_count,omitempty" jsonschema:"maximum entries; defaults to 30 and is capped at 200"`
+}
+
+type GitShowInput struct {
+	EnvironmentID  string `json:"environment_id"`
+	Ref            string `json:"ref" jsonschema:"commit-ish to inspect"`
+	MaxOutputBytes int    `json:"max_output_bytes,omitempty" jsonschema:"bounded patch output; defaults to 262144 and is capped at 4194304"`
+}
+
+type GitTagListInput struct {
+	EnvironmentID string `json:"environment_id"`
+	MaxCount      int    `json:"max_count,omitempty" jsonschema:"maximum tags; defaults to 100 and is capped at 500"`
+}
+
+type GitTagCreateInput struct {
+	EnvironmentID string `json:"environment_id"`
+	WriterOwner   string `json:"writer_owner"`
+	Name          string `json:"name"`
+	Ref           string `json:"ref,omitempty" jsonschema:"commit-ish; defaults to HEAD"`
+	Message       string `json:"message,omitempty"`
+	Annotated     bool   `json:"annotated,omitempty"`
+}
+
+type GitTagDeleteInput struct {
+	EnvironmentID string `json:"environment_id"`
+	WriterOwner   string `json:"writer_owner"`
+	Name          string `json:"name"`
+}
+
+type GitCherryPickInput struct {
+	EnvironmentID string   `json:"environment_id"`
+	WriterOwner   string   `json:"writer_owner"`
+	Commits       []string `json:"commits" jsonschema:"1-20 commit-ish values, applied in order"`
+}
+
+type GitWriterInput struct {
+	EnvironmentID string `json:"environment_id"`
+	WriterOwner   string `json:"writer_owner"`
+}
+
+type GitMergeInput struct {
+	EnvironmentID string `json:"environment_id"`
+	WriterOwner   string `json:"writer_owner"`
+	Ref           string `json:"ref"`
+	NoFF          bool   `json:"no_ff,omitempty"`
+}
+
+type GitFetchInput struct {
+	EnvironmentID string `json:"environment_id"`
+	WriterOwner   string `json:"writer_owner"`
+	Remote        string `json:"remote,omitempty" jsonschema:"configured remote name; defaults to origin"`
+	Tags          bool   `json:"tags,omitempty"`
+	Prune         bool   `json:"prune,omitempty"`
+}
+
+type GitPushInput struct {
+	EnvironmentID string   `json:"environment_id"`
+	WriterOwner   string   `json:"writer_owner"`
+	Remote        string   `json:"remote,omitempty" jsonschema:"configured remote name; defaults to origin"`
+	Branch        string   `json:"branch,omitempty" jsonschema:"local branch; defaults to current branch"`
+	Tags          []string `json:"tags,omitempty" jsonschema:"exact local tags to push; arbitrary refspecs are not accepted"`
+	SetUpstream   bool     `json:"set_upstream,omitempty"`
+}
+
 type EnvironmentRenameInput struct {
 	EnvironmentID string `json:"environment_id"`
 	Name          string `json:"name"`
@@ -609,6 +676,7 @@ func isAdminOnlyTool(name string) bool {
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
 		"resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote",
+		"git_fetch", "git_push", "git_tag_create", "git_tag_delete",
 		"memory_global_write", "memory_global_delete":
 		return true
 	default:
@@ -1975,6 +2043,84 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 	addScopedTool(server, surface, &mcp.Tool{Name: "git_commit", Description: "Create one controlled Git commit for all changes under the Environment root. Requires matching writer_owner and the Environment root to equal the Git top-level. ADM disables hooks/signing/fsmonitor and refuses Git filter attributes that could execute host code; arbitrary Git arguments are not accepted."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitCommitInput) (*mcp.CallToolResult, any, error) {
 			value, err := service.GitCommit(ctx, in.EnvironmentID, in.WriterOwner, in.Message)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_log", Description: "Read a bounded structured Git commit log from HEAD or one explicit commit-ish. Read-only; arbitrary Git arguments are not accepted."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitLogInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitLog(ctx, in.EnvironmentID, in.Ref, in.MaxCount)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_show", Description: "Show one resolved commit with bounded metadata/stat/patch output. ADM disables external diff and textconv execution."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitShowInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitShow(ctx, in.EnvironmentID, in.Ref, in.MaxOutputBytes)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_remote_list", Description: "List configured Git remote names plus fetch/push URLs without contacting the network."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitRemoteList(ctx, in.EnvironmentID)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_tag_list", Description: "List bounded local Git tags and their peeled commit targets. Read-only."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitTagListInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitTagList(ctx, in.EnvironmentID, in.MaxCount)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_tag_create", Description: "Create one lightweight or annotated local Git tag on an exact resolved commit. Requires matching writer_owner; force replacement and signing are not exposed."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitTagCreateInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitTagCreate(ctx, in.EnvironmentID, in.WriterOwner, in.Name, in.Ref, in.Message, in.Annotated)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_tag_delete", Description: "Admin-only: delete one exact local Git tag. Remote tag deletion is not exposed."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitTagDeleteInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitTagDelete(ctx, in.EnvironmentID, in.WriterOwner, in.Name)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_cherry_pick", Description: "Cherry-pick 1-20 explicitly resolved commits into a clean Environment root. Requires matching writer_owner. Hooks/signing are disabled; commits that change .gitattributes or activate filters/custom merge drivers are refused. Conflicts are returned as structured state rather than hidden."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitCherryPickInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitCherryPick(ctx, in.EnvironmentID, in.WriterOwner, in.Commits)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_cherry_pick_continue", Description: "Continue the current controlled cherry-pick after conflicts have been resolved/staged. Requires matching writer_owner."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitWriterInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitCherryPickContinue(ctx, in.EnvironmentID, in.WriterOwner)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_cherry_pick_abort", Description: "Abort the current controlled cherry-pick and restore its pre-operation state. Requires matching writer_owner."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitWriterInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitCherryPickAbort(ctx, in.EnvironmentID, in.WriterOwner)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_merge", Description: "Merge one explicitly resolved commit-ish into a clean Environment root. Requires matching writer_owner. Hooks/signing are disabled; incoming .gitattributes, filters and custom merge drivers are refused."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitMergeInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitMerge(ctx, in.EnvironmentID, in.WriterOwner, in.Ref, in.NoFF)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_merge_abort", Description: "Abort the current controlled merge and restore its pre-operation state. Requires matching writer_owner."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitWriterInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitMergeAbort(ctx, in.EnvironmentID, in.WriterOwner)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_fetch", Description: "Admin-only remote fetch from one configured Git remote. Requires matching writer_owner. Submodules are disabled; arbitrary refspecs are not accepted."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitFetchInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitFetch(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Tags, in.Prune)
+			return toolResult(value, err)
+		})
+
+	addScopedTool(server, surface, &mcp.Tool{Name: "git_push", Description: "Admin-only controlled remote push of one local branch and optional exact local tags. Requires matching writer_owner. No force push, remote deletion, arbitrary refspecs, or submodule recursion is exposed."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in GitPushInput) (*mcp.CallToolResult, any, error) {
+			value, err := service.GitPush(ctx, in.EnvironmentID, in.WriterOwner, in.Remote, in.Branch, in.Tags, in.SetUpstream)
 			return toolResult(value, err)
 		})
 

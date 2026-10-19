@@ -30,6 +30,10 @@ func TestAgentSurfaceHidesHostEscapeTools(t *testing.T) {
 		"environment_worktree_destroy":  true,
 		"environment_temporary_promote": true,
 		"environment_temporary_cleanup": true,
+		"git_fetch":                     true,
+		"git_push":                      true,
+		"git_tag_create":                true,
+		"git_tag_delete":                true,
 	}
 
 	agent := connectInMemory(t, ctx, New(service))
@@ -45,7 +49,12 @@ func TestAgentSurfaceHidesHostEscapeTools(t *testing.T) {
 			t.Fatalf("Agent MCP must not expose host-escape tool %q", tool.Name)
 		}
 	}
-	for _, name := range []string{"environment_verifier_run", "environment_verifier_run_start"} {
+	for _, name := range []string{
+		"environment_verifier_run", "environment_verifier_run_start",
+		"git_log", "git_show", "git_remote_list", "git_tag_list",
+		"git_cherry_pick", "git_cherry_pick_continue", "git_cherry_pick_abort",
+		"git_merge", "git_merge_abort",
+	} {
 		if !available[name] {
 			t.Fatalf("Agent MCP must retain approved verifier automation tool %q", name)
 		}
