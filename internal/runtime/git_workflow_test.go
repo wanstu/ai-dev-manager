@@ -16,6 +16,7 @@ func TestControlledGitWorkflowCherryPickTagLogAndShow(t *testing.T) {
 	}
 	root := t.TempDir()
 	runGitForCommitTest(t, git, root, "init", "-b", "main")
+	runGitForCommitTest(t, git, root, "config", "core.autocrlf", "false")
 	runGitForCommitTest(t, git, root, "config", "user.name", "ADM Test")
 	runGitForCommitTest(t, git, root, "config", "user.email", "adm-test@example.invalid")
 	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("base\n"), 0o644); err != nil {
@@ -85,6 +86,7 @@ func TestControlledCherryPickRefusesIncomingGitAttributes(t *testing.T) {
 	}
 	root := t.TempDir()
 	runGitForCommitTest(t, git, root, "init", "-b", "main")
+	runGitForCommitTest(t, git, root, "config", "core.autocrlf", "false")
 	runGitForCommitTest(t, git, root, "config", "user.name", "ADM Test")
 	runGitForCommitTest(t, git, root, "config", "user.email", "adm-test@example.invalid")
 	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("base\n"), 0o644); err != nil {
@@ -126,6 +128,7 @@ func TestControlledGitPushBranchAndExactTag(t *testing.T) {
 	}
 	runGitForCommitTest(t, git, remote, "init", "--bare")
 	runGitForCommitTest(t, git, root, "init", "-b", "main")
+	runGitForCommitTest(t, git, root, "config", "core.autocrlf", "false")
 	runGitForCommitTest(t, git, root, "config", "user.name", "ADM Test")
 	runGitForCommitTest(t, git, root, "config", "user.email", "adm-test@example.invalid")
 	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("base\n"), 0o644); err != nil {
