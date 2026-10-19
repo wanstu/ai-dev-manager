@@ -27,6 +27,13 @@ import (
 var trayIcon []byte
 
 func main() {
+	if handled, err := runSandboxHostPreparationMode(os.Args[1:]); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "sandbox host-prep error:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := dotenv.LoadDefaultFiles(); err != nil {
 		fmt.Fprintln(os.Stderr, "desktop error:", err)
 		os.Exit(1)
@@ -44,6 +51,20 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "desktop error:", err)
 		os.Exit(1)
+	}
+}
+
+func runSandboxHostPreparationMode(args []string) (bool, error) {
+	if len(args) != 1 {
+		return false, nil
+	}
+	switch args[0] {
+	case "--sandbox-host-prep-install":
+		return true, desktop.RunSandboxHostPreparationInstall()
+	case "--sandbox-host-prep-boot":
+		return true, desktop.RunSandboxHostPreparationBoot()
+	default:
+		return false, nil
 	}
 }
 
