@@ -201,11 +201,15 @@ func TestWindowsAppContainerJobChildHelper(t *testing.T) {
 	}
 	cmd := exec.Command(executable, "-test.run=^TestWindowsAppContainerGrandchildHelper$", "-test.v")
 	cmd.Env = os.Environ()
+	cmd.Stdin = strings.NewReader("")
+	var childOutput strings.Builder
+	cmd.Stdout = &childOutput
+	cmd.Stderr = &childOutput
 	if err := cmd.Start(); err != nil {
 		fail("start grandchild: " + err.Error())
 	}
 	if err := cmd.Wait(); err != nil {
-		fail("wait grandchild: " + err.Error())
+		fail("wait grandchild: " + err.Error() + ": " + childOutput.String())
 	}
 	fail("grandchild exited before Job Object cancellation")
 }
