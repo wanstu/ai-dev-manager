@@ -11,7 +11,6 @@ import (
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/verifier"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestAgentVerifierUsesSandboxOrExplicitHostApproval(t *testing.T) {
