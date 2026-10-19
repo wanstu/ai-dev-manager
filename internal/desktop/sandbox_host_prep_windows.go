@@ -183,9 +183,13 @@ func registerSandboxHostPrepBootTask(helper string) error {
 	if strings.Contains(helper, `"`) {
 		return fmt.Errorf("unexpected quote in host-prep helper path")
 	}
+	schtasks, err := sandboxHostPrepSystemExecutable("schtasks.exe")
+	if err != nil {
+		return err
+	}
 	action := fmt.Sprintf(`"%s" --sandbox-host-prep-boot`, helper)
 	command := hiddenWindowsCommand(
-		"schtasks.exe",
+		schtasks,
 		"/Create",
 		"/TN", sandboxHostPrepTaskName,
 		"/TR", action,
@@ -202,7 +206,11 @@ func registerSandboxHostPrepBootTask(helper string) error {
 }
 
 func removeSandboxHostPrepBootTask() error {
-	command := hiddenWindowsCommand("schtasks.exe", "/Delete", "/TN", sandboxHostPrepTaskName, "/F")
+	schtasks, err := sandboxHostPrepSystemExecutable("schtasks.exe")
+	if err != nil {
+		return err
+	}
+	command := hiddenWindowsCommand(schtasks, "/Delete", "/TN", sandboxHostPrepTaskName, "/F")
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("remove sandbox host-prep boot task: %w: %s", err, strings.TrimSpace(string(output)))
@@ -211,7 +219,11 @@ func removeSandboxHostPrepBootTask() error {
 }
 
 func sandboxHostPrepBootTaskInstalled() (bool, error) {
-	command := hiddenWindowsCommand("schtasks.exe", "/Query", "/TN", sandboxHostPrepTaskName)
+	schtasks, err := sandboxHostPrepSystemExecutable("schtasks.exe")
+	if err != nil {
+		return false, err
+	}
+	command := hiddenWindowsCommand(schtasks, "/Query", "/TN", sandboxHostPrepTaskName)
 	if err := command.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() != 0 {
 			return false, nil
@@ -219,6 +231,25 @@ func sandboxHostPrepBootTaskInstalled() (bool, error) {
 		return false, fmt.Errorf("query sandbox host-prep boot task: %w", err)
 	}
 	return true, nil
+}
+
+func sandboxHostPrepSystemExecutable(name string) (string, error) {
+	if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
+		return "", fmt.Errorf("invalid Windows system executable name %q", name)
+	}
+	systemRoot, err := windows.KnownFolderPath(windows.FOLDERID_System, windows.KF_FLAG_DEFAULT)
+	if err != nil {
+		return "", fmt.Errorf("resolve Windows system directory: %w", err)
+	}
+	path := filepath.Join(systemRoot, name)
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve Windows system executable %s: %w", name, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("Windows system executable is a directory: %s", path)
+	}
+	return path, nil
 }
 
 func hiddenWindowsCommand(name string, args ...string) *exec.Cmd {
