@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	serverName         = "adm"
-	runtimeOwnerHeader = "X-ADM-Runtime-Owner"
+	serverName             = "adm"
+	runtimeOwnerHeader     = "X-ADM-Runtime-Owner"
+	gatewayToolsetRevision = "2026-10-19.2"
 )
 
 var serverVersion = productversion.Current()
@@ -702,7 +703,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				"api_version":      "v2-dev",
 				"surface":          string(surface),
 				"role":             role,
-				"toolset_revision": serverVersion,
+				"toolset_revision": gatewayToolsetRevision,
 				"notes": []string{
 					"Workspace is a registered local directory; Git is optional.",
 					"Environment is a persistent development context; worktree is not a prerequisite.",
