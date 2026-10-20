@@ -885,7 +885,6 @@ function disabledRuntimeAction(button, reason = '') {
   reason = String(reason || '').trim();
   if (!button.disabled || !reason) return button;
   button.title = reason;
-  button.setAttribute('aria-describedby', '');
   const wrapper = document.createElement('span');
   wrapper.className = 'runtime-disabled-action';
   wrapper.tabIndex = 0;
