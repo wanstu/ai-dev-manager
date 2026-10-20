@@ -1112,3 +1112,15 @@ textarea:focus,
   visibility: visible;
   transform: translate(-50%, 0);
 }
+
+
+/* The settings card normally clips children to preserve rounded corners.
+   Permission help is an intentional popover and must escape that boundary. */
+.single-column-grid .subpanel.permission-control-panel {
+  position: relative;
+  z-index: 5;
+  overflow: visible;
+}
+.permission-control-panel .permission-help-tooltip {
+  z-index: 100;
+}

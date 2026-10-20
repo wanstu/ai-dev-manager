@@ -1074,24 +1074,24 @@ function renderSandboxHostPreparation(status) {
   const bootTask = Boolean(status?.boot_task_installed);
   const ready = supported && prepared && bootTask;
   elements.sandboxHostPreparationBadge.dataset.state = ready ? 'available' : (supported ? 'degraded' : 'unconfigured');
-  elements.sandboxHostPreparationBadge.textContent = ready ? '已启用' : (supported ? (prepared ? '待配置开机恢复' : '未启用') : '不适用');
+  elements.sandboxHostPreparationBadge.textContent = ready ? '已启用' : (supported ? (prepared ? '当前已生效 · 待完成开机恢复' : '未启用') : '不适用');
   elements.sandboxHostPreparationEnable.hidden = !supported || ready;
-  elements.sandboxHostPreparationEnable.textContent = prepared ? '配置开机自动恢复' : '启用强沙盒';
+  elements.sandboxHostPreparationEnable.textContent = prepared ? '完成开机自动恢复' : '启用强沙盒';
   elements.sandboxHostPreparationEnable.disabled = !supported || ready;
   elements.sandboxHostPreparationRefresh.disabled = false;
   if (!supported) {
-    elements.sandboxHostPreparationSummary.textContent = status?.message || '当前平台不使用 Windows AppContainer 强沙盒。';
+    elements.sandboxHostPreparationSummary.textContent = status?.message || '当前平台不需要 Windows 强沙盒。';
     return;
   }
   if (ready) {
-    elements.sandboxHostPreparationSummary.textContent = status?.message || 'Windows AppContainer 强沙盒已准备，开机后会自动恢复所需的系统权限。';
+    elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒已启用：当前可以安全运行受控的构建、测试等进程，重启电脑后也会自动恢复。';
     return;
   }
   if (prepared) {
-    elements.sandboxHostPreparationSummary.textContent = status?.message || '当前 Windows 会话已经具备强沙盒条件，但还没有开机自动恢复任务。';
+    elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒当前已经生效，但还需要完成一次管理员确认，才能保证重启电脑后继续可用。';
     return;
   }
-  elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒需要一次管理员准备；未准备时 Agent verifier 会 fail-closed，不会自动退回宿主执行。';
+  elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒尚未启用。启用时只需要一次 Windows 管理员确认。';
 }
 async function loadSandboxHostPreparation(showMessage = false) {
   elements.sandboxHostPreparationRefresh.disabled = true;
@@ -1113,10 +1113,10 @@ async function loadSandboxHostPreparation(showMessage = false) {
 }
 async function enableSandboxHostPreparation() {
   if (elements.sandboxHostPreparationEnable.disabled) return;
-  if (!window.confirm('启用 Windows 强沙盒需要一次管理员权限确认，并会注册 SYSTEM 开机任务以恢复 AppContainer 所需的 Null Device 权限。任务只运行 Program Files 中的受保护副本。继续？')) return;
+  if (!window.confirm('这一步需要一次 Windows 管理员确认，用来保证强沙盒在电脑重启后仍然自动可用。不会给 Agent 开放管理员权限。继续？')) return;
   elements.sandboxHostPreparationEnable.disabled = true;
   elements.sandboxHostPreparationRefresh.disabled = true;
-  elements.sandboxHostPreparationSummary.textContent = '正在等待 Windows 管理员确认并配置强沙盒…';
+  elements.sandboxHostPreparationSummary.textContent = '正在等待 Windows 管理员确认…';
   try {
     const status = await desktopAdapter().EnableSandboxHostPreparation();
     renderSandboxHostPreparation(status);

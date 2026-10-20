@@ -21,6 +21,7 @@ const (
 	sandboxHostPrepTaskName       = "AI Dev Manager Sandbox Host Prep"
 	sandboxHostPrepMachineDirName = "AI Dev Manager"
 	sandboxHostPrepMachineExeName = "adm-sandbox-host-prep.exe"
+	sandboxHostPrepReadyMarkerName = "sandbox-host-prep.ready"
 )
 
 func sandboxHostPreparationStatus() SandboxHostPreparationStatus {
@@ -42,9 +43,9 @@ func sandboxHostPreparationStatus() SandboxHostPreparationStatus {
 			status.Message += "; " + taskErr.Error()
 		}
 	} else if report.NullDevicePrepared && !taskInstalled {
-		status.Message = "当前会话的强沙盒已准备，但尚未配置开机自动恢复"
+		status.Message = "强沙盒当前已经生效，但还需要完成一次管理员确认，才能保证重启电脑后继续可用"
 	} else if report.NullDevicePrepared && taskInstalled {
-		status.Message = "Windows 强沙盒已准备，并会在开机时自动恢复"
+		status.Message = "强沙盒已启用：当前可用，重启电脑后也会自动恢复"
 	}
 	return status
 }
@@ -108,6 +109,10 @@ func RunSandboxHostPreparationInstall() error {
 		return err
 	}
 	if err := registerSandboxHostPrepBootTask(helper); err != nil {
+		return err
+	}
+	if err := writeSandboxHostPrepReadyMarker(helper); err != nil {
+		_ = removeSandboxHostPrepBootTask()
 		return err
 	}
 	if err := sandbox.PrepareNullDeviceHost(); err != nil {
@@ -215,6 +220,7 @@ func removeSandboxHostPrepBootTask() error {
 	if err != nil {
 		return fmt.Errorf("remove sandbox host-prep boot task: %w: %s", err, strings.TrimSpace(string(output)))
 	}
+	_ = removeSandboxHostPrepReadyMarker()
 	return nil
 }
 
@@ -226,11 +232,90 @@ func sandboxHostPrepBootTaskInstalled() (bool, error) {
 	command := hiddenWindowsCommand(schtasks, "/Query", "/TN", sandboxHostPrepTaskName)
 	if err := command.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() != 0 {
-			return false, nil
+			// SYSTEM tasks may intentionally deny ordinary users permission to
+			// query their Task Scheduler metadata. Do not interpret that as
+			// "not installed". The elevated installer writes a readiness marker
+			// next to the protected Program Files helper only after task
+			// registration succeeds; ordinary users can read but not forge it.
+			return sandboxHostPrepReadyMarkerInstalled(), nil
 		}
 		return false, fmt.Errorf("query sandbox host-prep boot task: %w", err)
 	}
 	return true, nil
+}
+
+func sandboxHostPrepReadyMarkerPath() (string, error) {
+	helper, err := sandboxHostPrepMachineExecutable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(helper), sandboxHostPrepReadyMarkerName), nil
+}
+
+func writeSandboxHostPrepReadyMarker(helper string) error {
+	marker, err := sandboxHostPrepReadyMarkerPath()
+	if err != nil {
+		return err
+	}
+	if filepath.Clean(filepath.Dir(marker)) != filepath.Clean(filepath.Dir(helper)) {
+		return fmt.Errorf("sandbox host-prep readiness marker escaped protected helper directory")
+	}
+	payload := []byte("task=" + sandboxHostPrepTaskName + "\nhelper=" + filepath.Base(helper) + "\n")
+	temp, err := os.CreateTemp(filepath.Dir(marker), "sandbox-host-prep-*.ready")
+	if err != nil {
+		return fmt.Errorf("create sandbox host-prep readiness marker: %w", err)
+	}
+	tempName := temp.Name()
+	cleanup := true
+	defer func() {
+		_ = temp.Close()
+		if cleanup {
+			_ = os.Remove(tempName)
+		}
+	}()
+	if _, err := temp.Write(payload); err != nil {
+		return fmt.Errorf("write sandbox host-prep readiness marker: %w", err)
+	}
+	if err := temp.Sync(); err != nil {
+		return fmt.Errorf("sync sandbox host-prep readiness marker: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("close sandbox host-prep readiness marker: %w", err)
+	}
+	_ = os.Remove(marker)
+	if err := os.Rename(tempName, marker); err != nil {
+		return fmt.Errorf("install sandbox host-prep readiness marker: %w", err)
+	}
+	cleanup = false
+	return nil
+}
+
+func removeSandboxHostPrepReadyMarker() error {
+	marker, err := sandboxHostPrepReadyMarkerPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func sandboxHostPrepReadyMarkerInstalled() bool {
+	helper, err := sandboxHostPrepMachineExecutable()
+	if err != nil {
+		return false
+	}
+	helperInfo, err := os.Stat(helper)
+	if err != nil || helperInfo.IsDir() {
+		return false
+	}
+	marker, err := sandboxHostPrepReadyMarkerPath()
+	if err != nil {
+		return false
+	}
+	markerInfo, err := os.Stat(marker)
+	return err == nil && !markerInfo.IsDir()
 }
 
 func sandboxHostPrepSystemExecutable(name string) (string, error) {
