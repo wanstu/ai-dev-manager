@@ -11,27 +11,9 @@ import (
 	"ai-dev-manager-v2/internal/catalog"
 )
 
-func TestAgentSurfaceHidesHostEscapeTools(t *testing.T) {
+func TestAgentSurfaceKeepsPermissionGatedToolsDiscoverable(t *testing.T) {
 	service := app.New(filepath.Join(t.TempDir(), "state.json"))
 	ctx := context.Background()
-
-	forbidden := map[string]bool{
-		"global_exec":                   true,
-		"global_mcp_status":             true,
-		"global_mcp_tools":              true,
-		"global_mcp_call":               true,
-		"global_skill_list":             true,
-		"global_skill_files":            true,
-		"global_skill_read":             true,
-		"exec":                          true,
-		"run_start":                     true,
-		"process_start":                 true,
-		"environment_worktree_create":   true,
-		"environment_worktree_destroy":  true,
-		"environment_temporary_promote": true,
-		"environment_temporary_cleanup": true,
-		"git_tag_delete":                true,
-	}
 
 	agent := connectInMemory(t, ctx, New(service))
 	defer agent.Close()
@@ -42,39 +24,63 @@ func TestAgentSurfaceHidesHostEscapeTools(t *testing.T) {
 	available := map[string]bool{}
 	for _, tool := range agentTools.Tools {
 		available[tool.Name] = true
-		if forbidden[tool.Name] {
-			t.Fatalf("Agent MCP must not expose host-escape tool %q", tool.Name)
-		}
 	}
 	for _, name := range []string{
+		"global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call",
+		"global_skill_list", "global_skill_files", "global_skill_read",
+		"exec", "run_start", "process_start",
+		"environment_worktree_create", "environment_worktree_destroy",
+		"environment_temporary_promote", "environment_temporary_cleanup",
+		"environment_verifier_agent_host_execution_set",
+		"git_tag_delete", "secret_list", "strong_permission_control_status", "strong_permission_control_set",
 		"environment_verifier_run", "environment_verifier_run_start",
 		"git_status", "git_diff", "git_branch", "git_commit",
 		"git_log", "git_show", "git_remote_list", "git_tag_list", "git_tag_create",
-		"git_fetch", "git_push",
-		"git_cherry_pick", "git_cherry_pick_continue", "git_cherry_pick_abort",
-		"git_merge", "git_merge_abort",
+		"git_fetch", "git_push", "git_cherry_pick", "git_merge",
 	} {
 		if !available[name] {
-			t.Fatalf("Agent MCP must retain approved verifier automation tool %q", name)
+			t.Fatalf("Agent MCP must keep permission-gated tool %q discoverable", name)
 		}
+	}
+
+	status := callGatewayTool(t, ctx, agent, "strong_permission_control_status", map[string]any{})
+	if status.IsError || !strings.Contains(toolText(t, status), `"enabled":true`) || !strings.Contains(toolText(t, status), `"mode":"strong"`) {
+		t.Fatalf("unexpected default strong permission status: %s", toolText(t, status))
+	}
+
+	strongBlocked := callGatewayTool(t, ctx, agent, "global_skill_list", map[string]any{})
+	strongText := toolText(t, strongBlocked)
+	if !strongBlocked.IsError || !strings.Contains(strongText, "Strong Permission Control is enabled") || !strings.Contains(strongText, "v1.4.4-compatible") {
+		t.Fatalf("strong-only permission denial is not actionable: %s", strongText)
+	}
+
+	adminBlocked := callGatewayTool(t, ctx, agent, "secret_list", map[string]any{})
+	adminText := toolText(t, adminBlocked)
+	if !adminBlocked.IsError || !strings.Contains(adminText, "requires the Admin surface") {
+		t.Fatalf("Admin-only permission denial is not actionable: %s", adminText)
+	}
+
+	if _, err := service.SetStrongPermissionControl(false); err != nil {
+		t.Fatal(err)
+	}
+	relaxed := callGatewayTool(t, ctx, agent, "global_skill_list", map[string]any{})
+	if relaxed.IsError {
+		t.Fatalf("v1.4.4-compatible mode must restore relaxed Agent capability: %s", toolText(t, relaxed))
+	}
+	stillAdmin := callGatewayTool(t, ctx, agent, "secret_list", map[string]any{})
+	if !stillAdmin.IsError || !strings.Contains(toolText(t, stillAdmin), "requires the Admin surface") {
+		t.Fatalf("v1.4.4-compatible mode must retain historical Admin boundary: %s", toolText(t, stillAdmin))
+	}
+	cannotToggle := callGatewayTool(t, ctx, agent, "strong_permission_control_set", map[string]any{"enabled": true})
+	if !cannotToggle.IsError || !strings.Contains(toolText(t, cannotToggle), "requires the Admin surface") {
+		t.Fatalf("Agent must not toggle its own permission mode: %s", toolText(t, cannotToggle))
 	}
 
 	admin := connectInMemory(t, ctx, NewAdmin(service))
 	defer admin.Close()
-	adminTools, err := admin.ListTools(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := make(map[string]bool, len(forbidden))
-	for _, tool := range adminTools.Tools {
-		if forbidden[tool.Name] {
-			found[tool.Name] = true
-		}
-	}
-	for name := range forbidden {
-		if !found[name] {
-			t.Fatalf("Admin MCP must retain management tool %q", name)
-		}
+	updated := callGatewayTool(t, ctx, admin, "strong_permission_control_set", map[string]any{"enabled": true})
+	if updated.IsError || !strings.Contains(toolText(t, updated), `"enabled":true`) {
+		t.Fatalf("Admin could not restore strong permission control: %s", toolText(t, updated))
 	}
 }
 

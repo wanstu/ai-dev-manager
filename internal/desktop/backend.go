@@ -44,6 +44,8 @@ type managementBackend interface {
 	ExecDenyClearAll() error
 	ExecAuthorizationStatus() (app.ExecAuthorizationStatus, error)
 	ExecFullAuthorizationSet(bool) (app.ExecAuthorizationStatus, error)
+	StrongPermissionControlStatus() (app.StrongPermissionControlStatus, error)
+	StrongPermissionControlSet(bool) (app.StrongPermissionControlStatus, error)
 	LoggingStatus() (logging.Status, error)
 	GatewayAccessStatus() (app.GatewayAccessStatus, error)
 	GatewayDiagnostics() (management.GatewayDiagnostics, error)

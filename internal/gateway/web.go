@@ -374,6 +374,13 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.management.ExecFullAuthorizationSet(b1)
+	case "GetStrongPermissionControlStatus":
+		return h.app.StrongPermissionControlStatus()
+	case "SetStrongPermissionControl":
+		if err := arg(0, &b1); err != nil {
+			return nil, err
+		}
+		return h.app.SetStrongPermissionControl(b1)
 	case "ListSkillSources":
 		return h.management.SkillSourceList()
 	case "ListSkillAvailability":

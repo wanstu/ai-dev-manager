@@ -12,8 +12,8 @@ import (
 
 func TestEncryptedSecretAdminOnlyLifecycle(t *testing.T) {
 	s := app.New(filepath.Join(t.TempDir(), "state.json"))
-	if !isAdminOnlyTool("secret_set") || !isAdminOnlyTool("secret_list") || !isAdminOnlyTool("secret_delete") {
-		t.Fatal("vault management tools must never be visible in Agent MCP")
+	if !isV144AdminOnlyTool("secret_set") || !isV144AdminOnlyTool("secret_list") || !isV144AdminOnlyTool("secret_delete") {
+		t.Fatal("vault management tools must remain Admin-only")
 	}
 	owner := newRuntimeOwner(s)
 	defer owner.Close()
@@ -43,9 +43,14 @@ func TestEncryptedSecretAdminOnlyLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, item := range tools.Tools {
-		if strings.HasPrefix(item.Name, "secret_") {
-			t.Fatalf("Agent exposed vault management tool %s", item.Name)
+	names := toolNames(tools.Tools)
+	for _, name := range []string{"secret_list", "secret_set", "secret_delete"} {
+		if !contains(names, name) {
+			t.Fatalf("Agent must keep vault management tool %s discoverable", name)
 		}
+	}
+	denied := callGatewayTool(t, ctx, agent, "secret_list", map[string]any{})
+	if !denied.IsError || !strings.Contains(toolText(t, denied), "requires the Admin surface") {
+		t.Fatalf("Agent vault denial must explain Admin requirement: %s", toolText(t, denied))
 	}
 }

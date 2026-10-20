@@ -40,7 +40,7 @@ type GlobalSkillFilesInput struct {
 }
 
 func registerGlobalTools(server *mcp.Server, surface serverSurface, service *app.Service) {
-	addScopedTool(server, surface, &mcp.Tool{
+	addScopedTool(server, surface, service, &mcp.Tool{
 		Name:        "global_exec",
 		Description: "Run one host-global executable without an Environment or writer. The command runs in ADM's isolated global-runtime directory and follows strict/full execution authorization.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in GlobalExecInput) (*mcp.CallToolResult, any, error) {
@@ -48,7 +48,7 @@ func registerGlobalTools(server *mcp.Server, surface serverSurface, service *app
 		return toolResult(result, err)
 	})
 
-	addScopedTool(server, surface, &mcp.Tool{
+	addScopedTool(server, surface, service, &mcp.Tool{
 		Name:        "global_mcp_status",
 		Description: "Probe one global MCP catalog entry without borrowing any Environment or writer.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in GlobalMCPInput) (*mcp.CallToolResult, any, error) {
@@ -56,7 +56,7 @@ func registerGlobalTools(server *mcp.Server, surface serverSurface, service *app
 		return toolResult(status, err)
 	})
 
-	addScopedTool(server, surface, &mcp.Tool{
+	addScopedTool(server, surface, service, &mcp.Tool{
 		Name:        "global_mcp_tools",
 		Description: "List tools from one global MCP catalog entry without an Environment or writer.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in GlobalMCPInput) (*mcp.CallToolResult, any, error) {
@@ -69,7 +69,7 @@ func registerGlobalTools(server *mcp.Server, surface serverSurface, service *app
 		return toolResult(result, err)
 	})
 
-	addScopedTool(server, surface, &mcp.Tool{
+	addScopedTool(server, surface, service, &mcp.Tool{
 		Name:        "global_mcp_call",
 		Description: "Call one tool on a global MCP catalog entry without an Environment or writer.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in GlobalMCPCallInput) (*mcp.CallToolResult, any, error) {
@@ -82,7 +82,7 @@ func registerGlobalTools(server *mcp.Server, surface serverSurface, service *app
 		return toolResult(result, err)
 	})
 
-	addScopedTool(server, surface, &mcp.Tool{
+	addScopedTool(server, surface, service, &mcp.Tool{
 		Name:        "global_skill_list",
 		Description: "List catalog Skill availability without selecting an Environment.",
 	}, func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
@@ -90,7 +90,7 @@ func registerGlobalTools(server *mcp.Server, surface serverSurface, service *app
 		return toolResult(result, err)
 	})
 
-	addScopedTool(server, surface, &mcp.Tool{
+	addScopedTool(server, surface, service, &mcp.Tool{
 		Name:        "global_skill_read",
 		Description: "Read one global Skill artifact/support file without selecting an Environment.",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in GlobalSkillInput) (*mcp.CallToolResult, any, error) {
@@ -98,7 +98,7 @@ func registerGlobalTools(server *mcp.Server, surface serverSurface, service *app
 		return toolResult(result, err)
 	})
 
-	addScopedTool(server, surface, &mcp.Tool{
+	addScopedTool(server, surface, service, &mcp.Tool{
 		Name:        "global_skill_files",
 		Description: "List bounded files for one global Skill artifact/support root without selecting an Environment.",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in GlobalSkillFilesInput) (*mcp.CallToolResult, any, error) {

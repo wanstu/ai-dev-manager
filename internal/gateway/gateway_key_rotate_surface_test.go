@@ -35,9 +35,13 @@ func TestGatewayKeyRotateToolsAreAdminOnlyAndReturnOneTimeSecrets(t *testing.T) 
 	}
 	agentNames := toolNames(agentTools.Tools)
 	for _, name := range []string{"gateway_admin_api_key_rotate", "gateway_agent_api_key_rotate"} {
-		if contains(agentNames, name) {
-			t.Fatalf("admin-only rotate tool %q leaked into Agent MCP", name)
+		if !contains(agentNames, name) {
+			t.Fatalf("admin-only rotate tool %q must remain visible in Agent MCP", name)
 		}
+	}
+	agentDenied := callGatewayTool(t, ctx, agent, "gateway_admin_api_key_rotate", map[string]any{})
+	if !agentDenied.IsError || !strings.Contains(toolText(t, agentDenied), "requires the Admin surface") {
+		t.Fatalf("Agent rotate denial must explain Admin requirement: %s", toolText(t, agentDenied))
 	}
 
 	admin := connect("/admin/mcp", "rotate-admin-surface-test")

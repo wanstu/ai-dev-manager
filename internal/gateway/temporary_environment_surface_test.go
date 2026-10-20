@@ -53,9 +53,13 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		}
 		if surface == "agent" {
 			for _, name := range []string{"environment_temporary_promote", "environment_temporary_cleanup"} {
-				if byName[name] != nil {
-					t.Fatalf("Agent surface exposed destructive temporary lifecycle tool %s", name)
+				if byName[name] == nil {
+					t.Fatalf("Agent surface must keep temporary lifecycle tool %s discoverable", name)
 				}
+			}
+			promoteDenied := callGatewayTool(t, ctx, session, "environment_temporary_promote", map[string]any{"environment_id": "env_missing", "owner_id": "missing"})
+			if !promoteDenied.IsError || !strings.Contains(toolText(t, promoteDenied), "requires the Admin surface") {
+				t.Fatalf("Agent promote denial must explain Admin requirement: %s", toolText(t, promoteDenied))
 			}
 		} else {
 			for _, name := range []string{"environment_temporary_promote", "environment_temporary_cleanup"} {
@@ -75,11 +79,14 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 			t.Fatalf("%s temporary create description lost provenance boundary: %q", surface, byName["environment_temporary_create"].Description)
 		}
 		_, hasDurableCreate := byName["environment_create"]
-		if surface == "agent" && hasDurableCreate {
-			t.Fatal("Agent surface exposed generic durable environment_create")
+		if !hasDurableCreate {
+			t.Fatalf("%s surface must keep generic durable environment_create discoverable", surface)
 		}
-		if surface == "admin" && !hasDurableCreate {
-			t.Fatal("Admin surface lost generic durable environment_create")
+		if surface == "agent" {
+			denied := callGatewayTool(t, ctx, session, "environment_create", map[string]any{"workspace_id": workspace.ID, "name": "denied"})
+			if !denied.IsError || !strings.Contains(toolText(t, denied), "requires the Admin surface") {
+				t.Fatalf("Agent durable create denial must explain Admin requirement: %s", toolText(t, denied))
+			}
 		}
 	}
 

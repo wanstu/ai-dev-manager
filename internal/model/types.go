@@ -197,7 +197,8 @@ type State struct {
 	WebAccess               WebAccessSettings     `json:"web_access,omitempty"`
 	AllowedExecutables      []string              `json:"allowed_executables,omitempty"`
 	BlockedExecutables      []string              `json:"blocked_executables,omitempty"`
-	ExecFullAuthorization   bool                  `json:"exec_full_authorization,omitempty"`
+	ExecFullAuthorization             bool                  `json:"exec_full_authorization,omitempty"`
+	StrongPermissionControlDisabled bool                  `json:"strong_permission_control_disabled,omitempty"`
 	AutoIndexEnvironmentIDs []string              `json:"auto_index_environment_ids,omitempty"`
 	ExecDenials             []ExecDenial          `json:"exec_denials,omitempty"`
 	ExecUsages              []ExecUsage           `json:"exec_usages,omitempty"`

@@ -29,6 +29,10 @@ type ExecFullAuthorizationInput struct {
 	Enabled bool `json:"enabled"`
 }
 
+type StrongPermissionControlInput struct {
+	Enabled bool `json:"enabled"`
+}
+
 func gatewayRequestAllowed(service *app.Service, request *http.Request, surface serverSurface) bool {
 	if service == nil || request == nil {
 		return false

@@ -51,7 +51,7 @@ const elements = {
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
   loadEnvironmentMemory: document.getElementById('loadEnvironmentMemory'), writeEnvironmentMemoryButton: document.getElementById('writeEnvironmentMemoryButton'), environmentMemoryScopeHint: document.getElementById('environmentMemoryScopeHint'), environmentMemoryForm: document.getElementById('environmentMemoryForm'), environmentMemoryKey: document.getElementById('environmentMemoryKey'), environmentMemoryValue: document.getElementById('environmentMemoryValue'), environmentMemoryList: document.getElementById('environmentMemoryList'),
-  execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execUsageCount: document.getElementById('execUsageCount'), execUsageSurfaceSummary: document.getElementById('execUsageSurfaceSummary'), execUsageFilter: document.getElementById('execUsageFilter'), execUsageSurfaceFilter: document.getElementById('execUsageSurfaceFilter'), execUsageTimeFilter: document.getElementById('execUsageTimeFilter'), execUsageVisibleCount: document.getElementById('execUsageVisibleCount'), execUsageTotalCount: document.getElementById('execUsageTotalCount'), execUsageList: document.getElementById('execUsageList'), execBlacklistForm: document.getElementById('execBlacklistForm'), execBlacklistExecutable: document.getElementById('execBlacklistExecutable'), execBlacklistList: document.getElementById('execBlacklistList'), execBlacklistCount: document.getElementById('execBlacklistCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'), execAuthorizationMode: document.getElementById('execAuthorizationMode'), execAuthorizationSave: document.getElementById('execAuthorizationSave'), execAuthorizationModeLabel: document.getElementById('execAuthorizationModeLabel'),
+  execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execUsageCount: document.getElementById('execUsageCount'), execUsageSurfaceSummary: document.getElementById('execUsageSurfaceSummary'), execUsageFilter: document.getElementById('execUsageFilter'), execUsageSurfaceFilter: document.getElementById('execUsageSurfaceFilter'), execUsageTimeFilter: document.getElementById('execUsageTimeFilter'), execUsageVisibleCount: document.getElementById('execUsageVisibleCount'), execUsageTotalCount: document.getElementById('execUsageTotalCount'), execUsageList: document.getElementById('execUsageList'), execBlacklistForm: document.getElementById('execBlacklistForm'), execBlacklistExecutable: document.getElementById('execBlacklistExecutable'), execBlacklistList: document.getElementById('execBlacklistList'), execBlacklistCount: document.getElementById('execBlacklistCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'), execAuthorizationMode: document.getElementById('execAuthorizationMode'), execAuthorizationSave: document.getElementById('execAuthorizationSave'), execAuthorizationModeLabel: document.getElementById('execAuthorizationModeLabel'), strongPermissionControl: document.getElementById('strongPermissionControl'), strongPermissionControlModeLabel: document.getElementById('strongPermissionControlModeLabel'), strongPermissionControlHint: document.getElementById('strongPermissionControlHint'),
   loadGlobalMemory: document.getElementById('loadGlobalMemory'), globalMemoryForm: document.getElementById('globalMemoryForm'), globalMemoryKey: document.getElementById('globalMemoryKey'), globalMemoryValue: document.getElementById('globalMemoryValue'), globalMemoryList: document.getElementById('globalMemoryList'),
 };
 
@@ -71,6 +71,7 @@ let gatewayAccessStatus = null;
 let gatewayDiagnostics = null;
 let gatewayConnectionStatus = null;
 let execAuthorizationStatus = null;
+let strongPermissionControlStatus = null;
 let runtimeRunsByID = new Map();
 let runtimeSubview = 'verifiers';
 let environmentDetailSubview = 'summary';
@@ -1366,6 +1367,47 @@ async function refreshExecAuthorizationStatus() {
   } catch (error) {
     execAuthorizationStatus = null;
     return 'Exec authorization: ' + errorText(error);
+  }
+}
+
+function renderStrongPermissionControlStatus(status) {
+  strongPermissionControlStatus = status || null;
+  const enabled = status?.enabled !== false;
+  elements.strongPermissionControl.checked = enabled;
+  elements.strongPermissionControlModeLabel.textContent = enabled ? 'Strong · 默认开启' : 'v1.4.4 compatible · 宽松';
+  elements.strongPermissionControlHint.textContent = status?.message || (enabled
+    ? '强权限开启：所有 Agent 工具仍可见；受限工具调用时会返回明确权限原因，不会无提示消失。'
+    : '强权限已关闭：Agent 使用 v1.4.4 兼容的宽松权限边界；原本属于 Admin 的管理操作仍需要 Admin 权限。');
+}
+async function refreshStrongPermissionControlStatus() {
+  try {
+    renderStrongPermissionControlStatus(await desktopAdapter().GetStrongPermissionControlStatus());
+    return '';
+  } catch (error) {
+    strongPermissionControlStatus = null;
+    elements.strongPermissionControl.checked = true;
+    elements.strongPermissionControl.disabled = true;
+    elements.strongPermissionControlHint.textContent = '强权限状态读取失败：' + errorText(error);
+    return 'Strong permission control: ' + errorText(error);
+  }
+}
+async function saveStrongPermissionControl() {
+  const enabled = Boolean(elements.strongPermissionControl.checked);
+  const previousEnabled = strongPermissionControlStatus?.enabled !== false;
+  if (!enabled && previousEnabled && !window.confirm('关闭强权限控制后，Agent 将恢复 v1.4.4 兼容的宽松权限行为，包括 raw exec、stdio MCP、verifier 宿主执行和 Git SSH 等。所有工具仍会保留，Admin 管理边界不会取消。确认关闭？')) {
+    renderStrongPermissionControlStatus(strongPermissionControlStatus);
+    return;
+  }
+  elements.strongPermissionControl.disabled = true;
+  try {
+    const status = await desktopAdapter().SetStrongPermissionControl(enabled);
+    renderStrongPermissionControlStatus(status);
+    setStatus(enabled ? '强权限控制已开启' : '强权限控制已关闭，已进入 v1.4.4 兼容模式', 'success');
+  } catch (error) {
+    renderStrongPermissionControlStatus(strongPermissionControlStatus);
+    setStatus('强权限控制设置失败：' + errorText(error), 'error');
+  } finally {
+    elements.strongPermissionControl.disabled = false;
   }
 }
 async function saveGatewayAllowedHosts() {
@@ -3224,7 +3266,7 @@ async function refreshSnapshot(successMessage = '') {
     catch (error) { skillSources = []; skillSourcesState = 'error'; skillSourcesError = errorText(error); sourceError = `Skill sources: ${skillSourcesError}`; }
     if (requestGeneration !== connectionGeneration) return false;
     renderSkillManager(safeArray(currentSnapshot?.skills));
-    const [loggingError, gatewayAccessError, gatewayDiagnosticsError, execAuthorizationError] = await Promise.all([refreshLoggingStatus(), refreshGatewayAccessStatus(), refreshGatewayDiagnostics(), refreshExecAuthorizationStatus()]);
+    const [loggingError, gatewayAccessError, gatewayDiagnosticsError, execAuthorizationError, strongPermissionError] = await Promise.all([refreshLoggingStatus(), refreshGatewayAccessStatus(), refreshGatewayDiagnostics(), refreshExecAuthorizationStatus(), refreshStrongPermissionControlStatus()]);
     if (requestGeneration !== connectionGeneration) return false;
 
     const contextResult = await refreshManagementContext(captureEnvironmentScope());
@@ -3234,7 +3276,7 @@ async function refreshSnapshot(successMessage = '') {
       try { await refreshSelectedEnvironmentDetail(); }
       catch (error) { detailError = `Environment detail: ${errorText(error)}`; }
     }
-    const auxiliaryErrors = [sourceError, loggingError, gatewayAccessError, gatewayDiagnosticsError, execAuthorizationError, ...safeArray(contextResult?.errors), detailError].filter(Boolean);
+    const auxiliaryErrors = [sourceError, loggingError, gatewayAccessError, gatewayDiagnosticsError, execAuthorizationError, strongPermissionError, ...safeArray(contextResult?.errors), detailError].filter(Boolean);
     if (auxiliaryErrors.length) setStatus(`基础快照已刷新；部分状态不可用：${auxiliaryErrors.join(' · ')}`, 'error');
     else setStatus(successMessage || `已刷新 · ${new Date().toLocaleTimeString()}`, 'success');
     return true;
@@ -4042,6 +4084,7 @@ elements.gatewayCopyAgentKey.addEventListener('click', async () => { if (element
 elements.gatewayAccessSetAgentKey.addEventListener('click', setGatewayAgentAPIKey);
 elements.gatewayAccessClearAgentKey.addEventListener('click', clearGatewayAgentAPIKey);
 elements.execAuthorizationSave.addEventListener('click', saveExecAuthorizationMode);
+elements.strongPermissionControl?.addEventListener('change', saveStrongPermissionControl);
 elements.cleanupExpiredTemporaryEnvironmentsButton.addEventListener('click', cleanupExpiredTemporaryEnvironments);
 document.getElementById('migrateManagedWorktreesButton')?.addEventListener('click', async (event) => {
   const button = event.currentTarget;

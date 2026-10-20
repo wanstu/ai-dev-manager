@@ -54,10 +54,14 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 			t.Fatalf("missing managed worktree tool %q in %v", required, names)
 		}
 	}
-	for _, adminOnly := range []string{"environment_worktree_create", "environment_worktree_destroy"} {
-		if contains(names, adminOnly) {
-			t.Fatalf("Agent surface exposed Admin-only managed worktree tool %q in %v", adminOnly, names)
+	for _, permissionGated := range []string{"environment_worktree_create", "environment_worktree_destroy"} {
+		if !contains(names, permissionGated) {
+			t.Fatalf("permission-gated managed worktree tool %q must remain visible in Agent surface: %v", permissionGated, names)
 		}
+	}
+	agentDenied := callGatewayTool(t, ctx, session, "environment_worktree_create", map[string]any{"workspace_id": ws.ID, "name": "denied", "branch_name": "test/denied"})
+	if !agentDenied.IsError || !strings.Contains(toolText(t, agentDenied), "requires the Admin surface") {
+		t.Fatalf("Agent worktree create denial must explain Admin requirement: %s", toolText(t, agentDenied))
 	}
 	adminTools, err := adminSession.ListTools(ctx, nil)
 	if err != nil {

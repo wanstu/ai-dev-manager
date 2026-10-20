@@ -192,6 +192,14 @@ func (s *Service) ExecFullAuthorizationSet(enabled bool) (app.ExecAuthorizationS
 	return s.app.SetExecFullAuthorization(enabled)
 }
 
+func (s *Service) StrongPermissionControlStatus() (app.StrongPermissionControlStatus, error) {
+	return s.app.StrongPermissionControlStatus()
+}
+
+func (s *Service) StrongPermissionControlSet(enabled bool) (app.StrongPermissionControlStatus, error) {
+	return s.app.SetStrongPermissionControl(enabled)
+}
+
 func (s *Service) LoggingStatus() (logging.Status, error) {
 	return s.app.LoggingStatus(), nil
 }
