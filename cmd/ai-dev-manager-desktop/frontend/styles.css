@@ -1124,3 +1124,33 @@ textarea:focus,
 .permission-control-panel .permission-help-tooltip {
   z-index: 100;
 }
+
+
+.detail-row-with-action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.detail-row-with-action > strong,
+.detail-row-with-action > span {
+  grid-column: 1;
+}
+.detail-row-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.detail-row-actions button {
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .detail-row-with-action {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .detail-row-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+}
