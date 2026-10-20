@@ -43,9 +43,9 @@ func sandboxHostPreparationStatus() SandboxHostPreparationStatus {
 			status.Message += "; " + taskErr.Error()
 		}
 	} else if report.NullDevicePrepared && !taskInstalled {
-		status.Message = "当前会话的强沙盒已准备，但尚未配置开机自动恢复"
+		status.Message = "强沙盒当前已经生效，但还需要完成一次管理员确认，才能保证重启电脑后继续可用"
 	} else if report.NullDevicePrepared && taskInstalled {
-		status.Message = "Windows 强沙盒已准备，并会在开机时自动恢复"
+		status.Message = "强沙盒已启用：当前可用，重启电脑后也会自动恢复"
 	}
 	return status
 }
