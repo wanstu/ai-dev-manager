@@ -3060,7 +3060,7 @@ function diagnosticGroupLabel(kind) {
 }
 function diagnosticActionHint(fact) {
   const reason = String(fact?.reason_code || fact?.reason || '').toLowerCase();
-  if (reason.includes('writer')) return '处理建议：等待当前 writer 到期，或由持有 owner 的会话续租/释放；管理员可使用 CLI 强制释放。';
+  if (reason.includes('writer')) return '处理建议：等待当前 writer 到期，或由持有 owner 的会话续租/释放；管理员也可以在 Environment 详情中强制释放锁。';
   if (reason.includes('executable') || reason.includes('allow')) return '处理建议：检查执行许可页的 Strict/Full 模式和 executable allowlist。';
   if (reason.includes('mcp') || reason.includes('connection') || reason.includes('auth')) return '处理建议：检查 MCP Endpoint、鉴权引用、网络和全局 MCP 探测结果。';
   if (reason.includes('skill') || reason.includes('artifact') || reason.includes('source')) return '处理建议：刷新 Skill Source，并检查 artifact/support root 是否存在。';
