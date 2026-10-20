@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -18,8 +19,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-source-check:
+    name: Release source gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release source
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag commit is contained in master
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+
+      - name: Verify tag commit already passed master CI
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+            -f branch=master \
+            -f event=push \
+            -f status=success \
+            -f head_sha="$GITHUB_SHA" \
+            -f per_page=1 \
+            --jq '.workflow_runs[0].id // empty')"
+          if [[ -z "$run_id" ]]; then
+            echo "Tag $GITHUB_REF_NAME points to $GITHUB_SHA, but that commit has no successful master CI push run." >&2
+            exit 1
+          fi
+          echo "Verified master CI run: $run_id"
+
   windows-test-vet-build:
-    name: Windows test, vet, and adm-desktop smoke build
+    name: Windows CI and Desktop artifact
+    needs: release-source-check
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -38,6 +78,7 @@ jobs:
         run: go mod download
 
       - name: Prepare Windows AppContainer host
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         shell: pwsh
         run: |
           go run ./cmd/adm-sandbox-host-prep prepare-null-device
@@ -46,12 +87,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: go test -count=1 ./...
 
       - name: Vet
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: go vet ./...
 
       - name: Browser acceptance for Windows Desktop updater
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         shell: pwsh
         run: |
           $env:ADM_UI_SMOKE_FOCUS = 'updater'
@@ -76,6 +120,7 @@ jobs:
           "desktop_artifact=adm-desktop$tagSuffix-windows-amd64" >> $env:GITHUB_OUTPUT
 
       - name: Test Desktop sandbox host-prep install mode
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         shell: pwsh
         run: |
           $desktop = Join-Path $PWD "dist/${{ steps.windows_desktop.outputs.desktop_name }}"
@@ -159,6 +204,7 @@ jobs:
 
   macos-desktop-build:
     name: macOS Desktop universal build
+    needs: release-source-check
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -171,6 +217,7 @@ jobs:
           cache: true
 
       - name: Test Unix runtime integration
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: go test -count=1 ./internal/runtime
 
       - name: Build macOS universal Desktop artifact
@@ -197,6 +244,7 @@ jobs:
 
   linux-desktop-build:
     name: Linux Desktop amd64 build
+    needs: release-source-check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -214,6 +262,7 @@ jobs:
           sudo apt-get install -y build-essential libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Test Linux runtime and Desktop backend
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: go test -count=1 ./internal/runtime ./internal/desktop
 
       - name: Build Linux Desktop artifact
@@ -300,7 +349,7 @@ jobs:
           cache: true
 
       - name: Test Unix runtime integration
-        if: matrix.goos != 'windows'
+        if: matrix.goos != 'windows' && !startsWith(github.ref, 'refs/tags/v')
         run: go test -count=1 ./internal/runtime
 
       - name: Build CLI artifact
