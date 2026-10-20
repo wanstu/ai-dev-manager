@@ -1404,7 +1404,16 @@ async function saveStrongPermissionControl() {
     renderStrongPermissionControlStatus(status);
     setStatus(enabled ? '强权限控制已开启' : '强权限控制已关闭，当前为宽松权限模式', 'success');
   } catch (error) {
-    renderStrongPermissionControlStatus(strongPermissionControlStatus);
+    try {
+      const actual = await desktopAdapter().GetStrongPermissionControlStatus();
+      renderStrongPermissionControlStatus(actual);
+      if ((actual?.enabled !== false) === enabled) {
+        setStatus(enabled ? '强权限控制已开启' : '强权限控制已关闭，当前为宽松权限模式', 'success');
+        return;
+      }
+    } catch (_) {
+      renderStrongPermissionControlStatus(strongPermissionControlStatus);
+    }
     setStatus('强权限控制设置失败：' + errorText(error), 'error');
   } finally {
     elements.strongPermissionControl.disabled = false;
