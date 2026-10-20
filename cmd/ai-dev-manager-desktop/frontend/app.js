@@ -2994,6 +2994,15 @@ function renderImportApplyResult(result) {
 }
 
 function detailRow(label, value) { const row = document.createElement('div'); row.className = 'detail-row'; const term = document.createElement('strong'); term.textContent = label; const content = document.createElement('span'); content.textContent = value || '—'; row.append(term, content); return row; }
+function detailActionRow(label, value, action) {
+  const row = detailRow(label, value);
+  row.classList.add('detail-row-with-action');
+  const actions = document.createElement('div');
+  actions.className = 'detail-row-actions';
+  actions.append(action);
+  row.append(actions);
+  return row;
+}
 function detailGroup(title, rows, note = '') {
   const section = document.createElement('section'); section.className = 'detail-group'; const heading = document.createElement('div'); heading.className = 'detail-group-heading'; const label = document.createElement('strong'); label.textContent = title; heading.append(label);
   if (note) { const description = document.createElement('span'); description.textContent = note; heading.append(description); }
@@ -3131,6 +3140,35 @@ function renderDiagnosticsPage() {
   elements.diagnosticsPageContent.replaceChildren(...environmentDiagnosticGroups(managementInspection));
   elements.diagnosticsPageContent.classList.remove('empty');
 }
+async function forceReleaseEnvironmentWriter(environmentID) {
+  environmentID = String(environmentID || '').trim();
+  if (!environmentID) return;
+  const current = managementInspection?.environment;
+  if (!current?.writer || current.environment_id !== environmentID) {
+    return setStatus('当前 Environment 已没有 active Writer。', 'success');
+  }
+  if (!window.confirm(
+    '确定强制释放这个 Environment 的 Writer 锁？\n\n' +
+    '这会立即取消当前持锁会话的写入权限。正在运行的进程或任务不会被自动停止，但后续写入会失去该 Writer 授权。\n\n' +
+    '仅在确认锁已失效、持锁会话异常退出或需要管理员恢复时使用。'
+  )) return;
+
+  const token = detailGeneration;
+  const connection = connectionGeneration;
+  setStatus('正在强制释放 Writer 锁…', 'loading');
+  try {
+    await desktopAdapter().ForceReleaseRuntimeWriter(environmentID);
+    if (runtimeWriterCredential.environmentID === environmentID) clearRuntimeWriterCredential();
+    if (connection !== connectionGeneration) return;
+    await refreshSnapshot('Writer 锁已强制释放');
+    if (token === detailGeneration && selectedEnvironmentID === environmentID) {
+      setStatus('Writer 锁已强制释放', 'success');
+    }
+  } catch (error) {
+    if (connection === connectionGeneration) setStatus('强制释放 Writer 锁失败：' + errorText(error), 'error');
+  }
+}
+
 function renderEnvironmentDetailFromInspection(inspection, token = detailGeneration) {
   const environment = inspection?.environment || {}, workspace = inspection?.workspace || {}, report = inspection?.capability_report || {}, facts = capabilityMap(report);
   if (token !== detailGeneration || environment.environment_id !== selectedEnvironmentID) return false;
@@ -3147,8 +3185,19 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
     detailRow('Workspace', (workspace.name || workspace.workspace_id || '—') + (workspace.workspace_id ? ' (' + workspace.workspace_id + ')' : '') + ' · ' + (workspace.path || '')),
     detailRow('State', environment.state),
   ];
+  const writerText = environment.writer
+    ? ('Active · expires ' + (environment.writer.expires_at ? new Date(environment.writer.expires_at).toLocaleString() : 'unknown'))
+    : 'No active writer';
+  const writerRow = environment.writer
+    ? detailActionRow('Writer lease', writerText, (() => {
+        const button = createActionButton('强制释放锁', 'force-release-writer', environment.environment_id, 'danger');
+        button.title = '管理员恢复操作：忽略当前 Writer owner 并立即释放写锁';
+        button.addEventListener('click', () => forceReleaseEnvironmentWriter(environment.environment_id));
+        return button;
+      })())
+    : detailRow('Writer lease', writerText);
   const authorityRows = [
-    detailRow('Writer lease', environment.writer ? ('Active · expires ' + (environment.writer.expires_at ? new Date(environment.writer.expires_at).toLocaleString() : 'unknown')) : 'No active writer'),
+    writerRow,
     detailRow('Private Memory count', safeNumber(environment.private_memory_count) + ' entries'),
   ];
   const unresolvedRows = [
@@ -3158,7 +3207,7 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
   elements.environmentDetail.replaceChildren(
     detailGroup('环境基本信息', identityRows, '项目路径、所属工作区及环境 ID。'),
     detailGroup('生命周期', temporaryLifecycleRows(environment), '查看是否临时、持久以及所属会话；这里不会修改清理策略。'),
-    detailGroup('写入与运行权限', authorityRows, '仅展示写入锁状态，不会自动获取或释放写入权限。'),
+    detailGroup('写入与运行权限', authorityRows, '正常操作仍由 Writer owner 获取/释放；管理员可在异常锁残留时显式强制释放。'),
     detailGroup('需要关注的能力', capabilityRows, issueFacts.length + ' 项能力需要关注；未配置的可选服务不影响普通代码分析。'),
     detailGroup('未解析引用', unresolvedRows, '正常 catalog 删除会同步清理选择；若这里仍有 unresolved ID，说明是历史或外部状态残留。')
   );
