@@ -663,9 +663,9 @@ body.has-editor-dialog { overflow: hidden; }
   background: var(--dk-bg-app);
   font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
 }
-body { background: var(--dk-bg-app); color: var(--dk-text); }
+body { background: var(--dk-app-gradient, var(--dk-bg-app)); color: var(--dk-text); }
 button {
-  background: var(--dk-primary);
+  background: var(--dk-primary-gradient, var(--dk-primary));
   color: var(--dk-primary-contrast);
 }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
@@ -685,7 +685,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .topbar,
 .panel,
 .subpanel,
-.management-sidebar,
 .metric,
 .overview-data-state,
 .overview-data-source,
@@ -698,7 +697,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .config-source-card,
 .remote-access-intro {
   border-color: var(--dk-border);
-  background: var(--dk-bg-elevated);
+  background: var(--dk-panel-gradient, var(--dk-bg-elevated));
+  color: var(--dk-text);
+}
+.management-sidebar {
+  border-color: var(--dk-border);
+  background: var(--dk-sidebar-gradient, var(--dk-bg-elevated));
   color: var(--dk-text);
 }
 .topbar,
@@ -745,7 +749,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .nav-link:hover { background: var(--dk-bg-subtle); color: var(--dk-text); }
 .nav-link[aria-current="page"] {
   border-color: var(--dk-nav-active-border);
-  background: var(--dk-nav-active-bg);
+  background: var(--dk-nav-gradient, var(--dk-nav-active-bg));
   color: var(--dk-nav-active-text);
   box-shadow: inset 3px 0 0 var(--dk-nav-active-accent);
 }

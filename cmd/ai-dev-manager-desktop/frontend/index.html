@@ -579,14 +579,25 @@
                 </select>
               </label>
               <label class="desktop-theme-field">
+                <span>主题样式</span>
+                <select id="desktopThemeStyle">
+                  <option value="solid">纯色</option>
+                  <option value="gradient">渐变</option>
+                </select>
+              </label>
+              <label id="desktopThemePackField" class="desktop-theme-field">
                 <span>主题包</span>
                 <select id="desktopThemePack">
                   <option value="">Kit 默认配色</option>
                 </select>
               </label>
+              <label id="desktopThemeGradientField" class="desktop-theme-field" hidden>
+                <span>渐变组合（选择 2–4 个）</span>
+                <select id="desktopThemeGradientPacks" multiple size="4" aria-label="渐变主题组合"></select>
+              </label>
             </div>
             <div class="desktop-theme-status-row">
-              <p id="desktopThemeHint" class="subpanel-note">默认使用跟随系统 + 极光主题；主题库由 Kit Runtime 管理。</p>
+              <p id="desktopThemeHint" class="subpanel-note">默认使用跟随系统 + 极光纯色；切换到渐变后可组合 2–4 个 Kit Theme。</p>
               <button id="desktopThemeRefreshButton" type="button" class="secondary-button">刷新主题库</button>
             </div>
             <label class="desktop-toggle" title="随用户登录自动启动 Desktop；托盘/关闭行为取决于当前平台">

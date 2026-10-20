@@ -101,7 +101,19 @@ func (s *Service) environmentCapabilityReportWithOptions(ctx context.Context, en
 	}
 	report.Facts = append(report.Facts, capabilityFact("environment.root", capabilityKindEnvironment, rootState, rootReason, rootMessage, false, rootEvidence))
 	report.Facts = append(report.Facts, fileCapabilityFacts(env, ws, rootErr)...)
-	execFacts, execAvailable := execCapabilityFacts(ctx, env, ws, rt, state.AllowedExecutables, state.ExecFullAuthorization, rootErr)
+	sandboxSupport := s.SandboxExecutionSupport()
+	execFacts, execAvailable := execCapabilityFacts(
+		ctx,
+		env,
+		ws,
+		rt,
+		state.AllowedExecutables,
+		state.ExecFullAuthorization,
+		!state.StrongPermissionControlDisabled,
+		sandboxSupport.Supported && sandboxSupport.StrongFileBoundarySupported && sandboxSupport.ProcessTreeBoundary,
+		sandboxSupport.Platform,
+		rootErr,
+	)
 	report.Facts = append(report.Facts, execFacts...)
 	report.Facts = append(report.Facts, verifierCapabilityFacts(ctx, env, ws, rt, rootErr)...)
 	report.Facts = append(report.Facts, gitCapabilityFacts(ctx, env, ws, rt, rootErr, inspectGit)...)
@@ -185,30 +197,73 @@ func fileCapabilityFacts(env model.Environment, ws model.Workspace, rootErr erro
 	return facts
 }
 
-func execCapabilityFacts(ctx context.Context, env model.Environment, ws model.Workspace, rt *runtime.Runtime, allowed []string, fullAuthorization bool, rootErr error) ([]model.CapabilityFact, bool) {
+func execCapabilityFacts(
+	ctx context.Context,
+	env model.Environment,
+	ws model.Workspace,
+	rt *runtime.Runtime,
+	allowed []string,
+	fullAuthorization bool,
+	strongPermissionEnabled bool,
+	sandboxAvailable bool,
+	sandboxPlatform string,
+	rootErr error,
+) ([]model.CapabilityFact, bool) {
+	agentExecutionMode := "host"
+	if strongPermissionEnabled {
+		agentExecutionMode = "sandbox"
+		if !sandboxAvailable {
+			agentExecutionMode = "unavailable"
+		}
+	}
 	evidence := []model.CapabilityEvidence{environmentEvidence(env, ws), writerEvidence(env), {
 		Kind: capabilityKindExec,
 		Details: map[string]string{
-			"allowed_executable_count": strconv.Itoa(len(allowed)),
-			"full_authorization":       strconv.FormatBool(fullAuthorization),
+			"allowed_executable_count":  strconv.Itoa(len(allowed)),
+			"full_authorization":        strconv.FormatBool(fullAuthorization),
+			"strong_permission_control": strconv.FormatBool(strongPermissionEnabled),
+			"agent_execution_mode":      agentExecutionMode,
+			"strong_sandbox_available":  strconv.FormatBool(sandboxAvailable),
+			"strong_sandbox_platform":   strings.TrimSpace(sandboxPlatform),
 		},
 	}}
 	if rootErr != nil {
 		return []model.CapabilityFact{capabilityFact(runtime.CapabilityExec, capabilityKindExec, model.CapabilityStateUnavailable, rootFailureReason(rootErr), rootFailureMessage(rootErr), true, evidence)}, false
 	}
+	if len(allowed) == 0 && !fullAuthorization {
+		return []model.CapabilityFact{capabilityFact(runtime.CapabilityExec, capabilityKindExec, model.CapabilityStateUnconfigured, "no_allowed_executables", "No executable is allowlisted for this Environment runtime.", true, evidence)}, false
+	}
+	if strongPermissionEnabled && !sandboxAvailable {
+		message := "Strong Permission Control requires Agent command execution to use the strong OS sandbox, but that sandbox is not currently available."
+		if strings.TrimSpace(sandboxPlatform) != "" {
+			message = fmt.Sprintf("Strong Permission Control requires Agent command execution to use the strong OS sandbox, but that sandbox is not currently available on %s.", sandboxPlatform)
+		}
+		return []model.CapabilityFact{capabilityFact(
+			runtime.CapabilityExec,
+			capabilityKindExec,
+			model.CapabilityStateUnavailable,
+			"strong_sandbox_unavailable",
+			message,
+			true,
+			evidence,
+		)}, false
+	}
 	if len(allowed) == 0 {
 		if fullAuthorization {
+			message := "Full authorization permits unlisted executables. Executions outside the allowlist are allowed and recorded as Full authorization bypass audit observations; executable availability is still resolved from PATH at execution time."
+			if strongPermissionEnabled {
+				message = "Full authorization permits unlisted executables, but Agent execution remains confined to the strong OS sandbox while Strong Permission Control is enabled. Unlisted executions are recorded as Full authorization bypass audit observations."
+			}
 			return []model.CapabilityFact{capabilityFact(
 				runtime.CapabilityExec,
 				capabilityKindExec,
 				model.CapabilityStateAvailable,
 				"full_authorization",
-				"Full authorization permits unlisted executables. Executions outside the allowlist are allowed and recorded as Full authorization bypass audit observations; executable availability is still resolved from PATH at execution time.",
+				message,
 				true,
 				evidence,
 			)}, true
 		}
-		return []model.CapabilityFact{capabilityFact(runtime.CapabilityExec, capabilityKindExec, model.CapabilityStateUnconfigured, "no_allowed_executables", "No executable is allowlisted for this Environment runtime.", true, evidence)}, false
 	}
 
 	facts := make([]model.CapabilityFact, 0, len(allowed)+1)
@@ -225,16 +280,27 @@ func execCapabilityFacts(ctx context.Context, env model.Environment, ws model.Wo
 			continue
 		}
 		available++
-		facts = append(facts, capabilityFact("shell.exec/"+executable, capabilityKindExec, model.CapabilityStateAvailable, "", "Executable is allowlisted and can be prepared without starting a process.", true, factEvidence))
+		message := "Executable is allowlisted and can be prepared without starting a process."
+		if strongPermissionEnabled {
+			message = "Executable is allowlisted and can be prepared; Agent execution uses the strong OS sandbox while Strong Permission Control is enabled."
+		}
+		factEvidence[len(factEvidence)-1].Details["agent_execution_mode"] = agentExecutionMode
+		facts = append(facts, capabilityFact("shell.exec/"+executable, capabilityKindExec, model.CapabilityStateAvailable, "", message, true, factEvidence))
 	}
 
 	summaryState := model.CapabilityStateAvailable
 	summaryReason := ""
 	summaryMessage := "At least one allowlisted executable can be prepared without starting a process."
+	if strongPermissionEnabled {
+		summaryMessage = "At least one allowlisted executable can be prepared; Agent command execution is available through the strong OS sandbox."
+	}
 	execAvailable := available > 0
 	if fullAuthorization {
 		summaryReason = "full_authorization"
 		summaryMessage = "Full authorization permits unlisted executables in addition to the explicit allowlist. Unlisted executions are recorded as Full authorization bypass audit observations."
+		if strongPermissionEnabled {
+			summaryMessage = "Full authorization permits unlisted executables, while Agent command execution remains confined to the strong OS sandbox. Unlisted executions are recorded as Full authorization bypass audit observations."
+		}
 		execAvailable = true
 	} else if available == 0 {
 		summaryState = model.CapabilityStateUnavailable

@@ -10,7 +10,6 @@ import (
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/verifier"
-
 )
 
 func TestAgentVerifierUsesSandboxOrExplicitHostApproval(t *testing.T) {
@@ -175,8 +174,12 @@ func TestAgentControlledGitCommitWithoutRawExec(t *testing.T) {
 		"writer_owner":   "controlled-commit-writer",
 		"executable":     os.Args[0],
 	})
-	if !rawDenied.IsError || !strings.Contains(toolText(t, rawDenied), "Strong Permission Control is enabled") {
-		t.Fatalf("raw host execution denial must explain strong permission mode: %s", toolText(t, rawDenied))
+	rawText := toolText(t, rawDenied)
+	if !rawDenied.IsError || !strings.Contains(rawText, "not allowed") {
+		t.Fatalf("unallowlisted Agent execution must still be rejected by Runtime authority: %s", rawText)
+	}
+	if strings.Contains(rawText, "Strong Permission Control is enabled") {
+		t.Fatalf("Agent exec is still being rejected by the old strong-permission host gate: %s", rawText)
 	}
 
 	committed := callGatewayTool(t, ctx, agent, "git_commit", map[string]any{

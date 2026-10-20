@@ -25,7 +25,7 @@ import (
 const (
 	serverName             = "adm"
 	runtimeOwnerHeader     = "X-ADM-Runtime-Owner"
-	gatewayToolsetRevision = "2026-10-19.3"
+	gatewayToolsetRevision = "2026-10-20.1"
 )
 
 var serverVersion = productversion.Current()
@@ -706,13 +706,24 @@ func onOff(enabled bool) string {
 	return "disabled"
 }
 
+func agentStrongSandboxExecution(service *app.Service, surface serverSurface) (bool, error) {
+	if surface != serverSurfaceAgent {
+		return false, nil
+	}
+	status, err := service.StrongPermissionControlStatus()
+	if err != nil {
+		return false, fmt.Errorf("read Strong Permission Control status: %w", err)
+	}
+	return status.Enabled, nil
+}
+
 func agentToolPermission(name string) agentToolPermissionClass {
 	if isV144AdminOnlyTool(name) {
 		return agentToolPermissionAdminOnly
 	}
 	switch name {
 	case "global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read",
-		"exec", "run_start", "process_start", "environment_temporary_cleanup", "environment_worktree_destroy", "git_tag_delete":
+		"process_start", "environment_temporary_cleanup", "environment_worktree_destroy", "git_tag_delete":
 		return agentToolPermissionStrongOnly
 	default:
 		return agentToolPermissionAllowed
@@ -2017,9 +2028,18 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec", Description: "Run one explicitly allowlisted executable inside an Environment root. Requires the matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec", Description: "Run one explicitly authorized executable inside an Environment root. Agent calls use the strong OS sandbox while Strong Permission Control is enabled; relaxed/Admin calls use host Runtime execution. Requires the matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in ExecInput) (*mcp.CallToolResult, any, error) {
-			value, err := service.Exec(ctx, in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
+			sandboxed, err := agentStrongSandboxExecution(service, surface)
+			if err != nil {
+				return toolResult(nil, err)
+			}
+			var value any
+			if sandboxed {
+				value, err = service.ExecSandbox(ctx, in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
+			} else {
+				value, err = service.Exec(ctx, in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
+			}
 			return toolResult(value, err)
 		})
 
@@ -2068,12 +2088,21 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "run_start", Description: "Start one asynchronous single-command Agent Run owned by this Gateway. Requires the matching Environment writer_owner and reuses the existing Runtime allowlist/cwd policy."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "run_start", Description: "Start one asynchronous single-command Agent Run owned by this Gateway. Agent calls use the strong OS sandbox while Strong Permission Control is enabled; relaxed/Admin calls use host Runtime execution. Requires the matching Environment writer_owner and reuses the existing Runtime allowlist/cwd policy."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in RunStartInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
 			}
-			value, err := owner.StartAgentRun(in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
+			sandboxed, err := agentStrongSandboxExecution(service, surface)
+			if err != nil {
+				return toolResult(nil, err)
+			}
+			var value agentRunStatus
+			if sandboxed {
+				value, err = owner.StartAgentRunSandboxed(in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
+			} else {
+				value, err = owner.StartAgentRun(in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
+			}
 			return toolResult(value, err)
 		})
 
