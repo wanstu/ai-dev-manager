@@ -881,6 +881,29 @@ function createActionButton(label, action, id, kind = 'secondary') {
   const button = document.createElement('button'); button.type = 'button'; button.className = `small-button ${kind === 'danger' ? 'danger-button' : 'secondary-button'}`;
   button.textContent = label; button.dataset.action = action; button.dataset.id = id; return button;
 }
+function disabledRuntimeAction(button, reason = '') {
+  reason = String(reason || '').trim();
+  if (!button.disabled || !reason) return button;
+  button.title = reason;
+  button.setAttribute('aria-describedby', '');
+  const wrapper = document.createElement('span');
+  wrapper.className = 'runtime-disabled-action';
+  wrapper.tabIndex = 0;
+  wrapper.setAttribute('aria-label', reason);
+  const tooltip = document.createElement('span');
+  tooltip.className = 'runtime-disabled-action-tooltip';
+  tooltip.setAttribute('role', 'tooltip');
+  tooltip.textContent = reason;
+  wrapper.append(button, tooltip);
+  return wrapper;
+}
+function runtimeWriterActionDisabledReason(environment, writerOwner, pending) {
+  if (pending) return '当前有 Runtime 操作正在执行，请等待完成后再操作。';
+  if (!environment) return '尚未选择 Environment。';
+  if (!environment.writer) return '当前 Environment 没有 active Writer。先获取 Writer 后才能执行此操作。';
+  if (!writerOwner) return '当前 Environment 有 active Writer，但当前 Desktop 会话没有 Writer Owner。需要由持锁会话操作；如果这是残留锁，可在 Environment 详情中使用“强制释放锁”。';
+  return '';
+}
 function checkControl(labelText, checked, action, id, disabled = false) {
   const label = document.createElement('label'); label.className = 'check-field compact-check';
   const input = document.createElement('input'); input.type = 'checkbox'; input.checked = Boolean(checked); input.disabled = disabled; input.dataset.action = action; input.dataset.id = id;
@@ -1684,6 +1707,7 @@ function renderRuntime() {
   syncRuntimeSubviewUI();
   const environment = currentEnvironment(), writerOwner = runtimeWriterOwner(), pending = Boolean(runtimePendingActionKey);
   const activeWriter = Boolean(environment?.writer), writerAuthorized = activeWriter && Boolean(writerOwner);
+  const writerActionDisabledReason = runtimeWriterActionDisabledReason(environment, writerOwner, pending);
   elements.runtimeHint.textContent = !environment
     ? '选择 Management Environment 后可查看当前 Gateway owner 的运行状态。'
     : activeWriter
@@ -1697,18 +1721,29 @@ function renderRuntime() {
 
   renderRuntimeListState('verifiers', '没有配置 verifier', (verifiers, container) => {
     for (const verifier of verifiers) {
-      const run = createActionButton('运行', 'run-verifier', verifier.verifier_id); run.disabled = pending || !writerAuthorized || verifier.enabled === false;
+      const run = createActionButton('运行', 'run-verifier', verifier.verifier_id);
+      run.disabled = pending || !writerAuthorized || verifier.enabled === false;
+      const runReason = verifier.enabled === false ? '当前 Verifier 已禁用，启用后才能运行。' : writerActionDisabledReason;
       const agentAllowed = Boolean(verifier.agent_host_execution_allowed);
       const agentToggle = createActionButton(agentAllowed ? '撤销 AI 运行' : '允许 AI 运行', 'toggle-verifier-agent', verifier.verifier_id, agentAllowed ? 'danger' : 'secondary');
       agentToggle.disabled = pending || verifier.enabled === false; agentToggle.dataset.allowed = agentAllowed ? '1' : '0';
+      const agentToggleReason = verifier.enabled === false ? '当前 Verifier 已禁用，无法修改 AI 运行权限。' : (pending ? '当前有 Runtime 操作正在执行，请等待完成后再操作。' : '');
       const args = safeArray(verifier.args).join(' '); const detail = `${verifier.kind || 'custom'} · ${verifier.executable || ''}${args ? ` ${args}` : ''}${verifier.cwd ? ` · cwd ${verifier.cwd}` : ''} · AI host ${agentAllowed ? '已允许' : '未允许'}`;
-      container.append(runtimeItem(verifier.name || verifier.verifier_id, verifier.verifier_id, verifier.enabled === false ? 'disabled' : 'configured', detail, [run, agentToggle]));
+      container.append(runtimeItem(verifier.name || verifier.verifier_id, verifier.verifier_id, verifier.enabled === false ? 'disabled' : 'configured', detail, [
+        disabledRuntimeAction(run, runReason),
+        disabledRuntimeAction(agentToggle, agentToggleReason),
+      ]));
     }
   });
   renderRuntimeListState('processes', '当前 Gateway owner 没有 process', (processes, container) => {
     for (const process of processes) {
-      const logs = createActionButton('日志', 'process-logs', process.id); logs.disabled = pending; const actions = [logs];
-      if (process.state === 'running') { const stop = createActionButton('停止', 'stop-process', process.id, 'danger'); stop.disabled = pending || !writerAuthorized; actions.push(stop); }
+      const logs = createActionButton('日志', 'process-logs', process.id); logs.disabled = pending;
+      const actions = [disabledRuntimeAction(logs, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看日志。' : '')];
+      if (process.state === 'running') {
+        const stop = createActionButton('停止', 'stop-process', process.id, 'danger');
+        stop.disabled = pending || !writerAuthorized;
+        actions.push(disabledRuntimeAction(stop, writerActionDisabledReason));
+      }
       const ports = safeArray(process.listening_ports); const detail = `PID ${process.pid || '—'}${ports.length ? ` · ports ${ports.join(', ')}` : ''}${process.exit_code !== undefined && process.exit_code !== null ? ` · exit ${process.exit_code}` : ''}${process.error_kind ? ` · ${process.error_kind}` : ''}`;
       container.append(runtimeItem(process.id, process.id, process.state, detail, actions));
     }
@@ -1716,8 +1751,13 @@ function renderRuntime() {
   runtimeRunsByID = new Map(safeArray(runtimeLists.runs).map((run) => [run.id, run]));
   renderRuntimeListState('runs', '当前 Gateway owner 没有 generic run', (runs, container) => {
     for (const run of runs) {
-      const output = createActionButton('输出', 'run-output', run.id); output.disabled = pending; const actions = [output];
-      if (run.state === 'running') { const cancel = createActionButton('取消', 'cancel-run', run.id, 'danger'); cancel.disabled = pending || !writerAuthorized; actions.push(cancel); }
+      const output = createActionButton('输出', 'run-output', run.id); output.disabled = pending;
+      const actions = [disabledRuntimeAction(output, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看输出。' : '')];
+      if (run.state === 'running') {
+        const cancel = createActionButton('取消', 'cancel-run', run.id, 'danger');
+        cancel.disabled = pending || !writerAuthorized;
+        actions.push(disabledRuntimeAction(cancel, writerActionDisabledReason));
+      }
       const detail = `${run.executable || ''}${safeArray(run.args).length ? ` ${safeArray(run.args).join(' ')}` : ''}${run.cwd ? ` · cwd ${run.cwd}` : ''}${run.exit_code !== undefined && run.exit_code !== null ? ` · exit ${run.exit_code}` : ''}${run.error_kind ? ` · ${run.error_kind}` : ''}`;
       container.append(runtimeItem(run.id, run.id, run.state, detail, actions));
     }
