@@ -22,8 +22,8 @@ func TestDesktopSurfaceDependencyDirection(t *testing.T) {
 
 func TestReleaseArtifactNamesRemainStable(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
-	assertFileContains(t, filepath.Join(repoRoot, ".github", "workflows", "ci.yml"), `adm$tagSuffix-${{ matrix.name }}${{ matrix.ext }}`)
-	assertFileContains(t, filepath.Join(repoRoot, ".github", "workflows", "ci.yml"), `adm-desktop$tagSuffix-windows-amd64.exe`)
+	assertFileContains(t, filepath.Join(repoRoot, ".github", "workflows", "ci.yml"), `adm$versionSuffix-${{ matrix.name }}${{ matrix.ext }}`)
+	assertFileContains(t, filepath.Join(repoRoot, ".github", "workflows", "ci.yml"), `adm-desktop$versionSuffix-windows-amd64.exe`)
 	assertFileContains(t, filepath.Join(repoRoot, "scripts", "build-desktop.ps1"), `[string]$OutputName = 'adm-desktop-windows-amd64.exe'`)
 }
 
