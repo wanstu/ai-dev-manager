@@ -342,6 +342,72 @@ func TestCapabilityReportFullAuthorizationAppliesToVerifierPreparation(t *testin
 	assertFact(t, full, "verifier/"+definition.ID, model.CapabilityStateAvailable, "", true)
 }
 
+func TestCapabilityReportReflectsAgentSandboxExecutionMode(t *testing.T) {
+	root := t.TempDir()
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(root, "sandbox-capability")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "sandbox-capability", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.AllowExecutable(executable); err != nil {
+		t.Fatal(err)
+	}
+
+	strong, err := service.EnvironmentCapabilityReport(context.Background(), env.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	strongFact := findFact(t, strong, runtime.CapabilityExec)
+	strongEvidence := strongFact.Evidence[len(strongFact.Evidence)-1].Details
+	if service.SandboxExecutionAvailable() {
+		if strongFact.State != model.CapabilityStateAvailable {
+			t.Fatalf("strong exec capability=%+v, want available sandbox execution", strongFact)
+		}
+		if strongEvidence["agent_execution_mode"] != "sandbox" {
+			t.Fatalf("strong agent_execution_mode=%q, want sandbox", strongEvidence["agent_execution_mode"])
+		}
+	} else {
+		if strongFact.State != model.CapabilityStateUnavailable || strongFact.ReasonCode != "strong_sandbox_unavailable" {
+			t.Fatalf("strong exec capability=%+v, want strong_sandbox_unavailable", strongFact)
+		}
+		if strongEvidence["agent_execution_mode"] != "unavailable" {
+			t.Fatalf("strong agent_execution_mode=%q, want unavailable", strongEvidence["agent_execution_mode"])
+		}
+	}
+
+	if _, err := service.SetStrongPermissionControl(false); err != nil {
+		t.Fatal(err)
+	}
+	relaxed, err := service.EnvironmentCapabilityReport(context.Background(), env.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	relaxedFact := assertFact(t, relaxed, runtime.CapabilityExec, model.CapabilityStateAvailable, "", true)
+	relaxedEvidence := relaxedFact.Evidence[len(relaxedFact.Evidence)-1].Details
+	if relaxedEvidence["agent_execution_mode"] != "host" {
+		t.Fatalf("relaxed agent_execution_mode=%q, want host", relaxedEvidence["agent_execution_mode"])
+	}
+}
+
+func findFact(t *testing.T, report model.CapabilityReport, key string) model.CapabilityFact {
+	t.Helper()
+	for _, fact := range report.Facts {
+		if fact.Key == key {
+			return fact
+		}
+	}
+	t.Fatalf("missing fact %s in %+v", key, report.Facts)
+	return model.CapabilityFact{}
+}
+
 func TestCapabilityReportVerifierSideEffectHelper(t *testing.T) {
 	path := os.Getenv("ADM_CAP_VERIFIER_SIDE_EFFECT")
 	if path == "" || !strings.Contains(strings.Join(os.Args, " "), "TestCapabilityReportVerifierSideEffectHelper") {
