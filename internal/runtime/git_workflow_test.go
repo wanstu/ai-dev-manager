@@ -218,6 +218,51 @@ func TestControlledGitPushBranchAndExactTag(t *testing.T) {
 	}
 }
 
+func TestControlledGitPushExactTagWithoutBranch(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not available")
+	}
+	root := t.TempDir()
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	if err := os.MkdirAll(remote, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitForCommitTest(t, git, remote, "init", "--bare")
+	runGitForCommitTest(t, git, root, "init", "-b", "main")
+	runGitForCommitTest(t, git, root, "config", "core.autocrlf", "false")
+	runGitForCommitTest(t, git, root, "config", "user.name", "ADM Test")
+	runGitForCommitTest(t, git, root, "config", "user.email", "adm-test@example.invalid")
+	if err := os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForCommitTest(t, git, root, "add", "tracked.txt")
+	runGitForCommitTest(t, git, root, "commit", "-m", "base")
+	runGitForCommitTest(t, git, root, "remote", "add", "origin", remote)
+
+	rt, err := NewWithEnvironment(root, nil, os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.GitTagCreate(context.Background(), "v-test-tag-only", "HEAD", "", false); err != nil {
+		t.Fatal(err)
+	}
+	result, err := rt.GitPush(context.Background(), "origin", "", []string{"v-test-tag-only"}, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Branch != "" || len(result.Tags) != 1 || result.Tags[0] != "v-test-tag-only" {
+		t.Fatalf("unexpected tags-only push result: %+v", result)
+	}
+	if got := runGitForCommitTest(t, git, remote, "rev-parse", "refs/tags/v-test-tag-only"); got == "" {
+		t.Fatal("remote tag was not pushed")
+	}
+	branchCheck := exec.Command(git, "-C", remote, "show-ref", "--verify", "--quiet", "refs/heads/main")
+	if err := branchCheck.Run(); err == nil {
+		t.Fatal("tags-only push unexpectedly created remote main branch")
+	}
+}
+
 func TestAgentSafeRemoteRejectsNonHTTPS(t *testing.T) {
 	git, err := exec.LookPath("git")
 	if err != nil {

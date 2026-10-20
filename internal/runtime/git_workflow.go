@@ -469,17 +469,25 @@ func (r *Runtime) gitPush(ctx context.Context, remote, branch string, tags []str
 		}
 	}
 	branch = strings.TrimSpace(branch)
-	if branch == "" {
+	// An omitted branch means "tags only" when exact tags were explicitly
+	// requested. Preserve the convenient current-branch default only when the
+	// caller did not specify either a branch or any tags.
+	if branch == "" && len(tags) == 0 {
 		current, branchErr := r.GitBranch(ctx)
 		if branchErr != nil {
 			return GitPushResult{}, branchErr
 		}
 		branch = current
 	}
-	if err := r.validateGitBranchName(ctx, git, branch); err != nil {
-		return GitPushResult{}, err
+	refspecs := make([]string, 0, 1+len(tags))
+	if branch != "" {
+		if err := r.validateGitBranchName(ctx, git, branch); err != nil {
+			return GitPushResult{}, err
+		}
+		refspecs = append(refspecs, "refs/heads/"+branch+":refs/heads/"+branch)
+	} else if setUpstream {
+		return GitPushResult{}, fmt.Errorf("git_push set_upstream requires an explicit or defaulted branch")
 	}
-	refspecs := []string{"refs/heads/" + branch + ":refs/heads/" + branch}
 	cleanTags := make([]string, 0, len(tags))
 	if len(tags) > 50 {
 		return GitPushResult{}, fmt.Errorf("git_push accepts at most 50 tags")
