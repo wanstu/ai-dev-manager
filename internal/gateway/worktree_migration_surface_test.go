@@ -8,7 +8,6 @@ import (
 
 	"ai-dev-manager-v2/internal/app"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestManagedWorktreeMigrationIsAdminOnly(t *testing.T) {
