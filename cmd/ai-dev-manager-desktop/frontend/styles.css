@@ -1124,3 +1124,74 @@ textarea:focus,
 .permission-control-panel .permission-help-tooltip {
   z-index: 100;
 }
+
+
+.detail-row-with-action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.detail-row-with-action > strong,
+.detail-row-with-action > span {
+  grid-column: 1;
+}
+.detail-row-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.detail-row-actions button {
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .detail-row-with-action {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .detail-row-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+}
+
+
+.runtime-disabled-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 7px;
+  cursor: help;
+  outline: none;
+}
+.runtime-disabled-action:focus-visible {
+  box-shadow: 0 0 0 2px var(--dk-primary-soft, #dbeafe);
+}
+.runtime-disabled-action-tooltip {
+  position: absolute;
+  z-index: 80;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: min(360px, 72vw);
+  padding: 9px 10px;
+  border: 1px solid var(--dk-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--dk-bg-elevated, #fff);
+  color: var(--dk-text, #111827);
+  box-shadow: var(--dk-shadow-panel, 0 10px 30px rgba(15, 23, 42, .14));
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: normal;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(-50%, 3px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+}
+.runtime-disabled-action:hover .runtime-disabled-action-tooltip,
+.runtime-disabled-action:focus-visible .runtime-disabled-action-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}

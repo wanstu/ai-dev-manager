@@ -881,6 +881,28 @@ function createActionButton(label, action, id, kind = 'secondary') {
   const button = document.createElement('button'); button.type = 'button'; button.className = `small-button ${kind === 'danger' ? 'danger-button' : 'secondary-button'}`;
   button.textContent = label; button.dataset.action = action; button.dataset.id = id; return button;
 }
+function disabledRuntimeAction(button, reason = '') {
+  reason = String(reason || '').trim();
+  if (!button.disabled || !reason) return button;
+  button.title = reason;
+  const wrapper = document.createElement('span');
+  wrapper.className = 'runtime-disabled-action';
+  wrapper.tabIndex = 0;
+  wrapper.setAttribute('aria-label', reason);
+  const tooltip = document.createElement('span');
+  tooltip.className = 'runtime-disabled-action-tooltip';
+  tooltip.setAttribute('role', 'tooltip');
+  tooltip.textContent = reason;
+  wrapper.append(button, tooltip);
+  return wrapper;
+}
+function runtimeWriterActionDisabledReason(environment, writerOwner, pending) {
+  if (pending) return '当前有 Runtime 操作正在执行，请等待完成后再操作。';
+  if (!environment) return '尚未选择 Environment。';
+  if (!environment.writer) return '当前 Environment 没有 active Writer。先获取 Writer 后才能执行此操作。';
+  if (!writerOwner) return '当前 Environment 有 active Writer，但当前 Desktop 会话没有 Writer Owner。需要由持锁会话操作；如果这是残留锁，可在 Environment 详情中使用“强制释放锁”。';
+  return '';
+}
 function checkControl(labelText, checked, action, id, disabled = false) {
   const label = document.createElement('label'); label.className = 'check-field compact-check';
   const input = document.createElement('input'); input.type = 'checkbox'; input.checked = Boolean(checked); input.disabled = disabled; input.dataset.action = action; input.dataset.id = id;
@@ -1684,6 +1706,7 @@ function renderRuntime() {
   syncRuntimeSubviewUI();
   const environment = currentEnvironment(), writerOwner = runtimeWriterOwner(), pending = Boolean(runtimePendingActionKey);
   const activeWriter = Boolean(environment?.writer), writerAuthorized = activeWriter && Boolean(writerOwner);
+  const writerActionDisabledReason = runtimeWriterActionDisabledReason(environment, writerOwner, pending);
   elements.runtimeHint.textContent = !environment
     ? '选择 Management Environment 后可查看当前 Gateway owner 的运行状态。'
     : activeWriter
@@ -1697,18 +1720,29 @@ function renderRuntime() {
 
   renderRuntimeListState('verifiers', '没有配置 verifier', (verifiers, container) => {
     for (const verifier of verifiers) {
-      const run = createActionButton('运行', 'run-verifier', verifier.verifier_id); run.disabled = pending || !writerAuthorized || verifier.enabled === false;
+      const run = createActionButton('运行', 'run-verifier', verifier.verifier_id);
+      run.disabled = pending || !writerAuthorized || verifier.enabled === false;
+      const runReason = verifier.enabled === false ? '当前 Verifier 已禁用，启用后才能运行。' : writerActionDisabledReason;
       const agentAllowed = Boolean(verifier.agent_host_execution_allowed);
       const agentToggle = createActionButton(agentAllowed ? '撤销 AI 运行' : '允许 AI 运行', 'toggle-verifier-agent', verifier.verifier_id, agentAllowed ? 'danger' : 'secondary');
       agentToggle.disabled = pending || verifier.enabled === false; agentToggle.dataset.allowed = agentAllowed ? '1' : '0';
+      const agentToggleReason = verifier.enabled === false ? '当前 Verifier 已禁用，无法修改 AI 运行权限。' : (pending ? '当前有 Runtime 操作正在执行，请等待完成后再操作。' : '');
       const args = safeArray(verifier.args).join(' '); const detail = `${verifier.kind || 'custom'} · ${verifier.executable || ''}${args ? ` ${args}` : ''}${verifier.cwd ? ` · cwd ${verifier.cwd}` : ''} · AI host ${agentAllowed ? '已允许' : '未允许'}`;
-      container.append(runtimeItem(verifier.name || verifier.verifier_id, verifier.verifier_id, verifier.enabled === false ? 'disabled' : 'configured', detail, [run, agentToggle]));
+      container.append(runtimeItem(verifier.name || verifier.verifier_id, verifier.verifier_id, verifier.enabled === false ? 'disabled' : 'configured', detail, [
+        disabledRuntimeAction(run, runReason),
+        disabledRuntimeAction(agentToggle, agentToggleReason),
+      ]));
     }
   });
   renderRuntimeListState('processes', '当前 Gateway owner 没有 process', (processes, container) => {
     for (const process of processes) {
-      const logs = createActionButton('日志', 'process-logs', process.id); logs.disabled = pending; const actions = [logs];
-      if (process.state === 'running') { const stop = createActionButton('停止', 'stop-process', process.id, 'danger'); stop.disabled = pending || !writerAuthorized; actions.push(stop); }
+      const logs = createActionButton('日志', 'process-logs', process.id); logs.disabled = pending;
+      const actions = [disabledRuntimeAction(logs, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看日志。' : '')];
+      if (process.state === 'running') {
+        const stop = createActionButton('停止', 'stop-process', process.id, 'danger');
+        stop.disabled = pending || !writerAuthorized;
+        actions.push(disabledRuntimeAction(stop, writerActionDisabledReason));
+      }
       const ports = safeArray(process.listening_ports); const detail = `PID ${process.pid || '—'}${ports.length ? ` · ports ${ports.join(', ')}` : ''}${process.exit_code !== undefined && process.exit_code !== null ? ` · exit ${process.exit_code}` : ''}${process.error_kind ? ` · ${process.error_kind}` : ''}`;
       container.append(runtimeItem(process.id, process.id, process.state, detail, actions));
     }
@@ -1716,8 +1750,13 @@ function renderRuntime() {
   runtimeRunsByID = new Map(safeArray(runtimeLists.runs).map((run) => [run.id, run]));
   renderRuntimeListState('runs', '当前 Gateway owner 没有 generic run', (runs, container) => {
     for (const run of runs) {
-      const output = createActionButton('输出', 'run-output', run.id); output.disabled = pending; const actions = [output];
-      if (run.state === 'running') { const cancel = createActionButton('取消', 'cancel-run', run.id, 'danger'); cancel.disabled = pending || !writerAuthorized; actions.push(cancel); }
+      const output = createActionButton('输出', 'run-output', run.id); output.disabled = pending;
+      const actions = [disabledRuntimeAction(output, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看输出。' : '')];
+      if (run.state === 'running') {
+        const cancel = createActionButton('取消', 'cancel-run', run.id, 'danger');
+        cancel.disabled = pending || !writerAuthorized;
+        actions.push(disabledRuntimeAction(cancel, writerActionDisabledReason));
+      }
       const detail = `${run.executable || ''}${safeArray(run.args).length ? ` ${safeArray(run.args).join(' ')}` : ''}${run.cwd ? ` · cwd ${run.cwd}` : ''}${run.exit_code !== undefined && run.exit_code !== null ? ` · exit ${run.exit_code}` : ''}${run.error_kind ? ` · ${run.error_kind}` : ''}`;
       container.append(runtimeItem(run.id, run.id, run.state, detail, actions));
     }
@@ -2994,6 +3033,15 @@ function renderImportApplyResult(result) {
 }
 
 function detailRow(label, value) { const row = document.createElement('div'); row.className = 'detail-row'; const term = document.createElement('strong'); term.textContent = label; const content = document.createElement('span'); content.textContent = value || '—'; row.append(term, content); return row; }
+function detailActionRow(label, value, action) {
+  const row = detailRow(label, value);
+  row.classList.add('detail-row-with-action');
+  const actions = document.createElement('div');
+  actions.className = 'detail-row-actions';
+  actions.append(action);
+  row.append(actions);
+  return row;
+}
 function detailGroup(title, rows, note = '') {
   const section = document.createElement('section'); section.className = 'detail-group'; const heading = document.createElement('div'); heading.className = 'detail-group-heading'; const label = document.createElement('strong'); label.textContent = title; heading.append(label);
   if (note) { const description = document.createElement('span'); description.textContent = note; heading.append(description); }
@@ -3051,7 +3099,7 @@ function diagnosticGroupLabel(kind) {
 }
 function diagnosticActionHint(fact) {
   const reason = String(fact?.reason_code || fact?.reason || '').toLowerCase();
-  if (reason.includes('writer')) return '处理建议：等待当前 writer 到期，或由持有 owner 的会话续租/释放；管理员可使用 CLI 强制释放。';
+  if (reason.includes('writer')) return '处理建议：等待当前 writer 到期，或由持有 owner 的会话续租/释放；管理员也可以在 Environment 详情中强制释放锁。';
   if (reason.includes('executable') || reason.includes('allow')) return '处理建议：检查执行许可页的 Strict/Full 模式和 executable allowlist。';
   if (reason.includes('mcp') || reason.includes('connection') || reason.includes('auth')) return '处理建议：检查 MCP Endpoint、鉴权引用、网络和全局 MCP 探测结果。';
   if (reason.includes('skill') || reason.includes('artifact') || reason.includes('source')) return '处理建议：刷新 Skill Source，并检查 artifact/support root 是否存在。';
@@ -3131,6 +3179,35 @@ function renderDiagnosticsPage() {
   elements.diagnosticsPageContent.replaceChildren(...environmentDiagnosticGroups(managementInspection));
   elements.diagnosticsPageContent.classList.remove('empty');
 }
+async function forceReleaseEnvironmentWriter(environmentID) {
+  environmentID = String(environmentID || '').trim();
+  if (!environmentID) return;
+  const current = managementInspection?.environment;
+  if (!current?.writer || current.environment_id !== environmentID) {
+    return setStatus('当前 Environment 已没有 active Writer。', 'success');
+  }
+  if (!window.confirm(
+    '确定强制释放这个 Environment 的 Writer 锁？\n\n' +
+    '这会立即取消当前持锁会话的写入权限。正在运行的进程或任务不会被自动停止，但后续写入会失去该 Writer 授权。\n\n' +
+    '仅在确认锁已失效、持锁会话异常退出或需要管理员恢复时使用。'
+  )) return;
+
+  const token = detailGeneration;
+  const connection = connectionGeneration;
+  setStatus('正在强制释放 Writer 锁…', 'loading');
+  try {
+    await desktopAdapter().ForceReleaseRuntimeWriter(environmentID);
+    if (runtimeWriterCredential.environmentID === environmentID) clearRuntimeWriterCredential();
+    if (connection !== connectionGeneration) return;
+    await refreshSnapshot('Writer 锁已强制释放');
+    if (token === detailGeneration && selectedEnvironmentID === environmentID) {
+      setStatus('Writer 锁已强制释放', 'success');
+    }
+  } catch (error) {
+    if (connection === connectionGeneration) setStatus('强制释放 Writer 锁失败：' + errorText(error), 'error');
+  }
+}
+
 function renderEnvironmentDetailFromInspection(inspection, token = detailGeneration) {
   const environment = inspection?.environment || {}, workspace = inspection?.workspace || {}, report = inspection?.capability_report || {}, facts = capabilityMap(report);
   if (token !== detailGeneration || environment.environment_id !== selectedEnvironmentID) return false;
@@ -3147,8 +3224,19 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
     detailRow('Workspace', (workspace.name || workspace.workspace_id || '—') + (workspace.workspace_id ? ' (' + workspace.workspace_id + ')' : '') + ' · ' + (workspace.path || '')),
     detailRow('State', environment.state),
   ];
+  const writerText = environment.writer
+    ? ('Active · expires ' + (environment.writer.expires_at ? new Date(environment.writer.expires_at).toLocaleString() : 'unknown'))
+    : 'No active writer';
+  const writerRow = environment.writer
+    ? detailActionRow('Writer lease', writerText, (() => {
+        const button = createActionButton('强制释放锁', 'force-release-writer', environment.environment_id, 'danger');
+        button.title = '管理员恢复操作：忽略当前 Writer owner 并立即释放写锁';
+        button.addEventListener('click', () => forceReleaseEnvironmentWriter(environment.environment_id));
+        return button;
+      })())
+    : detailRow('Writer lease', writerText);
   const authorityRows = [
-    detailRow('Writer lease', environment.writer ? ('Active · expires ' + (environment.writer.expires_at ? new Date(environment.writer.expires_at).toLocaleString() : 'unknown')) : 'No active writer'),
+    writerRow,
     detailRow('Private Memory count', safeNumber(environment.private_memory_count) + ' entries'),
   ];
   const unresolvedRows = [
@@ -3158,7 +3246,7 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
   elements.environmentDetail.replaceChildren(
     detailGroup('环境基本信息', identityRows, '项目路径、所属工作区及环境 ID。'),
     detailGroup('生命周期', temporaryLifecycleRows(environment), '查看是否临时、持久以及所属会话；这里不会修改清理策略。'),
-    detailGroup('写入与运行权限', authorityRows, '仅展示写入锁状态，不会自动获取或释放写入权限。'),
+    detailGroup('写入与运行权限', authorityRows, '正常操作仍由 Writer owner 获取/释放；管理员可在异常锁残留时显式强制释放。'),
     detailGroup('需要关注的能力', capabilityRows, issueFacts.length + ' 项能力需要关注；未配置的可选服务不影响普通代码分析。'),
     detailGroup('未解析引用', unresolvedRows, '正常 catalog 删除会同步清理选择；若这里仍有 unresolved ID，说明是历史或外部状态残留。')
   );

@@ -50,6 +50,24 @@ func TestWriterLeaseExpiresAndAnotherEnvironmentCanAcquireRoot(t *testing.T) {
 	}
 }
 
+func TestForceReleaseWriterIgnoresOwner(t *testing.T) {
+	service, envA, _, _ := newLeaseTestService(t)
+
+	if _, err := service.AcquireWriter(envA.ID, "active-owner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ReleaseWriter(envA.ID, "wrong-owner", false); err == nil {
+		t.Fatal("normal release must reject the wrong writer owner")
+	}
+	released, err := service.ReleaseWriter(envA.ID, "", true)
+	if err != nil {
+		t.Fatalf("force release must not require the writer owner: %v", err)
+	}
+	if released.Writer != nil {
+		t.Fatalf("force release left writer lease active: %#v", released.Writer)
+	}
+}
+
 func TestWriterLeaseBlocksAncestorDescendantRootsButAllowsSiblings(t *testing.T) {
 	root := t.TempDir()
 	workRoot := filepath.Join(root, "work")
