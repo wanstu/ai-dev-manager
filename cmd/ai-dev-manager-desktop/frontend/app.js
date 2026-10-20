@@ -1374,10 +1374,10 @@ function renderStrongPermissionControlStatus(status) {
   strongPermissionControlStatus = status || null;
   const enabled = status?.enabled !== false;
   elements.strongPermissionControl.checked = enabled;
-  elements.strongPermissionControlModeLabel.textContent = enabled ? 'Strong · 默认开启' : 'v1.4.4 compatible · 宽松';
+  elements.strongPermissionControlModeLabel.textContent = enabled ? '已开启 · 更安全' : '已关闭 · 更灵活';
   elements.strongPermissionControlHint.textContent = status?.message || (enabled
-    ? '强权限开启：所有 Agent 工具仍可见；受限工具调用时会返回明确权限原因，不会无提示消失。'
-    : '强权限已关闭：Agent 使用 v1.4.4 兼容的宽松权限边界；原本属于 Admin 的管理操作仍需要 Admin 权限。');
+    ? '强权限已开启：受限操作会被拦截并明确说明原因，建议保持开启。'
+    : '强权限已关闭：Agent 可以使用更多宿主机能力，开发更灵活但风险更高；Admin 管理权限仍不会开放。');
 }
 async function refreshStrongPermissionControlStatus() {
   try {
@@ -1394,7 +1394,7 @@ async function refreshStrongPermissionControlStatus() {
 async function saveStrongPermissionControl() {
   const enabled = Boolean(elements.strongPermissionControl.checked);
   const previousEnabled = strongPermissionControlStatus?.enabled !== false;
-  if (!enabled && previousEnabled && !window.confirm('关闭强权限控制后，Agent 将恢复 v1.4.4 兼容的宽松权限行为，包括 raw exec、stdio MCP、verifier 宿主执行和 Git SSH 等。所有工具仍会保留，Admin 管理边界不会取消。确认关闭？')) {
+  if (!enabled && previousEnabled && !window.confirm('关闭强权限控制后，Agent 将可以使用更多宿主机能力，包括命令执行、stdio MCP、Git SSH 和宿主 Verifier。开发会更灵活，但 Agent 对本机的执行能力也会更大。Admin、密钥和 Secret 等管理权限仍不会开放。确认关闭？')) {
     renderStrongPermissionControlStatus(strongPermissionControlStatus);
     return;
   }
@@ -1402,7 +1402,7 @@ async function saveStrongPermissionControl() {
   try {
     const status = await desktopAdapter().SetStrongPermissionControl(enabled);
     renderStrongPermissionControlStatus(status);
-    setStatus(enabled ? '强权限控制已开启' : '强权限控制已关闭，已进入 v1.4.4 兼容模式', 'success');
+    setStatus(enabled ? '强权限控制已开启' : '强权限控制已关闭，当前为宽松权限模式', 'success');
   } catch (error) {
     renderStrongPermissionControlStatus(strongPermissionControlStatus);
     setStatus('强权限控制设置失败：' + errorText(error), 'error');
