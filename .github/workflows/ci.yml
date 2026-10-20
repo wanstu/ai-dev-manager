@@ -512,7 +512,7 @@ jobs:
     needs:
       - release-source-check
       - windows-installer-upgrade-e2e
-    if: ${{ startsWith(github.ref, 'refs/tags/v') && needs.release-source-check.result == 'success' && needs.windows-installer-upgrade-e2e.result == 'success' }}
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.release-source-check.result == 'success' && needs.windows-installer-upgrade-e2e.result == 'success' }}
     permissions:
       actions: read
       contents: write
