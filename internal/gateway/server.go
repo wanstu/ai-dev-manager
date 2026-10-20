@@ -2210,7 +2210,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_push", Description: "Controlled push of one local branch and optional exact local tags to one existing configured Git remote. Requires matching writer_owner. With Strong Permission Control enabled, Agent push is restricted to safe configured HTTPS remotes; v1.4.4-compatible relaxed mode uses the host Git remote path. Force push, remote deletion and arbitrary refspecs are not exposed by this typed tool."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "git_push", Description: "Controlled push of one local branch and/or exact local tags to one existing configured Git remote. Requires matching writer_owner. If tags are supplied and branch is omitted, only those tags are pushed; the current branch is defaulted only when neither branch nor tags are supplied. With Strong Permission Control enabled, Agent push is restricted to safe configured HTTPS remotes; relaxed mode uses the host Git remote path. Force push, remote deletion and arbitrary refspecs are not exposed by this typed tool."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in GitPushInput) (*mcp.CallToolResult, any, error) {
 			strong, modeErr := strongAgentRestrictions(service, surface)
 			if modeErr != nil {
