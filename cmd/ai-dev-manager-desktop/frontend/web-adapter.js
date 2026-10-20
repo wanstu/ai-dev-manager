@@ -20,7 +20,7 @@
     'RemoveSkillSource','RemoveSkill','SetSkillDefault','SetWorkspaceMCP','SetWorkspaceSkill',
     'SetEnvironmentMCP','SetEnvironmentSkill','ListEnvironmentSkills','ListGlobalMemory',
     'WriteGlobalMemory','DeleteGlobalMemory','ListEnvironmentMemory','WriteEnvironmentMemory',
-    'DeleteEnvironmentMemory','AcquireRuntimeWriter','ReleaseRuntimeWriter','ListVerifiers',
+    'DeleteEnvironmentMemory','AcquireRuntimeWriter','ReleaseRuntimeWriter','ForceReleaseRuntimeWriter','ListVerifiers',
     'RunVerifier','ListProcesses','GetProcessLogs','StopProcess','ListRuns','CancelRun',
     'GetTemporaryEnvironmentStatus','PromoteTemporaryEnvironment','CleanupTemporaryEnvironment',
     'CleanupExpiredTemporaryEnvironments','CleanupStaleManagedWorktrees','MigrateManagedWorktreesToTemporary'
