@@ -19,7 +19,7 @@ func strongPermissionControlStatus(disabled bool) StrongPermissionControlStatus 
 			Compatibility:     "v1.4.4",
 			DefaultEnabled:    true,
 			RequiresReconnect: false,
-			Message:           "强权限控制已关闭；Agent 使用 v1.4.4 兼容的宽松权限边界。工具仍全部可见，v1.4.4 中原本属于 Admin 的管理工具仍需要 Admin 权限。",
+			Message:           "强权限控制已关闭；Agent 可以使用更多宿主机能力，开发操作更灵活但风险更高。工具仍全部可见，Admin、密钥和 Secret 等管理权限仍保持隔离。",
 		}
 	}
 	return StrongPermissionControlStatus{
@@ -28,7 +28,7 @@ func strongPermissionControlStatus(disabled bool) StrongPermissionControlStatus 
 		Compatibility:     "current",
 		DefaultEnabled:    true,
 		RequiresReconnect: false,
-		Message:           "强权限控制已开启；Agent 工具全部可见，但受限工具会在调用时返回明确权限原因和操作建议。不会自动降级到宽松模式。",
+		Message:           "强权限控制已开启；Agent 工具全部可见，受限操作会被拦截并返回明确原因和操作建议。建议保持开启。",
 	}
 }
 
