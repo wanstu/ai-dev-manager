@@ -409,13 +409,27 @@
         </div>
         <div class="system-control-grid single-column-grid exec-authority-grid">
           <section class="subpanel">
-            <div class="subpanel-heading"><div><h3>强权限控制</h3><span id="strongPermissionControlModeLabel">Strong · 默认开启</span></div></div>
+            <div class="subpanel-heading">
+              <div>
+                <div class="permission-heading-with-help">
+                  <h3>强权限控制</h3>
+                  <span class="permission-help" tabindex="0" aria-label="查看强权限控制说明">?
+                    <span class="permission-help-tooltip" role="tooltip">
+                      <strong>开启：</strong>Agent 只能使用受控或已授权的能力；高风险操作会被拦截并说明原因。<br>
+                      <strong>关闭：</strong>允许 Agent 使用更多宿主机能力，例如命令执行、stdio MCP、Git SSH 和宿主 Verifier；开发更灵活，但风险更高。<br>
+                      <strong>始终保留：</strong>Admin、密钥、Secret 等管理权限不会因为关闭此开关而开放给 Agent。
+                    </span>
+                  </span>
+                </div>
+                <span id="strongPermissionControlModeLabel">默认开启</span>
+              </div>
+            </div>
             <div class="subpanel-body">
-              <label class="desktop-toggle" title="控制 Agent 是否启用当前强权限边界；关闭后使用 v1.4.4 兼容的宽松 Agent 权限行为">
+              <label class="desktop-toggle">
                 <input id="strongPermissionControl" type="checkbox" checked>
-                <span><strong>开启强权限控制</strong><small>默认开启；关闭后进入 v1.4.4 兼容模式</small></span>
+                <span><strong>开启强权限控制</strong><small>默认开启；关闭后允许 Agent 使用更多宿主能力</small></span>
               </label>
-              <p id="strongPermissionControlHint" class="subpanel-note">强权限开启时，所有工具仍会保留在 Agent 工具列表中；无权限工具调用会返回明确原因和操作建议，不会无提示消失。关闭后 raw exec、stdio MCP、verifier host execution、Git SSH 等恢复 v1.4.4 兼容行为，但原本就属于 Admin 的密钥/管理操作仍保持 Admin 权限。</p>
+              <p id="strongPermissionControlHint" class="subpanel-note">建议保持开启。关闭后开发操作更自由，但 Agent 对宿主机的执行能力也会更大。</p>
             </div>
           </section>
           <section class="subpanel">
