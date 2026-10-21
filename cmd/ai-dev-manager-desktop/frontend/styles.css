@@ -663,9 +663,14 @@ body.has-editor-dialog { overflow: hidden; }
   background: var(--dk-bg-app);
   font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
 }
-body { background: var(--dk-app-gradient, var(--dk-bg-app)); color: var(--dk-text); }
+body {
+  background: var(--dk-bg-app);
+  background-image: var(--dk-app-gradient, none);
+  color: var(--dk-text);
+}
 button {
-  background: var(--dk-primary-gradient, var(--dk-primary));
+  background: var(--dk-primary);
+  background-image: var(--dk-primary-gradient, none);
   color: var(--dk-primary-contrast);
 }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
@@ -674,12 +679,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .secondary-button {
   border-color: var(--dk-border);
   background: var(--dk-bg-elevated);
+  background-image: none;
   color: var(--dk-text);
 }
-.secondary-button:hover:not(:disabled) { background: var(--dk-bg-subtle); }
+.secondary-button:hover:not(:disabled) { background: var(--dk-bg-subtle); background-image: none; }
 .danger-button {
   border-color: var(--dk-danger-border);
   background: var(--dk-danger-bg);
+  background-image: none;
   color: var(--dk-danger);
 }
 .topbar,
@@ -697,12 +704,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .config-source-card,
 .remote-access-intro {
   border-color: var(--dk-border);
-  background: var(--dk-panel-gradient, var(--dk-bg-elevated));
+  background: var(--dk-bg-elevated);
+  background-image: var(--dk-panel-gradient, none);
   color: var(--dk-text);
 }
 .management-sidebar {
   border-color: var(--dk-border);
-  background: var(--dk-sidebar-gradient, var(--dk-bg-elevated));
+  background: var(--dk-bg-elevated);
+  background-image: var(--dk-sidebar-gradient, none);
   color: var(--dk-text);
 }
 .topbar,
@@ -749,7 +758,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .nav-link:hover { background: var(--dk-bg-subtle); color: var(--dk-text); }
 .nav-link[aria-current="page"] {
   border-color: var(--dk-nav-active-border);
-  background: var(--dk-nav-gradient, var(--dk-nav-active-bg));
+  background: var(--dk-nav-active-bg);
+  background-image: var(--dk-nav-gradient, none);
   color: var(--dk-nav-active-text);
   box-shadow: inset 3px 0 0 var(--dk-nav-active-accent);
 }
@@ -838,14 +848,52 @@ textarea:focus,
 .detail-backdrop { background: var(--dk-backdrop); }
 .detail-panel,
 .editor-dialog { box-shadow: var(--dk-shadow-dialog); }
+.editor-dialog {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  background-image: none;
+  color: var(--dk-text);
+}
 .editor-dialog::backdrop { background: var(--dk-backdrop); }
+.editor-dialog .dialog-heading {
+  border-color: var(--dk-border-subtle);
+  background: var(--dk-bg-subtle);
+  background-image: none;
+  color: var(--dk-text);
+}
+.editor-dialog form,
+.editor-dialog > .manager-form,
+.editor-dialog > .inline-form,
+.editor-dialog > .single-line-form,
+.editor-dialog > .memory-form {
+  background: var(--dk-bg-elevated);
+  background-image: none;
+}
+.editor-dialog .form-actions {
+  border-color: var(--dk-border-subtle);
+  background: var(--dk-bg-subtle);
+  background-image: none;
+}
+.editor-dialog input,
+.editor-dialog select,
+.editor-dialog textarea {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  background-image: none;
+  color: var(--dk-text);
+}
+.editor-dialog input:focus,
+.editor-dialog select:focus,
+.editor-dialog textarea:focus {
+  border-color: var(--dk-primary);
+  box-shadow: 0 0 0 3px var(--dk-focus-ring);
+}
 .runtime-output,
 .runtime-output-panel pre,
 .auth-usage-grid code {
   background: var(--dk-log-bg);
   color: var(--dk-log-text);
 }
-.editor-dialog .form-actions { background: var(--dk-bg-subtle); }
 .dialog-message { background: var(--dk-danger-bg); color: var(--dk-danger); }
 .endpoint-stack span,
 .remote-access-intro,
@@ -887,6 +935,127 @@ textarea:focus,
   border-radius: var(--dk-radius-sm);
   background: var(--dk-bg-elevated);
   color: var(--dk-text);
+}
+.desktop-theme-field small { color: var(--dk-text-muted); font-size: 11px; font-weight: 400; line-height: 1.45; }
+.desktop-theme-style-field { align-content: start; }
+.desktop-theme-style-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--dk-radius-sm);
+  background: var(--dk-bg-muted);
+}
+.desktop-theme-style-switch button {
+  min-height: 36px;
+  border-color: transparent;
+  box-shadow: none;
+}
+.desktop-theme-style-switch button.is-active {
+  border-color: var(--dk-nav-active-border);
+  background: var(--dk-nav-active-bg);
+  background-image: var(--dk-nav-gradient, none);
+  color: var(--dk-nav-active-text);
+  box-shadow: inset 0 -2px 0 var(--dk-nav-active-accent);
+}
+.desktop-theme-gradient-field {
+  grid-column: 1 / -1;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--dk-border);
+  border-radius: var(--dk-radius-md);
+  background: var(--dk-bg-subtle);
+}
+.desktop-theme-gradient-presets { display: flex; flex-wrap: wrap; gap: 7px; }
+.desktop-theme-preset {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+.desktop-theme-preset[aria-pressed="true"] {
+  border-color: var(--dk-primary);
+  background: var(--dk-nav-active-bg);
+  color: var(--dk-nav-active-text);
+}
+.desktop-theme-gradient-list { display: grid; gap: 7px; }
+.desktop-theme-gradient-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px;
+}
+.desktop-theme-gradient-item select { min-height: 36px; }
+.desktop-theme-gradient-index {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--dk-bg-muted);
+  color: var(--dk-text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+}
+.desktop-theme-gradient-item button { min-width: 34px; min-height: 34px; padding: 5px 8px; }
+.desktop-theme-gradient-preview {
+  min-height: 78px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--dk-border);
+  border-radius: var(--dk-radius-md);
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .35);
+  overflow: hidden;
+}
+.desktop-theme-gradient-preview span { font-size: 11px; opacity: .9; }
+.desktop-theme-gradient-preview strong { font-size: 13px; }
+@media (max-width: 720px) {
+  .desktop-theme-gradient-item { grid-template-columns: 28px minmax(0, 1fr) repeat(3, auto); }
+  .desktop-theme-gradient-preview { align-items: flex-start; flex-direction: column; }
+}
+
+/* Keep local ADM surfaces aligned with Kit tokens in both solid and gradient modes. */
+.manager-form,
+.summary-strip,
+.list-toolbar,
+.runtime-subview-tabs,
+.skill-select-control,
+.resource-actions .check-field,
+.detail-group-heading,
+.editor-hint,
+.discovery-digest,
+.connection-auth-guide {
+  border-color: var(--dk-border-subtle);
+  background: var(--dk-bg-subtle);
+  color: var(--dk-text-secondary);
+}
+.list-heading,
+.skill-bulk-toolbar,
+.status-legend,
+.runtime-writer-toolbar,
+.detail-route-actions,
+.bulk-assignment-dialog .bulk-assignment-actions {
+  border-color: var(--dk-border-subtle);
+  background: var(--dk-bg-elevated);
+  color: var(--dk-text-secondary);
+}
+.summary-strip span,
+.diagnostic-fact {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  color: var(--dk-text-secondary);
+}
+.manager-form label,
+.filter-field,
+.status-legend,
+.detail-group-heading span,
+.detail-route-actions > span {
+  color: var(--dk-text-secondary);
 }
 .desktop-theme-status-row {
   display: flex;

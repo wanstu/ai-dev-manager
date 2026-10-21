@@ -578,23 +578,36 @@
                   <option value="dark">深色</option>
                 </select>
               </label>
-              <label class="desktop-theme-field">
+              <div class="desktop-theme-field desktop-theme-style-field">
                 <span>主题样式</span>
-                <select id="desktopThemeStyle">
+                <div id="desktopThemeStyleSwitch" class="desktop-theme-style-switch" role="group" aria-label="选择主题样式">
+                  <button type="button" class="secondary-button" data-desktop-theme-style="solid" aria-pressed="true">普通主题</button>
+                  <button type="button" class="secondary-button" data-desktop-theme-style="gradient" aria-pressed="false">渐变主题</button>
+                </div>
+                <select id="desktopThemeStyle" hidden aria-hidden="true" tabindex="-1">
                   <option value="solid">纯色</option>
                   <option value="gradient">渐变</option>
                 </select>
-              </label>
+              </div>
               <label id="desktopThemePackField" class="desktop-theme-field">
                 <span>主题包</span>
                 <select id="desktopThemePack">
                   <option value="">Kit 默认配色</option>
                 </select>
               </label>
-              <label id="desktopThemeGradientField" class="desktop-theme-field" hidden>
-                <span>渐变组合（选择 2–4 个）</span>
-                <select id="desktopThemeGradientPacks" multiple size="4" aria-label="渐变主题组合"></select>
-              </label>
+              <div id="desktopThemeGradientField" class="desktop-theme-field desktop-theme-gradient-field" hidden>
+                <span>渐变组合</span>
+                <small>组合 2～4 个主题，按下方顺序渐变。</small>
+                <div id="desktopThemeGradientPresets" class="desktop-theme-gradient-presets" role="group" aria-label="推荐渐变组合"></div>
+                <div id="desktopThemeGradientList" class="desktop-theme-gradient-list" aria-label="渐变主题顺序"></div>
+                <select id="desktopThemeGradientAdd" aria-label="添加基础主题">
+                  <option value="">＋ 添加基础主题</option>
+                </select>
+                <div id="desktopThemeGradientPreview" class="desktop-theme-gradient-preview" aria-label="渐变配色预览">
+                  <span>背景 · 卡片 · 导航</span><strong>渐变效果预览</strong>
+                </div>
+                <select id="desktopThemeGradientPacks" multiple hidden aria-hidden="true" tabindex="-1"></select>
+              </div>
             </div>
             <div class="desktop-theme-status-row">
               <p id="desktopThemeHint" class="subpanel-note">默认使用跟随系统 + 极光纯色；切换到渐变后可组合 2–4 个 Kit Theme。</p>
