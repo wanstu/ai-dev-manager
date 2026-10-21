@@ -74,6 +74,27 @@ h3 { margin-bottom: 0; font-size: 14px; }
 .item-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
 .list-item code, .list-item span, .list-item small, .managed-row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-item .project-path { white-space: normal; overflow-wrap: anywhere; }
+.workspace-list { container-type: inline-size; }
+.workspace-item .workspace-path {
+  min-width: 0;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+}
+.workspace-actions { max-width: min(100%, 520px); }
+@container (max-width: 720px) {
+  .workspace-item {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+  }
+  .workspace-item .workspace-actions {
+    max-width: none;
+    justify-content: flex-start;
+  }
+}
 .list-item code, .managed-row code { color: #4b5563; font-size: 11px; }
 .list-item span { color: #374151; font-size: 13px; }
 .list-item small { color: #9ca3af; }
@@ -337,6 +358,9 @@ h3 { margin-bottom: 0; font-size: 14px; }
 .runtime-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
 @media (max-width: 900px) {
+  .workspace-list-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-list-toolbar .workspace-search-field { grid-column: 1 / -1; }
+  .workspace-list-toolbar .visible-count { grid-column: 1 / -1; justify-self: start; }
   .management-context, .manager-form { grid-template-columns: 1fr; }
   .runtime-output-panel .subpanel-heading { align-items: flex-start; flex-direction: column; }
   .runtime-output-panel .subpanel-heading span { max-width: none; text-align: left; }
@@ -351,6 +375,11 @@ h3 { margin-bottom: 0; font-size: 14px; }
 }
 
 @media (max-width: 560px) {
+  .workspace-list-toolbar { grid-template-columns: 1fr; }
+  .workspace-list-toolbar .workspace-search-field,
+  .workspace-list-toolbar .visible-count { grid-column: auto; }
+  .workspace-item { padding-inline: 14px; }
+  .workspace-item .workspace-actions { gap: 5px; }
   .summary-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary-strip span { text-align: center; }
   .list-heading { align-items: flex-start; flex-direction: column; }
