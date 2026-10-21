@@ -1,6 +1,6 @@
 const elements = {
   refreshButton: document.getElementById('refreshButton'),
-  launchAtLogin: document.getElementById('launchAtLogin'), desktopShellHint: document.getElementById('desktopShellHint'), desktopThemeMode: document.getElementById('desktopThemeMode'), desktopThemeStyle: document.getElementById('desktopThemeStyle'), desktopThemeStyleSwitch: document.getElementById('desktopThemeStyleSwitch'), desktopThemePackField: document.getElementById('desktopThemePackField'), desktopThemePack: document.getElementById('desktopThemePack'), desktopThemeGradientField: document.getElementById('desktopThemeGradientField'), desktopThemeGradientPacks: document.getElementById('desktopThemeGradientPacks'), desktopThemeGradientPresets: document.getElementById('desktopThemeGradientPresets'), desktopThemeGradientList: document.getElementById('desktopThemeGradientList'), desktopThemeGradientAdd: document.getElementById('desktopThemeGradientAdd'), desktopThemeGradientPreview: document.getElementById('desktopThemeGradientPreview'), desktopThemeHint: document.getElementById('desktopThemeHint'), desktopThemeRefreshButton: document.getElementById('desktopThemeRefreshButton'),
+  launchAtLogin: document.getElementById('launchAtLogin'), desktopShellHint: document.getElementById('desktopShellHint'), desktopThemeMode: document.getElementById('desktopThemeMode'), desktopThemeStyle: document.getElementById('desktopThemeStyle'), desktopThemeStyleSwitch: document.getElementById('desktopThemeStyleSwitch'), desktopThemePackField: document.getElementById('desktopThemePackField'), desktopThemePack: document.getElementById('desktopThemePack'), desktopThemeGradientField: document.getElementById('desktopThemeGradientField'), desktopThemeGradientPacks: document.getElementById('desktopThemeGradientPacks'), desktopThemeGradientPresets: document.getElementById('desktopThemeGradientPresets'), desktopThemeGradientList: document.getElementById('desktopThemeGradientList'), desktopThemeGradientAdd: document.getElementById('desktopThemeGradientAdd'), desktopThemeGradientPreview: document.getElementById('desktopThemeGradientPreview'), desktopThemeCustomPresets: document.getElementById('desktopThemeCustomPresets'), desktopThemeGradientPresetNew: document.getElementById('desktopThemeGradientPresetNew'), desktopThemeGradientPresetEditor: document.getElementById('desktopThemeGradientPresetEditor'), desktopThemeGradientPresetName: document.getElementById('desktopThemeGradientPresetName'), desktopThemeGradientPresetSave: document.getElementById('desktopThemeGradientPresetSave'), desktopThemeGradientPresetCancel: document.getElementById('desktopThemeGradientPresetCancel'), desktopThemeHint: document.getElementById('desktopThemeHint'), desktopThemeRefreshButton: document.getElementById('desktopThemeRefreshButton'),
   sandboxHostPreparationBadge: document.getElementById('sandboxHostPreparationBadge'), sandboxHostPreparationSummary: document.getElementById('sandboxHostPreparationSummary'), sandboxHostPreparationEnable: document.getElementById('sandboxHostPreparationEnable'), sandboxHostPreparationRefresh: document.getElementById('sandboxHostPreparationRefresh'),
   worktreeSettingsForm: document.getElementById('worktreeSettingsForm'), worktreeRoot: document.getElementById('worktreeRoot'), worktreeBranchPrefix: document.getElementById('worktreeBranchPrefix'), worktreeSettingsSaveButton: document.getElementById('worktreeSettingsSaveButton'), worktreeSettingsHint: document.getElementById('worktreeSettingsHint'), hostEnvironmentSummary: document.getElementById('hostEnvironmentSummary'), hostEnvironmentRefreshButton: document.getElementById('hostEnvironmentRefreshButton'), loggingStatusSummary: document.getElementById('loggingStatusSummary'),
   statusPanel: document.getElementById('statusPanel'),
@@ -921,6 +921,7 @@ let desktopThemeCatalogLoaded = false;
 let desktopLegacyCatalogRefresh = null;
 const defaultDesktopGradientPacks = ['aurora', 'ocean'];
 let desktopGradientSelectionOrder = [...defaultDesktopGradientPacks];
+let desktopCustomGradientPresets = [];
 const desktopGradientPresets = [
   {label: '极光 · 樱花 · 海洋', packs: ['aurora', 'sakura', 'ocean']},
   {label: '森林 · 落日', packs: ['forest', 'sunset']},
@@ -963,6 +964,98 @@ function commitDesktopGradientSelections(names) {
 function gradientOptionByName(name) {
   return desktopGradientOptions().find((option) => option.value === name) || null;
 }
+function normalizeDesktopCustomGradientPresets(value) {
+  return safeArray(value).map((preset) => ({
+    name: String(preset?.name || '').trim(),
+    packs: safeArray(preset?.packs).map((name) => String(name || '').trim()).filter(Boolean),
+  })).filter((preset) => preset.name && preset.packs.length >= 2 && preset.packs.length <= 4);
+}
+function desktopGradientPackLabels(packs) {
+  return safeArray(packs).map((name) => gradientOptionByName(name)?.textContent || name);
+}
+function sameDesktopGradientPacks(left, right) {
+  const a = safeArray(left);
+  const b = safeArray(right);
+  return a.length === b.length && a.every((name, index) => name === b[index]);
+}
+function setDesktopGradientPresetEditorOpen(open) {
+  if (!elements.desktopThemeGradientPresetEditor) return;
+  elements.desktopThemeGradientPresetEditor.hidden = !open;
+  if (open) {
+    elements.desktopThemeGradientPresetName.value = '';
+    requestAnimationFrame(() => elements.desktopThemeGradientPresetName?.focus());
+  }
+}
+function renderDesktopCustomGradientPresets() {
+  if (!elements.desktopThemeCustomPresets) return;
+  const names = desktopGradientSelections();
+  elements.desktopThemeCustomPresets.replaceChildren();
+  if (!desktopCustomGradientPresets.length) {
+    const empty = document.createElement('span');
+    empty.className = 'desktop-theme-custom-empty';
+    empty.textContent = '还没有自定义渐变包';
+    elements.desktopThemeCustomPresets.append(empty);
+    return;
+  }
+  for (const preset of desktopCustomGradientPresets) {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'desktop-theme-custom-preset';
+    wrapper.classList.toggle('is-active', sameDesktopGradientPacks(preset.packs, names));
+
+    const apply = document.createElement('button');
+    apply.type = 'button';
+    apply.className = 'desktop-theme-custom-preset-apply';
+    apply.textContent = preset.name;
+    apply.title = desktopGradientPackLabels(preset.packs).join(' · ');
+    apply.addEventListener('click', () => commitDesktopGradientSelections(preset.packs));
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'desktop-theme-custom-preset-delete';
+    remove.textContent = '×';
+    remove.title = `删除自定义渐变包“${preset.name}”`;
+    remove.setAttribute('aria-label', `删除自定义渐变包“${preset.name}”`);
+    remove.addEventListener('click', () => void deleteDesktopGradientPreset(preset.name));
+
+    wrapper.append(apply, remove);
+    elements.desktopThemeCustomPresets.append(wrapper);
+  }
+}
+async function saveDesktopGradientPreset() {
+  const name = String(elements.desktopThemeGradientPresetName?.value || '').trim();
+  const packs = desktopGradientSelections();
+  if (!name) {
+    elements.desktopThemeGradientPresetName?.focus();
+    setStatus('请输入自定义渐变包名称', 'error');
+    return;
+  }
+  if (packs.length < 2 || packs.length > 4) {
+    setStatus('自定义渐变包需要 2～4 个基础主题', 'error');
+    return;
+  }
+  elements.desktopThemeGradientPresetSave.disabled = true;
+  try {
+    const preferences = await desktopAdapter().SaveDesktopGradientPreset(name, packs);
+    desktopCustomGradientPresets = normalizeDesktopCustomGradientPresets(preferences?.custom_gradient_presets);
+    setDesktopGradientPresetEditorOpen(false);
+    renderDesktopCustomGradientPresets();
+    setStatus(`自定义渐变包“${name}”已保存`, 'success');
+  } catch (error) {
+    setStatus(`自定义渐变包保存失败：${error?.message || String(error)}`, 'error');
+  } finally {
+    elements.desktopThemeGradientPresetSave.disabled = false;
+  }
+}
+async function deleteDesktopGradientPreset(name) {
+  try {
+    const preferences = await desktopAdapter().DeleteDesktopGradientPreset(name);
+    desktopCustomGradientPresets = normalizeDesktopCustomGradientPresets(preferences?.custom_gradient_presets);
+    renderDesktopCustomGradientPresets();
+    setStatus(`自定义渐变包“${name}”已删除`, 'success');
+  } catch (error) {
+    setStatus(`自定义渐变包删除失败：${error?.message || String(error)}`, 'error');
+  }
+}
 function renderDesktopGradientEditor() {
   const gradient = elements.desktopThemeStyle.value === 'gradient';
   for (const button of elements.desktopThemeStyleSwitch?.querySelectorAll('[data-desktop-theme-style]') || []) {
@@ -986,6 +1079,10 @@ function renderDesktopGradientEditor() {
     button.addEventListener('click', () => commitDesktopGradientSelections(preset.packs));
     elements.desktopThemeGradientPresets.append(button);
   }
+  if (elements.desktopThemeGradientPresetNew) {
+    elements.desktopThemeGradientPresetNew.disabled = names.length < 2 || names.length > 4;
+  }
+  renderDesktopCustomGradientPresets();
 
   elements.desktopThemeGradientList.replaceChildren();
   names.forEach((name, index) => {
@@ -1179,6 +1276,7 @@ async function applyDesktopThemePreferences(preferences) {
   const requestedPack = preferences?.theme_pack || '';
   const requestedGradient = safeArray(preferences?.theme_gradient_packs).filter(Boolean);
   const gradientPacks = requestedGradient.length ? requestedGradient : defaultDesktopGradientPacks;
+  desktopCustomGradientPresets = normalizeDesktopCustomGradientPresets(preferences?.custom_gradient_presets);
 
   elements.desktopThemeMode.value = mode;
   elements.desktopThemeStyle.value = style;
@@ -1238,8 +1336,11 @@ function setDesktopThemeControlsDisabled(disabled) {
   for (const button of elements.desktopThemeStyleSwitch?.querySelectorAll('button') || []) button.disabled = disabled;
   if (disabled) {
     if (elements.desktopThemeGradientAdd) elements.desktopThemeGradientAdd.disabled = true;
-    for (const control of elements.desktopThemeGradientField?.querySelectorAll('button, select') || []) control.disabled = true;
+    for (const control of elements.desktopThemeGradientField?.querySelectorAll('button, select, input') || []) control.disabled = true;
   } else {
+    if (elements.desktopThemeGradientPresetName) elements.desktopThemeGradientPresetName.disabled = false;
+    if (elements.desktopThemeGradientPresetSave) elements.desktopThemeGradientPresetSave.disabled = false;
+    if (elements.desktopThemeGradientPresetCancel) elements.desktopThemeGradientPresetCancel.disabled = false;
     renderDesktopGradientEditor();
   }
   elements.desktopThemeRefreshButton.disabled = disabled;
@@ -4426,6 +4527,18 @@ elements.desktopThemeGradientAdd?.addEventListener('change', () => {
   const name = elements.desktopThemeGradientAdd.value;
   if (!name) return;
   commitDesktopGradientSelections([...desktopGradientSelections(), name]);
+});
+elements.desktopThemeGradientPresetNew?.addEventListener('click', () => setDesktopGradientPresetEditorOpen(true));
+elements.desktopThemeGradientPresetCancel?.addEventListener('click', () => setDesktopGradientPresetEditorOpen(false));
+elements.desktopThemeGradientPresetSave?.addEventListener('click', () => void saveDesktopGradientPreset());
+elements.desktopThemeGradientPresetName?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    void saveDesktopGradientPreset();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    setDesktopGradientPresetEditorOpen(false);
+  }
 });
 elements.desktopThemeRefreshButton.addEventListener('click', refreshDesktopThemeCatalog);
 window.addEventListener('focus', () => { loadDesktopPreferences(false); loadSandboxHostPreparation(false); });

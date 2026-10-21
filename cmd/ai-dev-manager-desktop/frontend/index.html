@@ -598,7 +598,16 @@
               <div id="desktopThemeGradientField" class="desktop-theme-field desktop-theme-gradient-field" hidden>
                 <span>渐变组合</span>
                 <small>组合 2～4 个主题，按下方顺序渐变。</small>
-                <div id="desktopThemeGradientPresets" class="desktop-theme-gradient-presets" role="group" aria-label="推荐渐变组合"></div>
+                <div class="desktop-theme-preset-toolbar">
+                  <div id="desktopThemeGradientPresets" class="desktop-theme-gradient-presets" role="group" aria-label="推荐渐变组合"></div>
+                  <button id="desktopThemeGradientPresetNew" type="button" class="secondary-button desktop-theme-preset desktop-theme-preset-new">＋ 保存当前组合</button>
+                </div>
+                <div id="desktopThemeCustomPresets" class="desktop-theme-custom-presets" aria-label="我的自定义渐变包"></div>
+                <div id="desktopThemeGradientPresetEditor" class="desktop-theme-gradient-preset-editor" hidden>
+                  <input id="desktopThemeGradientPresetName" type="text" maxlength="40" autocomplete="off" placeholder="渐变包名称，例如：工作 / 夜间">
+                  <button id="desktopThemeGradientPresetSave" type="button">保存渐变包</button>
+                  <button id="desktopThemeGradientPresetCancel" type="button" class="secondary-button">取消</button>
+                </div>
                 <div id="desktopThemeGradientList" class="desktop-theme-gradient-list" aria-label="渐变主题顺序"></div>
                 <select id="desktopThemeGradientAdd" aria-label="添加基础主题">
                   <option value="">＋ 添加基础主题</option>

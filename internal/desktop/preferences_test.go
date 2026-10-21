@@ -68,6 +68,87 @@ func TestSetDesktopThemePersistsGradientPreferences(t *testing.T) {
 	}
 }
 
+func TestCustomGradientPresetPersistsAndSurvivesThemeChanges(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
+	adapter := &Adapter{preferencesPath: path}
+
+	preferences, err := adapter.SaveDesktopGradientPreset("工作", []string{"Aurora", "sakura", "ocean"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []DesktopGradientPreset{{Name: "工作", Packs: []string{"aurora", "sakura", "ocean"}}}
+	if !reflect.DeepEqual(preferences.CustomGradientPresets, want) {
+		t.Fatalf("custom gradient presets=%#v, want %#v", preferences.CustomGradientPresets, want)
+	}
+
+	if _, err := adapter.SetDesktopTheme("dark", "forest", "gradient", []string{"forest", "sunset"}); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := &Adapter{preferencesPath: path}
+	preferences, err = reloaded.GetDesktopPreferences()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(preferences.CustomGradientPresets, want) {
+		t.Fatalf("theme change lost custom gradient presets: %#v", preferences.CustomGradientPresets)
+	}
+}
+
+func TestCustomGradientPresetSaveReplacesByNameAndDeletePersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
+	adapter := &Adapter{preferencesPath: path}
+
+	if _, err := adapter.SaveDesktopGradientPreset("夜间", []string{"midnight", "neon"}); err != nil {
+		t.Fatal(err)
+	}
+	preferences, err := adapter.SaveDesktopGradientPreset("夜间", []string{"obsidian", "cyber", "neon"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []DesktopGradientPreset{{Name: "夜间", Packs: []string{"obsidian", "cyber", "neon"}}}
+	if !reflect.DeepEqual(preferences.CustomGradientPresets, want) {
+		t.Fatalf("replaced presets=%#v, want %#v", preferences.CustomGradientPresets, want)
+	}
+
+	preferences, err = adapter.DeleteDesktopGradientPreset("夜间")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preferences.CustomGradientPresets) != 0 {
+		t.Fatalf("deleted presets=%#v, want empty", preferences.CustomGradientPresets)
+	}
+	reloaded := &Adapter{preferencesPath: path}
+	preferences, err = reloaded.GetDesktopPreferences()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preferences.CustomGradientPresets) != 0 {
+		t.Fatalf("reloaded deleted presets=%#v, want empty", preferences.CustomGradientPresets)
+	}
+}
+
+func TestCustomGradientPresetRejectsInvalidValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
+	adapter := &Adapter{preferencesPath: path}
+
+	for _, tt := range []struct {
+		name  string
+		packs []string
+	}{
+		{name: "", packs: []string{"aurora", "ocean"}},
+		{name: "one", packs: []string{"aurora"}},
+		{name: "duplicate", packs: []string{"aurora", "aurora"}},
+		{name: "bad", packs: []string{"aurora", "../theme"}},
+	} {
+		if _, err := adapter.SaveDesktopGradientPreset(tt.name, tt.packs); err == nil {
+			t.Fatalf("SaveDesktopGradientPreset(%q, %#v) expected validation error", tt.name, tt.packs)
+		}
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("invalid preset must not write preferences, stat err=%v", err)
+	}
+}
+
 func TestDesktopThemePreferencesNormalizeOlderSolidFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
 	if err := os.WriteFile(path, []byte(`{"theme_mode":"dark","theme_pack":"forest"}`), 0o600); err != nil {
