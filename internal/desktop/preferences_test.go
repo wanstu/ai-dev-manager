@@ -3,30 +3,34 @@ package desktop
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
-func TestDesktopThemePreferencesDefaultToSystemAurora(t *testing.T) {
+func TestDesktopThemePreferencesDefaultToSystemAuroraSolid(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
 	state, err := readPersistedDesktopPreferences(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.ThemeMode != "system" || state.ThemePack != "aurora" {
-		t.Fatalf("default theme = %q / %q; want system / aurora", state.ThemeMode, state.ThemePack)
+	if state.ThemeMode != "system" || state.ThemePack != "aurora" || state.ThemeStyle != "solid" {
+		t.Fatalf("default theme = %q / %q / %q; want system / aurora / solid", state.ThemeMode, state.ThemePack, state.ThemeStyle)
+	}
+	if !reflect.DeepEqual(state.ThemeGradientPacks, []string{"aurora", "ocean"}) {
+		t.Fatalf("default gradient packs = %#v; want aurora/ocean", state.ThemeGradientPacks)
 	}
 }
 
-func TestSetDesktopThemePersistsPreferences(t *testing.T) {
+func TestSetDesktopThemePersistsSolidPreferences(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
 	adapter := &Adapter{preferencesPath: path}
 
-	preferences, err := adapter.SetDesktopTheme("dark", "forest")
+	preferences, err := adapter.SetDesktopTheme("dark", "forest", "solid", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preferences.ThemeMode != "dark" || preferences.ThemePack != "forest" {
-		t.Fatalf("saved theme = %q / %q; want dark / forest", preferences.ThemeMode, preferences.ThemePack)
+	if preferences.ThemeMode != "dark" || preferences.ThemePack != "forest" || preferences.ThemeStyle != "solid" {
+		t.Fatalf("saved theme = %q / %q / %q; want dark / forest / solid", preferences.ThemeMode, preferences.ThemePack, preferences.ThemeStyle)
 	}
 
 	reloaded := &Adapter{preferencesPath: path}
@@ -34,8 +38,50 @@ func TestSetDesktopThemePersistsPreferences(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preferences.ThemeMode != "dark" || preferences.ThemePack != "forest" {
-		t.Fatalf("reloaded theme = %q / %q; want dark / forest", preferences.ThemeMode, preferences.ThemePack)
+	if preferences.ThemeMode != "dark" || preferences.ThemePack != "forest" || preferences.ThemeStyle != "solid" {
+		t.Fatalf("reloaded theme = %q / %q / %q; want dark / forest / solid", preferences.ThemeMode, preferences.ThemePack, preferences.ThemeStyle)
+	}
+}
+
+func TestSetDesktopThemePersistsGradientPreferences(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
+	adapter := &Adapter{preferencesPath: path}
+
+	preferences, err := adapter.SetDesktopTheme("system", "aurora", "gradient", []string{"Aurora", "ocean", "forest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preferences.ThemeStyle != "gradient" {
+		t.Fatalf("theme style=%q, want gradient", preferences.ThemeStyle)
+	}
+	if !reflect.DeepEqual(preferences.ThemeGradientPacks, []string{"aurora", "ocean", "forest"}) {
+		t.Fatalf("gradient packs=%#v", preferences.ThemeGradientPacks)
+	}
+
+	reloaded := &Adapter{preferencesPath: path}
+	preferences, err = reloaded.GetDesktopPreferences()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preferences.ThemeStyle != "gradient" || !reflect.DeepEqual(preferences.ThemeGradientPacks, []string{"aurora", "ocean", "forest"}) {
+		t.Fatalf("reloaded gradient preferences=%+v", preferences)
+	}
+}
+
+func TestDesktopThemePreferencesNormalizeOlderSolidFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
+	if err := os.WriteFile(path, []byte(`{"theme_mode":"dark","theme_pack":"forest"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state, err := readPersistedDesktopPreferences(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.ThemeMode != "dark" || state.ThemePack != "forest" || state.ThemeStyle != "solid" {
+		t.Fatalf("old theme normalized to %+v", state)
+	}
+	if !reflect.DeepEqual(state.ThemeGradientPacks, []string{"aurora", "ocean"}) {
+		t.Fatalf("old preference gradient defaults=%#v", state.ThemeGradientPacks)
 	}
 }
 
@@ -43,7 +89,7 @@ func TestSetDesktopThemeAllowsKitDefaultAndFutureRuntimePack(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "desktop-preferences.json")
 	adapter := &Adapter{preferencesPath: path}
 
-	preferences, err := adapter.SetDesktopTheme("light", "")
+	preferences, err := adapter.SetDesktopTheme("light", "", "solid", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +97,7 @@ func TestSetDesktopThemeAllowsKitDefaultAndFutureRuntimePack(t *testing.T) {
 		t.Fatalf("saved theme = %q / %q; want light / empty", preferences.ThemeMode, preferences.ThemePack)
 	}
 
-	preferences, err = adapter.SetDesktopTheme("system", "future-pack")
+	preferences, err = adapter.SetDesktopTheme("system", "future-pack", "solid", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,19 +108,26 @@ func TestSetDesktopThemeAllowsKitDefaultAndFutureRuntimePack(t *testing.T) {
 
 func TestSetDesktopThemeRejectsInvalidValuesWithoutWriting(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		mode string
-		pack string
+		name     string
+		mode     string
+		pack     string
+		style    string
+		gradient []string
 	}{
-		{name: "mode", mode: "sepia", pack: "aurora"},
-		{name: "pack spaces", mode: "system", pack: "not a theme"},
-		{name: "pack path", mode: "system", pack: "../theme"},
-		{name: "pack uppercase", mode: "system", pack: "Aurora!"},
+		{name: "mode", mode: "sepia", pack: "aurora", style: "solid"},
+		{name: "pack spaces", mode: "system", pack: "not a theme", style: "solid"},
+		{name: "pack path", mode: "system", pack: "../theme", style: "solid"},
+		{name: "pack uppercase punctuation", mode: "system", pack: "Aurora!", style: "solid"},
+		{name: "style", mode: "system", pack: "aurora", style: "animated"},
+		{name: "gradient duplicate", mode: "system", pack: "aurora", style: "gradient", gradient: []string{"aurora", "aurora"}},
+		{name: "gradient single", mode: "system", pack: "aurora", style: "gradient", gradient: []string{"aurora"}},
+		{name: "gradient too many", mode: "system", pack: "aurora", style: "gradient", gradient: []string{"aurora", "ocean", "forest", "sunset", "future"}},
+		{name: "gradient path", mode: "system", pack: "aurora", style: "gradient", gradient: []string{"aurora", "../theme"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "desktop-preferences.json")
 			adapter := &Adapter{preferencesPath: path}
-			if _, err := adapter.SetDesktopTheme(tt.mode, tt.pack); err == nil {
+			if _, err := adapter.SetDesktopTheme(tt.mode, tt.pack, tt.style, tt.gradient); err == nil {
 				t.Fatal("expected validation error")
 			}
 			if _, err := os.Stat(path); !os.IsNotExist(err) {

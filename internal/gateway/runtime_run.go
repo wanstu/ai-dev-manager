@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/identity"
 	runtimepkg "ai-dev-manager-v2/internal/runtime"
 )
@@ -32,6 +33,7 @@ type agentRunStatus struct {
 	Executable      string        `json:"executable"`
 	Args            []string      `json:"args,omitempty"`
 	Cwd             string        `json:"cwd,omitempty"`
+	ExecutionMode   string        `json:"execution_mode,omitempty"`
 	StartedAt       time.Time     `json:"started_at"`
 	CompletedAt     *time.Time    `json:"completed_at,omitempty"`
 	ExitCode        *int          `json:"exit_code,omitempty"`
@@ -52,6 +54,7 @@ type ownedAgentRun struct {
 	cwd           string
 	timeoutMS     int64
 	maxOutput     int
+	executionMode string
 	ctx           context.Context
 	cancel        context.CancelFunc
 	done          chan struct{}
@@ -110,6 +113,7 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 		cwd:           cwd,
 		timeoutMS:     normalizedTimeoutMS,
 		maxOutput:     maxOutputBytes,
+		executionMode: "host",
 		ctx:           runCtx,
 		cancel:        cancel,
 		done:          make(chan struct{}),
@@ -125,6 +129,58 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 		return agentRunStatus{}, err
 	}
 	go o.executeAgentRun(run, cmd)
+	go o.heartbeatAgentRun(run)
+	return o.agentRunStatus(run), nil
+}
+
+func (o *runtimeOwner) StartAgentRunSandboxed(environmentID, writerOwner, executable string, args []string, cwd string, timeoutMS int64, maxOutputBytes int) (agentRunStatus, error) {
+	if o == nil || o.service == nil {
+		return agentRunStatus{}, fmt.Errorf("runtime owner is not initialized")
+	}
+	normalizedTimeoutMS := timeoutMS
+	if normalizedTimeoutMS <= 0 {
+		normalizedTimeoutMS = 30000
+	}
+	runCtx, cancel := context.WithTimeout(o.processContext(), time.Duration(normalizedTimeoutMS)*time.Millisecond)
+	prepared, err := o.service.PrepareSandboxExecution(runCtx, environmentID, writerOwner, executable, args, cwd, "run_start_sandbox")
+	if err != nil {
+		cancel()
+		return agentRunStatus{}, err
+	}
+	runID, err := identity.New("run")
+	if err != nil {
+		cancel()
+		return agentRunStatus{}, err
+	}
+	o.service.Log("info", "run.start", map[string]string{
+		"environment_id": environmentID,
+		"executable":     executable,
+		"surface":        "run",
+		"execution_mode": "sandbox",
+	})
+	run := &ownedAgentRun{
+		id:            runID,
+		environmentID: environmentID,
+		writerOwner:   writerOwner,
+		executable:    executable,
+		args:          append([]string(nil), args...),
+		cwd:           cwd,
+		timeoutMS:     normalizedTimeoutMS,
+		maxOutput:     maxOutputBytes,
+		executionMode: "sandbox",
+		ctx:           runCtx,
+		cancel:        cancel,
+		done:          make(chan struct{}),
+		stdout:        newOwnerOutputBuffer(maxOutputBytes),
+		stderr:        newOwnerOutputBuffer(maxOutputBytes),
+		state:         agentRunRunning,
+		startedAt:     time.Now().UTC(),
+	}
+	if err := o.installAgentRun(run); err != nil {
+		cancel()
+		return agentRunStatus{}, err
+	}
+	go o.executeSandboxAgentRun(run, prepared)
 	go o.heartbeatAgentRun(run)
 	return o.agentRunStatus(run), nil
 }
@@ -181,11 +237,30 @@ func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 		_ = o.service.RecordExecUsage(run.environmentID, run.executable, "run_start")
 		err = cmd.Wait()
 	}
-	now := time.Now().UTC()
 	stdout, stdoutTruncated := run.stdout.Snapshot()
 	stderr, stderrTruncated := run.stderr.Snapshot()
 	result := runtimepkg.CommandResult{ExitCode: 0, Stdout: stdout, Stderr: stderr}
+	o.completeAgentRun(run, result, err, stdoutTruncated, stderrTruncated)
+}
 
+func (o *runtimeOwner) executeSandboxAgentRun(run *ownedAgentRun, prepared app.PreparedSandboxExecution) {
+	result, err := o.service.RunPreparedSandboxExecution(
+		run.ctx,
+		prepared,
+		run.id,
+		run.maxOutput,
+		run.stdout,
+		run.stderr,
+	)
+	stdout, stdoutTruncated := run.stdout.Snapshot()
+	stderr, stderrTruncated := run.stderr.Snapshot()
+	result.Stdout = stdout
+	result.Stderr = stderr
+	o.completeAgentRun(run, result, err, stdoutTruncated, stderrTruncated)
+}
+
+func (o *runtimeOwner) completeAgentRun(run *ownedAgentRun, result runtimepkg.CommandResult, err error, stdoutTruncated, stderrTruncated bool) {
+	now := time.Now().UTC()
 	run.mu.Lock()
 	run.result = result
 	run.hasResult = true
@@ -241,8 +316,17 @@ func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 	finalState := run.state
 	finalErrorKind := run.errorKind
 	finalExitCode := run.result.ExitCode
+	executionMode := run.executionMode
 	run.mu.Unlock()
-	o.service.Log("info", "run.completed", map[string]string{"environment_id": run.environmentID, "executable": run.executable, "surface": "run", "state": string(finalState), "exit_code": fmt.Sprint(finalExitCode), "error_kind": finalErrorKind})
+	o.service.Log("info", "run.completed", map[string]string{
+		"environment_id": run.environmentID,
+		"executable":     run.executable,
+		"surface":        "run",
+		"execution_mode": executionMode,
+		"state":          string(finalState),
+		"exit_code":      fmt.Sprint(finalExitCode),
+		"error_kind":     finalErrorKind,
+	})
 
 	run.cancel()
 	close(run.done)
@@ -301,6 +385,7 @@ func (o *runtimeOwner) agentRunStatus(run *ownedAgentRun) agentRunStatus {
 		Executable:    run.executable,
 		Args:          append([]string(nil), run.args...),
 		Cwd:           run.cwd,
+		ExecutionMode: run.executionMode,
 		StartedAt:     run.startedAt,
 		CompletedAt:   run.completedAt,
 		ErrorKind:     run.errorKind,

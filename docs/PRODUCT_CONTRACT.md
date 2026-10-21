@@ -115,6 +115,10 @@ Command execution must run within the selected registered Workspace/Environment 
 
 Commands not permitted by the whitelist must be rejected clearly.
 
+When Strong Permission Control is enabled, Agent `exec` and generic asynchronous `run_start` must execute through the strong OS sandbox after the same executable/cwd authority checks. Sandbox setup or launch failure must fail closed and must never fall back to host execution. Admin and explicitly selected v1.4.4-compatible relaxed execution may continue to use the existing host Runtime path.
+
+Capability reporting must describe the authority the Agent can actually use: host execution in relaxed mode, sandbox execution in strong mode, or unavailable when strong sandbox execution is not ready.
+
 The allowlist is mutable management state. ADM must support removing a previously allowed executable, and that removal must affect subsequent capability checks and command execution without requiring an ADM restart. Removing a value that is not currently allowlisted must fail clearly rather than report a false success.
 
 Acceptance:

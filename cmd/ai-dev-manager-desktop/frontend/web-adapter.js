@@ -57,11 +57,18 @@
   });
 
   function webPreferences() {
+    let gradientPacks = ['aurora', 'ocean'];
+    try {
+      const saved = JSON.parse(localStorage.getItem('adm-web-theme-gradient-packs') || 'null');
+      if (Array.isArray(saved) && saved.length) gradientPacks = saved;
+    } catch (_) {}
     return {
       launch_at_login_supported: false,
       launch_at_login: false,
       theme_mode: localStorage.getItem('adm-web-theme-mode') || 'system',
       theme_pack: localStorage.getItem('adm-web-theme-pack') || '',
+      theme_style: localStorage.getItem('adm-web-theme-style') || 'solid',
+      theme_gradient_packs: gradientPacks,
     };
   }
 
@@ -118,10 +125,12 @@
   });
   adapter.EnableSandboxHostPreparation = async () => { throw new Error('Windows 强沙盒只能在本机 Desktop 中启用'); };
   adapter.SetLaunchAtLogin = async () => webPreferences();
-  adapter.SetDesktopTheme = async (mode, pack) => {
+  adapter.SetDesktopTheme = async (mode, pack, style, gradientPacks) => {
     if (mode) localStorage.setItem('adm-web-theme-mode', mode);
     if (pack) localStorage.setItem('adm-web-theme-pack', pack);
     else localStorage.removeItem('adm-web-theme-pack');
+    localStorage.setItem('adm-web-theme-style', style === 'gradient' ? 'gradient' : 'solid');
+    localStorage.setItem('adm-web-theme-gradient-packs', JSON.stringify(Array.isArray(gradientPacks) ? gradientPacks : []));
     return webPreferences();
   };
   adapter.StartLocalADM = async () => { throw new Error('Web 管理台不负责启动 Gateway；请使用 systemd 或 adm gateway start'); };

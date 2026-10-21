@@ -24,10 +24,12 @@ func newLaunchAtLoginManager() (*autostart.Manager, error) {
 // DesktopPreferences contains settings owned by the Desktop process itself.
 // These preferences are intentionally independent from ADM Gateway connectivity.
 type DesktopPreferences struct {
-	LaunchAtLoginSupported bool   `json:"launch_at_login_supported"`
-	LaunchAtLogin          bool   `json:"launch_at_login"`
-	ThemeMode              string `json:"theme_mode"`
-	ThemePack              string `json:"theme_pack"`
+	LaunchAtLoginSupported bool     `json:"launch_at_login_supported"`
+	LaunchAtLogin          bool     `json:"launch_at_login"`
+	ThemeMode              string   `json:"theme_mode"`
+	ThemePack              string   `json:"theme_pack"`
+	ThemeStyle             string   `json:"theme_style"`
+	ThemeGradientPacks     []string `json:"theme_gradient_packs,omitempty"`
 }
 
 func (a *Adapter) GetDesktopPreferences() (DesktopPreferences, error) {
@@ -48,6 +50,8 @@ func (a *Adapter) GetDesktopPreferences() (DesktopPreferences, error) {
 		LaunchAtLogin:          enabled,
 		ThemeMode:              themePreferences.ThemeMode,
 		ThemePack:              themePreferences.ThemePack,
+		ThemeStyle:             themePreferences.ThemeStyle,
+		ThemeGradientPacks:     append([]string(nil), themePreferences.ThemeGradientPacks...),
 	}, nil
 }
 

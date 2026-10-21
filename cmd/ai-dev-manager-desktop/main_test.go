@@ -293,7 +293,7 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, required := range []string{
-		"/desktopkit/tokens.css", "/desktopkit/base.css", "/desktopkit/components.css", "/desktopkit/navigation.css", "/desktopkit/theme.js", "desktopThemeMode", "desktopThemePack", "desktopThemeHint", "desktopThemeRefreshButton",
+		"/desktopkit/tokens.css", "/desktopkit/base.css", "/desktopkit/components.css", "/desktopkit/navigation.css", "/desktopkit/theme.js", "desktopThemeMode", "desktopThemeStyle", "desktopThemePack", "desktopThemeGradientPacks", "desktopThemeHint", "desktopThemeRefreshButton",
 		"workspaceCount", "environmentCount", "execCount", "mcpCount", "skillCount", "memoryCount", "refreshButton", "launchAtLogin", "desktopShellHint", "app-brand-mark", "ai-dev-manager-window.png", "navigation.js", "dashboard.js", "project-pages.js", "runtime-view.js", "skill-bulk.js", "dashboardDataState", "dashboardLastSuccess", "management-sidebar", "data-management-page=\"overview\"", "data-route-link=\"settings\"",
 		"gatewayState", "gatewayBaseURL", "gatewayHealthURL", "gatewayURL", "gatewayAdminURL", "gatewayRefreshButton", "gatewayStartButton", "gatewayStopButton", "gatewayHostState", "gatewayAdminKeyState", "gatewayAdminKeyHint", "gatewayAgentKeyState", "gatewayAgentKeyHint", "connectionAPIKeyState",
 		"workspaceForm", "workspaceFilter", "workspaceVisibleCount", "workspaceListTotalCount", "connectionStartOnDesktopLaunch", "environmentForm", "environmentFilter", "environmentWorkspaceFilter", "environmentVisibleCount", "environmentListTotalCount", "environmentFilterHint", "environmentDetailPanel", "environmentDetailRoutes", "aria-modal",
@@ -311,7 +311,7 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 	}
 	for _, required := range []string{
 		"window.go?.desktop?.Adapter", "GetSnapshot", "refreshSnapshot",
-		"GetDesktopPreferences", "SetLaunchAtLogin", "SetDesktopTheme", "loadDesktopPreferences", "updateLaunchAtLogin", "ensureDesktopThemeCatalog", "refreshDesktopThemeCatalog", "applyDesktopThemePreferences", "updateDesktopTheme", "loadCatalog", "refreshCatalog", "applyPack", "clearAppliedPack", "desktopKitTheme",
+		"GetDesktopPreferences", "SetLaunchAtLogin", "SetDesktopTheme", "loadDesktopPreferences", "updateLaunchAtLogin", "ensureDesktopThemeCatalog", "refreshDesktopThemeCatalog", "applyDesktopThemePreferences", "updateDesktopTheme", "loadCatalog", "refreshCatalog", "applyPack", "clearAppliedPack", "applyGradient", "clearGradient", "desktopGradientSelections", "desktopKitTheme",
 		"ConnectADM", "StartLocalADM", "StopLocalADM", "refreshConnectedADM", "initializeConnectionProfiles",
 		"AddWorkspace", "RenameWorkspace", "RemoveWorkspace",
 		"CreateEnvironment", "RenameEnvironment", "RemoveEnvironment", "InspectEnvironment", "GetTemporaryEnvironmentStatus", "PromoteTemporaryEnvironment", "CleanupTemporaryEnvironment",

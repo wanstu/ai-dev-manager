@@ -1,6 +1,6 @@
 const elements = {
   refreshButton: document.getElementById('refreshButton'),
-  launchAtLogin: document.getElementById('launchAtLogin'), desktopShellHint: document.getElementById('desktopShellHint'), desktopThemeMode: document.getElementById('desktopThemeMode'), desktopThemePack: document.getElementById('desktopThemePack'), desktopThemeHint: document.getElementById('desktopThemeHint'), desktopThemeRefreshButton: document.getElementById('desktopThemeRefreshButton'),
+  launchAtLogin: document.getElementById('launchAtLogin'), desktopShellHint: document.getElementById('desktopShellHint'), desktopThemeMode: document.getElementById('desktopThemeMode'), desktopThemeStyle: document.getElementById('desktopThemeStyle'), desktopThemePackField: document.getElementById('desktopThemePackField'), desktopThemePack: document.getElementById('desktopThemePack'), desktopThemeGradientField: document.getElementById('desktopThemeGradientField'), desktopThemeGradientPacks: document.getElementById('desktopThemeGradientPacks'), desktopThemeHint: document.getElementById('desktopThemeHint'), desktopThemeRefreshButton: document.getElementById('desktopThemeRefreshButton'),
   sandboxHostPreparationBadge: document.getElementById('sandboxHostPreparationBadge'), sandboxHostPreparationSummary: document.getElementById('sandboxHostPreparationSummary'), sandboxHostPreparationEnable: document.getElementById('sandboxHostPreparationEnable'), sandboxHostPreparationRefresh: document.getElementById('sandboxHostPreparationRefresh'),
   worktreeSettingsForm: document.getElementById('worktreeSettingsForm'), worktreeRoot: document.getElementById('worktreeRoot'), worktreeBranchPrefix: document.getElementById('worktreeBranchPrefix'), worktreeSettingsSaveButton: document.getElementById('worktreeSettingsSaveButton'), worktreeSettingsHint: document.getElementById('worktreeSettingsHint'), hostEnvironmentSummary: document.getElementById('hostEnvironmentSummary'), hostEnvironmentRefreshButton: document.getElementById('hostEnvironmentRefreshButton'), loggingStatusSummary: document.getElementById('loggingStatusSummary'),
   statusPanel: document.getElementById('statusPanel'),
@@ -918,6 +918,7 @@ function mcpProbeFingerprint(entry) { if (!entry) return ''; const {default_incl
 const defaultADMBaseURL = 'http://127.0.0.1:43137';
 function currentADMBaseURL() { return elements.gatewayBaseURL.value.trim() || defaultADMBaseURL; }
 let desktopThemeCatalogLoaded = false;
+const defaultDesktopGradientPacks = ['aurora', 'ocean'];
 function desktopThemeAPI() {
   const api = window.desktopKitTheme;
   if (!api?.loadCatalog || !api?.applyPack || !api?.clearAppliedPack) {
@@ -925,12 +926,28 @@ function desktopThemeAPI() {
   }
   return api;
 }
+function desktopGradientSelections() {
+  return [...elements.desktopThemeGradientPacks.selectedOptions].map((option) => option.value).filter(Boolean);
+}
+function setDesktopGradientSelections(names) {
+  const selected = new Set(safeArray(names));
+  for (const option of elements.desktopThemeGradientPacks.options) {
+    option.selected = selected.has(option.value);
+  }
+}
+function syncDesktopThemeStyleControls() {
+  const gradient = elements.desktopThemeStyle.value === 'gradient';
+  elements.desktopThemePackField.hidden = gradient;
+  elements.desktopThemeGradientField.hidden = !gradient;
+}
 function renderDesktopThemeCatalog(catalog) {
-  const current = elements.desktopThemePack.value;
+  const currentPack = elements.desktopThemePack.value;
+  const currentGradient = desktopGradientSelections();
   const defaultOption = document.createElement('option');
   defaultOption.value = '';
   defaultOption.textContent = 'Kit 默认配色';
   elements.desktopThemePack.replaceChildren(defaultOption);
+  elements.desktopThemeGradientPacks.replaceChildren();
   for (const pack of safeArray(catalog?.packs)) {
     if (!pack?.name) continue;
     const option = document.createElement('option');
@@ -938,10 +955,16 @@ function renderDesktopThemeCatalog(catalog) {
     option.textContent = pack.display_name || pack.name;
     option.dataset.description = pack.description || '';
     elements.desktopThemePack.append(option);
+    if (pack.gradient_light && pack.gradient_dark) {
+      const gradientOption = option.cloneNode(true);
+      elements.desktopThemeGradientPacks.append(gradientOption);
+    }
   }
-  if ([...elements.desktopThemePack.options].some((option) => option.value === current)) {
-    elements.desktopThemePack.value = current;
+  if ([...elements.desktopThemePack.options].some((option) => option.value === currentPack)) {
+    elements.desktopThemePack.value = currentPack;
   }
+  const gradientSelection = currentGradient.length ? currentGradient : defaultDesktopGradientPacks;
+  setDesktopGradientSelections(gradientSelection);
 }
 async function ensureDesktopThemeCatalog(refresh = false) {
   if (desktopThemeCatalogLoaded && !refresh) return desktopThemeAPI().getCatalog?.();
@@ -962,43 +985,102 @@ function ensureUnavailableThemeOption(pack) {
   elements.desktopThemePack.append(option);
   return option;
 }
-async function applyDesktopThemePreferences(preferences) {
-  const api = desktopThemeAPI();
-  const mode = ['light', 'dark', 'system'].includes(preferences?.theme_mode) ? preferences.theme_mode : 'system';
-  const requestedPack = preferences?.theme_pack || '';
-
-  elements.desktopThemeMode.value = mode;
-  api.apply(mode);
-
+function ensureUnavailableGradientOptions(names) {
+  for (const name of safeArray(names)) {
+    if (!name || [...elements.desktopThemeGradientPacks.options].some((option) => option.value === name)) continue;
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = `${name}（当前主题库不可用）`;
+    option.dataset.unavailable = 'true';
+    elements.desktopThemeGradientPacks.append(option);
+  }
+}
+async function applyDesktopSolidTheme(api, requestedPack) {
+  api.clearGradient?.();
   let packOption = requestedPack
     ? [...elements.desktopThemePack.options].find((option) => option.value === requestedPack)
     : null;
-  let warning = '';
-
   if (!requestedPack) {
     api.clearAppliedPack();
     elements.desktopThemePack.value = '';
-  } else if (packOption && packOption.dataset.unavailable !== 'true') {
+    return '';
+  }
+  if (packOption && packOption.dataset.unavailable !== 'true') {
     elements.desktopThemePack.value = requestedPack;
     try {
       await api.applyPack(requestedPack);
+      return '';
     } catch (error) {
-      warning = `主题包 ${requestedPack} 加载失败，当前继续使用基础配色：${error?.message || String(error)}`;
       api.clearAppliedPack();
+      return `主题包 ${requestedPack} 加载失败，当前继续使用基础配色：${error?.message || String(error)}`;
+    }
+  }
+  packOption = ensureUnavailableThemeOption(requestedPack);
+  elements.desktopThemePack.value = requestedPack;
+  api.clearAppliedPack();
+  return `主题包 ${requestedPack} 当前不在 Kit Theme catalog 中，已临时使用基础配色`;
+}
+async function applyDesktopThemePreferences(preferences) {
+  const api = desktopThemeAPI();
+  const mode = ['light', 'dark', 'system'].includes(preferences?.theme_mode) ? preferences.theme_mode : 'system';
+  const style = preferences?.theme_style === 'gradient' ? 'gradient' : 'solid';
+  const requestedPack = preferences?.theme_pack || '';
+  const requestedGradient = safeArray(preferences?.theme_gradient_packs).filter(Boolean);
+  const gradientPacks = requestedGradient.length ? requestedGradient : defaultDesktopGradientPacks;
+
+  elements.desktopThemeMode.value = mode;
+  elements.desktopThemeStyle.value = style;
+  api.apply(mode);
+  syncDesktopThemeStyleControls();
+
+  let warning = '';
+  if (style === 'gradient') {
+    ensureUnavailableGradientOptions(gradientPacks);
+    setDesktopGradientSelections(gradientPacks);
+    const unavailable = gradientPacks.filter((name) => {
+      const option = [...elements.desktopThemeGradientPacks.options].find((item) => item.value === name);
+      return !option || option.dataset.unavailable === 'true';
+    });
+    if (!api.applyGradient || !api.clearGradient) {
+      warning = '当前 Desktop Kit 不支持渐变主题，已临时使用纯色主题';
+    } else if (gradientPacks.length < 2 || gradientPacks.length > 4 || unavailable.length) {
+      warning = unavailable.length
+        ? `渐变主题 ${unavailable.join('、')} 当前不可用，已临时使用纯色主题`
+        : '渐变主题需要选择 2–4 个不同主题，已临时使用纯色主题';
+    } else {
+      try {
+        await api.applyGradient(gradientPacks);
+      } catch (error) {
+        warning = `渐变主题加载失败，已临时使用纯色主题：${error?.message || String(error)}`;
+      }
+    }
+    if (warning) {
+      api.clearGradient?.();
+      const fallbackWarning = await applyDesktopSolidTheme(api, requestedPack);
+      if (fallbackWarning) warning += `；${fallbackWarning}`;
     }
   } else {
-    packOption = ensureUnavailableThemeOption(requestedPack);
-    elements.desktopThemePack.value = requestedPack;
-    api.clearAppliedPack();
-    warning = `主题包 ${requestedPack} 当前不在 Kit Theme catalog 中，已临时使用基础配色`;
+    warning = await applyDesktopSolidTheme(api, requestedPack);
   }
 
   const modeLabel = elements.desktopThemeMode.selectedOptions[0]?.textContent || mode;
-  const selectedPack = elements.desktopThemePack.selectedOptions[0];
-  const packLabel = selectedPack?.textContent || 'Kit 默认配色';
-  const description = selectedPack?.dataset.description;
-  elements.desktopThemeHint.textContent = warning || `${modeLabel} · ${packLabel}${description ? ` · ${description}` : ''}`;
+  if (style === 'gradient' && !warning) {
+    const gradientLabels = [...elements.desktopThemeGradientPacks.selectedOptions].map((option) => option.textContent || option.value);
+    elements.desktopThemeHint.textContent = `${modeLabel} · 渐变 · ${gradientLabels.join(' + ')}`;
+  } else {
+    const selectedPack = elements.desktopThemePack.selectedOptions[0];
+    const packLabel = selectedPack?.textContent || 'Kit 默认配色';
+    const description = selectedPack?.dataset.description;
+    elements.desktopThemeHint.textContent = warning || `${modeLabel} · 纯色 · ${packLabel}${description ? ` · ${description}` : ''}`;
+  }
   return {warning};
+}
+function setDesktopThemeControlsDisabled(disabled) {
+  elements.desktopThemeMode.disabled = disabled;
+  elements.desktopThemeStyle.disabled = disabled;
+  elements.desktopThemePack.disabled = disabled;
+  elements.desktopThemeGradientPacks.disabled = disabled;
+  elements.desktopThemeRefreshButton.disabled = disabled;
 }
 async function refreshDesktopThemeCatalog() {
   if (elements.desktopThemeRefreshButton.disabled) return;
@@ -1020,21 +1102,20 @@ async function refreshDesktopThemeCatalog() {
 async function updateDesktopTheme() {
   const mode = elements.desktopThemeMode.value;
   const pack = elements.desktopThemePack.value;
-  elements.desktopThemeMode.disabled = true;
-  elements.desktopThemePack.disabled = true;
-  elements.desktopThemeRefreshButton.disabled = true;
+  const style = elements.desktopThemeStyle.value;
+  const gradientPacks = desktopGradientSelections();
+  setDesktopThemeControlsDisabled(true);
   try {
-    const preferences = await desktopAdapter().SetDesktopTheme(mode, pack);
+    const preferences = await desktopAdapter().SetDesktopTheme(mode, pack, style, gradientPacks);
     const result = await applyDesktopThemePreferences(preferences);
     window.runtime?.EventsEmit?.('desktop:preferences-changed');
-    setStatus(result.warning ? 'Desktop 主题偏好已保存，但主题包当前不可用' : 'Desktop 主题已保存', result.warning ? 'error' : 'success');
+    setStatus(result.warning ? 'Desktop 主题偏好已保存，但当前主题未能完整加载' : 'Desktop 主题已保存', result.warning ? 'error' : 'success');
   } catch (error) {
     setStatus(`Desktop 主题保存失败：${error?.message || String(error)}`, 'error');
     await loadDesktopPreferences(false);
   } finally {
-    elements.desktopThemeMode.disabled = false;
-    elements.desktopThemePack.disabled = false;
-    elements.desktopThemeRefreshButton.disabled = false;
+    setDesktopThemeControlsDisabled(false);
+    syncDesktopThemeStyleControls();
   }
 }
 async function loadDesktopPreferences(showMessage = false) {
@@ -1049,12 +1130,13 @@ async function loadDesktopPreferences(showMessage = false) {
     try {
       await ensureDesktopThemeCatalog(false);
       await applyDesktopThemePreferences(preferences);
-      elements.desktopThemeMode.disabled = false;
-      elements.desktopThemePack.disabled = false;
-      elements.desktopThemeRefreshButton.disabled = false;
+      setDesktopThemeControlsDisabled(false);
+      syncDesktopThemeStyleControls();
     } catch (themeError) {
       elements.desktopThemeMode.disabled = false;
+      elements.desktopThemeStyle.disabled = true;
       elements.desktopThemePack.disabled = true;
+      elements.desktopThemeGradientPacks.disabled = true;
       elements.desktopThemeRefreshButton.disabled = false;
       elements.desktopThemeHint.textContent = `Kit Runtime Theme 不可用，当前仍可使用明暗模式：${themeError?.message || String(themeError)}`;
     }
@@ -1063,9 +1145,7 @@ async function loadDesktopPreferences(showMessage = false) {
     return preferences;
   } catch (error) {
     elements.launchAtLogin.disabled = true;
-    elements.desktopThemeMode.disabled = true;
-    elements.desktopThemePack.disabled = true;
-    elements.desktopThemeRefreshButton.disabled = true;
+    setDesktopThemeControlsDisabled(true);
     elements.desktopShellHint.textContent = `设置读取失败：${error?.message || String(error)}`;
     elements.desktopThemeHint.textContent = `主题读取失败：${error?.message || String(error)}`;
     if (showMessage) setStatus(`Desktop 设置读取失败：${error?.message || String(error)}`, 'error');
@@ -4166,7 +4246,19 @@ elements.launchAtLogin.addEventListener('change', updateLaunchAtLogin);
 elements.sandboxHostPreparationEnable?.addEventListener('click', enableSandboxHostPreparation);
 elements.sandboxHostPreparationRefresh?.addEventListener('click', () => loadSandboxHostPreparation(true));
 elements.desktopThemeMode.addEventListener('change', updateDesktopTheme);
+elements.desktopThemeStyle.addEventListener('change', () => {
+  syncDesktopThemeStyleControls();
+  updateDesktopTheme();
+});
 elements.desktopThemePack.addEventListener('change', updateDesktopTheme);
+elements.desktopThemeGradientPacks.addEventListener('change', () => {
+  const count = desktopGradientSelections().length;
+  if (count < 2 || count > 4) {
+    elements.desktopThemeHint.textContent = count < 2 ? '渐变主题至少选择 2 个主题。' : '渐变主题最多选择 4 个主题。';
+    return;
+  }
+  updateDesktopTheme();
+});
 elements.desktopThemeRefreshButton.addEventListener('click', refreshDesktopThemeCatalog);
 window.addEventListener('focus', () => { loadDesktopPreferences(false); loadSandboxHostPreparation(false); });
 window.addEventListener('keydown', (event) => { if (event.key !== 'Escape' || activeEditorDialog()) return; if (selectedEnvironmentID) closeEnvironmentDetail(); else if (editingMCPID) resetMCPEditor(true); });
