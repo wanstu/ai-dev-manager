@@ -1001,8 +1001,10 @@ function renderDesktopGradientEditor() {
     for (const source of desktopGradientOptions()) {
       const option = document.createElement('option');
       option.value = source.value;
-      option.textContent = source.textContent || source.value;
-      option.disabled = names.includes(source.value) && source.value !== name;
+      option.textContent = source.dataset.unavailable === 'true'
+        ? `${source.textContent || source.value}（需刷新主题库）`
+        : (source.textContent || source.value);
+      option.disabled = source.dataset.unavailable === 'true' || (names.includes(source.value) && source.value !== name);
       option.dataset.unavailable = source.dataset.unavailable || '';
       select.append(option);
     }
@@ -1084,12 +1086,15 @@ function renderDesktopThemeCatalog(catalog) {
     option.textContent = pack.display_name || pack.name;
     option.dataset.description = pack.description || '';
     elements.desktopThemePack.append(option);
+    const gradientOption = option.cloneNode(true);
     if (pack.gradient_light && pack.gradient_dark) {
-      const gradientOption = option.cloneNode(true);
       gradientOption.dataset.gradientLight = pack.gradient_light;
       gradientOption.dataset.gradientDark = pack.gradient_dark;
-      elements.desktopThemeGradientPacks.append(gradientOption);
+    } else {
+      gradientOption.dataset.unavailable = 'true';
+      gradientOption.dataset.description = '当前缓存缺少渐变色元数据，刷新主题库后可用';
     }
+    elements.desktopThemeGradientPacks.append(gradientOption);
   }
   if ([...elements.desktopThemePack.options].some((option) => option.value === currentPack)) {
     elements.desktopThemePack.value = currentPack;
@@ -1101,11 +1106,21 @@ async function ensureDesktopThemeCatalog(refresh = false) {
   if (desktopThemeCatalogLoaded && !refresh) return desktopThemeAPI().getCatalog?.();
   const api = desktopThemeAPI();
   let catalog = refresh ? await api.refreshCatalog() : await api.loadCatalog();
-  // Kit v0.12 may inherit a v0.11 shared catalog cache without gradient metadata.
-  // Match Know Me: transparently refresh that legacy cache instead of requiring the user to repair it.
-  if (!refresh && !safeArray(catalog?.packs).some((pack) => pack?.gradient_light && pack?.gradient_dark) && api.refreshCatalog) {
-    desktopLegacyCatalogRefresh ||= api.refreshCatalog();
-    catalog = await desktopLegacyCatalogRefresh;
+  // Kit v0.12 may inherit an older shared catalog: the solid themes are present,
+  // but only the four fallback packs have gradient metadata. Refresh whenever any
+  // catalog pack is missing its gradient colors so gradient mode sees the same library.
+  const catalogPacks = safeArray(catalog?.packs);
+  const catalogHasIncompleteGradientMetadata = catalogPacks.length > 0
+    && catalogPacks.some((pack) => pack?.name && (!pack?.gradient_light || !pack?.gradient_dark));
+  if (!refresh && catalogHasIncompleteGradientMetadata && api.refreshCatalog) {
+    try {
+      desktopLegacyCatalogRefresh ||= api.refreshCatalog();
+      const refreshedCatalog = await desktopLegacyCatalogRefresh;
+      if (safeArray(refreshedCatalog?.packs).length) catalog = refreshedCatalog;
+    } catch {
+      // Keep the cached catalog usable for solid themes; missing gradient packs are
+      // shown as unavailable instead of disabling the whole theme settings panel.
+    }
   }
   renderDesktopThemeCatalog(catalog);
   desktopThemeCatalogLoaded = true;

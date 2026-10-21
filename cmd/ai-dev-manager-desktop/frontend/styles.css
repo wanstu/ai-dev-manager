@@ -665,13 +665,19 @@ body.has-editor-dialog { overflow: hidden; }
 }
 body {
   background: var(--dk-bg-app);
-  background-image: var(--dk-app-gradient, none);
+  background-image: none;
   color: var(--dk-text);
 }
 button {
   background: var(--dk-primary);
-  background-image: var(--dk-primary-gradient, none);
+  background-image: none;
   color: var(--dk-primary-contrast);
+}
+:root[data-dk-theme-style="gradient"] body {
+  background-image: var(--dk-app-gradient, none);
+}
+:root[data-dk-theme-style="gradient"] button:not(.secondary-button):not(.danger-button) {
+  background-image: var(--dk-primary-gradient, none);
 }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
   outline-color: var(--dk-primary);
@@ -705,14 +711,31 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .remote-access-intro {
   border-color: var(--dk-border);
   background: var(--dk-bg-elevated);
-  background-image: var(--dk-panel-gradient, none);
+  background-image: none;
   color: var(--dk-text);
 }
 .management-sidebar {
   border-color: var(--dk-border);
   background: var(--dk-bg-elevated);
-  background-image: var(--dk-sidebar-gradient, none);
+  background-image: none;
   color: var(--dk-text);
+}
+:root[data-dk-theme-style="gradient"] .topbar,
+:root[data-dk-theme-style="gradient"] .panel,
+:root[data-dk-theme-style="gradient"] .subpanel,
+:root[data-dk-theme-style="gradient"] .metric,
+:root[data-dk-theme-style="gradient"] .overview-data-state,
+:root[data-dk-theme-style="gradient"] .overview-data-source,
+:root[data-dk-theme-style="gradient"] .overview-data-source-grid > div,
+:root[data-dk-theme-style="gradient"] .credential-card,
+:root[data-dk-theme-style="gradient"] .auth-usage-card,
+:root[data-dk-theme-style="gradient"] .auth-usage-grid > div,
+:root[data-dk-theme-style="gradient"] .config-source-card,
+:root[data-dk-theme-style="gradient"] .remote-access-intro {
+  background-image: var(--dk-panel-gradient, none);
+}
+:root[data-dk-theme-style="gradient"] .management-sidebar {
+  background-image: var(--dk-sidebar-gradient, none);
 }
 .topbar,
 .management-sidebar,
@@ -759,9 +782,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .nav-link[aria-current="page"] {
   border-color: var(--dk-nav-active-border);
   background: var(--dk-nav-active-bg);
-  background-image: var(--dk-nav-gradient, none);
+  background-image: none;
   color: var(--dk-nav-active-text);
   box-shadow: inset 3px 0 0 var(--dk-nav-active-accent);
+}
+:root[data-dk-theme-style="gradient"] .nav-link[aria-current="page"] {
+  background-image: var(--dk-nav-gradient, none);
 }
 .metric-link:hover { border-color: var(--dk-border); box-shadow: var(--dk-shadow-panel); }
 .badge,
@@ -941,22 +967,32 @@ textarea:focus,
 .desktop-theme-style-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: 6px;
   padding: 4px;
+  border: 1px solid var(--dk-border-subtle);
   border-radius: var(--dk-radius-sm);
-  background: var(--dk-bg-muted);
+  background: var(--dk-bg-subtle);
 }
 .desktop-theme-style-switch button {
   min-height: 36px;
-  border-color: transparent;
+  border: 1px solid transparent;
+  background: transparent;
+  background-image: none !important;
+  color: var(--dk-text-secondary);
   box-shadow: none;
 }
+.desktop-theme-style-switch button:hover:not(:disabled) {
+  border-color: var(--dk-border);
+  background: var(--dk-bg-elevated);
+  background-image: none !important;
+  color: var(--dk-text);
+}
 .desktop-theme-style-switch button.is-active {
-  border-color: var(--dk-nav-active-border);
-  background: var(--dk-nav-active-bg);
-  background-image: var(--dk-nav-gradient, none);
-  color: var(--dk-nav-active-text);
-  box-shadow: inset 0 -2px 0 var(--dk-nav-active-accent);
+  border-color: var(--dk-primary);
+  background: var(--dk-bg-elevated);
+  background-image: none !important;
+  color: var(--dk-primary);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .08), inset 0 -2px 0 var(--dk-primary);
 }
 .desktop-theme-gradient-field {
   grid-column: 1 / -1;
