@@ -1,6 +1,6 @@
 const elements = {
   refreshButton: document.getElementById('refreshButton'),
-  launchAtLogin: document.getElementById('launchAtLogin'), desktopShellHint: document.getElementById('desktopShellHint'), desktopThemeMode: document.getElementById('desktopThemeMode'), desktopThemeStyle: document.getElementById('desktopThemeStyle'), desktopThemePackField: document.getElementById('desktopThemePackField'), desktopThemePack: document.getElementById('desktopThemePack'), desktopThemeGradientField: document.getElementById('desktopThemeGradientField'), desktopThemeGradientPacks: document.getElementById('desktopThemeGradientPacks'), desktopThemeHint: document.getElementById('desktopThemeHint'), desktopThemeRefreshButton: document.getElementById('desktopThemeRefreshButton'),
+  launchAtLogin: document.getElementById('launchAtLogin'), desktopShellHint: document.getElementById('desktopShellHint'), desktopThemeMode: document.getElementById('desktopThemeMode'), desktopThemeStyle: document.getElementById('desktopThemeStyle'), desktopThemeStyleSwitch: document.getElementById('desktopThemeStyleSwitch'), desktopThemePackField: document.getElementById('desktopThemePackField'), desktopThemePack: document.getElementById('desktopThemePack'), desktopThemeGradientField: document.getElementById('desktopThemeGradientField'), desktopThemeGradientPacks: document.getElementById('desktopThemeGradientPacks'), desktopThemeGradientPresets: document.getElementById('desktopThemeGradientPresets'), desktopThemeGradientList: document.getElementById('desktopThemeGradientList'), desktopThemeGradientAdd: document.getElementById('desktopThemeGradientAdd'), desktopThemeGradientPreview: document.getElementById('desktopThemeGradientPreview'), desktopThemeHint: document.getElementById('desktopThemeHint'), desktopThemeRefreshButton: document.getElementById('desktopThemeRefreshButton'),
   sandboxHostPreparationBadge: document.getElementById('sandboxHostPreparationBadge'), sandboxHostPreparationSummary: document.getElementById('sandboxHostPreparationSummary'), sandboxHostPreparationEnable: document.getElementById('sandboxHostPreparationEnable'), sandboxHostPreparationRefresh: document.getElementById('sandboxHostPreparationRefresh'),
   worktreeSettingsForm: document.getElementById('worktreeSettingsForm'), worktreeRoot: document.getElementById('worktreeRoot'), worktreeBranchPrefix: document.getElementById('worktreeBranchPrefix'), worktreeSettingsSaveButton: document.getElementById('worktreeSettingsSaveButton'), worktreeSettingsHint: document.getElementById('worktreeSettingsHint'), hostEnvironmentSummary: document.getElementById('hostEnvironmentSummary'), hostEnvironmentRefreshButton: document.getElementById('hostEnvironmentRefreshButton'), loggingStatusSummary: document.getElementById('loggingStatusSummary'),
   statusPanel: document.getElementById('statusPanel'),
@@ -918,7 +918,14 @@ function mcpProbeFingerprint(entry) { if (!entry) return ''; const {default_incl
 const defaultADMBaseURL = 'http://127.0.0.1:43137';
 function currentADMBaseURL() { return elements.gatewayBaseURL.value.trim() || defaultADMBaseURL; }
 let desktopThemeCatalogLoaded = false;
+let desktopLegacyCatalogRefresh = null;
 const defaultDesktopGradientPacks = ['aurora', 'ocean'];
+let desktopGradientSelectionOrder = [...defaultDesktopGradientPacks];
+const desktopGradientPresets = [
+  {label: '极光 · 樱花 · 海洋', packs: ['aurora', 'sakura', 'ocean']},
+  {label: '森林 · 落日', packs: ['forest', 'sunset']},
+  {label: '终端 · 霓虹', packs: ['terminal', 'neon']},
+];
 function desktopThemeAPI() {
   const api = window.desktopKitTheme;
   if (!api?.loadCatalog || !api?.applyPack || !api?.clearAppliedPack) {
@@ -927,18 +934,140 @@ function desktopThemeAPI() {
   return api;
 }
 function desktopGradientSelections() {
-  return [...elements.desktopThemeGradientPacks.selectedOptions].map((option) => option.value).filter(Boolean);
+  return desktopGradientSelectionOrder.slice();
+}
+function desktopGradientOptions() {
+  return [...elements.desktopThemeGradientPacks.options];
 }
 function setDesktopGradientSelections(names) {
-  const selected = new Set(safeArray(names));
+  const unique = [];
+  for (const name of safeArray(names).map((item) => String(item || '').trim()).filter(Boolean)) {
+    if (!unique.includes(name)) unique.push(name);
+  }
+  desktopGradientSelectionOrder = unique.slice(0, 4);
+  const selected = new Set(desktopGradientSelectionOrder);
   for (const option of elements.desktopThemeGradientPacks.options) {
     option.selected = selected.has(option.value);
   }
+  renderDesktopGradientEditor();
+}
+function commitDesktopGradientSelections(names) {
+  const unique = safeArray(names).filter((name, index, values) => name && values.indexOf(name) === index);
+  if (unique.length < 2 || unique.length > 4) {
+    elements.desktopThemeHint.textContent = unique.length < 2 ? '渐变主题至少需要 2 个基础主题。' : '渐变主题最多支持 4 个基础主题。';
+    return;
+  }
+  setDesktopGradientSelections(unique);
+  void updateDesktopTheme();
+}
+function gradientOptionByName(name) {
+  return desktopGradientOptions().find((option) => option.value === name) || null;
+}
+function renderDesktopGradientEditor() {
+  const gradient = elements.desktopThemeStyle.value === 'gradient';
+  for (const button of elements.desktopThemeStyleSwitch?.querySelectorAll('[data-desktop-theme-style]') || []) {
+    const active = button.dataset.desktopThemeStyle === elements.desktopThemeStyle.value;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  }
+  if (!elements.desktopThemeGradientList || !elements.desktopThemeGradientPresets || !elements.desktopThemeGradientAdd || !elements.desktopThemeGradientPreview) return;
+  if (!gradient) return;
+
+  const names = desktopGradientSelections();
+  const available = desktopGradientOptions().filter((option) => option.dataset.unavailable !== 'true');
+
+  elements.desktopThemeGradientPresets.replaceChildren();
+  for (const preset of desktopGradientPresets.filter((item) => item.packs.every((name) => available.some((option) => option.value === name)))) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary-button desktop-theme-preset';
+    button.textContent = preset.label;
+    button.setAttribute('aria-pressed', preset.packs.join(',') === names.join(',') ? 'true' : 'false');
+    button.addEventListener('click', () => commitDesktopGradientSelections(preset.packs));
+    elements.desktopThemeGradientPresets.append(button);
+  }
+
+  elements.desktopThemeGradientList.replaceChildren();
+  names.forEach((name, index) => {
+    const row = document.createElement('div');
+    row.className = 'desktop-theme-gradient-item';
+
+    const number = document.createElement('span');
+    number.className = 'desktop-theme-gradient-index';
+    number.textContent = String(index + 1);
+
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', `第 ${index + 1} 个基础主题`);
+    for (const source of desktopGradientOptions()) {
+      const option = document.createElement('option');
+      option.value = source.value;
+      option.textContent = source.textContent || source.value;
+      option.disabled = names.includes(source.value) && source.value !== name;
+      option.dataset.unavailable = source.dataset.unavailable || '';
+      select.append(option);
+    }
+    if (![...select.options].some((option) => option.value === name)) {
+      const unavailable = document.createElement('option');
+      unavailable.value = name;
+      unavailable.textContent = `${name}（当前不可用）`;
+      select.prepend(unavailable);
+    }
+    select.value = name;
+    select.addEventListener('change', () => {
+      const next = names.slice();
+      next[index] = select.value;
+      commitDesktopGradientSelections(next);
+    });
+
+    const up = document.createElement('button');
+    up.type = 'button'; up.className = 'secondary-button small-button'; up.textContent = '↑'; up.title = '上移'; up.disabled = index === 0;
+    up.addEventListener('click', () => {
+      const next = names.slice(); [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      commitDesktopGradientSelections(next);
+    });
+    const down = document.createElement('button');
+    down.type = 'button'; down.className = 'secondary-button small-button'; down.textContent = '↓'; down.title = '下移'; down.disabled = index === names.length - 1;
+    down.addEventListener('click', () => {
+      const next = names.slice(); [next[index], next[index + 1]] = [next[index + 1], next[index]];
+      commitDesktopGradientSelections(next);
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.className = 'secondary-button small-button'; remove.textContent = '×'; remove.title = '移除'; remove.disabled = names.length <= 2;
+    remove.addEventListener('click', () => commitDesktopGradientSelections(names.filter((_, itemIndex) => itemIndex !== index)));
+
+    row.append(number, select, up, down, remove);
+    elements.desktopThemeGradientList.append(row);
+  });
+
+  const previousAddValue = elements.desktopThemeGradientAdd.value;
+  const addPlaceholder = document.createElement('option');
+  addPlaceholder.value = '';
+  addPlaceholder.textContent = names.length < 4 ? '＋ 添加基础主题' : '已达到 4 个主题';
+  elements.desktopThemeGradientAdd.replaceChildren(addPlaceholder);
+  for (const source of available.filter((option) => !names.includes(option.value))) {
+    const option = document.createElement('option');
+    option.value = source.value;
+    option.textContent = source.textContent || source.value;
+    elements.desktopThemeGradientAdd.append(option);
+  }
+  elements.desktopThemeGradientAdd.value = previousAddValue && !names.includes(previousAddValue) ? previousAddValue : '';
+  elements.desktopThemeGradientAdd.hidden = names.length >= 4;
+  elements.desktopThemeGradientAdd.disabled = names.length >= 4;
+
+  const dark = desktopThemeAPI().getResolvedTheme?.() === 'dark';
+  const previewColors = names.map((name) => {
+    const option = gradientOptionByName(name);
+    return dark ? option?.dataset.gradientDark : option?.dataset.gradientLight;
+  }).filter(Boolean);
+  elements.desktopThemeGradientPreview.style.background = previewColors.length >= 2
+    ? `linear-gradient(120deg, ${previewColors.join(', ')})`
+    : '';
 }
 function syncDesktopThemeStyleControls() {
   const gradient = elements.desktopThemeStyle.value === 'gradient';
   elements.desktopThemePackField.hidden = gradient;
   elements.desktopThemeGradientField.hidden = !gradient;
+  renderDesktopGradientEditor();
 }
 function renderDesktopThemeCatalog(catalog) {
   const currentPack = elements.desktopThemePack.value;
@@ -957,6 +1086,8 @@ function renderDesktopThemeCatalog(catalog) {
     elements.desktopThemePack.append(option);
     if (pack.gradient_light && pack.gradient_dark) {
       const gradientOption = option.cloneNode(true);
+      gradientOption.dataset.gradientLight = pack.gradient_light;
+      gradientOption.dataset.gradientDark = pack.gradient_dark;
       elements.desktopThemeGradientPacks.append(gradientOption);
     }
   }
@@ -969,7 +1100,13 @@ function renderDesktopThemeCatalog(catalog) {
 async function ensureDesktopThemeCatalog(refresh = false) {
   if (desktopThemeCatalogLoaded && !refresh) return desktopThemeAPI().getCatalog?.();
   const api = desktopThemeAPI();
-  const catalog = refresh ? await api.refreshCatalog() : await api.loadCatalog();
+  let catalog = refresh ? await api.refreshCatalog() : await api.loadCatalog();
+  // Kit v0.12 may inherit a v0.11 shared catalog cache without gradient metadata.
+  // Match Know Me: transparently refresh that legacy cache instead of requiring the user to repair it.
+  if (!refresh && !safeArray(catalog?.packs).some((pack) => pack?.gradient_light && pack?.gradient_dark) && api.refreshCatalog) {
+    desktopLegacyCatalogRefresh ||= api.refreshCatalog();
+    catalog = await desktopLegacyCatalogRefresh;
+  }
   renderDesktopThemeCatalog(catalog);
   desktopThemeCatalogLoaded = true;
   return catalog;
@@ -1065,7 +1202,10 @@ async function applyDesktopThemePreferences(preferences) {
 
   const modeLabel = elements.desktopThemeMode.selectedOptions[0]?.textContent || mode;
   if (style === 'gradient' && !warning) {
-    const gradientLabels = [...elements.desktopThemeGradientPacks.selectedOptions].map((option) => option.textContent || option.value);
+    const gradientLabels = desktopGradientSelections().map((name) => {
+      const option = gradientOptionByName(name);
+      return option?.textContent || name;
+    });
     elements.desktopThemeHint.textContent = `${modeLabel} · 渐变 · ${gradientLabels.join(' + ')}`;
   } else {
     const selectedPack = elements.desktopThemePack.selectedOptions[0];
@@ -1080,6 +1220,13 @@ function setDesktopThemeControlsDisabled(disabled) {
   elements.desktopThemeStyle.disabled = disabled;
   elements.desktopThemePack.disabled = disabled;
   elements.desktopThemeGradientPacks.disabled = disabled;
+  for (const button of elements.desktopThemeStyleSwitch?.querySelectorAll('button') || []) button.disabled = disabled;
+  if (disabled) {
+    if (elements.desktopThemeGradientAdd) elements.desktopThemeGradientAdd.disabled = true;
+    for (const control of elements.desktopThemeGradientField?.querySelectorAll('button, select') || []) control.disabled = true;
+  } else {
+    renderDesktopGradientEditor();
+  }
   elements.desktopThemeRefreshButton.disabled = disabled;
 }
 async function refreshDesktopThemeCatalog() {
@@ -4250,14 +4397,20 @@ elements.desktopThemeStyle.addEventListener('change', () => {
   syncDesktopThemeStyleControls();
   updateDesktopTheme();
 });
-elements.desktopThemePack.addEventListener('change', updateDesktopTheme);
-elements.desktopThemeGradientPacks.addEventListener('change', () => {
-  const count = desktopGradientSelections().length;
-  if (count < 2 || count > 4) {
-    elements.desktopThemeHint.textContent = count < 2 ? '渐变主题至少选择 2 个主题。' : '渐变主题最多选择 4 个主题。';
-    return;
-  }
+elements.desktopThemeStyleSwitch?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-desktop-theme-style]');
+  if (!button || button.disabled) return;
+  const style = button.dataset.desktopThemeStyle === 'gradient' ? 'gradient' : 'solid';
+  if (elements.desktopThemeStyle.value === style) return;
+  elements.desktopThemeStyle.value = style;
+  syncDesktopThemeStyleControls();
   updateDesktopTheme();
+});
+elements.desktopThemePack.addEventListener('change', updateDesktopTheme);
+elements.desktopThemeGradientAdd?.addEventListener('change', () => {
+  const name = elements.desktopThemeGradientAdd.value;
+  if (!name) return;
+  commitDesktopGradientSelections([...desktopGradientSelections(), name]);
 });
 elements.desktopThemeRefreshButton.addEventListener('click', refreshDesktopThemeCatalog);
 window.addEventListener('focus', () => { loadDesktopPreferences(false); loadSandboxHostPreparation(false); });
