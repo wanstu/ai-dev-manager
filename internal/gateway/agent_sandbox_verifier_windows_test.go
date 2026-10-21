@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/verifier"
@@ -49,9 +50,9 @@ func TestAgentUnapprovedVerifierDefaultsToWindowsSandbox(t *testing.T) {
 	defer agent.Close()
 
 	syncResult := callGatewayTool(t, ctx, agent, "environment_verifier_run", map[string]any{
-		"environment_id": environmentID,
-		"writer_owner":   asyncVerifierTestWriter,
-		"verifier_id":    definition.ID,
+		"environment_id":   environmentID,
+		"writer_owner":     asyncVerifierTestWriter,
+		"verifier_id":      definition.ID,
 		"max_output_bytes": 4096,
 	})
 	if syncResult.IsError {
@@ -65,9 +66,9 @@ func TestAgentUnapprovedVerifierDefaultsToWindowsSandbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	started := callGatewayTool(t, ctx, agent, "environment_verifier_run_start", map[string]any{
-		"environment_id": environmentID,
-		"writer_owner":   asyncVerifierTestWriter,
-		"verifier_id":    definition.ID,
+		"environment_id":   environmentID,
+		"writer_owner":     asyncVerifierTestWriter,
+		"verifier_id":      definition.ID,
 		"max_output_bytes": 4096,
 	})
 	if started.IsError {
@@ -104,7 +105,9 @@ func TestAgentSandboxVerifierCommandHelper(t *testing.T) {
 		fmt.Fprintln(os.Stdout, "agent-sandbox-success")
 	case "long":
 		fmt.Fprintln(os.Stdout, "agent-sandbox-ready")
-		select {}
+		for {
+			time.Sleep(time.Hour)
+		}
 	default:
 		t.Fatalf("unknown Agent sandbox mode %q", mode)
 	}

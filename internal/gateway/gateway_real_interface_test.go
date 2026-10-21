@@ -58,7 +58,7 @@ func TestGatewayLiveHostInterfaceAllowlist(t *testing.T) {
 	port := listener.Addr().(*net.TCPAddr).Port
 	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true}
 	t.Cleanup(transport.CloseIdleConnections)
-	client := &http.Client{Timeout: 600 * time.Millisecond, Transport: transport}
+	client := &http.Client{Timeout: 2 * time.Second, Transport: transport}
 	url := ""
 	call := func(path, host string, headers map[string]string) (int, error) {
 		req, err := http.NewRequest(http.MethodGet, url+path, nil)
