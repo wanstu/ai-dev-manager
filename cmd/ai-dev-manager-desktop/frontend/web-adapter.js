@@ -58,9 +58,14 @@
 
   function webPreferences() {
     let gradientPacks = ['aurora', 'ocean'];
+    let customGradientPresets = [];
     try {
       const saved = JSON.parse(localStorage.getItem('adm-web-theme-gradient-packs') || 'null');
       if (Array.isArray(saved) && saved.length) gradientPacks = saved;
+    } catch (_) {}
+    try {
+      const saved = JSON.parse(localStorage.getItem('adm-web-theme-custom-gradient-presets') || 'null');
+      if (Array.isArray(saved)) customGradientPresets = saved;
     } catch (_) {}
     return {
       launch_at_login_supported: false,
@@ -69,6 +74,7 @@
       theme_pack: localStorage.getItem('adm-web-theme-pack') || '',
       theme_style: localStorage.getItem('adm-web-theme-style') || 'solid',
       theme_gradient_packs: gradientPacks,
+      custom_gradient_presets: customGradientPresets,
     };
   }
 
@@ -131,6 +137,27 @@
     else localStorage.removeItem('adm-web-theme-pack');
     localStorage.setItem('adm-web-theme-style', style === 'gradient' ? 'gradient' : 'solid');
     localStorage.setItem('adm-web-theme-gradient-packs', JSON.stringify(Array.isArray(gradientPacks) ? gradientPacks : []));
+    return webPreferences();
+  };
+  adapter.SaveDesktopGradientPreset = async (name, packs) => {
+    name = String(name || '').trim();
+    if (!name) throw new Error('请输入自定义渐变包名称');
+    if (!Array.isArray(packs) || packs.length < 2 || packs.length > 4) throw new Error('自定义渐变包需要 2～4 个主题');
+    const preferences = webPreferences();
+    const presets = Array.isArray(preferences.custom_gradient_presets) ? preferences.custom_gradient_presets.slice() : [];
+    const index = presets.findIndex((item) => String(item?.name || '').toLocaleLowerCase() === name.toLocaleLowerCase());
+    const preset = {name, packs: packs.slice()};
+    if (index >= 0) presets[index] = preset;
+    else presets.push(preset);
+    localStorage.setItem('adm-web-theme-custom-gradient-presets', JSON.stringify(presets));
+    return webPreferences();
+  };
+  adapter.DeleteDesktopGradientPreset = async (name) => {
+    const key = String(name || '').trim().toLocaleLowerCase();
+    const preferences = webPreferences();
+    const presets = (Array.isArray(preferences.custom_gradient_presets) ? preferences.custom_gradient_presets : [])
+      .filter((item) => String(item?.name || '').trim().toLocaleLowerCase() !== key);
+    localStorage.setItem('adm-web-theme-custom-gradient-presets', JSON.stringify(presets));
     return webPreferences();
   };
   adapter.StartLocalADM = async () => { throw new Error('Web 管理台不负责启动 Gateway；请使用 systemd 或 adm gateway start'); };
