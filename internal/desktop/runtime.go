@@ -31,6 +31,17 @@ func (a *Adapter) ReleaseRuntimeWriter(environmentID, owner string) (model.Envir
 	return a.runtime.WriterRelease(environmentID, owner, false)
 }
 
+func (a *Adapter) GetRuntimeWriterDiagnostics(environmentID string) (adminmcp.WriterDiagnostics, error) {
+	if err := a.readyRuntime(); err != nil {
+		return adminmcp.WriterDiagnostics{}, err
+	}
+	environmentID = strings.TrimSpace(environmentID)
+	if environmentID == "" {
+		return adminmcp.WriterDiagnostics{}, fmt.Errorf("environment id is required")
+	}
+	return a.runtime.WriterDiagnostics(environmentID)
+}
+
 // ForceReleaseRuntimeWriter is an explicit administrator recovery action.
 func (a *Adapter) ForceReleaseRuntimeWriter(environmentID string) (model.Environment, error) {
 	if err := a.readyRuntime(); err != nil {

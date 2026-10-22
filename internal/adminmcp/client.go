@@ -66,6 +66,45 @@ type RunStatus struct {
 	Message       string     `json:"message,omitempty"`
 }
 
+type RuntimeOwnerInfo struct {
+	ID                string    `json:"id"`
+	PID               int       `json:"pid"`
+	StartedAt         time.Time `json:"started_at"`
+	OwnedMCPSessions  int       `json:"owned_mcp_sessions"`
+	OwnedDevProcesses int       `json:"owned_dev_processes"`
+	OwnedAgentRuns    int       `json:"owned_agent_runs"`
+}
+
+type WriterHeartbeatSource struct {
+	Kind           string    `json:"kind"`
+	ID             string    `json:"id"`
+	State          string    `json:"state"`
+	PID            int       `json:"pid,omitempty"`
+	Executable     string    `json:"executable,omitempty"`
+	Cwd            string    `json:"cwd,omitempty"`
+	ExecutionMode  string    `json:"execution_mode,omitempty"`
+	VerifierID     string    `json:"verifier_id,omitempty"`
+	VerifierName   string    `json:"verifier_name,omitempty"`
+	GatewayOwnerID string    `json:"gateway_owner_id,omitempty"`
+	GatewayPID     int       `json:"gateway_pid,omitempty"`
+	StartedAt      time.Time `json:"started_at,omitempty"`
+	ObservedAt     time.Time `json:"observed_at,omitempty"`
+}
+
+type WriterDiagnostics struct {
+	EnvironmentID            string                  `json:"environment_id"`
+	Active                   bool                    `json:"active"`
+	OwnerFingerprint         string                  `json:"owner_fingerprint,omitempty"`
+	AcquiredAt               *time.Time              `json:"acquired_at,omitempty"`
+	LastSeenAt               *time.Time              `json:"last_seen_at,omitempty"`
+	ExpiresAt                *time.Time              `json:"expires_at,omitempty"`
+	HeartbeatIntervalSeconds int64                   `json:"heartbeat_interval_seconds,omitempty"`
+	Attribution              string                  `json:"attribution"`
+	GatewayOwner             RuntimeOwnerInfo        `json:"gateway_owner"`
+	HeartbeatSources         []WriterHeartbeatSource `json:"heartbeat_sources"`
+	Note                     string                  `json:"note,omitempty"`
+}
+
 func New(endpoint string) *Client {
 	return NewWithAPIKey(endpoint, "")
 }
@@ -390,6 +429,10 @@ func (c *Client) WriterAcquire(environmentID, owner string) (model.Environment, 
 
 func (c *Client) WriterHeartbeat(environmentID, owner string) (model.Environment, error) {
 	return callAdmin[model.Environment](c, context.Background(), "environment_writer_heartbeat", map[string]any{"environment_id": environmentID, "owner": owner})
+}
+
+func (c *Client) WriterDiagnostics(environmentID string) (WriterDiagnostics, error) {
+	return callAdmin[WriterDiagnostics](c, context.Background(), "environment_writer_diagnostics", map[string]any{"environment_id": environmentID})
 }
 
 func (c *Client) WriterRelease(environmentID, owner string, force bool) (model.Environment, error) {

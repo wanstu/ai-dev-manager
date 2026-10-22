@@ -853,6 +853,14 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.app.WriterRelease(s1, s2, false)
+	case "GetRuntimeWriterDiagnostics":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if h.owner == nil {
+			return nil, errors.New("Gateway runtime owner is unavailable")
+		}
+		return h.owner.WriterDiagnostics(s1)
 	case "ForceReleaseRuntimeWriter":
 		if err := arg(0, &s1); err != nil {
 			return nil, err

@@ -106,6 +106,7 @@ type temporaryEnvironmentBackend interface {
 
 type runtimeBackend interface {
 	WriterAcquire(string, string) (model.Environment, error)
+	WriterDiagnostics(string) (adminmcp.WriterDiagnostics, error)
 	WriterRelease(string, string, bool) (model.Environment, error)
 	VerifierList(string) ([]model.VerifierDefinition, error)
 	VerifierAgentHostExecutionSet(string, string, bool) (model.VerifierDefinition, error)

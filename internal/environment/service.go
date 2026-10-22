@@ -1,6 +1,8 @@
 package environment
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,20 +22,39 @@ const (
 	DefaultWriterLeaseTTL = 5 * time.Minute
 )
 
+type WriterObservation struct {
+	EnvironmentID    string    `json:"environment_id"`
+	LeaseAcquiredAt  time.Time `json:"lease_acquired_at"`
+	OwnerFingerprint string    `json:"owner_fingerprint"`
+	GatewayOwnerID   string    `json:"gateway_owner_id,omitempty"`
+	GatewayPID       int       `json:"gateway_pid,omitempty"`
+	SourceKind       string    `json:"source_kind,omitempty"`
+	SourceID         string    `json:"source_id,omitempty"`
+	SourcePID        int       `json:"source_pid,omitempty"`
+	Executable       string    `json:"executable,omitempty"`
+	Cwd              string    `json:"cwd,omitempty"`
+	ExecutionMode    string    `json:"execution_mode,omitempty"`
+	VerifierID       string    `json:"verifier_id,omitempty"`
+	VerifierName     string    `json:"verifier_name,omitempty"`
+	ObservedAt       time.Time `json:"observed_at"`
+}
+
 type Service struct {
-	store          *store.Store
-	workspaces     *workspace.Service
-	now            func() time.Time
-	writerLeaseTTL time.Duration
-	onRemoved      func(string) error
+	store                *store.Store
+	workspaces           *workspace.Service
+	now                  func() time.Time
+	writerLeaseTTL       time.Duration
+	writerObservationDir string
+	onRemoved            func(string) error
 }
 
 func New(s *store.Store, workspaces *workspace.Service) *Service {
 	return &Service{
-		store:          s,
-		workspaces:     workspaces,
-		now:            time.Now,
-		writerLeaseTTL: DefaultWriterLeaseTTL,
+		store:                s,
+		workspaces:           workspaces,
+		now:                  time.Now,
+		writerLeaseTTL:       DefaultWriterLeaseTTL,
+		writerObservationDir: filepath.Join(filepath.Dir(s.Path()), "runtime-observations"),
 	}
 }
 
@@ -415,6 +436,9 @@ func (s *Service) Remove(id string) (model.Environment, error) {
 		state.Environments = append(state.Environments[:idx], state.Environments[idx+1:]...)
 		return nil
 	})
+	if err == nil {
+		_ = s.ClearWriterObservations(id)
+	}
 	if err == nil && s.onRemoved != nil {
 		if cleanupErr := s.onRemoved(id); cleanupErr != nil {
 			return removed, fmt.Errorf("Environment removed but index cleanup failed: %w", cleanupErr)
@@ -447,6 +471,9 @@ func (s *Service) RemoveManaged(id string) (model.Environment, model.ManagedWork
 		state.ManagedWorktrees = append(state.ManagedWorktrees[:managedIdx], state.ManagedWorktrees[managedIdx+1:]...)
 		return nil
 	})
+	if err == nil {
+		_ = s.ClearWriterObservations(id)
+	}
 	if err == nil && s.onRemoved != nil {
 		if cleanupErr := s.onRemoved(id); cleanupErr != nil {
 			return removed, managedRemoved, fmt.Errorf("Environment removed but index cleanup failed: %w", cleanupErr)
@@ -503,6 +530,7 @@ func (s *Service) AcquireWriter(id, owner string) (model.Environment, error) {
 		return model.Environment{}, fmt.Errorf("writer owner is required")
 	}
 	var result model.Environment
+	newLease := false
 	err := s.store.Update(func(state *model.State) error {
 		idx := findEnvironment(state.Environments, id)
 		if idx < 0 {
@@ -522,11 +550,15 @@ func (s *Service) AcquireWriter(id, owner string) (model.Environment, error) {
 		}
 		if target.Writer == nil {
 			target.Writer = &model.WriterLease{Owner: owner, AcquiredAt: now}
+			newLease = true
 		}
 		s.renewWriter(target, now, false)
 		result = *target
 		return nil
 	})
+	if err == nil && newLease {
+		_ = s.ClearWriterObservations(id)
+	}
 	return result, err
 }
 
@@ -557,6 +589,9 @@ func (s *Service) ReleaseWriter(id, owner string, force bool) (model.Environment
 		result = *target
 		return nil
 	})
+	if err == nil && result.Writer == nil {
+		_ = s.ClearWriterObservations(id)
+	}
 	return result, err
 }
 
@@ -585,6 +620,115 @@ func (s *Service) RequireWriter(id, owner string) (model.Environment, error) {
 
 func (s *Service) HeartbeatWriter(id, owner string) (model.Environment, error) {
 	return s.RequireWriter(id, owner)
+}
+
+func (s *Service) ObserveWriter(id, owner string, observation WriterObservation) (model.Environment, error) {
+	owner = strings.TrimSpace(owner)
+	result, err := s.RequireWriter(id, owner)
+	if err != nil {
+		return model.Environment{}, err
+	}
+	if result.Writer == nil {
+		return result, nil
+	}
+	observation.EnvironmentID = id
+	observation.LeaseAcquiredAt = result.Writer.AcquiredAt
+	observation.OwnerFingerprint = writerOwnerFingerprint(owner)
+	observation.ObservedAt = result.Writer.LastSeenAt
+	_ = s.writeWriterObservation(observation)
+	return result, nil
+}
+
+func (s *Service) WriterObservations(id string, lease *model.WriterLease) ([]WriterObservation, error) {
+	if lease == nil {
+		return []WriterObservation{}, nil
+	}
+	dir := s.writerObservationEnvironmentDir(id)
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return []WriterObservation{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	fingerprint := writerOwnerFingerprint(lease.Owner)
+	items := make([]WriterObservation, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+			continue
+		}
+		data, readErr := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if readErr != nil {
+			continue
+		}
+		var observation WriterObservation
+		if json.Unmarshal(data, &observation) != nil {
+			continue
+		}
+		if observation.EnvironmentID != id ||
+			!observation.LeaseAcquiredAt.Equal(lease.AcquiredAt) ||
+			observation.OwnerFingerprint != fingerprint {
+			continue
+		}
+		items = append(items, observation)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ObservedAt.After(items[j].ObservedAt)
+	})
+	return items, nil
+}
+
+func (s *Service) ClearWriterObservation(id string, observation WriterObservation) error {
+	path := s.writerObservationPath(id, observation)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) ClearWriterObservations(id string) error {
+	err := os.RemoveAll(s.writerObservationEnvironmentDir(id))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+func (s *Service) writeWriterObservation(observation WriterObservation) error {
+	dir := s.writerObservationEnvironmentDir(observation.EnvironmentID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	path := s.writerObservationPath(observation.EnvironmentID, observation)
+	data, err := json.Marshal(observation)
+	if err != nil {
+		return err
+	}
+	tmp := fmt.Sprintf("%s.tmp-%d-%d", path, os.Getpid(), time.Now().UnixNano())
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+		return err
+	}
+	_ = os.Remove(path)
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+func (s *Service) writerObservationEnvironmentDir(id string) string {
+	return filepath.Join(s.writerObservationDir, strings.TrimSpace(id))
+}
+
+func (s *Service) writerObservationPath(id string, observation WriterObservation) string {
+	key := observation.GatewayOwnerID + "\x00" + observation.SourceKind + "\x00" + observation.SourceID
+	sum := sha256.Sum256([]byte(key))
+	return filepath.Join(s.writerObservationEnvironmentDir(id), fmt.Sprintf("%x.json", sum[:12]))
+}
+
+func writerOwnerFingerprint(owner string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(owner)))
+	return fmt.Sprintf("%x", sum[:])
 }
 
 func (s *Service) Touch(id, owner string) error {

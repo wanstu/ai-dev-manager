@@ -52,6 +52,7 @@ type ownedDevProcess struct {
 	environmentID string
 	writerOwner   string
 	executable    string
+	cwd           string
 	cmd           *exec.Cmd
 	cancel        context.CancelFunc
 	done          chan struct{}
@@ -112,6 +113,7 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 		environmentID: environmentID,
 		writerOwner:   writerOwner,
 		executable:    executable,
+		cwd:           cwd,
 		cmd:           cmd,
 		cancel:        cancel,
 		done:          make(chan struct{}),
@@ -119,6 +121,11 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 		stderr:        stderr,
 		state:         devProcessRunning,
 		startedAt:     time.Now().UTC(),
+	}
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("process", process.id, cmd.Process.Pid, executable, cwd, "host", "", "")); err != nil {
+		cancel()
+		_ = cmd.Wait()
+		return devProcessStatus{}, err
 	}
 	if err := o.installDevProcess(process); err != nil {
 		cancel()
@@ -262,6 +269,7 @@ func (o *runtimeOwner) waitDevProcess(process *ownedDevProcess) {
 	}
 	process.mu.Unlock()
 	o.service.Log("info", "process.completed", map[string]string{"environment_id": process.environmentID, "executable": process.executable, "surface": "process", "exit_code": fmt.Sprint(exitCode), "error_kind": kind})
+	o.clearWriterObservation(process.environmentID, o.writerObservation("process", process.id, 0, "", "", "", "", ""))
 	process.cancel()
 	close(process.done)
 }
@@ -278,7 +286,14 @@ func (o *runtimeOwner) heartbeatDevProcess(process *ownedDevProcess) {
 		case <-process.done:
 			return
 		case <-ticker.C:
-			if _, err := o.service.Environments.HeartbeatWriter(process.environmentID, process.writerOwner); err != nil {
+			process.mu.Lock()
+			pid := 0
+			if process.cmd != nil && process.cmd.Process != nil {
+				pid = process.cmd.Process.Pid
+			}
+			observation := o.writerObservation("process", process.id, pid, process.executable, process.cwd, "host", "", "")
+			process.mu.Unlock()
+			if err := o.observeWriter(process.environmentID, process.writerOwner, observation); err != nil {
 				process.mu.Lock()
 				if process.errorKind == "" {
 					process.errorKind = "writer_heartbeat_failed"
