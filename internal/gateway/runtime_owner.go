@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
+	"ai-dev-manager-v2/internal/environment"
 	"ai-dev-manager-v2/internal/model"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -24,7 +26,10 @@ const (
 	runtimeOwnerInventoryLimit   = 256
 )
 
-var runtimeOwnerSequence atomic.Uint64
+var (
+	runtimeOwnerSequence             atomic.Uint64
+	runtimeWriterObservationSequence atomic.Uint64
+)
 
 type ownedMCPSession interface {
 	Ping(context.Context, *mcp.PingParams) error
@@ -47,6 +52,36 @@ type runtimeOwnerInfo struct {
 	OwnedMCPSessions  int       `json:"owned_mcp_sessions"`
 	OwnedDevProcesses int       `json:"owned_dev_processes"`
 	OwnedAgentRuns    int       `json:"owned_agent_runs"`
+}
+
+type writerHeartbeatSource struct {
+	Kind           string    `json:"kind"`
+	ID             string    `json:"id"`
+	State          string    `json:"state"`
+	PID            int       `json:"pid,omitempty"`
+	Executable     string    `json:"executable,omitempty"`
+	Cwd            string    `json:"cwd,omitempty"`
+	ExecutionMode  string    `json:"execution_mode,omitempty"`
+	VerifierID     string    `json:"verifier_id,omitempty"`
+	VerifierName   string    `json:"verifier_name,omitempty"`
+	GatewayOwnerID string    `json:"gateway_owner_id,omitempty"`
+	GatewayPID     int       `json:"gateway_pid,omitempty"`
+	StartedAt      time.Time `json:"started_at,omitempty"`
+	ObservedAt     time.Time `json:"observed_at,omitempty"`
+}
+
+type writerDiagnostics struct {
+	EnvironmentID            string                  `json:"environment_id"`
+	Active                   bool                    `json:"active"`
+	OwnerFingerprint         string                  `json:"owner_fingerprint,omitempty"`
+	AcquiredAt               *time.Time              `json:"acquired_at,omitempty"`
+	LastSeenAt               *time.Time              `json:"last_seen_at,omitempty"`
+	ExpiresAt                *time.Time              `json:"expires_at,omitempty"`
+	HeartbeatIntervalSeconds int64                   `json:"heartbeat_interval_seconds,omitempty"`
+	Attribution              string                  `json:"attribution"`
+	GatewayOwner             runtimeOwnerInfo        `json:"gateway_owner"`
+	HeartbeatSources         []writerHeartbeatSource `json:"heartbeat_sources"`
+	Note                     string                  `json:"note,omitempty"`
 }
 
 type runtimeOwner struct {
@@ -117,6 +152,233 @@ func (o *runtimeOwner) Info() runtimeOwnerInfo {
 		OwnedDevProcesses: o.runningDevProcessCountLocked(),
 		OwnedAgentRuns:    o.runningAgentRunCountLocked(),
 	}
+}
+
+func (o *runtimeOwner) writerObservation(sourceKind, sourceID string, sourcePID int, executable, cwd, executionMode, verifierID, verifierName string) environment.WriterObservation {
+	if o == nil {
+		return environment.WriterObservation{}
+	}
+	return environment.WriterObservation{
+		GatewayOwnerID: o.id,
+		GatewayPID:     o.pid,
+		SourceKind:     sourceKind,
+		SourceID:       sourceID,
+		SourcePID:      sourcePID,
+		Executable:     executable,
+		Cwd:            cwd,
+		ExecutionMode:  executionMode,
+		VerifierID:     verifierID,
+		VerifierName:   verifierName,
+	}
+}
+
+func (o *runtimeOwner) observeWriter(environmentID, writerOwner string, observation environment.WriterObservation) error {
+	if o == nil || o.service == nil {
+		return fmt.Errorf("runtime owner is not initialized")
+	}
+	_, err := o.service.Environments.ObserveWriter(environmentID, writerOwner, observation)
+	return err
+}
+
+func (o *runtimeOwner) clearWriterObservation(environmentID string, observation environment.WriterObservation) {
+	if o == nil || o.service == nil {
+		return
+	}
+	_ = o.service.Environments.ClearWriterObservation(environmentID, observation)
+}
+
+func (o *runtimeOwner) nextWriterObservationID(prefix string) string {
+	return fmt.Sprintf("%s_%x", prefix, runtimeWriterObservationSequence.Add(1))
+}
+
+func (o *runtimeOwner) beginWriterObservation(environmentID, writerOwner string, observation environment.WriterObservation) (func(), error) {
+	if observation.SourceID == "" {
+		observation.SourceID = o.nextWriterObservationID(observation.SourceKind)
+	}
+	if err := o.observeWriter(environmentID, writerOwner, observation); err != nil {
+		return nil, err
+	}
+	stop := make(chan struct{})
+	var once sync.Once
+	interval := o.service.Environments.WriterLeaseTTL() / 3
+	if interval <= 0 {
+		interval = time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				if err := o.observeWriter(environmentID, writerOwner, observation); err != nil {
+					o.clearWriterObservation(environmentID, observation)
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		once.Do(func() {
+			close(stop)
+			o.clearWriterObservation(environmentID, observation)
+		})
+	}, nil
+}
+
+func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostics, error) {
+	if o == nil || o.service == nil {
+		return writerDiagnostics{}, fmt.Errorf("runtime owner is not initialized")
+	}
+	environment, err := o.service.Environments.Get(environmentID)
+	if err != nil {
+		return writerDiagnostics{}, err
+	}
+	diagnostics := writerDiagnostics{
+		EnvironmentID:    environmentID,
+		Active:           environment.Writer != nil,
+		Attribution:      "none",
+		GatewayOwner:     o.Info(),
+		HeartbeatSources: []writerHeartbeatSource{},
+	}
+	if environment.Writer == nil {
+		diagnostics.Note = "No active Writer lease."
+		return diagnostics, nil
+	}
+
+	lease := *environment.Writer
+	acquiredAt, lastSeenAt, expiresAt := lease.AcquiredAt, lease.LastSeenAt, lease.ExpiresAt
+	diagnostics.AcquiredAt = &acquiredAt
+	diagnostics.LastSeenAt = &lastSeenAt
+	diagnostics.ExpiresAt = &expiresAt
+	sum := sha256.Sum256([]byte(lease.Owner))
+	diagnostics.OwnerFingerprint = fmt.Sprintf("%x", sum[:6])
+	interval := o.service.Environments.WriterLeaseTTL() / 3
+	if interval <= 0 {
+		interval = time.Second
+	}
+	diagnostics.HeartbeatIntervalSeconds = int64(interval / time.Second)
+
+	o.mu.Lock()
+	processes := make([]*ownedDevProcess, 0, len(o.processes))
+	for _, process := range o.processes {
+		if process.environmentID == environmentID {
+			processes = append(processes, process)
+		}
+	}
+	runs := make([]*ownedAgentRun, 0, len(o.runs))
+	for _, run := range o.runs {
+		if run.environmentID == environmentID {
+			runs = append(runs, run)
+		}
+	}
+	verifierRuns := make([]*ownedVerifierRun, 0, len(o.verifierRuns))
+	for _, run := range o.verifierRuns {
+		if run.environmentID == environmentID {
+			verifierRuns = append(verifierRuns, run)
+		}
+	}
+	o.mu.Unlock()
+
+	for _, process := range processes {
+		process.mu.Lock()
+		if process.writerOwner == lease.Owner && process.state == devProcessRunning {
+			source := writerHeartbeatSource{
+				Kind:           "process",
+				ID:             process.id,
+				State:          string(process.state),
+				Executable:     process.executable,
+				Cwd:            process.cwd,
+				GatewayOwnerID: o.id,
+				GatewayPID:     o.pid,
+				StartedAt:      process.startedAt,
+				ObservedAt:     lease.LastSeenAt,
+			}
+			if process.cmd != nil && process.cmd.Process != nil {
+				source.PID = process.cmd.Process.Pid
+			}
+			diagnostics.HeartbeatSources = append(diagnostics.HeartbeatSources, source)
+		}
+		process.mu.Unlock()
+	}
+	for _, run := range runs {
+		run.mu.Lock()
+		if run.writerOwner == lease.Owner && run.state == agentRunRunning {
+			diagnostics.HeartbeatSources = append(diagnostics.HeartbeatSources, writerHeartbeatSource{
+				Kind:           "run",
+				ID:             run.id,
+				State:          string(run.state),
+				Executable:     run.executable,
+				Cwd:            run.cwd,
+				PID:            run.pid,
+				ExecutionMode:  run.executionMode,
+				GatewayOwnerID: o.id,
+				GatewayPID:     o.pid,
+				StartedAt:      run.startedAt,
+				ObservedAt:     lease.LastSeenAt,
+			})
+		}
+		run.mu.Unlock()
+	}
+	for _, run := range verifierRuns {
+		run.mu.Lock()
+		if run.writerOwner == lease.Owner && run.state == verifierRunRunning {
+			diagnostics.HeartbeatSources = append(diagnostics.HeartbeatSources, writerHeartbeatSource{
+				Kind:           "verifier",
+				ID:             run.id,
+				State:          string(run.state),
+				Executable:     run.prepared.Definition.Executable,
+				Cwd:            run.prepared.Definition.Cwd,
+				ExecutionMode:  run.executionMode,
+				VerifierID:     run.prepared.Definition.ID,
+				VerifierName:   run.prepared.Definition.Name,
+				GatewayOwnerID: o.id,
+				GatewayPID:     o.pid,
+				StartedAt:      run.startedAt,
+				ObservedAt:     lease.LastSeenAt,
+			})
+		}
+		run.mu.Unlock()
+	}
+	sort.Slice(diagnostics.HeartbeatSources, func(i, j int) bool {
+		return diagnostics.HeartbeatSources[i].StartedAt.Before(diagnostics.HeartbeatSources[j].StartedAt)
+	})
+	if len(diagnostics.HeartbeatSources) > 0 {
+		diagnostics.Attribution = "current_gateway_runtime"
+		diagnostics.Note = "Active Writer is being renewed by one or more running resources owned by this Gateway."
+		return diagnostics, nil
+	}
+	observations, observationErr := o.service.Environments.WriterObservations(environmentID, &lease)
+	if observationErr == nil && len(observations) > 0 {
+		observation := observations[0]
+		sourceState := "observed"
+		diagnostics.Attribution = "lease_observation"
+		diagnostics.Note = "The latest Writer renewal was attributed by the holding Gateway to this ephemeral safe source observation. The Writer owner credential is not included."
+		if !observation.ObservedAt.Equal(lease.LastSeenAt) {
+			sourceState = "last_observed"
+			diagnostics.Attribution = "last_known_source"
+			diagnostics.Note = "This is the last identified Writer source, but a later generic renewal occurred without source metadata. Treat it as historical context, not proof that the source is still running."
+		}
+		diagnostics.HeartbeatSources = append(diagnostics.HeartbeatSources, writerHeartbeatSource{
+			Kind:           observation.SourceKind,
+			ID:             observation.SourceID,
+			State:          sourceState,
+			PID:            observation.SourcePID,
+			Executable:     observation.Executable,
+			Cwd:            observation.Cwd,
+			ExecutionMode:  observation.ExecutionMode,
+			VerifierID:     observation.VerifierID,
+			VerifierName:   observation.VerifierName,
+			GatewayOwnerID: observation.GatewayOwnerID,
+			GatewayPID:     observation.GatewayPID,
+			ObservedAt:     observation.ObservedAt,
+		})
+		return diagnostics, nil
+	}
+	diagnostics.Attribution = "unattributed"
+	diagnostics.Note = "Active Writer has no safe source observation. It may come from a legacy Gateway, a direct non-Gateway caller, or an observation registry that is temporarily unavailable."
+	return diagnostics, nil
 }
 
 func (o *runtimeOwner) Reconcile(ctx context.Context) {

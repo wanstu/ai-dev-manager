@@ -495,6 +495,7 @@
         <label class="filter-field"><span>Writer Owner（仅当前 Desktop 会话）</span><input id="runtimeWriterOwnerInput" type="text" autocomplete="off" spellcheck="false" placeholder="留空时可为无 Writer 的 Environment 自动生成"></label>
         <div class="gateway-actions"><button id="runtimeWriterAcquireButton" type="button" class="secondary-button small-button">获取 / 续租 Writer</button><button id="runtimeWriterReleaseButton" type="button" class="secondary-button small-button">释放 Writer</button></div>
         <p id="runtimeWriterHint" class="subpanel-note">服务端不会返回 Writer owner。若 Writer 已被其他会话持有，必须由人类提供正确 owner 才能续租或执行受保护操作。</p>
+        <div id="runtimeWriterDiagnostics" class="runtime-writer-diagnostics empty">选择 Environment 后显示 Writer 占用来源。</div>
       </div>
       <div id="runtimeSubviewTabs" class="runtime-subview-tabs" role="tablist" aria-label="Runtime subviews">
         <button type="button" role="tab" aria-selected="true" data-runtime-subview="verifiers">Verifiers <span id="runtimeVerifierCount">0</span></button>

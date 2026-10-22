@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
+	"ai-dev-manager-v2/internal/environment"
 	"ai-dev-manager-v2/internal/model"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -781,6 +783,125 @@ func TestRuntimeOwnerInspectAndRefreshTools(t *testing.T) {
 	_, _, closes := first.counts()
 	if closes != 1 {
 		t.Fatalf("stale session closes=%d, want 1", closes)
+	}
+}
+
+func TestWriterDiagnosticsAttributesMatchingRunningRunWithoutLeakingOwner(t *testing.T) {
+	service, environmentID, _ := runtimeOwnerTestService(t)
+	const writerOwner = "secret-writer-owner"
+	if _, err := service.Environments.AcquireWriter(environmentID, writerOwner); err != nil {
+		t.Fatal(err)
+	}
+	owner := newRuntimeOwner(service)
+	run := &ownedAgentRun{
+		id:            "run_writer_diagnostics",
+		environmentID: environmentID,
+		writerOwner:   writerOwner,
+		executable:    "cmd.exe",
+		cwd:           "java/adapters/26.2-fabric",
+		executionMode: "host",
+		state:         agentRunRunning,
+		startedAt:     time.Now().UTC(),
+		done:          make(chan struct{}),
+		cancel:        func() {},
+	}
+	owner.mu.Lock()
+	owner.runs[run.id] = run
+	owner.mu.Unlock()
+
+	diagnostics, err := owner.WriterDiagnostics(environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !diagnostics.Active || diagnostics.Attribution != "current_gateway_runtime" {
+		t.Fatalf("diagnostics = %+v", diagnostics)
+	}
+	if len(diagnostics.HeartbeatSources) != 1 {
+		t.Fatalf("heartbeat sources = %+v, want one", diagnostics.HeartbeatSources)
+	}
+	source := diagnostics.HeartbeatSources[0]
+	if source.Kind != "run" || source.ID != run.id || source.Executable != "cmd.exe" || source.Cwd != run.cwd {
+		t.Fatalf("heartbeat source = %+v", source)
+	}
+	if diagnostics.OwnerFingerprint == "" || diagnostics.OwnerFingerprint == writerOwner {
+		t.Fatalf("owner fingerprint = %q", diagnostics.OwnerFingerprint)
+	}
+	payload, err := json.Marshal(diagnostics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), writerOwner) {
+		t.Fatalf("writer credential leaked in diagnostics: %s", payload)
+	}
+
+	run.mu.Lock()
+	run.state = agentRunSucceeded
+	run.mu.Unlock()
+	close(run.done)
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWriterDiagnosticsUsesPersistedObservationFromAnotherGateway(t *testing.T) {
+	service, environmentID, _ := runtimeOwnerTestService(t)
+	const writerOwner = "external-writer-owner"
+	if _, err := service.Environments.AcquireWriter(environmentID, writerOwner); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Environments.ObserveWriter(environmentID, writerOwner, environment.WriterObservation{
+		GatewayOwnerID: "owner_external",
+		GatewayPID:     4242,
+		SourceKind:     "run",
+		SourceID:       "run_external",
+		SourcePID:      8181,
+		Executable:     "cmd.exe",
+		Cwd:            "java/adapters/26.3-fabric",
+		ExecutionMode:  "host",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+
+	diagnostics, err := owner.WriterDiagnostics(environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !diagnostics.Active || diagnostics.Attribution != "lease_observation" || len(diagnostics.HeartbeatSources) != 1 {
+		t.Fatalf("diagnostics = %+v", diagnostics)
+	}
+	source := diagnostics.HeartbeatSources[0]
+	if source.Kind != "run" || source.ID != "run_external" || source.PID != 8181 || source.GatewayPID != 4242 || source.GatewayOwnerID != "owner_external" {
+		t.Fatalf("persisted heartbeat source = %+v", source)
+	}
+	payload, err := json.Marshal(diagnostics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), writerOwner) {
+		t.Fatalf("writer credential leaked in persisted diagnostics: %s", payload)
+	}
+}
+
+func TestWriterDiagnosticsMarksLegacyWriterWithoutObservationUnattributed(t *testing.T) {
+	service, environmentID, _ := runtimeOwnerTestService(t)
+	const writerOwner = "legacy-writer-owner"
+	if _, err := service.Environments.AcquireWriter(environmentID, writerOwner); err != nil {
+		t.Fatal(err)
+	}
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+
+	diagnostics, err := owner.WriterDiagnostics(environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !diagnostics.Active || diagnostics.Attribution != "unattributed" || len(diagnostics.HeartbeatSources) != 0 {
+		t.Fatalf("diagnostics = %+v", diagnostics)
+	}
+	if diagnostics.OwnerFingerprint == "" {
+		t.Fatal("expected non-authorizing owner fingerprint")
 	}
 }
 

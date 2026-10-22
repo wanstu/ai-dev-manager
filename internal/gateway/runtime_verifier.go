@@ -52,6 +52,7 @@ type ownedVerifierRun struct {
 	writerOwner   string
 	prepared      app.PreparedVerifierExecution
 	executionMode string
+	pid           int
 	ctx           context.Context
 	cancel        context.CancelFunc
 	done          chan struct{}
@@ -106,6 +107,10 @@ func (o *runtimeOwner) StartVerifierRun(environmentID, writerOwner, verifierID s
 	}
 	cmd.Stdout = run.stdout
 	cmd.Stderr = run.stderr
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("verifier", run.id, 0, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name)); err != nil {
+		cancel()
+		return verifierRunStatus{}, err
+	}
 	if err := o.installVerifierRun(run); err != nil {
 		cancel()
 		return verifierRunStatus{}, err
@@ -141,6 +146,10 @@ func (o *runtimeOwner) StartVerifierRunSandboxed(environmentID, writerOwner, ver
 		startedAt:     time.Now().UTC(),
 		stdout:        newOwnerOutputBuffer(maxOutputBytes),
 		stderr:        newOwnerOutputBuffer(maxOutputBytes),
+	}
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("verifier", run.id, 0, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name)); err != nil {
+		cancel()
+		return verifierRunStatus{}, err
 	}
 	if err := o.installVerifierRun(run); err != nil {
 		cancel()
@@ -258,6 +267,7 @@ func (o *runtimeOwner) executeSandboxVerifierRun(run *ownedVerifierRun, maxOutpu
 	run.completedAt = &now
 	run.mu.Unlock()
 
+	o.clearWriterObservation(run.environmentID, o.writerObservation("verifier", run.id, 0, "", "", "", "", ""))
 	run.cancel()
 	close(run.done)
 }
@@ -266,6 +276,13 @@ func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) 
 	commandStarted := time.Now()
 	err := cmd.Start()
 	if err == nil {
+		run.mu.Lock()
+		if cmd.Process != nil {
+			run.pid = cmd.Process.Pid
+		}
+		pid := run.pid
+		run.mu.Unlock()
+		_ = o.observeWriter(run.environmentID, run.writerOwner, o.writerObservation("verifier", run.id, pid, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name))
 		_ = o.service.RecordExecUsage(run.environmentID, run.prepared.Definition.Executable, "verifier_async_start")
 		err = cmd.Wait()
 	}
@@ -328,6 +345,7 @@ func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) 
 	run.completedAt = &now
 	run.mu.Unlock()
 
+	o.clearWriterObservation(run.environmentID, o.writerObservation("verifier", run.id, 0, "", "", "", "", ""))
 	run.cancel()
 	close(run.done)
 }
@@ -347,7 +365,10 @@ func (o *runtimeOwner) heartbeatVerifierRun(run *ownedVerifierRun) {
 		case <-run.done:
 			return
 		case <-ticker.C:
-			if _, err := o.service.Environments.HeartbeatWriter(run.environmentID, run.writerOwner); err != nil {
+			run.mu.Lock()
+			observation := o.writerObservation("verifier", run.id, run.pid, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name)
+			run.mu.Unlock()
+			if err := o.observeWriter(run.environmentID, run.writerOwner, observation); err != nil {
 				o.requestVerifierRunCancel(run, "writer_heartbeat_failed", err.Error())
 				return
 			}

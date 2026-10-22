@@ -25,7 +25,7 @@ import (
 const (
 	serverName             = "adm"
 	runtimeOwnerHeader     = "X-ADM-Runtime-Owner"
-	gatewayToolsetRevision = "2026-10-20.1"
+	gatewayToolsetRevision = "2026-10-22.1"
 )
 
 var serverVersion = productversion.Current()
@@ -734,7 +734,7 @@ func isV144AdminOnlyTool(name string) bool {
 	switch name {
 	case "project_index_auto_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "host_directory_list",
 		"workspace_add", "workspace_rename", "workspace_remove", "workspace_mcp_set", "workspace_skill_set",
-		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_verifier_add", "environment_verifier_remove", "environment_verifier_agent_host_execution_set", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary",
+		"environment_create", "environment_rename", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_remove", "environment_writer_diagnostics", "environment_verifier_add", "environment_verifier_remove", "environment_verifier_agent_host_execution_set", "environment_temporary_cleanup_expired", "environment_temporary_promote", "environment_worktree_create", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary",
 		"exec_allow", "exec_allow_remove", "exec_block", "exec_block_remove", "exec_block_list", "exec_deny_list", "exec_deny_clear", "exec_deny_clear_all", "exec_authorization_status", "exec_full_authorization_set",
 		"logging_status", "gateway_access_status", "gateway_diagnostics", "gateway_access_policy_set", "gateway_allowed_hosts_set", "gateway_admin_api_key_set", "gateway_admin_api_key_rotate", "gateway_admin_api_key_clear", "gateway_agent_api_key_set", "gateway_agent_api_key_rotate", "gateway_agent_api_key_clear",
 		"secret_list", "secret_set", "secret_delete", "mcp_list", "mcp_add", "mcp_update", "mcp_remove", "mcp_set_default", "mcp_probe", "mcp_import_preview", "mcp_import_apply",
@@ -1329,13 +1329,34 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_acquire", Description: "Acquire or renew the single writer lease for an Environment physical root. Use this only immediately before an operation that explicitly requires writer_owner; do not acquire a writer for tree/read/search or other read-only inspection."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
 			env, err := service.Environments.AcquireWriter(in.EnvironmentID, in.Owner)
+			if err == nil && owner != nil {
+				env, err = service.Environments.ObserveWriter(in.EnvironmentID, in.Owner, owner.writerObservation("lease", "", 0, "", "", "", "", ""))
+			}
 			return toolResult(env, err)
 		})
 
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_heartbeat", Description: "Renew an active writer lease without performing a file mutation."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
-			env, err := service.Environments.HeartbeatWriter(in.EnvironmentID, in.Owner)
+			var env model.Environment
+			var err error
+			if owner != nil {
+				env, err = service.Environments.ObserveWriter(in.EnvironmentID, in.Owner, owner.writerObservation("heartbeat", "", 0, "", "", "", "", ""))
+			} else {
+				env, err = service.Environments.HeartbeatWriter(in.EnvironmentID, in.Owner)
+			}
 			return toolResult(env, err)
+		})
+
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_diagnostics", Description: "Admin-only: explain an active Writer lease without revealing the owner credential. Correlates the lease to matching running Process/Run/Verifier resources in this Gateway and reports lease timing, a non-authorizing owner fingerprint, Gateway PID, and heartbeat sources."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
+			if surface != serverSurfaceAdmin {
+				return toolResult(nil, fmt.Errorf("writer diagnostics is only available on the administrative surface"))
+			}
+			if owner == nil {
+				return toolResult(nil, fmt.Errorf("runtime owner is not initialized"))
+			}
+			value, err := owner.WriterDiagnostics(in.EnvironmentID)
+			return toolResult(value, err)
 		})
 
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_release", Description: "Release an Environment writer lease."},
@@ -1376,6 +1397,13 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			mode, err := agentVerifierExecutionMode(service, surface, in.EnvironmentID, in.VerifierID)
 			if err != nil {
 				return toolResult(nil, err)
+			}
+			if owner != nil {
+				stopObservation, observeErr := owner.beginWriterObservation(in.EnvironmentID, in.WriterOwner, owner.writerObservation("verifier_sync", "", 0, "", "", mode, in.VerifierID, ""))
+				if observeErr != nil {
+					return toolResult(nil, observeErr)
+				}
+				defer stopObservation()
 			}
 			if mode == "sandbox" {
 				result, runErr := service.RunVerifierSandboxed(ctx, in.EnvironmentID, in.WriterOwner, in.VerifierID, in.MaxOutputBytes)
@@ -2033,6 +2061,17 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			sandboxed, err := agentStrongSandboxExecution(service, surface)
 			if err != nil {
 				return toolResult(nil, err)
+			}
+			executionMode := "host"
+			if sandboxed {
+				executionMode = "sandbox"
+			}
+			if owner != nil {
+				stopObservation, observeErr := owner.beginWriterObservation(in.EnvironmentID, in.WriterOwner, owner.writerObservation("exec", "", 0, in.Executable, in.Cwd, executionMode, "", ""))
+				if observeErr != nil {
+					return toolResult(nil, observeErr)
+				}
+				defer stopObservation()
 			}
 			var value any
 			if sandboxed {

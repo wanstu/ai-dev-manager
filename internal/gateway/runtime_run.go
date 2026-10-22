@@ -55,6 +55,7 @@ type ownedAgentRun struct {
 	timeoutMS     int64
 	maxOutput     int
 	executionMode string
+	pid           int
 	ctx           context.Context
 	cancel        context.CancelFunc
 	done          chan struct{}
@@ -124,6 +125,10 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 	}
 	cmd.Stdout = run.stdout
 	cmd.Stderr = run.stderr
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("run", run.id, 0, executable, cwd, run.executionMode, "", "")); err != nil {
+		cancel()
+		return agentRunStatus{}, err
+	}
 	if err := o.installAgentRun(run); err != nil {
 		cancel()
 		return agentRunStatus{}, err
@@ -175,6 +180,10 @@ func (o *runtimeOwner) StartAgentRunSandboxed(environmentID, writerOwner, execut
 		stderr:        newOwnerOutputBuffer(maxOutputBytes),
 		state:         agentRunRunning,
 		startedAt:     time.Now().UTC(),
+	}
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("run", run.id, 0, executable, cwd, run.executionMode, "", "")); err != nil {
+		cancel()
+		return agentRunStatus{}, err
 	}
 	if err := o.installAgentRun(run); err != nil {
 		cancel()
@@ -234,6 +243,13 @@ func (o *runtimeOwner) CancelAgentRun(environmentID, writerOwner, runID string) 
 func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 	err := cmd.Start()
 	if err == nil {
+		run.mu.Lock()
+		if cmd.Process != nil {
+			run.pid = cmd.Process.Pid
+		}
+		pid := run.pid
+		run.mu.Unlock()
+		_ = o.observeWriter(run.environmentID, run.writerOwner, o.writerObservation("run", run.id, pid, run.executable, run.cwd, run.executionMode, "", ""))
 		_ = o.service.RecordExecUsage(run.environmentID, run.executable, "run_start")
 		err = cmd.Wait()
 	}
@@ -328,6 +344,7 @@ func (o *runtimeOwner) completeAgentRun(run *ownedAgentRun, result runtimepkg.Co
 		"error_kind":     finalErrorKind,
 	})
 
+	o.clearWriterObservation(run.environmentID, o.writerObservation("run", run.id, 0, "", "", "", "", ""))
 	run.cancel()
 	close(run.done)
 }
@@ -344,7 +361,10 @@ func (o *runtimeOwner) heartbeatAgentRun(run *ownedAgentRun) {
 		case <-run.done:
 			return
 		case <-ticker.C:
-			if _, err := o.service.Environments.HeartbeatWriter(run.environmentID, run.writerOwner); err != nil {
+			run.mu.Lock()
+			observation := o.writerObservation("run", run.id, run.pid, run.executable, run.cwd, run.executionMode, "", "")
+			run.mu.Unlock()
+			if err := o.observeWriter(run.environmentID, run.writerOwner, observation); err != nil {
 				o.requestAgentRunCancel(run, "writer_heartbeat_failed", err.Error())
 				return
 			}

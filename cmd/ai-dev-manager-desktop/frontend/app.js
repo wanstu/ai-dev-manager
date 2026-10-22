@@ -23,7 +23,7 @@ const elements = {
   workspaceBadge: document.getElementById('workspaceBadge'), environmentBadge: document.getElementById('environmentBadge'), execBadge: document.getElementById('execBadge'),
   mcpBadge: document.getElementById('mcpBadge'), skillBadge: document.getElementById('skillBadge'),
   managementContextPanel: document.getElementById('managementContextPanel'), managementWorkspace: document.getElementById('managementWorkspace'), managementEnvironment: document.getElementById('managementEnvironment'), managementEnvironmentHint: document.getElementById('managementEnvironmentHint'), createEnvironmentButton: document.getElementById('createEnvironmentButton'), editEnvironmentButton: document.getElementById('editEnvironmentButton'),
-  runtimeRefreshButton: document.getElementById('runtimeRefreshButton'), runtimeHint: document.getElementById('runtimeHint'), runtimeWriterOwnerInput: document.getElementById('runtimeWriterOwnerInput'), runtimeWriterAcquireButton: document.getElementById('runtimeWriterAcquireButton'), runtimeWriterReleaseButton: document.getElementById('runtimeWriterReleaseButton'), runtimeWriterHint: document.getElementById('runtimeWriterHint'), runtimeSubviewTabs: document.getElementById('runtimeSubviewTabs'), runtimeVerifierCount: document.getElementById('runtimeVerifierCount'), runtimeProcessCount: document.getElementById('runtimeProcessCount'), runtimeRunCount: document.getElementById('runtimeRunCount'), verifierList: document.getElementById('verifierList'), processList: document.getElementById('processList'), runList: document.getElementById('runList'), runtimeOutputMeta: document.getElementById('runtimeOutputMeta'), runtimeOutput: document.getElementById('runtimeOutput'),
+  runtimeRefreshButton: document.getElementById('runtimeRefreshButton'), runtimeHint: document.getElementById('runtimeHint'), runtimeWriterOwnerInput: document.getElementById('runtimeWriterOwnerInput'), runtimeWriterAcquireButton: document.getElementById('runtimeWriterAcquireButton'), runtimeWriterReleaseButton: document.getElementById('runtimeWriterReleaseButton'), runtimeWriterHint: document.getElementById('runtimeWriterHint'), runtimeWriterDiagnostics: document.getElementById('runtimeWriterDiagnostics'), runtimeSubviewTabs: document.getElementById('runtimeSubviewTabs'), runtimeVerifierCount: document.getElementById('runtimeVerifierCount'), runtimeProcessCount: document.getElementById('runtimeProcessCount'), runtimeRunCount: document.getElementById('runtimeRunCount'), verifierList: document.getElementById('verifierList'), processList: document.getElementById('processList'), runList: document.getElementById('runList'), runtimeOutputMeta: document.getElementById('runtimeOutputMeta'), runtimeOutput: document.getElementById('runtimeOutput'),
   mcpTotalCount: document.getElementById('mcpTotalCount'), mcpDefaultCount: document.getElementById('mcpDefaultCount'), mcpEnvironmentCount: document.getElementById('mcpEnvironmentCount'), mcpIssueCount: document.getElementById('mcpIssueCount'),
   mcpForm: document.getElementById('mcpForm'), mcpName: document.getElementById('mcpName'), mcpTransport: document.getElementById('mcpTransport'), mcpEndpointField: document.getElementById('mcpEndpointField'), mcpEndpoint: document.getElementById('mcpEndpoint'),
   mcpExecutableField: document.getElementById('mcpExecutableField'), mcpExecutable: document.getElementById('mcpExecutable'), mcpArgsField: document.getElementById('mcpArgsField'), mcpArgs: document.getElementById('mcpArgs'),
@@ -80,6 +80,8 @@ let runtimeSubviewGeneration = 0;
 let runtimeLists = {verifiers: [], processes: [], runs: []};
 let runtimeListStates = {verifiers: 'unloaded', processes: 'unloaded', runs: 'unloaded'};
 let runtimeListErrors = {verifiers: '', processes: '', runs: ''};
+let runtimeWriterDiagnostics = null;
+let runtimeWriterDiagnosticsError = '';
 let runtimeOutputBinding = null;
 let runtimePendingActionKey = '';
 let runtimeWriterCredential = {environmentID: '', owner: ''};
@@ -1983,6 +1985,8 @@ function resetRuntimeCollections(state = 'unloaded', error = '') {
   runtimeLists = {verifiers: [], processes: [], runs: []};
   runtimeListStates = {verifiers: state, processes: state, runs: state};
   runtimeListErrors = {verifiers: error, processes: error, runs: error};
+  runtimeWriterDiagnostics = null;
+  runtimeWriterDiagnosticsError = '';
   runtimeRunsByID = new Map();
 }
 function syncRuntimeSubviewUI() {
@@ -2045,21 +2049,111 @@ function renderRuntimeListState(kind, emptyText, renderItems) {
   if (!filtered.length) return emptyMessage(container, '当前运行视图没有符合筛选条件的项目。');
   container.replaceChildren(); container.classList.remove('empty'); renderItems(filtered, container);
 }
+function writerDiagnosticTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+}
+function writerSourceLabel(source) {
+  const kind = String(source?.kind || 'runtime').toLowerCase();
+  if (kind === 'process') return 'Process';
+  if (kind === 'verifier') return 'Verifier';
+  if (kind === 'verifier_sync') return '同步 Verifier';
+  if (kind === 'run') return 'Run';
+  if (kind === 'exec') return '同步 Exec';
+  if (kind === 'lease') return 'Writer 获取/续租';
+  if (kind === 'heartbeat') return '显式 Heartbeat';
+  return kind || 'Runtime';
+}
+function renderRuntimeWriterDiagnostics(environment) {
+  const container = elements.runtimeWriterDiagnostics;
+  if (!container) return;
+  if (!environment) return emptyMessage(container, '选择 Environment 后显示 Writer 占用来源。');
+  if (!environment.writer) return emptyMessage(container, '当前没有 active Writer；没有锁占用。');
+  if (runtimeWriterDiagnosticsError) return emptyMessage(container, 'Writer 占用诊断读取失败：' + runtimeWriterDiagnosticsError);
+  const diagnostics = runtimeWriterDiagnostics;
+  if (!diagnostics || diagnostics.environment_id !== environment.environment_id) return emptyMessage(container, '正在读取 Writer 占用来源…');
+
+  container.replaceChildren();
+  container.classList.remove('empty');
+  const summary = document.createElement('div');
+  summary.className = 'runtime-writer-summary';
+  const sources = safeArray(diagnostics.heartbeat_sources);
+  const attribution = diagnostics.attribution === 'current_gateway_runtime'
+    ? `已归因到当前 Gateway · ${sources.length} 个续租源`
+    : diagnostics.attribution === 'lease_observation'
+      ? '最新续租已归因到占锁 Gateway'
+      : diagnostics.attribution === 'last_known_source'
+        ? '仅有上一次已识别来源；之后发生过未标注续租'
+        : diagnostics.attribution === 'unattributed'
+          ? '没有可用的续租来源快照'
+          : '当前无续租来源';
+  const facts = [
+    ['状态', attribution],
+    ['Owner 指纹', diagnostics.owner_fingerprint || '—'],
+    ['最近续租', writerDiagnosticTime(diagnostics.last_seen_at)],
+    ['租约到期', writerDiagnosticTime(diagnostics.expires_at)],
+    ['自动心跳', diagnostics.heartbeat_interval_seconds ? `约每 ${diagnostics.heartbeat_interval_seconds}s` : '—'],
+    ['Gateway', diagnostics.gateway_owner?.pid ? `PID ${diagnostics.gateway_owner.pid}` : '—'],
+  ];
+  for (const [label, value] of facts) {
+    const span = document.createElement('span');
+    const strong = document.createElement('strong'); strong.textContent = label + '：';
+    span.append(strong, document.createTextNode(String(value)));
+    summary.append(span);
+  }
+  container.append(summary);
+
+  if (sources.length) {
+    const list = document.createElement('div'); list.className = 'runtime-writer-source-list';
+    for (const source of sources) {
+      const item = document.createElement('div'); item.className = 'runtime-writer-source';
+      const title = document.createElement('strong');
+      title.textContent = `${writerSourceLabel(source)} ${source.id || '—'}${source.pid ? ` · PID ${source.pid}` : ''}${source.gateway_pid ? ` · Gateway PID ${source.gateway_pid}` : ''}`;
+      const code = document.createElement('code');
+      const commandBits = [source.executable || '', source.cwd ? `cwd ${source.cwd}` : '', source.execution_mode || ''].filter(Boolean);
+      code.textContent = commandBits.join(' · ') || '运行项详情不可用';
+      const meta = document.createElement('small');
+      const verifier = source.verifier_name || source.verifier_id;
+      const observedOnly = source.state === 'observed' || source.state === 'last_observed';
+      const timing = observedOnly
+        ? `${source.state === 'last_observed' ? '上次识别' : '最后观测'} ${writerDiagnosticTime(source.observed_at)}`
+        : `开始 ${writerDiagnosticTime(source.started_at)} · 最近续租 ${writerDiagnosticTime(source.observed_at)}`;
+      const sourceMeaning = source.state === 'observed'
+        ? '该来源与当前 lease 的最新续租时间一致'
+        : source.state === 'last_observed'
+          ? '之后发生过未标注来源的续租；这里只能作为历史线索'
+          : '该运行项持有与当前 lease 相同的 Writer owner，因此会自动续租';
+      meta.textContent = [verifier ? `Verifier ${verifier}` : '', timing, sourceMeaning].filter(Boolean).join(' · ');
+      item.append(title, code, meta); list.append(item);
+    }
+    container.append(list);
+  } else {
+    const warning = document.createElement('div');
+    warning.className = 'warning-text';
+    warning.textContent = '当前 active Writer 没有可用的安全来源快照。通常表示它来自尚未升级的旧 Gateway、非 Gateway 直接调用，或历史 lease；升级后的 Gateway 会在每次续租时写入来源。';
+    container.append(warning);
+  }
+}
 function renderRuntime() {
   syncRuntimeSubviewUI();
   const environment = currentEnvironment(), writerOwner = runtimeWriterOwner(), pending = Boolean(runtimePendingActionKey);
   const activeWriter = Boolean(environment?.writer), writerAuthorized = activeWriter && Boolean(writerOwner);
   const writerActionDisabledReason = runtimeWriterActionDisabledReason(environment, writerOwner, pending);
+  const writerSources = safeArray(runtimeWriterDiagnostics?.heartbeat_sources);
   elements.runtimeHint.textContent = !environment
     ? '选择 Management Environment 后可查看当前 Gateway owner 的运行状态。'
-    : activeWriter
-      ? '当前 Environment 有 active Writer。服务端不会暴露 owner；只有当前 Desktop 会话已显式持有正确 owner 时，运行/停止/取消操作才可用。'
-      : '当前 Environment 没有 active Writer；可查看 owner-local 状态与日志，也可以显式获取一个 Writer。';
+    : activeWriter && writerSources.length
+      ? `当前 Writer 正由 ${writerSourceLabel(writerSources[0])} ${writerSources[0].id || ''}${writerSources.length > 1 ? ` 等 ${writerSources.length} 个运行项` : ''}自动续租；原始 owner 凭证保持隐藏。`
+      : activeWriter
+        ? '当前 Environment 有 active Writer；下方会显示租约时间和可归因的续租来源，原始 owner 凭证不会回显。'
+        : '当前 Environment 没有 active Writer；可查看 owner-local 状态与日志，也可以显式获取一个 Writer。';
   if (elements.runtimeWriterOwnerInput && runtimeWriterCredential.environmentID === environment?.environment_id && document.activeElement !== elements.runtimeWriterOwnerInput) elements.runtimeWriterOwnerInput.value = runtimeWriterCredential.owner || '';
   elements.runtimeWriterOwnerInput.disabled = !environment || pending;
   elements.runtimeWriterAcquireButton.disabled = !environment || pending;
   elements.runtimeWriterReleaseButton.disabled = !environment || pending || !writerAuthorized;
-  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存一个 Writer Owner；它只存在于内存，不写入 profile/state，也不会从服务端回显。' : activeWriter ? '检测到 active Writer，但 owner 被隐藏。要使用该 Writer，必须由人类显式输入正确 owner；错误 owner 不会获得 authority。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
+  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存 Writer authority；下方诊断仍只展示安全指纹和占用来源，不回显原始 owner。' : activeWriter ? '检测到 active Writer。下方会说明当前锁是否由本 Gateway 的 Process / Run / Verifier 保活；原始 owner 凭证保持隐藏。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
+  renderRuntimeWriterDiagnostics(environment);
 
   renderRuntimeListState('verifiers', '没有配置 verifier', (verifiers, container) => {
     for (const verifier of verifiers) {
@@ -2116,7 +2210,10 @@ async function refreshRuntimeContext(showMessage = false, scope = captureEnviron
   runtimeListStates = {verifiers: 'loading', processes: 'loading', runs: 'loading'}; runtimeListErrors = {verifiers: '', processes: '', runs: ''}; renderRuntime();
   if (showMessage) setStatus('正在刷新 Runtime 状态…', 'loading');
   const results = await Promise.allSettled([
-    desktopAdapter().ListVerifiers(scope.environmentID), desktopAdapter().ListProcesses(scope.environmentID), desktopAdapter().ListRuns(scope.environmentID),
+    desktopAdapter().ListVerifiers(scope.environmentID),
+    desktopAdapter().ListProcesses(scope.environmentID),
+    desktopAdapter().ListRuns(scope.environmentID),
+    desktopAdapter().GetRuntimeWriterDiagnostics(scope.environmentID),
   ]);
   if (!environmentScopeIsCurrent(scope)) return {stale: true, errors: []};
   const descriptors = [
@@ -2126,6 +2223,14 @@ async function refreshRuntimeContext(showMessage = false, scope = captureEnviron
   for (const [kind, label, result] of descriptors) {
     if (result.status === 'fulfilled') { runtimeLists[kind] = safeArray(result.value); runtimeListStates[kind] = 'success'; runtimeListErrors[kind] = ''; }
     else { runtimeListStates[kind] = 'error'; runtimeListErrors[kind] = errorText(result.reason); errors.push(`${label}: ${runtimeListErrors[kind]}`); }
+  }
+  if (results[3].status === 'fulfilled') {
+    runtimeWriterDiagnostics = results[3].value || null;
+    runtimeWriterDiagnosticsError = '';
+  } else {
+    runtimeWriterDiagnostics = null;
+    runtimeWriterDiagnosticsError = errorText(results[3].reason);
+    errors.push(`Writer diagnostics: ${runtimeWriterDiagnosticsError}`);
   }
   renderRuntime();
   if (showMessage) setStatus(errors.length ? `Runtime 部分状态不可用：${errors.join(' · ')}` : 'Runtime 状态已刷新', errors.length ? 'error' : 'success');
