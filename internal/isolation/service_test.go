@@ -288,8 +288,12 @@ func TestDestroyRefusesUnpublishedCommitAndRetainsCommittedWork(t *testing.T) {
 	if _, err := service.Destroy(ctx, created.Environment.ID, "writer", false); err == nil || !strings.Contains(err.Error(), "not verified on any freshly fetched remote branch") {
 		t.Fatalf("unpublished local commit must block default destroy, got %v", err)
 	}
-	if _, err := service.Destroy(ctx, created.Environment.ID, "writer", true); err != nil {
+	result, err := service.DestroyForRetentionCleanup(ctx, created.Environment.ID, "writer", false)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if result.Forced {
+		t.Fatalf("retention cleanup should not require Git force for clean unpublished work: %+v", result)
 	}
 	if got := gitRun(t, source, "rev-parse", created.ManagedWorktree.Branch); got != localHead {
 		t.Fatalf("retained branch lost local commit: got %s want %s", got, localHead)

@@ -443,6 +443,17 @@ func (s *Service) Safety(ctx context.Context, environmentID string) (SafetyStatu
 }
 
 func (s *Service) Destroy(ctx context.Context, environmentID, writerOwner string, force bool) (DestroyResult, error) {
+	return s.destroy(ctx, environmentID, writerOwner, force, false)
+}
+
+// DestroyForRetentionCleanup removes a clean managed worktree while allowing
+// unpublished commits because the managed branch is retained. Dirty/ignored
+// work is still refused so retention cleanup cannot discard uncommitted files.
+func (s *Service) DestroyForRetentionCleanup(ctx context.Context, environmentID, writerOwner string, force bool) (DestroyResult, error) {
+	return s.destroy(ctx, environmentID, writerOwner, force, true)
+}
+
+func (s *Service) destroy(ctx context.Context, environmentID, writerOwner string, force, allowUnpublished bool) (DestroyResult, error) {
 	env, err := s.environments.RequireWriter(strings.TrimSpace(environmentID), strings.TrimSpace(writerOwner))
 	if err != nil {
 		return DestroyResult{}, err
@@ -461,12 +472,12 @@ func (s *Service) Destroy(ctx context.Context, environmentID, writerOwner string
 	if err != nil {
 		return DestroyResult{}, err
 	}
-	if !force && (safety.Dirty || safety.Unpublished) {
+	if !force && (safety.Dirty || (safety.Unpublished && !allowUnpublished)) {
 		reasons := make([]string, 0, 2)
 		if safety.Dirty {
 			reasons = append(reasons, "dirty worktree")
 		}
-		if safety.Unpublished {
+		if safety.Unpublished && !allowUnpublished {
 			reasons = append(reasons, "locally advanced HEAD is not verified on any freshly fetched remote branch")
 		}
 		return DestroyResult{}, fmt.Errorf("managed worktree %s destroy refused: %s; retry with force=true only after review", managed.ID, strings.Join(reasons, ", "))

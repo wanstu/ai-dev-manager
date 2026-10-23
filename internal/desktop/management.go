@@ -193,7 +193,7 @@ func (a *Adapter) CleanupStaleManagedWorktrees(inactiveSeconds int64, environmen
 	return backend.EnvironmentWorktreeCleanupStale(inactiveSeconds, environmentIDs, execute)
 }
 
-func (a *Adapter) CleanupExpiredTemporaryEnvironments(execute bool) (model.ResourceRetentionCleanupResult, error) {
+func (a *Adapter) CleanupExpiredTemporaryEnvironments(execute, force bool) (model.ResourceRetentionCleanupResult, error) {
 	if err := a.ready(); err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}
@@ -201,7 +201,7 @@ func (a *Adapter) CleanupExpiredTemporaryEnvironments(execute bool) (model.Resou
 	if !ok {
 		return model.ResourceRetentionCleanupResult{}, errors.New("temporary Environment lifecycle requires ADM Admin MCP")
 	}
-	return backend.EnvironmentTemporaryCleanupExpired(execute)
+	return backend.EnvironmentTemporaryCleanupExpired(execute, force)
 }
 
 func (a *Adapter) CleanupTemporaryEnvironment(id, ownerID string, execute bool) (model.ResourceRetentionCleanupResult, error) {

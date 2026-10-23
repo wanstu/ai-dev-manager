@@ -155,7 +155,7 @@ func (o *runtimeOwner) TemporaryEnvironmentCleanup(ctx context.Context, environm
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}
-	o.cleanupManagedWorktreeRetention(ctx, target, &result)
+	o.cleanupManagedWorktreeRetention(ctx, target, &result, false)
 	for _, mutation := range result.Removed {
 		if mutation.Kind == model.RetentionResourceEnvironment && mutation.ID == environment.ID {
 			o.DropEnvironment(environment.ID)
@@ -197,11 +197,61 @@ func (o *runtimeOwner) enrichManagedWorktreeRetention(ctx context.Context, item 
 		item.Blockers = append(item.Blockers, "managed_worktree_ignored_files")
 	}
 	if safety.Unpublished {
-		item.Blockers = append(item.Blockers, "managed_worktree_unpublished")
+		item.Uncertainties = uniqueGatewayStrings(append(item.Uncertainties, "managed_worktree_unpublished_branch_retained"))
 	}
 }
 
-func (o *runtimeOwner) ExpiredTemporaryEnvironmentsCleanup(ctx context.Context, execute bool) (model.ResourceRetentionCleanupResult, error) {
+const (
+	expiredTemporaryCleanupInitialDelay = time.Minute
+	expiredTemporaryCleanupInterval     = time.Hour
+	expiredTemporaryCleanupTimeout      = 10 * time.Minute
+)
+
+func (o *runtimeOwner) monitorExpiredTemporaryEnvironments(ctx context.Context) {
+	timer := time.NewTimer(expiredTemporaryCleanupInitialDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+	}
+	o.runAutomaticExpiredTemporaryCleanup(ctx)
+
+	ticker := time.NewTicker(expiredTemporaryCleanupInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			o.runAutomaticExpiredTemporaryCleanup(ctx)
+		}
+	}
+}
+
+func (o *runtimeOwner) runAutomaticExpiredTemporaryCleanup(ctx context.Context) {
+	cleanupCtx, cancel := context.WithTimeout(ctx, expiredTemporaryCleanupTimeout)
+	defer cancel()
+	result, err := o.ExpiredTemporaryEnvironmentsCleanup(cleanupCtx, true, false)
+	if err != nil {
+		o.service.Log("warn", "retention.expired_environment_cleanup_failed", map[string]string{"error": err.Error()})
+		return
+	}
+	removed := 0
+	for _, mutation := range result.Removed {
+		if mutation.Kind == model.RetentionResourceEnvironment {
+			removed++
+		}
+	}
+	if removed > 0 {
+		o.service.Log("info", "retention.expired_environment_cleanup", map[string]string{
+			"removed": fmt.Sprintf("%d", removed),
+			"skipped": fmt.Sprintf("%d", len(result.Skipped)),
+		})
+	}
+}
+
+func (o *runtimeOwner) ExpiredTemporaryEnvironmentsCleanup(ctx context.Context, execute, force bool) (model.ResourceRetentionCleanupResult, error) {
 	now := time.Now().UTC()
 	report, err := o.retentionReportFiltered(ctx, func(item model.ResourceRetentionItem) bool {
 		return item.Kind == model.RetentionResourceEnvironment &&
@@ -212,6 +262,9 @@ func (o *runtimeOwner) ExpiredTemporaryEnvironmentsCleanup(ctx context.Context, 
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}
+	if force {
+		o.allowForcedManagedWorktreeCleanup(ctx, &report)
+	}
 	request := model.ResourceRetentionCleanupRequest{Execute: execute}
 	if !execute {
 		return o.service.ResourceRetentionCleanupFromReport(report, request)
@@ -220,7 +273,7 @@ func (o *runtimeOwner) ExpiredTemporaryEnvironmentsCleanup(ctx context.Context, 
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
 	}
-	o.cleanupManagedWorktreeRetention(ctx, report, &result)
+	o.cleanupManagedWorktreeRetention(ctx, report, &result, force)
 	for _, mutation := range result.Removed {
 		if mutation.Kind == model.RetentionResourceEnvironment {
 			o.DropEnvironment(mutation.ID)
@@ -246,11 +299,36 @@ func (o *runtimeOwner) ResourceRetentionCleanup(ctx context.Context, request mod
 			o.DropMCP(mutation.ID)
 		}
 	}
-	o.cleanupManagedWorktreeRetention(ctx, report, &result)
+	o.cleanupManagedWorktreeRetention(ctx, report, &result, false)
 	return result, nil
 }
 
-func (o *runtimeOwner) cleanupManagedWorktreeRetention(ctx context.Context, report model.ResourceRetentionReport, result *model.ResourceRetentionCleanupResult) {
+func (o *runtimeOwner) allowForcedManagedWorktreeCleanup(ctx context.Context, report *model.ResourceRetentionReport) {
+	if o == nil || o.service == nil || o.service.Isolation == nil || report == nil {
+		return
+	}
+	now := time.Now().UTC()
+	for i := range report.Resources {
+		item := &report.Resources[i]
+		if item.Kind != model.RetentionResourceEnvironment || item.Retention.Persistence != model.PersistenceTemporary {
+			continue
+		}
+		_, managed, err := o.service.Isolation.GetByEnvironment(item.ID)
+		if err != nil || !managed {
+			continue
+		}
+		before := len(item.Blockers)
+		item.Blockers = removeRetentionBlocker(item.Blockers, "managed_worktree_dirty")
+		item.Blockers = removeRetentionBlocker(item.Blockers, "managed_worktree_ignored_files")
+		item.Blockers = removeRetentionBlocker(item.Blockers, "managed_worktree_unpublished")
+		if len(item.Blockers) != before {
+			item.Uncertainties = uniqueGatewayStrings(append(item.Uncertainties, "force_cleanup_discards_uncommitted_or_ignored_work"))
+			refreshRetentionCleanupState(item, now)
+		}
+	}
+}
+
+func (o *runtimeOwner) cleanupManagedWorktreeRetention(ctx context.Context, report model.ResourceRetentionReport, result *model.ResourceRetentionCleanupResult, force bool) {
 	if o == nil || o.service == nil || o.service.Isolation == nil || o.service.Environments == nil || result == nil {
 		return
 	}
@@ -281,7 +359,7 @@ func (o *runtimeOwner) cleanupManagedWorktreeRetention(ctx context.Context, repo
 			markRetentionExecutionBlocked(result, item.ID, blockers...)
 			continue
 		}
-		destroyed, err := o.service.Isolation.Destroy(ctx, item.ID, writerOwner, false)
+		destroyed, err := o.service.Isolation.DestroyForRetentionCleanup(ctx, item.ID, writerOwner, force)
 		if err != nil {
 			_, _ = o.service.Environments.ReleaseWriter(item.ID, writerOwner, false)
 			markRetentionExecutionBlocked(result, item.ID, "managed_worktree_cleanup_failed")

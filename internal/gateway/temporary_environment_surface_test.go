@@ -403,7 +403,6 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		blocker string
 	}{
 		{dirty.Environment.ID, "managed_worktree_dirty"},
-		{unpublished.Environment.ID, "managed_worktree_unpublished"},
 		{tampered.Environment.ID, "managed_worktree_safety_check_failed"},
 	} {
 		preview := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": tc.id, "owner_id": "managed-owner"})
@@ -417,6 +416,22 @@ func TestTemporaryEnvironmentManagedHTTPIsolationAndSafety(t *testing.T) {
 		if _, err := service.Environments.Get(tc.id); err != nil {
 			t.Fatalf("unsafe managed Environment %s was removed: %v", tc.id, err)
 		}
+	}
+
+	unpublishedHead := strings.TrimSpace(gatewayGitRun(t, unpublished.ManagedWorktree.Root, "rev-parse", "HEAD"))
+	unpublishedPreview := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": unpublished.Environment.ID, "owner_id": "managed-owner"})
+	if unpublishedPreview.IsError || !strings.Contains(toolText(t, unpublishedPreview), "\"cleanup_eligible\":true") {
+		t.Fatalf("clean unpublished Environment should be cleanup eligible: %s", toolText(t, unpublishedPreview))
+	}
+	unpublishedExecute := callGatewayTool(t, ctx, admin, "environment_temporary_cleanup", map[string]any{"environment_id": unpublished.Environment.ID, "owner_id": "managed-owner", "execute": true})
+	if unpublishedExecute.IsError {
+		t.Fatalf("clean unpublished Environment cleanup failed: %s", toolText(t, unpublishedExecute))
+	}
+	if _, err := service.Environments.Get(unpublished.Environment.ID); err == nil {
+		t.Fatal("clean unpublished Environment still exists after cleanup")
+	}
+	if got := strings.TrimSpace(gatewayGitRun(t, source, "rev-parse", unpublished.ManagedWorktree.Branch)); got != unpublishedHead {
+		t.Fatalf("cleanup lost retained unpublished branch commit: got=%s want=%s", got, unpublishedHead)
 	}
 
 	plainRoot := t.TempDir()

@@ -257,7 +257,7 @@ func TestTemporaryManagedWorktreeTargetedCleanupBlocksDirtyWork(t *testing.T) {
 	}
 }
 
-func TestTemporaryManagedWorktreeTargetedCleanupBlocksUnpublishedAndTamperedWork(t *testing.T) {
+func TestTemporaryManagedWorktreeTargetedCleanupRetainsUnpublishedAndBlocksTamperedWork(t *testing.T) {
 	t.Run("unpublished", func(t *testing.T) {
 		service := app.New(filepath.Join(t.TempDir(), "state.json"))
 		workspaceRoot := t.TempDir()
@@ -280,6 +280,11 @@ func TestTemporaryManagedWorktreeTargetedCleanupBlocksUnpublishedAndTamperedWork
 		}
 		mustGitCommand(t, created.Environment.Root, "add", "commit.txt")
 		mustGitCommand(t, created.Environment.Root, "commit", "-m", "local unpublished")
+		localHead, err := gitCommandOutput(created.Environment.Root, "rev-parse", "HEAD")
+		if err != nil {
+			t.Fatal(err)
+		}
+		localHead = strings.TrimSpace(localHead)
 
 		owner := newRuntimeOwner(service)
 		defer owner.Close()
@@ -287,18 +292,21 @@ func TestTemporaryManagedWorktreeTargetedCleanupBlocksUnpublishedAndTamperedWork
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(preview.Report.Resources) != 1 || !hasRetentionBlocker(preview.Report.Resources[0].Blockers, "managed_worktree_unpublished") {
-			t.Fatalf("unpublished blocker missing: %+v", preview)
+		if len(preview.Report.Resources) != 1 || !preview.Report.Resources[0].CleanupEligible || hasRetentionBlocker(preview.Report.Resources[0].Blockers, "managed_worktree_unpublished") {
+			t.Fatalf("clean unpublished managed worktree should be cleanup eligible: %+v", preview)
 		}
-		if _, err := owner.TemporaryEnvironmentCleanup(ctx, created.Environment.ID, "owner-unpublished", true); err == nil {
-			t.Fatal("unpublished managed cleanup unexpectedly succeeded")
-		}
-		writer := "test-force-unpublished"
-		if _, err := service.Environments.AcquireWriter(created.Environment.ID, writer); err != nil {
+		executed, err := owner.TemporaryEnvironmentCleanup(ctx, created.Environment.ID, "owner-unpublished", true)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := service.Isolation.Destroy(ctx, created.Environment.ID, writer, true); err != nil {
-			t.Fatal(err)
+		if !hasTemporaryRetentionMutation(executed.Removed, model.RetentionResourceEnvironment, created.Environment.ID) {
+			t.Fatalf("unpublished managed cleanup did not remove Environment: %+v", executed)
+		}
+		if _, err := service.Environments.Get(created.Environment.ID); err == nil {
+			t.Fatal("unpublished managed Environment metadata still exists after cleanup")
+		}
+		if got, err := gitCommandOutput(workspaceRoot, "rev-parse", created.ManagedWorktree.Branch); err != nil || strings.TrimSpace(got) != localHead {
+			t.Fatalf("retained branch lost unpublished commit: got=%q err=%v want=%q", strings.TrimSpace(got), err, localHead)
 		}
 	})
 
