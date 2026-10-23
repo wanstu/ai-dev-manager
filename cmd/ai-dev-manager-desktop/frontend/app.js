@@ -3882,12 +3882,17 @@ async function forceCleanupExpiredTemporaryEnvironments() {
       return;
     }
     const destructive = eligible.filter((item) => safeArray(item.uncertainties).includes('force_cleanup_discards_uncommitted_or_ignored_work'));
+    const recovered = eligible.filter((item) => safeArray(item.uncertainties).includes('force_cleanup_recovers_broken_managed_worktree'));
+    const preservedRoots = eligible.filter((item) => safeArray(item.uncertainties).includes('force_cleanup_preserves_non_git_root_contents'));
     const names = eligible.slice(0, 8).map((item) => item.name || item.id).join('\n');
     const suffix = eligible.length > 8 ? `\n…以及另外 ${eligible.length - 8} 个` : '';
-    const warning = destructive.length
-      ? `其中 ${destructive.length} 个包含未提交或 Git ignored 本地内容，这些内容会被删除；已提交的 managed branch 会保留。`
-      : '这些 Environment 均已通过强制回收检查；已提交的 managed branch 会保留。';
-    if (!window.confirm(`强制回收 ${eligible.length} 个已过期 temporary Environment？\n\n${warning}\n\n${names}${suffix}\n\n运行中的任务、Writer、结构异常 Worktree 仍不会被删除。`)) {
+    const warnings = [];
+    if (destructive.length) warnings.push(`${destructive.length} 个包含未提交或 Git ignored 本地内容，这些内容会被删除；已提交的 managed branch 会保留。`);
+    if (recovered.length) warnings.push(`${recovered.length} 个 Worktree 结构异常但可安全恢复；仅管理员主动强制清理会处理。`);
+    if (preservedRoots.length) warnings.push(`${preservedRoots.length} 个目录已不再是 Git Worktree：只移除 ADM/Worktree 元数据，目录内容原样保留。`);
+    if (!warnings.length) warnings.push('这些 Environment 均已通过强制回收检查；已提交的 managed branch 会保留。');
+    const warning = warnings.join('\n');
+    if (!window.confirm(`强制回收 ${eligible.length} 个已过期 temporary Environment？\n\n${warning}\n\n${names}${suffix}\n\n运行中的任务、Writer、根目录越界或 Git common-dir 被替换的 Worktree 仍不会被删除。`)) {
       setStatus('已取消强制清理；未修改 Environment。', 'success');
       return;
     }

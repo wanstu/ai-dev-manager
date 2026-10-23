@@ -71,6 +71,18 @@ type SafetyStatus struct {
 	Head        string `json:"head"`
 }
 
+const (
+	ForcedRetentionRecoveryMetadataOnly   = "metadata_only"
+	ForcedRetentionRecoveryRemoveWorktree = "remove_worktree"
+)
+
+type ForcedRetentionCleanupRecovery struct {
+	Allowed       bool   `json:"allowed"`
+	Mode          string `json:"mode,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	CurrentBranch string `json:"current_branch,omitempty"`
+}
+
 func New(s *store.Store, workspaces *workspace.Service, environments *environment.Service) *Service {
 	return &Service{store: s, workspaces: workspaces, environments: environments, now: time.Now}
 }
@@ -389,6 +401,75 @@ func (s *Service) SafetyForRetentionCleanup(ctx context.Context, environmentID s
 	return s.safety(ctx, environmentID, false)
 }
 
+// ForcedRetentionCleanupRecovery recognizes only narrowly recoverable broken
+// managed-worktree states. It never follows a root outside ADM's configured
+// worktree directory and never accepts a changed Git common directory.
+func (s *Service) ForcedRetentionCleanupRecovery(ctx context.Context, environmentID string) (ForcedRetentionCleanupRecovery, error) {
+	env, err := s.environments.Get(strings.TrimSpace(environmentID))
+	if err != nil {
+		return ForcedRetentionCleanupRecovery{}, err
+	}
+	managed, ok, err := s.GetByEnvironment(env.ID)
+	if err != nil {
+		return ForcedRetentionCleanupRecovery{}, err
+	}
+	if !ok {
+		return ForcedRetentionCleanupRecovery{}, fmt.Errorf("environment %s is not backed by a managed worktree", env.ID)
+	}
+	if managed.EnvironmentID != env.ID || managed.WorkspaceID != env.WorkspaceID || !samePath(managed.Root, env.Root) {
+		return ForcedRetentionCleanupRecovery{}, fmt.Errorf("managed worktree metadata does not match environment %s", env.ID)
+	}
+	settings, err := s.Settings()
+	if err != nil {
+		return ForcedRetentionCleanupRecovery{}, err
+	}
+	if !within(settings.Root, managed.Root) {
+		return ForcedRetentionCleanupRecovery{}, fmt.Errorf("managed worktree %s root escapes configured ADM worktree root", managed.ID)
+	}
+
+	root, err := canonicalExistingDir(managed.Root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ForcedRetentionCleanupRecovery{Allowed: true, Mode: ForcedRetentionRecoveryMetadataOnly, Reason: "root_missing"}, nil
+		}
+		return ForcedRetentionCleanupRecovery{}, err
+	}
+	if !samePath(root, managed.Root) {
+		return ForcedRetentionCleanupRecovery{}, fmt.Errorf("managed worktree %s root identity changed", managed.ID)
+	}
+
+	top, err := s.gitOutput(ctx, root, "rev-parse", "--show-toplevel")
+	if err != nil {
+		// The path is still inside ADM's worktree root but is no longer a Git
+		// worktree. Detach ADM metadata only; preserve all directory contents.
+		return ForcedRetentionCleanupRecovery{Allowed: true, Mode: ForcedRetentionRecoveryMetadataOnly, Reason: "root_not_git_worktree"}, nil
+	}
+	topDir, err := canonicalExistingDir(strings.TrimSpace(top))
+	if err != nil || !samePath(topDir, root) {
+		return ForcedRetentionCleanupRecovery{}, fmt.Errorf("managed worktree %s Git top-level no longer matches root", managed.ID)
+	}
+	commonRaw, err := s.gitOutput(ctx, root, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return ForcedRetentionCleanupRecovery{}, fmt.Errorf("managed worktree %s Git common-dir check failed: %w", managed.ID, err)
+	}
+	commonDir, err := canonicalGitPath(root, strings.TrimSpace(commonRaw))
+	if err != nil || !samePath(commonDir, managed.GitCommonDir) {
+		return ForcedRetentionCleanupRecovery{}, fmt.Errorf("managed worktree %s Git common directory changed", managed.ID)
+	}
+	branch, err := s.gitOutput(ctx, root, "branch", "--show-current")
+	if err != nil {
+		return ForcedRetentionCleanupRecovery{}, fmt.Errorf("managed worktree %s branch check failed: %w", managed.ID, err)
+	}
+	currentBranch := strings.TrimSpace(branch)
+	if currentBranch != managed.Branch {
+		return ForcedRetentionCleanupRecovery{
+			Allowed: true, Mode: ForcedRetentionRecoveryRemoveWorktree,
+			Reason: "branch_changed", CurrentBranch: currentBranch,
+		}, nil
+	}
+	return ForcedRetentionCleanupRecovery{Allowed: false, Reason: "validation_failure_not_recoverable"}, nil
+}
+
 func (s *Service) safety(ctx context.Context, environmentID string, verifyPublication bool) (SafetyStatus, error) {
 	env, err := s.environments.Get(strings.TrimSpace(environmentID))
 	if err != nil {
@@ -476,8 +557,14 @@ func (s *Service) destroy(ctx context.Context, environmentID, writerOwner string
 	if !ok {
 		return DestroyResult{}, fmt.Errorf("environment %s is not backed by a managed worktree", env.ID)
 	}
-	if err := s.ValidateEnvironment(ctx, env); err != nil {
-		return DestroyResult{}, err
+	if validateErr := s.ValidateEnvironment(ctx, env); validateErr != nil {
+		if force && allowUnpublished {
+			recovery, recoveryErr := s.ForcedRetentionCleanupRecovery(ctx, env.ID)
+			if recoveryErr == nil && recovery.Allowed {
+				return s.destroyForcedRetentionRecovery(ctx, env, managed, recovery)
+			}
+		}
+		return DestroyResult{}, validateErr
 	}
 	var safety SafetyStatus
 	if allowUnpublished {
@@ -514,6 +601,40 @@ func (s *Service) destroy(ctx context.Context, environmentID, writerOwner string
 		RetainedBranch:    managed.Branch,
 		Forced:            force,
 	}, nil
+}
+
+func (s *Service) destroyForcedRetentionRecovery(ctx context.Context, env model.Environment, managed model.ManagedWorktree, recovery ForcedRetentionCleanupRecovery) (DestroyResult, error) {
+	switch recovery.Mode {
+	case ForcedRetentionRecoveryMetadataOnly:
+		if _, _, err := s.environments.RemoveManaged(env.ID); err != nil {
+			return DestroyResult{}, fmt.Errorf("remove broken managed worktree metadata: %w", err)
+		}
+		// Best-effort cleanup of stale Git worktree registration. This never
+		// deletes the preserved non-Git directory contents.
+		_ = s.pruneWorktreesViaCommonDir(ctx, managed)
+		return DestroyResult{
+			ManagedWorktreeID: managed.ID, EnvironmentID: env.ID, Root: managed.Root,
+			RetainedBranch: managed.Branch, Forced: true,
+		}, nil
+	case ForcedRetentionRecoveryRemoveWorktree:
+		if err := s.removeWorktreeViaCommonDir(ctx, managed, true); err != nil {
+			return DestroyResult{}, fmt.Errorf("force-remove recoverable managed worktree %s: %w", managed.ID, err)
+		}
+		if _, _, err := s.environments.RemoveManaged(env.ID); err != nil {
+			return DestroyResult{}, fmt.Errorf("managed worktree removed from Git but ADM metadata cleanup failed: %w", err)
+		}
+		_ = os.Remove(filepath.Dir(managed.Root))
+		retainedBranch := recovery.CurrentBranch
+		if retainedBranch == "" {
+			retainedBranch = managed.Branch
+		}
+		return DestroyResult{
+			ManagedWorktreeID: managed.ID, EnvironmentID: env.ID, Root: managed.Root,
+			RetainedBranch: retainedBranch, Forced: true,
+		}, nil
+	default:
+		return DestroyResult{}, fmt.Errorf("managed worktree %s has no supported force-cleanup recovery", managed.ID)
+	}
 }
 
 func (s *Service) Settings() (model.WorktreeSettings, error) {
@@ -1042,6 +1163,20 @@ func (s *Service) removeWorktreeViaCommonDir(ctx context.Context, managed model.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree remove: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func (s *Service) pruneWorktreesViaCommonDir(ctx context.Context, managed model.ManagedWorktree) error {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, git, "--git-dir="+managed.GitCommonDir, "worktree", "prune")
+	configureProcessCommand(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git worktree prune: %s", strings.TrimSpace(string(out)))
 	}
 	return nil
 }
