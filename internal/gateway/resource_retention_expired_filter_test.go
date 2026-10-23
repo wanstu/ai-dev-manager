@@ -55,7 +55,7 @@ func TestExpiredTemporaryCleanupFiltersBeforeWorktreeSafety(t *testing.T) {
 	}
 	owner := newRuntimeOwner(service)
 	defer owner.Close()
-	preview, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, false)
+	preview, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestExpiredTemporaryCleanupFiltersBeforeWorktreeSafety(t *testing.T) {
 	if !hasRetentionBlocker(got.Blockers, "managed_worktree_dirty") || got.CleanupEligible {
 		t.Fatalf("dirty expired worktree must remain blocked: %+v", got)
 	}
-	executed, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, true)
+	executed, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +79,35 @@ func TestExpiredTemporaryCleanupFiltersBeforeWorktreeSafety(t *testing.T) {
 	for _, id := range []string{expired.Environment.ID, future.Environment.ID, durable.Environment.ID} {
 		if _, err := service.Environments.Get(id); err != nil {
 			t.Fatalf("environment %s unexpectedly removed: %v", id, err)
+		}
+	}
+
+	forcePreview, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(forcePreview.Report.Resources) != 1 || !forcePreview.Report.Resources[0].CleanupEligible {
+		t.Fatalf("force preview should make expired dirty managed worktree eligible: %+v", forcePreview)
+	}
+	if !hasRetentionBlocker(forcePreview.Report.Resources[0].Uncertainties, "force_cleanup_discards_uncommitted_or_ignored_work") {
+		t.Fatalf("force preview must disclose destructive cleanup: %+v", forcePreview.Report.Resources[0])
+	}
+	forced, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasTemporaryRetentionMutation(forced.Removed, model.RetentionResourceEnvironment, expired.Environment.ID) {
+		t.Fatalf("force cleanup did not remove expired dirty managed worktree: %+v", forced)
+	}
+	if _, err := service.Environments.Get(expired.Environment.ID); err == nil {
+		t.Fatal("expired dirty Environment still exists after force cleanup")
+	}
+	if _, err := os.Stat(expired.ManagedWorktree.Root); !os.IsNotExist(err) {
+		t.Fatalf("expired dirty managed root still exists after force cleanup: %v", err)
+	}
+	for _, id := range []string{future.Environment.ID, durable.Environment.ID} {
+		if _, err := service.Environments.Get(id); err != nil {
+			t.Fatalf("non-expired/durable environment %s unexpectedly removed: %v", id, err)
 		}
 	}
 }

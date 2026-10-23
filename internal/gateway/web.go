@@ -310,7 +310,7 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 		return nil
 	}
 	var s1, s2, s3 string
-	var b1 bool
+	var b1, b2 bool
 	switch call.Method {
 	case "GetSnapshot":
 		return h.management.Snapshot()
@@ -974,10 +974,15 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 		if err := arg(0, &b1); err != nil {
 			return nil, err
 		}
+		if len(call.Args) > 1 {
+			if err := arg(1, &b2); err != nil {
+				return nil, err
+			}
+		}
 		if h.owner == nil {
 			return nil, errors.New("Gateway runtime owner is unavailable")
 		}
-		return h.owner.ExpiredTemporaryEnvironmentsCleanup(ctx, b1)
+		return h.owner.ExpiredTemporaryEnvironmentsCleanup(ctx, b1, b2)
 	default:
 		return nil, fmt.Errorf("unsupported web management method %q", call.Method)
 	}

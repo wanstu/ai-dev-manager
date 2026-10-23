@@ -597,8 +597,8 @@ func (c *Client) EnvironmentWorktreeCleanupStale(inactiveSeconds int64, environm
 	})
 }
 
-func (c *Client) EnvironmentTemporaryCleanupExpired(execute bool) (model.ResourceRetentionCleanupResult, error) {
-	return callAdmin[model.ResourceRetentionCleanupResult](c, context.Background(), "environment_temporary_cleanup_expired", map[string]any{"execute": execute})
+func (c *Client) EnvironmentTemporaryCleanupExpired(execute, force bool) (model.ResourceRetentionCleanupResult, error) {
+	return callAdmin[model.ResourceRetentionCleanupResult](c, context.Background(), "environment_temporary_cleanup_expired", map[string]any{"execute": execute, "force": force})
 }
 
 func (c *Client) EnvironmentTemporaryCleanup(id, ownerID string, execute bool) (model.ResourceRetentionCleanupResult, error) {

@@ -215,6 +215,7 @@ type TemporaryEnvironmentOwnerInput struct {
 
 type TemporaryEnvironmentCleanupExpiredInput struct {
 	Execute bool `json:"execute,omitempty"`
+	Force   bool `json:"force,omitempty" jsonschema:"admin-only destructive override for expired managed worktrees; discards uncommitted and ignored files while retaining the managed branch"`
 }
 
 type TemporaryEnvironmentCleanupInput struct {
@@ -1132,12 +1133,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_cleanup_expired", Description: "Preview or execute cleanup of all expired temporary Environments only. Runtime blockers and managed-worktree dirty/unpublished safety checks remain enforced."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_cleanup_expired", Description: "Preview or execute cleanup of all expired temporary Environments only. By default runtime, dirty and ignored-worktree blockers remain enforced. Admin-only force=true may discard uncommitted and ignored files from expired managed worktrees while retaining their managed branches; runtime/tamper blockers remain enforced."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCleanupExpiredInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
 			}
-			value, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, in.Execute)
+			value, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, in.Execute, in.Force)
 			return toolResult(value, err)
 		})
 
@@ -2441,6 +2442,7 @@ func RunStdio(ctx context.Context, service *app.Service) error {
 	defer owner.Close()
 	defer cancelOwner()
 	go owner.Reconcile(ownerCtx)
+	go owner.monitorExpiredTemporaryEnvironments(ownerCtx)
 	return newServer(service, owner).Run(ctx, &mcp.StdioTransport{})
 }
 
@@ -2565,6 +2567,7 @@ func RunHTTP(ctx context.Context, service *app.Service, listen string) error {
 	defer owner.Close()
 	defer cancelOwner()
 	go owner.Reconcile(ownerCtx)
+	go owner.monitorExpiredTemporaryEnvironments(ownerCtx)
 
 	httpServer := &http.Server{
 		Addr:              listen,
