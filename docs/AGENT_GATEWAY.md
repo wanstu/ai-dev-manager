@@ -901,7 +901,9 @@ Managed worktree 是 create-once 资源：不要 reset/sync/reuse 旧 worktree �
 
 默认拒绝 dirty/unpublished work。generic managed destroy 有 explicit `force` recovery 选项，但即使 force，generated branch 仍保留。
 
-不要把这个 force 与 temporary cleanup 混淆；temporary lifecycle **没有 force**。
+Owner-scoped `environment_temporary_cleanup` 仍然没有 force。Admin 的批量 `environment_temporary_cleanup_expired` 额外提供 `force=true` recovery：只针对已过期 temporary Environment，可丢弃 dirty/ignored 本地内容，但 managed branch 仍保留，运行中和 worktree identity/tamper blocker 不会被绕过。
+
+另外，显式 `temporary_environment_ttl` 的 Environment 在到期超过 24 小时后会进入系统 hard-expiry 自动回收，因此 Agent 不需要依赖“任务结束时主动清理”才能让资源数量收敛。
 
 ## 15. Temporary Environment tools
 
@@ -1246,7 +1248,7 @@ Agent 的 Environment MCP runtime tools 只消费管理员已配置/选择的 ca
 
 `environment_worktree_cleanup_stale` 专门处理历史 durable managed worktree 堆积：默认只 preview；按 Environment `last_activity_at` 和 `inactive_seconds` 判断 stale，同时检查 active Writer / MCP / process / run / verifier、Git dirty、unpublished commit。`execute=true` 时必须显式传 `environment_ids`，并在真正删除前再次检查；没有 force 路径，删除 worktree 后 generated branch 仍保留。temporary managed worktree 不会被这条工具接管，继续走 owner-scoped temporary cleanup。
 
-Agent temporary Environment lifecycle 是更窄、owner-scoped、no-force 的 workflow。
+Agent 单个 temporary Environment lifecycle 仍是更窄、owner-scoped、no-force 的 workflow；Admin 批量过期回收属于独立的运维恢复边界。
 
 ### Global Memory mutation
 

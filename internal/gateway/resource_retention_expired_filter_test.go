@@ -111,3 +111,73 @@ func TestExpiredTemporaryCleanupFiltersBeforeWorktreeSafety(t *testing.T) {
 		}
 	}
 }
+
+func TestHardCleanupAfterGraceOnlyTargetsExplicitTTLEnvironments(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	root := t.TempDir()
+	initRetentionGitWorkspace(t, root)
+	ws, err := service.Workspaces.Add(root, "retention-hard-cleanup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	create := func(name, branch string) isolation.CreateResult {
+		result, err := service.Isolation.Create(ctx, ws.ID, name, isolation.CreateOptions{BranchName: branch, BaseRef: "HEAD"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(result.ManagedWorktree.Root, "dirty.txt"), []byte(name), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	oldTTL := create("old-explicit-ttl", "test/hard-old")
+	recentTTL := create("recent-explicit-ttl", "test/hard-recent")
+	legacy := create("legacy-policy", "test/hard-legacy")
+
+	now := time.Now().UTC()
+	oldExpiry := now.Add(-48 * time.Hour)
+	recentExpiry := now.Add(-2 * time.Hour)
+	for _, tc := range []struct {
+		id, owner, policy string
+		expires           time.Time
+	}{
+		{oldTTL.Environment.ID, "old-owner", temporaryEnvironmentTTLPolicy, oldExpiry},
+		{recentTTL.Environment.ID, "recent-owner", temporaryEnvironmentTTLPolicy, recentExpiry},
+		{legacy.Environment.ID, "legacy-owner", "managed_worktree_temporary", oldExpiry},
+	} {
+		if _, err := service.MarkResourceTemporary(model.ResourceRetentionUpdateRequest{
+			Kind:      model.RetentionResourceEnvironment,
+			ID:        tc.id,
+			OwnerID:   tc.owner,
+			ExpiresAt: &tc.expires,
+			Policy:    tc.policy,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	result, err := owner.expiredTemporaryEnvironmentsCleanup(
+		ctx,
+		true,
+		true,
+		now.Add(-expiredTemporaryHardCleanupGrace),
+		temporaryEnvironmentTTLPolicy,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasTemporaryRetentionMutation(result.Removed, model.RetentionResourceEnvironment, oldTTL.Environment.ID) {
+		t.Fatalf("old explicit-TTL Environment was not hard-cleaned: %+v", result)
+	}
+	if _, err := service.Environments.Get(oldTTL.Environment.ID); err == nil {
+		t.Fatal("old explicit-TTL Environment still exists")
+	}
+	for _, id := range []string{recentTTL.Environment.ID, legacy.Environment.ID} {
+		if _, err := service.Environments.Get(id); err != nil {
+			t.Fatalf("non-target Environment %s was removed: %v", id, err)
+		}
+	}
+}

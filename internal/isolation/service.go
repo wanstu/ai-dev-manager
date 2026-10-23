@@ -379,6 +379,17 @@ func (s *Service) ValidateEnvironment(ctx context.Context, env model.Environment
 }
 
 func (s *Service) Safety(ctx context.Context, environmentID string) (SafetyStatus, error) {
+	return s.safety(ctx, environmentID, true)
+}
+
+// SafetyForRetentionCleanup validates managed-worktree identity and local
+// dirty/ignored state without contacting remotes. Retention cleanup preserves
+// the managed branch, so publication is not required to protect committed work.
+func (s *Service) SafetyForRetentionCleanup(ctx context.Context, environmentID string) (SafetyStatus, error) {
+	return s.safety(ctx, environmentID, false)
+}
+
+func (s *Service) safety(ctx context.Context, environmentID string, verifyPublication bool) (SafetyStatus, error) {
 	env, err := s.environments.Get(strings.TrimSpace(environmentID))
 	if err != nil {
 		return SafetyStatus{}, err
@@ -409,7 +420,7 @@ func (s *Service) Safety(ctx context.Context, environmentID string) (SafetyStatu
 	}
 	head = strings.TrimSpace(head)
 	safety := SafetyStatus{Dirty: strings.TrimSpace(status) != "" || strings.TrimSpace(ignored) != "", Ignored: strings.TrimSpace(ignored) != "", Head: head}
-	if safety.Dirty || head == managed.BaseCommit {
+	if safety.Dirty || head == managed.BaseCommit || !verifyPublication {
 		return safety, nil
 	}
 	// Remote-tracking refs are a cache, not evidence of current publication.
@@ -468,7 +479,12 @@ func (s *Service) destroy(ctx context.Context, environmentID, writerOwner string
 	if err := s.ValidateEnvironment(ctx, env); err != nil {
 		return DestroyResult{}, err
 	}
-	safety, err := s.Safety(ctx, env.ID)
+	var safety SafetyStatus
+	if allowUnpublished {
+		safety, err = s.SafetyForRetentionCleanup(ctx, env.ID)
+	} else {
+		safety, err = s.Safety(ctx, env.ID)
+	}
 	if err != nil {
 		return DestroyResult{}, err
 	}

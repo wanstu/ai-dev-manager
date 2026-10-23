@@ -184,7 +184,7 @@ func (o *runtimeOwner) enrichManagedWorktreeRetention(ctx context.Context, item 
 		item.Uncertainties = uniqueGatewayStrings(append(item.Uncertainties, "cleanup_requires_managed_worktree_safety_evidence"))
 		return
 	}
-	safety, err := o.service.Isolation.Safety(ctx, item.ID)
+	safety, err := o.service.Isolation.SafetyForRetentionCleanup(ctx, item.ID)
 	if err != nil {
 		item.Blockers = append(item.Blockers, "managed_worktree_safety_check_failed")
 		item.Uncertainties = uniqueGatewayStrings(append(item.Uncertainties, "cleanup_requires_managed_worktree_safety_evidence"))
@@ -196,15 +196,14 @@ func (o *runtimeOwner) enrichManagedWorktreeRetention(ctx context.Context, item 
 	if safety.Ignored {
 		item.Blockers = append(item.Blockers, "managed_worktree_ignored_files")
 	}
-	if safety.Unpublished {
-		item.Uncertainties = uniqueGatewayStrings(append(item.Uncertainties, "managed_worktree_unpublished_branch_retained"))
-	}
 }
 
 const (
 	expiredTemporaryCleanupInitialDelay = time.Minute
 	expiredTemporaryCleanupInterval     = time.Hour
 	expiredTemporaryCleanupTimeout      = 10 * time.Minute
+	expiredTemporaryHardCleanupGrace    = 24 * time.Hour
+	temporaryEnvironmentTTLPolicy       = "temporary_environment_ttl"
 )
 
 func (o *runtimeOwner) monitorExpiredTemporaryEnvironments(ctx context.Context) {
@@ -232,32 +231,63 @@ func (o *runtimeOwner) monitorExpiredTemporaryEnvironments(ctx context.Context) 
 func (o *runtimeOwner) runAutomaticExpiredTemporaryCleanup(ctx context.Context) {
 	cleanupCtx, cancel := context.WithTimeout(ctx, expiredTemporaryCleanupTimeout)
 	defer cancel()
+
 	result, err := o.ExpiredTemporaryEnvironmentsCleanup(cleanupCtx, true, false)
 	if err != nil {
 		o.service.Log("warn", "retention.expired_environment_cleanup_failed", map[string]string{"error": err.Error()})
 		return
 	}
-	removed := 0
-	for _, mutation := range result.Removed {
-		if mutation.Kind == model.RetentionResourceEnvironment {
-			removed++
-		}
-	}
+	removed := retentionRemovedEnvironmentCount(result)
 	if removed > 0 {
 		o.service.Log("info", "retention.expired_environment_cleanup", map[string]string{
 			"removed": fmt.Sprintf("%d", removed),
 			"skipped": fmt.Sprintf("%d", len(result.Skipped)),
 		})
 	}
+
+	// Explicit-TTL temporary Environments are disposable by contract. After a
+	// 24-hour grace period, reclaim abandoned dirty/ignored worktrees as well.
+	// Runtime activity and worktree identity/tamper checks remain hard blockers.
+	hardCutoff := time.Now().UTC().Add(-expiredTemporaryHardCleanupGrace)
+	hardResult, hardErr := o.expiredTemporaryEnvironmentsCleanup(cleanupCtx, true, true, hardCutoff, temporaryEnvironmentTTLPolicy)
+	if hardErr != nil {
+		o.service.Log("warn", "retention.expired_environment_hard_cleanup_failed", map[string]string{"error": hardErr.Error()})
+		return
+	}
+	hardRemoved := retentionRemovedEnvironmentCount(hardResult)
+	if hardRemoved > 0 {
+		o.service.Log("info", "retention.expired_environment_hard_cleanup", map[string]string{
+			"removed":       fmt.Sprintf("%d", hardRemoved),
+			"skipped":       fmt.Sprintf("%d", len(hardResult.Skipped)),
+			"grace_seconds": fmt.Sprintf("%d", int64(expiredTemporaryHardCleanupGrace/time.Second)),
+		})
+	}
+}
+
+func retentionRemovedEnvironmentCount(result model.ResourceRetentionCleanupResult) int {
+	removed := 0
+	for _, mutation := range result.Removed {
+		if mutation.Kind == model.RetentionResourceEnvironment {
+			removed++
+		}
+	}
+	return removed
 }
 
 func (o *runtimeOwner) ExpiredTemporaryEnvironmentsCleanup(ctx context.Context, execute, force bool) (model.ResourceRetentionCleanupResult, error) {
-	now := time.Now().UTC()
+	return o.expiredTemporaryEnvironmentsCleanup(ctx, execute, force, time.Now().UTC(), "")
+}
+
+func (o *runtimeOwner) expiredTemporaryEnvironmentsCleanup(ctx context.Context, execute, force bool, expiredBefore time.Time, policy string) (model.ResourceRetentionCleanupResult, error) {
+	policy = strings.TrimSpace(policy)
 	report, err := o.retentionReportFiltered(ctx, func(item model.ResourceRetentionItem) bool {
-		return item.Kind == model.RetentionResourceEnvironment &&
-			item.Retention.Persistence == model.PersistenceTemporary &&
-			item.Retention.ExpiresAt != nil &&
-			!now.Before(item.Retention.ExpiresAt.UTC())
+		if item.Kind != model.RetentionResourceEnvironment ||
+			item.Retention.Persistence != model.PersistenceTemporary ||
+			item.Retention.ExpiresAt == nil ||
+			item.Retention.ExpiresAt.UTC().After(expiredBefore.UTC()) {
+			return false
+		}
+		return policy == "" || strings.EqualFold(strings.TrimSpace(item.Retention.Policy), policy)
 	})
 	if err != nil {
 		return model.ResourceRetentionCleanupResult{}, err
