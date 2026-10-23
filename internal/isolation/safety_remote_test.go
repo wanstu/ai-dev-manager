@@ -109,6 +109,13 @@ func TestSafetyRefusesCleanupWhenRemoteVerificationFails(t *testing.T) {
 	if _, err := s.Safety(context.Background(), created.Environment.ID); err == nil || !strings.Contains(err.Error(), "cannot verify published commits") {
 		t.Fatalf("failed remote verification must block safety eligibility, got %v", err)
 	}
+	retentionSafety, err := s.SafetyForRetentionCleanup(context.Background(), created.Environment.ID)
+	if err != nil {
+		t.Fatalf("retention cleanup safety must not depend on remote publication: %v", err)
+	}
+	if retentionSafety.Dirty || retentionSafety.Ignored {
+		t.Fatalf("clean retention safety unexpectedly blocked: %+v", retentionSafety)
+	}
 	if _, err := envs.AcquireWriter(created.Environment.ID, "cleanup"); err != nil {
 		t.Fatal(err)
 	}

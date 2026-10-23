@@ -594,9 +594,18 @@ Retention 包括：
 - expiry；
 - optional session/run provenance。
 
-### 20.1 TTL 不等于自动删除
+### 20.1 TTL 与自动回收
 
-过期只表示“时间条件可能满足”。真正 cleanup 还要 fresh runtime/Git safety check。
+过期后 Gateway 会周期性尝试自动 cleanup，但仍先做 fresh runtime/Git safety check。
+
+对于显式 `temporary_environment_ttl` 的临时 Environment：
+
+- 到期后先走普通安全回收；
+- 到期超过 24 小时仍被 dirty/ignored 本地内容阻塞时，进入 hard-expiry 回收；
+- hard-expiry 可以丢弃未提交/ignored 内容，但仍保留 managed branch；
+- active Writer / MCP / process / run / verifier，以及 worktree identity/tamper 异常仍是硬 blocker。
+
+因此 temporary TTL 是有实际回收语义的，不依赖 Agent 在任务结束时主动 cleanup。
 
 ### 20.2 Cleanup preview
 
@@ -608,7 +617,7 @@ execute 再做一次 fresh recheck，防止 preview 后状态发生变化。
 
 ordinary root：只删 Environment state/private context。
 
-managed worktree：调用 managed destroy safety，并且 temporary workflow 不提供 force。
+managed worktree：调用 managed destroy safety。Owner-scoped 单个 temporary cleanup 不提供 force；Admin 的“清理全部已过期临时 Environment”提供显式 force recovery，用于清理已过期且业务上可丢弃的 dirty/ignored worktree。
 
 ### 20.4 Promote
 
