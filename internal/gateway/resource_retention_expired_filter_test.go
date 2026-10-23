@@ -165,6 +165,7 @@ func TestHardCleanupAfterGraceOnlyTargetsExplicitTTLEnvironments(t *testing.T) {
 		true,
 		now.Add(-expiredTemporaryHardCleanupGrace),
 		temporaryEnvironmentTTLPolicy,
+		false,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -179,5 +180,92 @@ func TestHardCleanupAfterGraceOnlyTargetsExplicitTTLEnvironments(t *testing.T) {
 		if _, err := service.Environments.Get(id); err != nil {
 			t.Fatalf("non-target Environment %s was removed: %v", id, err)
 		}
+	}
+}
+
+
+func TestForceExpiredCleanupRecoversBrokenManagedWorktrees(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	root := t.TempDir()
+	initRetentionGitWorkspace(t, root)
+	ws, err := service.Workspaces.Add(root, "retention-broken-recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	branchDrift, err := service.Isolation.Create(ctx, ws.ID, "branch-drift", isolation.CreateOptions{BranchName: "test/recovery-expected", BaseRef: "HEAD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonGit, err := service.Isolation.Create(ctx, ws.ID, "non-git-root", isolation.CreateOptions{BranchName: "test/recovery-non-git", BaseRef: "HEAD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expired := time.Now().UTC().Add(-48 * time.Hour)
+	for _, item := range []isolation.CreateResult{branchDrift, nonGit} {
+		if _, err := service.MarkResourceTemporary(model.ResourceRetentionUpdateRequest{
+			Kind: model.RetentionResourceEnvironment, ID: item.Environment.ID, OwnerID: "broken-recovery",
+			ExpiresAt: &expired, Policy: temporaryEnvironmentTTLPolicy,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gatewayGitRun(t, branchDrift.ManagedWorktree.Root, "checkout", "-b", "test/recovery-actual")
+	nonGitSentinel := filepath.Join(nonGit.ManagedWorktree.Root, "preserve-me.txt")
+	if err := os.WriteFile(nonGitSentinel, []byte("preserve"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(nonGit.ManagedWorktree.Root, ".git")); err != nil {
+		t.Fatal(err)
+	}
+
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	normal, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range normal.Report.Resources {
+		if !hasRetentionBlocker(item.Blockers, "managed_worktree_safety_check_failed") || item.CleanupEligible {
+			t.Fatalf("broken worktree should be blocked without explicit force: %+v", item)
+		}
+	}
+
+	forcedPreview, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(forcedPreview.Report.Resources) != 2 {
+		t.Fatalf("force preview resources=%+v", forcedPreview.Report.Resources)
+	}
+	for _, item := range forcedPreview.Report.Resources {
+		if !item.CleanupEligible {
+			t.Fatalf("recoverable broken worktree should be force eligible: %+v", item)
+		}
+		if !hasRetentionBlocker(item.Uncertainties, "force_cleanup_recovers_broken_managed_worktree") {
+			t.Fatalf("force recovery must be disclosed: %+v", item)
+		}
+	}
+
+	executed, err := owner.ExpiredTemporaryEnvironmentsCleanup(ctx, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []isolation.CreateResult{branchDrift, nonGit} {
+		if !hasTemporaryRetentionMutation(executed.Removed, model.RetentionResourceEnvironment, item.Environment.ID) {
+			t.Fatalf("broken Environment %s not removed: %+v", item.Environment.ID, executed)
+		}
+		if _, err := service.Environments.Get(item.Environment.ID); err == nil {
+			t.Fatalf("broken Environment %s still exists", item.Environment.ID)
+		}
+	}
+	if _, err := os.Stat(branchDrift.ManagedWorktree.Root); !os.IsNotExist(err) {
+		t.Fatalf("branch-drift worktree root should be removed: %v", err)
+	}
+	if got := gatewayGitRun(t, root, "show-ref", "--verify", "--hash", "refs/heads/test/recovery-actual"); got == "" {
+		t.Fatal("actual branch was not retained")
+	}
+	if got, err := os.ReadFile(nonGitSentinel); err != nil || string(got) != "preserve" {
+		t.Fatalf("non-Git orphan directory contents must be preserved: got=%q err=%v", string(got), err)
 	}
 }
