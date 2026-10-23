@@ -55,7 +55,7 @@ func TestStaleManagedWorktreeCleanupPreviewClassifiesCandidatesConservatively(t 
 
 	owner := newRuntimeOwner(service)
 	defer owner.Close()
-	result, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, nil, false)
+	result, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, nil, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,11 +108,11 @@ func TestStaleManagedWorktreeCleanupExecuteRequiresExplicitSafeSelection(t *test
 
 	owner := newRuntimeOwner(service)
 	defer owner.Close()
-	if _, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, nil, true); err == nil {
+	if _, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, nil, true, false); err == nil {
 		t.Fatal("execute without explicit environment_ids must fail")
 	}
 
-	result, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, []string{clean.Environment.ID, dirty.Environment.ID}, true)
+	result, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, []string{clean.Environment.ID, dirty.Environment.ID}, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,4 +174,75 @@ func cleanupCandidateMap(items []model.ManagedWorktreeCleanupCandidate) map[stri
 		out[item.EnvironmentID] = item
 	}
 	return out
+}
+
+
+func TestStaleManagedWorktreeCleanupForceOnlyAppliesToLegacyTemporary(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+	ctx := context.Background()
+	service := app.New(filepath.Join(t.TempDir(), "adm", "state.json"))
+	source := t.TempDir()
+	initRetentionGitWorkspace(t, source)
+	workspace, err := service.Workspaces.Add(source, "cleanup-legacy-temp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := createCleanupManagedWorktree(t, ctx, service, workspace.ID, "legacy-temp", "cleanup/legacy-temp")
+	durableDirty := createCleanupManagedWorktree(t, ctx, service, workspace.ID, "durable-dirty", "cleanup/durable-dirty")
+	ageCleanupEnvironment(t, service, legacy.Environment.ID, 48*time.Hour)
+	ageCleanupEnvironment(t, service, durableDirty.Environment.ID, 48*time.Hour)
+	expiresAt := time.Now().UTC().Add(20 * 24 * time.Hour)
+	if _, err := service.MarkResourceTemporary(model.ResourceRetentionUpdateRequest{
+		Kind: model.RetentionResourceEnvironment, ID: legacy.Environment.ID, OwnerID: "adm:managed-worktree",
+		ExpiresAt: &expiresAt, Policy: legacyManagedWorktreeTemporaryPolicy,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range []string{legacy.ManagedWorktree.Root, durableDirty.ManagedWorktree.Root} {
+		if err := os.WriteFile(filepath.Join(root, "dirty.txt"), []byte("dirty\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	normal, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, nil, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalMap := cleanupCandidateMap(normal.Report.Candidates)
+	if got := normalMap[legacy.Environment.ID]; got.CleanupEligible || !containsGatewayString(got.Blockers, "managed_worktree_dirty") {
+		t.Fatalf("legacy dirty worktree should require force: %+v", got)
+	}
+
+	forced, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, nil, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forcedMap := cleanupCandidateMap(forced.Report.Candidates)
+	if got := forcedMap[legacy.Environment.ID]; !got.CleanupEligible || !got.ForceRequired || !got.Temporary {
+		t.Fatalf("legacy temporary should become force-eligible: %+v", got)
+	}
+	if got := forcedMap[durableDirty.Environment.ID]; got.CleanupEligible || !containsGatewayString(got.Blockers, "managed_worktree_dirty") {
+		t.Fatalf("force must not weaken durable cleanup: %+v", got)
+	}
+
+	executed, err := owner.StaleManagedWorktreeCleanup(ctx, 24*60*60, []string{legacy.Environment.ID}, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(executed.Removed) != 1 || executed.Removed[0].EnvironmentID != legacy.Environment.ID {
+		t.Fatalf("legacy temporary not removed: %+v", executed)
+	}
+	if _, err := service.Environments.Get(legacy.Environment.ID); err == nil {
+		t.Fatal("legacy temporary Environment still exists")
+	}
+	if got := gatewayGitRun(t, source, "show-ref", "--verify", "--hash", "refs/heads/"+legacy.ManagedWorktree.Branch); got == "" {
+		t.Fatal("legacy cleanup deleted retained branch")
+	}
+	if _, err := service.Environments.Get(durableDirty.Environment.ID); err != nil {
+		t.Fatalf("durable dirty Environment should remain: %v", err)
+	}
 }

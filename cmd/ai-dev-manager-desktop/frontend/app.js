@@ -45,7 +45,7 @@ const elements = {
   environmentForm: document.getElementById('environmentForm'), environmentWorkspace: document.getElementById('environmentWorkspace'), environmentName: document.getElementById('environmentName'), environmentRoot: document.getElementById('environmentRoot'), environmentBrowseButton: document.getElementById('environmentBrowseButton'), environmentList: document.getElementById('environmentList'), environmentFilter: document.getElementById('environmentFilter'), environmentWorkspaceFilter: document.getElementById('environmentWorkspaceFilter'), environmentVisibleCount: document.getElementById('environmentVisibleCount'), environmentListTotalCount: document.getElementById('environmentListTotalCount'), environmentFilterHint: document.getElementById('environmentFilterHint'),
   hostDirectoryDialog: document.getElementById('hostDirectoryDialog'), hostDirectoryRootsButton: document.getElementById('hostDirectoryRootsButton'), hostDirectoryParentButton: document.getElementById('hostDirectoryParentButton'), hostDirectoryRefreshButton: document.getElementById('hostDirectoryRefreshButton'), hostDirectoryCurrentPath: document.getElementById('hostDirectoryCurrentPath'), hostDirectoryList: document.getElementById('hostDirectoryList'), hostDirectoryHint: document.getElementById('hostDirectoryHint'), hostDirectorySelectButton: document.getElementById('hostDirectorySelectButton'),
   environmentWorkspaceDialog: document.getElementById('environmentWorkspaceDialog'), environmentWorkspaceDialogTitle: document.getElementById('environmentWorkspaceDialogTitle'), environmentWorkspaceForm: document.getElementById('environmentWorkspaceForm'), environmentWorkspaceSummary: document.getElementById('environmentWorkspaceSummary'), environmentWorkspaceTarget: document.getElementById('environmentWorkspaceTarget'), environmentWorkspaceReason: document.getElementById('environmentWorkspaceReason'), environmentWorkspaceSaveButton: document.getElementById('environmentWorkspaceSaveButton'),
-  environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), forceCleanupExpiredTemporaryEnvironmentsButton: document.getElementById('forceCleanupExpiredTemporaryEnvironmentsButton'), cleanupStaleWorktreesButton: document.getElementById('cleanupStaleWorktreesButton'), staleWorktreeCleanupDialog: document.getElementById('staleWorktreeCleanupDialog'), staleWorktreeCleanupHours: document.getElementById('staleWorktreeCleanupHours'), staleWorktreeCleanupSummary: document.getElementById('staleWorktreeCleanupSummary'), staleWorktreeCleanupList: document.getElementById('staleWorktreeCleanupList'), staleWorktreeCleanupResult: document.getElementById('staleWorktreeCleanupResult'), staleWorktreeCleanupRefreshButton: document.getElementById('staleWorktreeCleanupRefreshButton'), staleWorktreeCleanupExecuteButton: document.getElementById('staleWorktreeCleanupExecuteButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
+  environmentWorkspaceRecommendationsButton: document.getElementById('environmentWorkspaceRecommendationsButton'), cleanupExpiredTemporaryEnvironmentsButton: document.getElementById('cleanupExpiredTemporaryEnvironmentsButton'), forceCleanupExpiredTemporaryEnvironmentsButton: document.getElementById('forceCleanupExpiredTemporaryEnvironmentsButton'), cleanupStaleWorktreesButton: document.getElementById('cleanupStaleWorktreesButton'), staleWorktreeCleanupDialog: document.getElementById('staleWorktreeCleanupDialog'), staleWorktreeCleanupHours: document.getElementById('staleWorktreeCleanupHours'), staleWorktreeCleanupForceLegacy: document.getElementById('staleWorktreeCleanupForceLegacy'), staleWorktreeCleanupSummary: document.getElementById('staleWorktreeCleanupSummary'), staleWorktreeCleanupList: document.getElementById('staleWorktreeCleanupList'), staleWorktreeCleanupResult: document.getElementById('staleWorktreeCleanupResult'), staleWorktreeCleanupRefreshButton: document.getElementById('staleWorktreeCleanupRefreshButton'), staleWorktreeCleanupExecuteButton: document.getElementById('staleWorktreeCleanupExecuteButton'), environmentWorkspaceRecommendationsDialog: document.getElementById('environmentWorkspaceRecommendationsDialog'), environmentWorkspaceRecommendationsSummary: document.getElementById('environmentWorkspaceRecommendationsSummary'), environmentWorkspaceRecommendationsList: document.getElementById('environmentWorkspaceRecommendationsList'), environmentWorkspaceRecommendationsResult: document.getElementById('environmentWorkspaceRecommendationsResult'), environmentWorkspaceRecommendationsApplyButton: document.getElementById('environmentWorkspaceRecommendationsApplyButton'),
   environmentDetailBackdrop: document.getElementById('environmentDetailBackdrop'), environmentDetailPanel: document.getElementById('environmentDetailPanel'), environmentDetailTitle: document.getElementById('environmentDetailTitle'), environmentDetailSubviewTabs: document.getElementById('environmentDetailSubviewTabs'), environmentDetailSubviewHelp: document.getElementById('environmentDetailSubviewHelp'), environmentDetail: document.getElementById('environmentDetail'), environmentDiagnostics: document.getElementById('environmentDiagnostics'), environmentDetailRoutes: document.getElementById('environmentDetailRoutes'), environmentTreeDigestSection: document.getElementById('environmentTreeDigestSection'), environmentTreeDigestButton: document.getElementById('environmentTreeDigestButton'), environmentTreeDigestResult: document.getElementById('environmentTreeDigestResult'), environmentProjectIndexSection: document.getElementById('environmentProjectIndexSection'), environmentProjectIndexStatusButton: document.getElementById('environmentProjectIndexStatusButton'), environmentProjectAnalyzeButton: document.getElementById('environmentProjectAnalyzeButton'), environmentProjectIndexResult: document.getElementById('environmentProjectIndexResult'), environmentProjectIndexProgress: document.getElementById('environmentProjectIndexProgress'), environmentProjectIndexPhase: document.getElementById('environmentProjectIndexPhase'), environmentProjectIndexCount: document.getElementById('environmentProjectIndexCount'), environmentProjectIndexProgressBar: document.getElementById('environmentProjectIndexProgressBar'), environmentProjectAutoIndex: document.getElementById('environmentProjectAutoIndex'), environmentProjectAutoIndexStatus: document.getElementById('environmentProjectAutoIndexStatus'), environmentCodeIntelligenceSection: document.getElementById('environmentCodeIntelligenceSection'), environmentCodeIntelligenceButton: document.getElementById('environmentCodeIntelligenceButton'), environmentCodeIntelligenceResult: document.getElementById('environmentCodeIntelligenceResult'), environmentJetBrainsSearchInput: document.getElementById('environmentJetBrainsSearchInput'), environmentJetBrainsSearchButton: document.getElementById('environmentJetBrainsSearchButton'), environmentJetBrainsSearchResult: document.getElementById('environmentJetBrainsSearchResult'),
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
@@ -3906,6 +3906,9 @@ function staleWorktreeCleanupInactiveSeconds() {
   const hours = Math.max(1, Number(elements.staleWorktreeCleanupHours?.value || 24));
   return Math.round(hours * 3600);
 }
+function staleWorktreeCleanupForceLegacy() {
+  return Boolean(elements.staleWorktreeCleanupForceLegacy?.checked);
+}
 function staleWorktreeBlockerText(blocker) {
   const labels = {
     recent_activity: '最近仍有活动',
@@ -3933,8 +3936,8 @@ function renderStaleWorktreeCleanupPreview(result) {
   const eligible = candidates.filter((item) => item.cleanup_eligible);
   const blocked = candidates.filter((item) => !item.cleanup_eligible);
   elements.staleWorktreeCleanupSummary.textContent = candidates.length
-    ? `发现 ${candidates.length} 个 durable managed worktree：${eligible.length} 个可安全清理，${blocked.length} 个被保护。`
-    : '当前没有符合范围的 durable managed worktree。';
+    ? `发现 ${candidates.length} 个闲置 managed worktree：${eligible.length} 个可清理，${blocked.length} 个被保护。`
+    : '当前没有符合范围的闲置 managed worktree。';
   elements.staleWorktreeCleanupList.replaceChildren();
   if (!candidates.length) {
     emptyMessage(elements.staleWorktreeCleanupList, '没有可预览的 managed worktree。');
@@ -3956,11 +3959,12 @@ function renderStaleWorktreeCleanupPreview(result) {
     title.textContent = item.name || item.environment_id || 'Managed worktree';
     const meta = document.createElement('span');
     const inactiveHours = Math.floor(Number(item.inactive_seconds || 0) / 3600);
-    meta.textContent = `${item.branch || '—'} · 闲置约 ${inactiveHours} 小时`;
+    const kind = item.temporary ? '历史临时' : 'Durable';
+    meta.textContent = `${kind} · ${item.branch || '—'} · 闲置约 ${inactiveHours} 小时`;
     const reason = document.createElement('span');
     reason.className = 'muted';
     reason.textContent = item.cleanup_eligible
-      ? '通过安全检查；删除 worktree/Environment，分支保留。'
+      ? (item.force_required ? '强制回收：未提交/ignored 内容会删除；Git 分支保留。' : '通过安全检查；删除 worktree/Environment，分支保留。')
       : safeArray(item.blockers).map(staleWorktreeBlockerText).join(' · ') || '当前不可清理';
     body.append(title, meta, reason);
     row.append(checkbox, body);
@@ -3977,7 +3981,7 @@ async function previewStaleWorktreeCleanup({openDialog = false} = {}) {
   elements.staleWorktreeCleanupSummary.textContent = '正在检查 managed worktree…';
   emptyMessage(elements.staleWorktreeCleanupList, '正在执行安全检查…');
   try {
-    const preview = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), [], false);
+    const preview = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), [], false, staleWorktreeCleanupForceLegacy());
     renderStaleWorktreeCleanupPreview(preview);
   } catch (error) {
     emptyMessage(elements.staleWorktreeCleanupList, '预览失败：' + errorText(error));
@@ -3990,17 +3994,19 @@ async function executeStaleWorktreeCleanup() {
   const selected = [...elements.staleWorktreeCleanupList.querySelectorAll('input[data-stale-worktree-id]:checked:not(:disabled)')]
     .map((input) => input.dataset.staleWorktreeId).filter(Boolean);
   if (!selected.length) return;
-  if (!window.confirm(`将安全清理已选的 ${selected.length} 个闲置 managed worktree。\n\n会删除对应 Worktree 目录和 Environment 记录，但保留 Git 分支；执行前会重新检查 dirty/unpublished/运行状态。继续？`)) return;
+  const forceLegacy = staleWorktreeCleanupForceLegacy();
+  const forceNote = forceLegacy ? '\n\n已开启历史临时强制回收：仅 managed_worktree_temporary 可丢弃未提交/ignored 内容；Durable 不会被强制。' : '';
+  if (!window.confirm(`将清理已选的 ${selected.length} 个闲置 managed worktree。\n\n会删除对应 Worktree 目录和 Environment 记录，但保留 Git 分支；执行前会重新检查运行状态。${forceNote}\n\n继续？`)) return;
   elements.staleWorktreeCleanupExecuteButton.disabled = true;
   elements.staleWorktreeCleanupRefreshButton.disabled = true;
   elements.staleWorktreeCleanupResult.textContent = '正在重新检查并清理…';
   try {
-    const result = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), selected, true);
+    const result = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), selected, true, forceLegacy);
     const removed = safeArray(result?.removed).length;
     const skipped = safeArray(result?.skipped).length;
     elements.staleWorktreeCleanupResult.textContent = `完成：清理 ${removed} 个，安全检查阻止 ${skipped} 个。`;
     await refreshSnapshot();
-    const preview = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), [], false);
+    const preview = await desktopAdapter().CleanupStaleManagedWorktrees(staleWorktreeCleanupInactiveSeconds(), [], false, staleWorktreeCleanupForceLegacy());
     renderStaleWorktreeCleanupPreview(preview);
   } catch (error) {
     elements.staleWorktreeCleanupResult.textContent = '清理失败：' + errorText(error);
@@ -4712,6 +4718,7 @@ document.getElementById('migrateManagedWorktreesButton')?.addEventListener('clic
 });
 elements.cleanupStaleWorktreesButton?.addEventListener('click', () => previewStaleWorktreeCleanup({openDialog: true}));
 elements.staleWorktreeCleanupRefreshButton?.addEventListener('click', () => previewStaleWorktreeCleanup());
+elements.staleWorktreeCleanupForceLegacy?.addEventListener('change', () => previewStaleWorktreeCleanup());
 elements.staleWorktreeCleanupExecuteButton?.addEventListener('click', executeStaleWorktreeCleanup);
 elements.staleWorktreeCleanupList?.addEventListener('change', syncStaleWorktreeCleanupExecuteButton);
 elements.gatewayRefreshButton.addEventListener('click', () => refreshConnectedADM(true).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));

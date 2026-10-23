@@ -243,6 +243,7 @@ type StaleManagedWorktreeCleanupInput struct {
 	InactiveSeconds int64    `json:"inactive_seconds,omitempty" jsonschema:"minimum inactivity age in seconds; defaults to 86400 (24h)"`
 	EnvironmentIDs  []string `json:"environment_ids,omitempty" jsonschema:"explicit managed Environment IDs to clean; required when execute=true"`
 	Execute         bool     `json:"execute,omitempty" jsonschema:"false or omitted previews only; true executes only explicitly selected safe candidates after fresh rechecks"`
+	Force           bool     `json:"force,omitempty" jsonschema:"admin-only: for legacy managed_worktree_temporary candidates only, discard dirty/ignored local files while retaining the branch"`
 }
 
 type WriterAcquireInput struct {
@@ -1178,12 +1179,12 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_worktree_cleanup_stale", Description: "Admin-only conservative cleanup for stale durable managed worktrees. Preview is the default. execute=true requires explicit environment_ids and only removes candidates that remain inactive, have no active writer/runtime blockers, are clean, and have no unpublished commits. There is no force path; retained branches are preserved."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_worktree_cleanup_stale", Description: "Admin-only cleanup for stale managed worktrees. Durable worktrees remain conservative. Legacy managed_worktree_temporary records are also included; force=true may discard dirty/ignored local files only for those legacy temporary records while retaining their branches. Runtime and identity blockers remain enforced."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in StaleManagedWorktreeCleanupInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
 			}
-			value, err := owner.StaleManagedWorktreeCleanup(ctx, in.InactiveSeconds, in.EnvironmentIDs, in.Execute)
+			value, err := owner.StaleManagedWorktreeCleanup(ctx, in.InactiveSeconds, in.EnvironmentIDs, in.Execute, in.Force)
 			return toolResult(value, err)
 		})
 

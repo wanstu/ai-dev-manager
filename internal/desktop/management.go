@@ -182,7 +182,7 @@ func (a *Adapter) MigrateManagedWorktreesToTemporary(execute bool) (model.Manage
 
 // CleanupStaleManagedWorktrees is exposed to both Desktop and Web. ADM Admin
 // MCP enforces the final safety recheck and requires explicit IDs on execution.
-func (a *Adapter) CleanupStaleManagedWorktrees(inactiveSeconds int64, environmentIDs []string, execute bool) (model.ManagedWorktreeCleanupResult, error) {
+func (a *Adapter) CleanupStaleManagedWorktrees(inactiveSeconds int64, environmentIDs []string, execute, force bool) (model.ManagedWorktreeCleanupResult, error) {
 	if err := a.ready(); err != nil {
 		return model.ManagedWorktreeCleanupResult{}, err
 	}
@@ -190,7 +190,7 @@ func (a *Adapter) CleanupStaleManagedWorktrees(inactiveSeconds int64, environmen
 	if !ok {
 		return model.ManagedWorktreeCleanupResult{}, errors.New("managed worktree cleanup requires ADM Admin MCP")
 	}
-	return backend.EnvironmentWorktreeCleanupStale(inactiveSeconds, environmentIDs, execute)
+	return backend.EnvironmentWorktreeCleanupStale(inactiveSeconds, environmentIDs, execute, force)
 }
 
 func (a *Adapter) CleanupExpiredTemporaryEnvironments(execute, force bool) (model.ResourceRetentionCleanupResult, error) {
