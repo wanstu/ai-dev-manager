@@ -584,10 +584,16 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 				return nil, err
 			}
 		}
+		force := false
+		if len(call.Args) > 3 {
+			if err := arg(3, &force); err != nil {
+				return nil, err
+			}
+		}
 		if h.owner == nil {
 			return nil, fmt.Errorf("persistent runtime owner is unavailable")
 		}
-		return h.owner.StaleManagedWorktreeCleanup(ctx, inactiveSeconds, environmentIDs, execute)
+		return h.owner.StaleManagedWorktreeCleanup(ctx, inactiveSeconds, environmentIDs, execute, force)
 	case "EnvironmentTreeDigest":
 		if err := arg(0, &s1); err != nil {
 			return nil, err

@@ -15,6 +15,9 @@ type ManagedWorktreeCleanupCandidate struct {
 	Blockers          []string  `json:"blockers,omitempty"`
 	Dirty             bool      `json:"dirty,omitempty"`
 	Unpublished       bool      `json:"unpublished,omitempty"`
+	Temporary         bool      `json:"temporary,omitempty"`
+	RetentionPolicy   string    `json:"retention_policy,omitempty"`
+	ForceRequired     bool      `json:"force_required,omitempty"`
 }
 
 type ManagedWorktreeCleanupReport struct {

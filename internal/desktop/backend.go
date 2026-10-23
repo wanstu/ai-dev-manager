@@ -94,7 +94,7 @@ type managedWorktreeMigrationBackend interface {
 }
 
 type staleWorktreeCleanupBackend interface {
-	EnvironmentWorktreeCleanupStale(int64, []string, bool) (model.ManagedWorktreeCleanupResult, error)
+	EnvironmentWorktreeCleanupStale(int64, []string, bool, bool) (model.ManagedWorktreeCleanupResult, error)
 }
 
 type temporaryEnvironmentBackend interface {

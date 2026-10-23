@@ -591,9 +591,9 @@ func (c *Client) EnvironmentWorktreeMigrateTemporary(execute bool) (model.Manage
 	return callAdmin[model.ManagedWorktreeRetentionMigrationResult](c, context.Background(), "environment_worktree_migrate_temporary", map[string]any{"execute": execute})
 }
 
-func (c *Client) EnvironmentWorktreeCleanupStale(inactiveSeconds int64, environmentIDs []string, execute bool) (model.ManagedWorktreeCleanupResult, error) {
+func (c *Client) EnvironmentWorktreeCleanupStale(inactiveSeconds int64, environmentIDs []string, execute, force bool) (model.ManagedWorktreeCleanupResult, error) {
 	return callAdmin[model.ManagedWorktreeCleanupResult](c, context.Background(), "environment_worktree_cleanup_stale", map[string]any{
-		"inactive_seconds": inactiveSeconds, "environment_ids": environmentIDs, "execute": execute,
+		"inactive_seconds": inactiveSeconds, "environment_ids": environmentIDs, "execute": execute, "force": force,
 	})
 }
 

@@ -10,9 +10,12 @@ import (
 	"ai-dev-manager-v2/internal/model"
 )
 
-const defaultStaleManagedWorktreeInactiveSeconds int64 = 24 * 60 * 60
+const (
+	defaultStaleManagedWorktreeInactiveSeconds int64 = 24 * 60 * 60
+	legacyManagedWorktreeTemporaryPolicy              = "managed_worktree_temporary"
+)
 
-func (o *runtimeOwner) StaleManagedWorktreeCleanup(ctx context.Context, inactiveSeconds int64, environmentIDs []string, execute bool) (model.ManagedWorktreeCleanupResult, error) {
+func (o *runtimeOwner) StaleManagedWorktreeCleanup(ctx context.Context, inactiveSeconds int64, environmentIDs []string, execute, force bool) (model.ManagedWorktreeCleanupResult, error) {
 	if o == nil || o.service == nil || o.service.Isolation == nil || o.service.Environments == nil {
 		return model.ManagedWorktreeCleanupResult{}, fmt.Errorf("managed worktree cleanup is unavailable")
 	}
@@ -23,7 +26,7 @@ func (o *runtimeOwner) StaleManagedWorktreeCleanup(ctx context.Context, inactive
 	if execute && len(selected) == 0 {
 		return model.ManagedWorktreeCleanupResult{}, fmt.Errorf("environment_ids is required when execute=true; preview first and explicitly select stale managed worktrees")
 	}
-	report, err := o.staleManagedWorktreeReport(ctx, inactiveSeconds, selected)
+	report, err := o.staleManagedWorktreeReport(ctx, inactiveSeconds, selected, force)
 	if err != nil {
 		return model.ManagedWorktreeCleanupResult{}, err
 	}
@@ -37,7 +40,7 @@ func (o *runtimeOwner) StaleManagedWorktreeCleanup(ctx context.Context, inactive
 			result.Skipped = append(result.Skipped, preview)
 			continue
 		}
-		fresh, err := o.managedWorktreeCleanupCandidate(ctx, preview.EnvironmentID, time.Now().UTC(), inactiveSeconds)
+		fresh, err := o.managedWorktreeCleanupCandidate(ctx, preview.EnvironmentID, time.Now().UTC(), inactiveSeconds, force)
 		if err != nil {
 			preview.CleanupEligible = false
 			preview.Blockers = uniqueGatewayStrings(append(preview.Blockers, "candidate_recheck_failed"))
@@ -63,6 +66,45 @@ func (o *runtimeOwner) StaleManagedWorktreeCleanup(ctx context.Context, inactive
 			result.Skipped = append(result.Skipped, fresh)
 			continue
 		}
+
+		legacyTemporary := fresh.Temporary && strings.EqualFold(strings.TrimSpace(fresh.RetentionPolicy), legacyManagedWorktreeTemporaryPolicy)
+		if legacyTemporary {
+			safety, safetyErr := o.service.Isolation.SafetyForRetentionCleanup(ctx, fresh.EnvironmentID)
+			if safetyErr != nil || (safety.Dirty && !force) {
+				_, _ = o.service.Environments.ReleaseWriter(fresh.EnvironmentID, writerOwner, false)
+				fresh.CleanupEligible = false
+				if safetyErr != nil {
+					fresh.Blockers = append(fresh.Blockers, "managed_worktree_safety_check_failed")
+				}
+				if safety.Dirty && !force {
+					fresh.Blockers = append(fresh.Blockers, "managed_worktree_dirty")
+					if safety.Ignored {
+						fresh.Blockers = append(fresh.Blockers, "managed_worktree_ignored_files")
+					}
+				}
+				fresh.Blockers = uniqueGatewayStrings(fresh.Blockers)
+				result.Skipped = append(result.Skipped, fresh)
+				continue
+			}
+			destroyed, destroyErr := o.service.Isolation.DestroyForRetentionCleanup(ctx, fresh.EnvironmentID, writerOwner, force)
+			if destroyErr != nil {
+				_, _ = o.service.Environments.ReleaseWriter(fresh.EnvironmentID, writerOwner, false)
+				fresh.CleanupEligible = false
+				fresh.Blockers = uniqueGatewayStrings(append(fresh.Blockers, "managed_worktree_cleanup_failed"))
+				result.Skipped = append(result.Skipped, fresh)
+				continue
+			}
+			o.DropEnvironment(fresh.EnvironmentID)
+			result.Removed = append(result.Removed, model.ManagedWorktreeCleanupMutation{
+				ManagedWorktreeID: destroyed.ManagedWorktreeID,
+				EnvironmentID:     destroyed.EnvironmentID,
+				Name:              fresh.Name,
+				Root:              destroyed.Root,
+				RetainedBranch:    destroyed.RetainedBranch,
+			})
+			continue
+		}
+
 		safety, safetyErr := o.service.Isolation.Safety(ctx, fresh.EnvironmentID)
 		if safetyErr != nil || safety.Dirty || safety.Unpublished {
 			_, _ = o.service.Environments.ReleaseWriter(fresh.EnvironmentID, writerOwner, false)
@@ -72,14 +114,12 @@ func (o *runtimeOwner) StaleManagedWorktreeCleanup(ctx context.Context, inactive
 			}
 			if safety.Dirty {
 				fresh.Blockers = append(fresh.Blockers, "managed_worktree_dirty")
-				fresh.Dirty = true
-			}
-			if safety.Ignored {
-				fresh.Blockers = append(fresh.Blockers, "managed_worktree_ignored_files")
+				if safety.Ignored {
+					fresh.Blockers = append(fresh.Blockers, "managed_worktree_ignored_files")
+				}
 			}
 			if safety.Unpublished {
 				fresh.Blockers = append(fresh.Blockers, "managed_worktree_unpublished")
-				fresh.Unpublished = true
 			}
 			fresh.Blockers = uniqueGatewayStrings(fresh.Blockers)
 			result.Skipped = append(result.Skipped, fresh)
@@ -107,7 +147,7 @@ func (o *runtimeOwner) StaleManagedWorktreeCleanup(ctx context.Context, inactive
 	return result, nil
 }
 
-func (o *runtimeOwner) staleManagedWorktreeReport(ctx context.Context, inactiveSeconds int64, selected map[string]struct{}) (model.ManagedWorktreeCleanupReport, error) {
+func (o *runtimeOwner) staleManagedWorktreeReport(ctx context.Context, inactiveSeconds int64, selected map[string]struct{}, force bool) (model.ManagedWorktreeCleanupReport, error) {
 	now := time.Now().UTC()
 	report := model.ManagedWorktreeCleanupReport{GeneratedAt: now, InactiveThresholdSeconds: inactiveSeconds, Candidates: []model.ManagedWorktreeCleanupCandidate{}}
 	managedItems, err := o.service.ManagedWorktrees()
@@ -122,11 +162,11 @@ func (o *runtimeOwner) staleManagedWorktreeReport(ctx context.Context, inactiveS
 			}
 		}
 		found[managed.EnvironmentID] = struct{}{}
-		candidate, candidateErr := o.managedWorktreeCleanupCandidate(ctx, managed.EnvironmentID, now, inactiveSeconds)
+		candidate, candidateErr := o.managedWorktreeCleanupCandidate(ctx, managed.EnvironmentID, now, inactiveSeconds, force)
 		if candidateErr != nil {
 			candidate = model.ManagedWorktreeCleanupCandidate{ManagedWorktreeID: managed.ID, EnvironmentID: managed.EnvironmentID, Root: managed.Root, Branch: managed.Branch, CreatedAt: managed.CreatedAt, CleanupEligible: false, Blockers: []string{"candidate_inspection_failed"}}
 		}
-		if candidate.Blockers != nil && containsGatewayString(candidate.Blockers, "temporary_environment_use_temporary_cleanup") {
+		if containsGatewayString(candidate.Blockers, "temporary_environment_use_temporary_cleanup") {
 			continue
 		}
 		report.Candidates = append(report.Candidates, candidate)
@@ -153,7 +193,7 @@ func (o *runtimeOwner) staleManagedWorktreeReport(ctx context.Context, inactiveS
 	return report, nil
 }
 
-func (o *runtimeOwner) managedWorktreeCleanupCandidate(ctx context.Context, environmentID string, now time.Time, inactiveThresholdSeconds int64) (model.ManagedWorktreeCleanupCandidate, error) {
+func (o *runtimeOwner) managedWorktreeCleanupCandidate(ctx context.Context, environmentID string, now time.Time, inactiveThresholdSeconds int64, force bool) (model.ManagedWorktreeCleanupCandidate, error) {
 	environment, err := o.service.Environments.Get(strings.TrimSpace(environmentID))
 	if err != nil {
 		return model.ManagedWorktreeCleanupCandidate{}, err
@@ -177,11 +217,14 @@ func (o *runtimeOwner) managedWorktreeCleanupCandidate(ctx context.Context, envi
 	if !activityAt.IsZero() && now.After(activityAt) {
 		inactiveFor = int64(now.Sub(activityAt).Seconds())
 	}
+	legacyTemporary := environment.Retention.Persistence == model.PersistenceTemporary &&
+		strings.EqualFold(strings.TrimSpace(environment.Retention.Policy), legacyManagedWorktreeTemporaryPolicy)
 	candidate := model.ManagedWorktreeCleanupCandidate{
 		ManagedWorktreeID: managed.ID, EnvironmentID: environment.ID, Name: environment.Name, Root: managed.Root, Branch: managed.Branch,
 		CreatedAt: managed.CreatedAt, LastActivityAt: activityAt, InactiveSeconds: inactiveFor,
+		Temporary: environment.Retention.Persistence == model.PersistenceTemporary, RetentionPolicy: environment.Retention.Policy,
 	}
-	if environment.Retention.Persistence == model.PersistenceTemporary {
+	if environment.Retention.Persistence == model.PersistenceTemporary && !legacyTemporary {
 		candidate.Blockers = append(candidate.Blockers, "temporary_environment_use_temporary_cleanup")
 		return finalizeManagedWorktreeCleanupCandidate(candidate), nil
 	}
@@ -194,19 +237,34 @@ func (o *runtimeOwner) managedWorktreeCleanupCandidate(ctx context.Context, envi
 	if blockers := o.runtimeRetentionBlockers(model.RetentionResourceEnvironment, environment.ID); len(blockers) != 0 {
 		candidate.Blockers = append(candidate.Blockers, blockers...)
 	}
-	safety, safetyErr := o.service.Isolation.Safety(ctx, environment.ID)
+
+	var safetyErr error
+	var dirty, ignored, unpublished bool
+	if legacyTemporary {
+		safety, err := o.service.Isolation.SafetyForRetentionCleanup(ctx, environment.ID)
+		safetyErr = err
+		dirty, ignored = safety.Dirty, safety.Ignored
+	} else {
+		safety, err := o.service.Isolation.Safety(ctx, environment.ID)
+		safetyErr = err
+		dirty, ignored, unpublished = safety.Dirty, safety.Ignored, safety.Unpublished
+	}
 	if safetyErr != nil {
 		candidate.Blockers = append(candidate.Blockers, "managed_worktree_safety_check_failed")
 	} else {
-		candidate.Dirty = safety.Dirty
-		candidate.Unpublished = safety.Unpublished
-		if safety.Dirty {
-			candidate.Blockers = append(candidate.Blockers, "managed_worktree_dirty")
+		candidate.Dirty = dirty
+		candidate.Unpublished = unpublished
+		if dirty {
+			if legacyTemporary && force {
+				candidate.ForceRequired = true
+			} else {
+				candidate.Blockers = append(candidate.Blockers, "managed_worktree_dirty")
+				if ignored {
+					candidate.Blockers = append(candidate.Blockers, "managed_worktree_ignored_files")
+				}
+			}
 		}
-		if safety.Ignored {
-			candidate.Blockers = append(candidate.Blockers, "managed_worktree_ignored_files")
-		}
-		if safety.Unpublished {
+		if unpublished {
 			candidate.Blockers = append(candidate.Blockers, "managed_worktree_unpublished")
 		}
 	}
