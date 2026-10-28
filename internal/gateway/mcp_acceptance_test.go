@@ -820,8 +820,26 @@ func jsonStringField(text, field string) string {
 func callGatewayTool(t *testing.T, ctx context.Context, session *mcp.ClientSession, name string, arguments map[string]any) *mcp.CallToolResult {
 	t.Helper()
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: arguments})
-	if err != nil {
-		t.Fatalf("%s transport error: %v", name, err)
+	if err == nil {
+		return result
 	}
-	return result
+	if strings.Contains(err.Error(), "unknown tool") && !strings.HasPrefix(name, "adm_") {
+		group, action := compactToolRoute(name)
+		if group != "" && action != "" {
+			compactName := "adm_" + group
+			compactResult, compactErr := session.CallTool(ctx, &mcp.CallToolParams{
+				Name: compactName,
+				Arguments: map[string]any{
+					"action":    action,
+					"arguments": arguments,
+				},
+			})
+			if compactErr == nil {
+				return compactResult
+			}
+			t.Fatalf("%s transport error: %v; compact retry %s.%s failed: %v", name, err, group, action, compactErr)
+		}
+	}
+	t.Fatalf("%s transport error: %v", name, err)
+	return nil
 }
