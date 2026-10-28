@@ -43,7 +43,7 @@ func (s *Service) EnsureEnvironmentSandboxAccess(environment model.Environment) 
 	return nil
 }
 
-func (s *Service) CleanupEnvironmentSandboxAccess(environment model.Environment) error {
+func (s *Service) CleanupEnvironmentSandboxAccess(environment model.Environment, workspace model.Workspace) error {
 	sandboxRoot := strings.TrimSpace(s.SandboxRoot)
 	if sandboxRoot != "" {
 		root, err := filepath.Abs(filepath.Clean(sandboxRoot))
@@ -62,10 +62,6 @@ func (s *Service) CleanupEnvironmentSandboxAccess(environment model.Environment)
 		}
 	}
 
-	workspace, err := s.Workspaces.Get(environment.WorkspaceID)
-	if err != nil {
-		return err
-	}
 	status := sandbox.InspectEnvironmentWorkspaceAccess(environment.ID, workspace.Path, environment.Root)
 	if status.ProfilePresent || status.HasAnyGrant {
 		cleaned, err := sandbox.CleanupEnvironmentWorkspaceAccess(environment.ID, workspace.Path, environment.Root)
