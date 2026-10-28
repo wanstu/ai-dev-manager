@@ -61,25 +61,63 @@ func CleanupEnvironmentAccess(environmentID, root string) (EnvironmentAccessStat
 	return cleanupEnvironmentAccessPlatform(status)
 }
 
+func ResolveEnvironmentTraversalRoot(workspaceRoot, environmentRoot string) (string, error) {
+	workspaceRoot = filepath.Clean(strings.TrimSpace(workspaceRoot))
+	environmentRoot = filepath.Clean(strings.TrimSpace(environmentRoot))
+	if workspaceRoot == "." || !filepath.IsAbs(workspaceRoot) {
+		return "", fmt.Errorf("workspace root must be an absolute path")
+	}
+	if environmentRoot == "." || !filepath.IsAbs(environmentRoot) {
+		return "", fmt.Errorf("environment root must be an absolute path")
+	}
+	if pathWithin(workspaceRoot, environmentRoot) {
+		return workspaceRoot, nil
+	}
+
+	workspaceVolume := filepath.VolumeName(workspaceRoot)
+	environmentVolume := filepath.VolumeName(environmentRoot)
+	if !strings.EqualFold(workspaceVolume, environmentVolume) {
+		return "", fmt.Errorf("workspace and Environment roots are on different volumes")
+	}
+
+	current := workspaceRoot
+	for {
+		if pathWithin(current, environmentRoot) {
+			volumeRoot := filepath.Clean(workspaceVolume + string(filepath.Separator))
+			if workspaceVolume == "" {
+				volumeRoot = filepath.Clean(string(filepath.Separator))
+			}
+			if sameTraversalPath(current, volumeRoot) {
+				return "", fmt.Errorf("workspace and Environment only share the volume root; refuse broad traversal ACL")
+			}
+			return current, nil
+		}
+		next := filepath.Dir(current)
+		if next == current {
+			break
+		}
+		current = next
+	}
+	return "", fmt.Errorf("workspace and Environment do not share a safe traversal root")
+}
+
+func sameTraversalPath(left, right string) bool {
+	return strings.EqualFold(filepath.Clean(left), filepath.Clean(right))
+}
+
 func InspectEnvironmentWorkspaceAccess(environmentID, workspaceRoot, root string) EnvironmentAccessStatus {
 	status := InspectEnvironmentAccess(environmentID, root)
 	if status.EnvironmentID == "" || status.ProfileName == "" {
 		return status
 	}
-	workspaceRoot = filepath.Clean(strings.TrimSpace(workspaceRoot))
-	if workspaceRoot == "." || !filepath.IsAbs(workspaceRoot) {
+	traversalRoot, err := ResolveEnvironmentTraversalRoot(workspaceRoot, status.Root)
+	if err != nil {
 		status.Prepared = false
 		status.CanAutoPrepare = false
-		status.Message = "workspace root must be an absolute path"
+		status.Message = err.Error()
 		return status
 	}
-	if !pathWithin(workspaceRoot, status.Root) {
-		status.Prepared = false
-		status.CanAutoPrepare = false
-		status.Message = "environment root must stay inside the workspace root"
-		return status
-	}
-	return inspectEnvironmentWorkspaceAccessPlatform(status, workspaceRoot)
+	return inspectEnvironmentWorkspaceAccessPlatform(status, traversalRoot)
 }
 
 func PrepareEnvironmentWorkspaceAccess(environmentID, workspaceRoot, root string) (EnvironmentAccessStatus, error) {
@@ -87,7 +125,11 @@ func PrepareEnvironmentWorkspaceAccess(environmentID, workspaceRoot, root string
 	if status.EnvironmentID == "" || status.ProfileName == "" {
 		return status, fmt.Errorf("invalid Environment sandbox preparation request: %s", status.Message)
 	}
-	return prepareEnvironmentWorkspaceAccessPlatform(status, filepath.Clean(workspaceRoot))
+	traversalRoot, err := ResolveEnvironmentTraversalRoot(workspaceRoot, status.Root)
+	if err != nil {
+		return status, err
+	}
+	return prepareEnvironmentWorkspaceAccessPlatform(status, traversalRoot)
 }
 
 func CleanupEnvironmentWorkspaceAccess(environmentID, workspaceRoot, root string) (EnvironmentAccessStatus, error) {
@@ -95,7 +137,11 @@ func CleanupEnvironmentWorkspaceAccess(environmentID, workspaceRoot, root string
 	if status.EnvironmentID == "" || status.ProfileName == "" {
 		return status, fmt.Errorf("invalid Environment sandbox cleanup request: %s", status.Message)
 	}
-	return cleanupEnvironmentWorkspaceAccessPlatform(status, filepath.Clean(workspaceRoot))
+	traversalRoot, err := ResolveEnvironmentTraversalRoot(workspaceRoot, status.Root)
+	if err != nil {
+		return status, err
+	}
+	return cleanupEnvironmentWorkspaceAccessPlatform(status, traversalRoot)
 }
 
 func environmentWorkspaceTraversePaths(workspaceRoot, environmentRoot string) ([]string, error) {
