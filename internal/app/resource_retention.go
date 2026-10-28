@@ -269,7 +269,7 @@ func executeRetentionCleanup(
 	report model.ResourceRetentionReport,
 	now time.Time,
 	runtimeEligibleEnvironmentIDs, runtimeEligibleMCPIDs map[string]struct{},
-	beforeEnvironmentRemove func(model.Environment) error,
+	beforeEnvironmentRemove func(model.Environment, model.Workspace) error,
 ) model.ResourceRetentionCleanupResult {
 	result := model.ResourceRetentionCleanupResult{GeneratedAt: now, DryRun: false, Report: report}
 	removableEnvironments := map[string]struct{}{}
@@ -608,7 +608,7 @@ func removeEnvironmentState(
 	state *model.State,
 	id string,
 	now time.Time,
-	beforeRemove func(model.Environment) error,
+	beforeRemove func(model.Environment, model.Workspace) error,
 ) (model.Environment, bool, error) {
 	for _, managed := range state.ManagedWorktrees {
 		if managed.EnvironmentID == id {
@@ -624,7 +624,17 @@ func removeEnvironmentState(
 			return model.Environment{}, false, nil
 		}
 		if beforeRemove != nil {
-			if err := beforeRemove(environment); err != nil {
+			var workspace model.Workspace
+			for _, candidate := range state.Workspaces {
+				if candidate.ID == environment.WorkspaceID {
+					workspace = candidate
+					break
+				}
+			}
+			if workspace.ID == "" {
+				return environment, false, fmt.Errorf("workspace %q not found", environment.WorkspaceID)
+			}
+			if err := beforeRemove(environment, workspace); err != nil {
 				return environment, false, err
 			}
 		}
