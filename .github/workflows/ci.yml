@@ -169,9 +169,7 @@ jobs:
 
       - name: Test
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        # Temporary PR diagnostic: force a bounded verbose Windows test run so
-        # an AppContainer hang yields the exact test name and goroutine stack.
-        run: go test -v -timeout 2m -count=1 ./...
+        run: go test -count=1 ./...
 
       - name: Vet
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
