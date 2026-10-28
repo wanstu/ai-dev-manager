@@ -50,6 +50,11 @@ func (s *Service) PrepareSandboxExecution(
 	if err != nil {
 		return PreparedSandboxExecution{}, err
 	}
+	if s.SandboxExecutionSupport().Platform == "windows" {
+		if err := s.EnsureEnvironmentSandboxAccess(env); err != nil {
+			return PreparedSandboxExecution{}, fmt.Errorf("prepare Environment strong-sandbox access: %w", err)
+		}
+	}
 	s.recordFullAuthorizationBypass(rt, environmentID, executable, surface)
 	cmd, err := rt.PrepareCommand(ctx, executable, args, cwd)
 	if err != nil {
