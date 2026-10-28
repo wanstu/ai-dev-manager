@@ -16,3 +16,15 @@ func prepareEnvironmentAccessPlatform(status EnvironmentAccessStatus) (Environme
 func cleanupEnvironmentAccessPlatform(status EnvironmentAccessStatus) (EnvironmentAccessStatus, error) {
 	return status, nil
 }
+
+func inspectEnvironmentWorkspaceAccessPlatform(status EnvironmentAccessStatus, workspaceRoot string) EnvironmentAccessStatus {
+	return status
+}
+
+func prepareEnvironmentWorkspaceAccessPlatform(status EnvironmentAccessStatus, workspaceRoot string) (EnvironmentAccessStatus, error) {
+	return status, fmt.Errorf("Environment AppContainer ACL preparation is unavailable on this platform")
+}
+
+func cleanupEnvironmentWorkspaceAccessPlatform(status EnvironmentAccessStatus, workspaceRoot string) (EnvironmentAccessStatus, error) {
+	return status, nil
+}
