@@ -15,7 +15,6 @@ import (
 type PathAccess string
 
 const (
-	PathAccessTraverse  PathAccess = "traverse"
 	PathAccessReadOnly  PathAccess = "read_only"
 	PathAccessReadWrite PathAccess = "read_write"
 
@@ -24,11 +23,6 @@ const (
 )
 
 func windowsPathAccessMask(access PathAccess) (windows.ACCESS_MASK, error) {
-	if access == PathAccessTraverse {
-		// FILE_GENERIC_EXECUTE on a directory includes FILE_TRAVERSE,
-		// FILE_READ_ATTRIBUTES and SYNCHRONIZE, but not FILE_LIST_DIRECTORY.
-		return windows.ACCESS_MASK(windows.FILE_GENERIC_EXECUTE), nil
-	}
 	mask := windows.ACCESS_MASK(windows.FILE_GENERIC_READ | windows.FILE_GENERIC_EXECUTE)
 	if access == PathAccessReadWrite {
 		const fileDeleteChild = 0x00000040
@@ -87,7 +81,7 @@ func WindowsAppContainerPathAccessGranted(path, sidText string, access PathAcces
 		if windows.ACCESS_MASK(ace.Mask)&requiredMask != requiredMask {
 			continue
 		}
-		if info.IsDir() && access != PathAccessTraverse {
+		if info.IsDir() {
 			requiredFlags := byte(objectInheritACE | containerInheritACE)
 			if ace.Header.AceFlags&requiredFlags != requiredFlags {
 				continue
@@ -136,7 +130,7 @@ func EnsureWindowsAppContainerPath(path, sidText string, access PathAccess) (cha
 	}
 
 	inheritance := uint32(windows.NO_INHERITANCE)
-	if info.IsDir() && access != PathAccessTraverse {
+	if info.IsDir() {
 		inheritance = windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT
 	}
 	entry := windows.EXPLICIT_ACCESS{
