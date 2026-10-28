@@ -15,29 +15,33 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func localSandboxEnvironment(environmentID string) (string, string, error) {
+func localSandboxEnvironment(environmentID string) (string, string, string, error) {
 	environmentID = strings.TrimSpace(environmentID)
 	if environmentID == "" {
-		return "", "", fmt.Errorf("environment id is required")
+		return "", "", "", fmt.Errorf("environment id is required")
 	}
 	statePath, err := store.DefaultPath()
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	service := app.New(statePath)
 	environment, err := service.Environments.Get(environmentID)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	return environment.ID, environment.Root, nil
+	workspace, err := service.Workspaces.Get(environment.WorkspaceID)
+	if err != nil {
+		return "", "", "", err
+	}
+	return environment.ID, workspace.Path, environment.Root, nil
 }
 
 func sandboxEnvironmentPreparationStatus(environmentID string) (sandbox.EnvironmentAccessStatus, error) {
-	id, root, err := localSandboxEnvironment(environmentID)
+	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
 	if err != nil {
 		return sandbox.EnvironmentAccessStatus{}, err
 	}
-	return sandbox.InspectEnvironmentAccess(id, root), nil
+	return sandbox.InspectEnvironmentWorkspaceAccess(id, workspaceRoot, root), nil
 }
 
 func enableSandboxEnvironmentPreparation(environmentID string) (sandbox.EnvironmentAccessStatus, error) {
@@ -49,11 +53,11 @@ func enableSandboxEnvironmentPreparation(environmentID string) (sandbox.Environm
 		return status, nil
 	}
 	if status.CanAutoPrepare {
-		id, root, resolveErr := localSandboxEnvironment(environmentID)
+		id, workspaceRoot, root, resolveErr := localSandboxEnvironment(environmentID)
 		if resolveErr != nil {
 			return status, resolveErr
 		}
-		return sandbox.PrepareEnvironmentAccess(id, root)
+		return sandbox.PrepareEnvironmentWorkspaceAccess(id, workspaceRoot, root)
 	}
 
 	executable, err := os.Executable()
@@ -94,11 +98,11 @@ func enableSandboxEnvironmentPreparation(environmentID string) (sandbox.Environm
 }
 
 func cleanupSandboxEnvironmentPreparation(environmentID string) (sandbox.EnvironmentAccessStatus, error) {
-	id, root, err := localSandboxEnvironment(environmentID)
+	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
 	if err != nil {
 		return sandbox.EnvironmentAccessStatus{}, err
 	}
-	status, cleanupErr := sandbox.CleanupEnvironmentAccess(id, root)
+	status, cleanupErr := sandbox.CleanupEnvironmentWorkspaceAccess(id, workspaceRoot, root)
 	if cleanupErr == nil {
 		return status, nil
 	}
@@ -146,11 +150,11 @@ func RunSandboxEnvironmentPreparation(environmentID string) error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return fmt.Errorf("Environment sandbox preparation requires administrator elevation")
 	}
-	id, root, err := localSandboxEnvironment(environmentID)
+	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
 	if err != nil {
 		return err
 	}
-	status, err := sandbox.PrepareEnvironmentAccess(id, root)
+	status, err := sandbox.PrepareEnvironmentWorkspaceAccess(id, workspaceRoot, root)
 	if err != nil {
 		return err
 	}
@@ -164,11 +168,11 @@ func RunSandboxEnvironmentCleanup(environmentID string) error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
 		return fmt.Errorf("Environment sandbox cleanup requires administrator elevation")
 	}
-	id, root, err := localSandboxEnvironment(environmentID)
+	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
 	if err != nil {
 		return err
 	}
-	status, err := sandbox.CleanupEnvironmentAccess(id, root)
+	status, err := sandbox.CleanupEnvironmentWorkspaceAccess(id, workspaceRoot, root)
 	if err != nil {
 		return err
 	}
