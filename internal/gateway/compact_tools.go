@@ -38,21 +38,21 @@ func newCompactAgentServer(service *app.Service, owner *runtimeOwner) *mcp.Serve
 	serverSession, err := legacy.Connect(ctx, serverTransport, nil)
 	if err != nil {
 		service.Log("error", "gateway.compact_agent_legacy_connect_failed", map[string]string{"error": err.Error()})
-		return legacy
+		return newCompactAgentFailureServer(fmt.Errorf("connect internal legacy router: %w", err))
 	}
 	client := mcp.NewClient(&mcp.Implementation{Name: serverName + "-compact-router", Version: serverVersion}, nil)
 	clientSession, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		_ = serverSession.Close()
 		service.Log("error", "gateway.compact_agent_client_connect_failed", map[string]string{"error": err.Error()})
-		return legacy
+		return newCompactAgentFailureServer(fmt.Errorf("connect compact internal client: %w", err))
 	}
 	listed, err := clientSession.ListTools(ctx, nil)
 	if err != nil {
 		_ = clientSession.Close()
 		_ = serverSession.Close()
 		service.Log("error", "gateway.compact_agent_list_failed", map[string]string{"error": err.Error()})
-		return legacy
+		return newCompactAgentFailureServer(fmt.Errorf("list internal legacy tools: %w", err))
 	}
 
 	compact := mcp.NewServer(
@@ -103,6 +103,20 @@ func newCompactAgentServer(service *app.Service, owner *runtimeOwner) *mcp.Serve
 	}
 
 	return compact
+}
+
+func newCompactAgentFailureServer(initErr error) *mcp.Server {
+	server := mcp.NewServer(
+		&mcp.Implementation{Name: serverName, Version: serverVersion},
+		&mcp.ServerOptions{Instructions: gatewayAgentInstructions},
+	)
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "adm_help",
+		Description: "Report why the compact ADM Agent tool router failed to initialize. The Agent surface remains fail-closed instead of expanding back to the legacy tool list.",
+	}, func(context.Context, *mcp.CallToolRequest, CompactHelpInput) (*mcp.CallToolResult, any, error) {
+		return nil, nil, fmt.Errorf("ADM compact Agent router is unavailable: %w", initErr)
+	})
+	return server
 }
 
 func registerCompactGroup(
