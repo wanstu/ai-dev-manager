@@ -163,7 +163,7 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 	}
 	grants := make([]grant, 0, 4+len(request.ToolRoots))
 	seen := map[string]struct{}{}
-	addGrant := func(path string, access PathAccess, grantAncestors bool) error {
+	addGrant := func(path string, access PathAccess) error {
 		canonical, resolveErr := canonicalExistingPath(path)
 		if resolveErr != nil {
 			return resolveErr
@@ -181,23 +181,11 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 				return nil
 			}
 		}
-		var ancestorChanges []string
-		if grantAncestors {
-			var ancestorErr error
-			ancestorChanges, ancestorErr = EnsureWindowsAppContainerAncestorAccess(canonical, profile.SID)
-			if ancestorErr != nil {
-				return ancestorErr
-			}
-		}
 		changed, grantErr := EnsureWindowsAppContainerPath(canonical, profile.SID, access)
 		if grantErr != nil {
-			_ = cleanupChangedAncestorAccess(ancestorChanges, profile.SID)
 			return grantErr
 		}
 		seen[key] = struct{}{}
-		for _, ancestor := range ancestorChanges {
-			grants = append(grants, grant{path: ancestor, access: PathAccessTraverse})
-		}
 		if changed {
 			grants = append(grants, grant{path: canonical, access: access})
 		}
@@ -211,31 +199,32 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 		}
 	}()
 
-	// A one-time administrator Environment grant is already present, so Ensure
-	// returns changed=false and it is preserved. User-writable roots that ADM can
-	// prepare itself remain transient and are revoked when this execution ends.
-	if err := addGrant(worktreeRoot, PathAccessReadWrite, true); err != nil {
+	// Never rewrite parent-directory ACLs during command execution. AppContainer
+	// can open an explicitly granted Environment root without mutating the volume
+	// or workspace ancestor chain; protected/administrative roots are handled by
+	// the one-time Environment preparation flow instead.
+	if err := addGrant(worktreeRoot, PathAccessReadWrite); err != nil {
 		return ExecutionResult{}, fmt.Errorf("grant sandbox worktree: %w", err)
 	}
-	if err := addGrant(runtimeRoot, PathAccessReadWrite, false); err != nil {
+	if err := addGrant(runtimeRoot, PathAccessReadWrite); err != nil {
 		return ExecutionResult{}, fmt.Errorf("grant sandbox runtime root: %w", err)
 	}
 	if !pathWithin(runtimeRoot, dirs.CacheRoot) {
-		if err := addGrant(dirs.CacheRoot, PathAccessReadWrite, false); err != nil {
+		if err := addGrant(dirs.CacheRoot, PathAccessReadWrite); err != nil {
 			return ExecutionResult{}, fmt.Errorf("grant sandbox persistent cache root: %w", err)
 		}
 	}
-	if err := addGrant(filepath.Dir(executable), PathAccessReadOnly, false); err != nil {
+	if err := addGrant(filepath.Dir(executable), PathAccessReadOnly); err != nil {
 		return ExecutionResult{}, fmt.Errorf("grant sandbox executable directory: %w", err)
 	}
-	if err := addGrant(executable, PathAccessReadOnly, false); err != nil {
+	if err := addGrant(executable, PathAccessReadOnly); err != nil {
 		return ExecutionResult{}, fmt.Errorf("grant sandbox executable: %w", err)
 	}
 	for _, root := range request.ToolRoots {
 		if strings.TrimSpace(root) == "" {
 			continue
 		}
-		if err := addGrant(root, PathAccessReadOnly, false); err != nil {
+		if err := addGrant(root, PathAccessReadOnly); err != nil {
 			// Tool roots are discovered from the host toolchain and can disappear
 			// between discovery and ACL application (for example CI toolcache
 			// junction rotation). Missing optional roots are safe to skip: they
