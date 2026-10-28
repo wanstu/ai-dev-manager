@@ -18,21 +18,22 @@ import (
 )
 
 const (
-	sandboxHostPrepTaskName       = "AI Dev Manager Sandbox Host Prep"
-	sandboxHostPrepMachineDirName = "AI Dev Manager"
-	sandboxHostPrepMachineExeName = "adm-sandbox-host-prep.exe"
+	sandboxHostPrepTaskName        = "AI Dev Manager Sandbox Host Prep"
+	sandboxHostPrepMachineDirName  = "AI Dev Manager"
+	sandboxHostPrepMachineExeName  = "adm-sandbox-host-prep.exe"
 	sandboxHostPrepReadyMarkerName = "sandbox-host-prep.ready"
 )
 
 func sandboxHostPreparationStatus() SandboxHostPreparationStatus {
 	report := sandbox.InspectHostPreparation()
-	taskInstalled, taskErr := sandboxHostPrepBootTaskInstalled()
+	taskInstalled, taskVerified, taskErr := sandboxHostPrepBootTaskStatus()
 	status := SandboxHostPreparationStatus{
 		Platform:           "windows",
 		Supported:          true,
 		NullDevicePrepared: report.NullDevicePrepared,
 		BootTaskInstalled:  taskInstalled,
-		RequiresAdminSetup: !report.NullDevicePrepared || !taskInstalled,
+		BootTaskVerified:   taskVerified,
+		RequiresAdminSetup: !report.NullDevicePrepared || !taskInstalled || !taskVerified,
 		Message:            report.Message,
 	}
 	if taskErr != nil {
@@ -44,6 +45,8 @@ func sandboxHostPreparationStatus() SandboxHostPreparationStatus {
 		}
 	} else if report.NullDevicePrepared && !taskInstalled {
 		status.Message = "强沙盒当前已经生效，但还需要完成一次管理员确认，才能保证重启电脑后继续可用"
+	} else if report.NullDevicePrepared && taskInstalled && !taskVerified {
+		status.Message = "强沙盒当前可用；开机恢复标记存在，但任务查询无法验证，可能被安全软件或系统权限拦截"
 	} else if report.NullDevicePrepared && taskInstalled {
 		status.Message = "强沙盒已启用：当前可用，重启电脑后也会自动恢复"
 	}
@@ -224,24 +227,23 @@ func removeSandboxHostPrepBootTask() error {
 	return nil
 }
 
-func sandboxHostPrepBootTaskInstalled() (bool, error) {
+func sandboxHostPrepBootTaskStatus() (installed bool, verified bool, err error) {
 	schtasks, err := sandboxHostPrepSystemExecutable("schtasks.exe")
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	command := hiddenWindowsCommand(schtasks, "/Query", "/TN", sandboxHostPrepTaskName)
 	if err := command.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() != 0 {
-			// SYSTEM tasks may intentionally deny ordinary users permission to
-			// query their Task Scheduler metadata. Do not interpret that as
-			// "not installed". The elevated installer writes a readiness marker
-			// next to the protected Program Files helper only after task
-			// registration succeeds; ordinary users can read but not forge it.
-			return sandboxHostPrepReadyMarkerInstalled(), nil
+			// Security software and SYSTEM-task ACLs can both block Task Scheduler
+			// queries. A protected marker still proves that an elevated installer
+			// completed task registration at some point, but it does not prove the
+			// task remains queryable/present now. Preserve that distinction.
+			return sandboxHostPrepReadyMarkerInstalled(), false, nil
 		}
-		return false, fmt.Errorf("query sandbox host-prep boot task: %w", err)
+		return false, false, fmt.Errorf("query sandbox host-prep boot task: %w", err)
 	}
-	return true, nil
+	return true, true, nil
 }
 
 func sandboxHostPrepReadyMarkerPath() (string, error) {
