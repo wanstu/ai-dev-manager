@@ -7,6 +7,7 @@ import "fmt"
 type PathAccess string
 
 const (
+	PathAccessTraverse  PathAccess = "traverse"
 	PathAccessReadOnly  PathAccess = "read_only"
 	PathAccessReadWrite PathAccess = "read_write"
 )
