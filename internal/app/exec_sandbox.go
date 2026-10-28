@@ -191,6 +191,9 @@ func (s *Service) ExecSandbox(
 		return nil, fmt.Errorf("writer heartbeat failed: %w", heartbeatErr)
 	}
 	if timedOut {
+		if execErr != nil && execErr.Error() != context.DeadlineExceeded.Error() {
+			return nil, fmt.Errorf("command timed out after %dms: %v", timeoutMS, execErr)
+		}
 		return nil, fmt.Errorf("command timed out after %dms", timeoutMS)
 	}
 	if execErr != nil {
