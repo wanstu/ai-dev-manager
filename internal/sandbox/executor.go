@@ -11,18 +11,20 @@ import (
 )
 
 type ExecutionRequest struct {
-	Scope           string            `json:"scope"`
-	RuntimeRoot     string            `json:"runtime_root"`
-	WorktreeRoot    string            `json:"worktree_root"`
-	Executable      string            `json:"executable"`
-	Args            []string          `json:"args,omitempty"`
-	Cwd             string            `json:"cwd"`
-	BaseEnvironment []string          `json:"-"`
+	Scope            string            `json:"scope"`
+	RuntimeRoot      string            `json:"runtime_root"`
+	CacheRoot        string            `json:"cache_root,omitempty"`
+	WorktreeRoot     string            `json:"worktree_root"`
+	Executable       string            `json:"executable"`
+	Args             []string          `json:"args,omitempty"`
+	Cwd              string            `json:"cwd"`
+	BaseEnvironment  []string          `json:"-"`
 	ExtraEnvironment map[string]string `json:"-"`
-	ToolRoots       []string          `json:"tool_roots,omitempty"`
-	MaxOutputBytes  int               `json:"max_output_bytes,omitempty"`
-	Stdout          io.Writer         `json:"-"`
-	Stderr          io.Writer         `json:"-"`
+	ToolRoots        []string          `json:"tool_roots,omitempty"`
+	Capabilities     []string          `json:"capabilities,omitempty"`
+	MaxOutputBytes   int               `json:"max_output_bytes,omitempty"`
+	Stdout           io.Writer         `json:"-"`
+	Stderr           io.Writer         `json:"-"`
 }
 
 type ExecutionResult struct {
@@ -44,15 +46,27 @@ func (r ExecutionRequest) Validate() error {
 			return fmt.Errorf("sandbox %s must be an absolute path", name)
 		}
 	}
+	if strings.TrimSpace(r.CacheRoot) != "" {
+		if !filepath.IsAbs(r.CacheRoot) {
+			return fmt.Errorf("sandbox cache_root must be an absolute path")
+		}
+		runtimeParent := filepath.Dir(filepath.Clean(r.RuntimeRoot))
+		cacheRoot := filepath.Clean(r.CacheRoot)
+		if !pathWithin(runtimeParent, cacheRoot) || pathWithin(filepath.Clean(r.RuntimeRoot), cacheRoot) {
+			return fmt.Errorf("sandbox cache_root must stay inside the Environment sandbox root and outside the per-execution runtime root")
+		}
+	}
 	if r.MaxOutputBytes < 0 {
 		return fmt.Errorf("sandbox max_output_bytes must be nonnegative")
 	}
 	return nil
 }
 
-// Execute creates an isolated AppContainer identity for one execution,
-// grants only the selected project/runtime/tool paths, launches the process,
-// and revokes those grants before returning.
+// Execute launches one command under the AppContainer identity selected by
+// Scope. Callers use a stable Environment scope; profile/temp/build directories
+// remain execution-local while an optional ADM-owned Environment cache persists.
+// Pre-existing Environment ACL grants are reused, while
+// grants created by this execution are revoked before returning.
 //
 // There is intentionally no unsandboxed fallback here. Callers that want a
 // trusted-host mode must choose that separate authority explicitly.
@@ -89,6 +103,13 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 		return ExecutionResult{}, fmt.Errorf("sandbox runtime root and worktree root must not overlap")
 	}
 	dirs := DefaultRuntimeDirs(runtimeRoot)
+	if strings.TrimSpace(request.CacheRoot) != "" {
+		cacheRoot, cacheErr := filepath.Abs(filepath.Clean(request.CacheRoot))
+		if cacheErr != nil {
+			return ExecutionResult{}, fmt.Errorf("resolve sandbox cache root: %w", cacheErr)
+		}
+		dirs.CacheRoot = cacheRoot
+	}
 	for _, dir := range []string{
 		dirs.Root,
 		dirs.ProfileRoot,
@@ -112,7 +133,7 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 	if err != nil {
 		return ExecutionResult{}, err
 	}
-	profile, _, err := EnsureWindowsAppContainerProfile(profileName)
+	profile, profileCreated, err := EnsureWindowsAppContainerProfile(profileName)
 	if err != nil {
 		return ExecutionResult{}, err
 	}
@@ -128,11 +149,13 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 	if err := os.MkdirAll(appContainerTemp, 0o755); err != nil {
 		return ExecutionResult{}, fmt.Errorf("create AppContainer temp directory: %w", err)
 	}
-	defer func() {
-		if deleteErr := DeleteWindowsAppContainerProfile(profile.Name); deleteErr != nil {
-			err = errors.Join(err, fmt.Errorf("delete sandbox profile: %w", deleteErr))
-		}
-	}()
+	if profileCreated {
+		defer func() {
+			if deleteErr := DeleteWindowsAppContainerProfile(profile.Name); deleteErr != nil {
+				err = errors.Join(err, fmt.Errorf("delete sandbox profile: %w", deleteErr))
+			}
+		}()
+	}
 
 	type grant struct {
 		path   string
@@ -140,7 +163,7 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 	}
 	grants := make([]grant, 0, 4+len(request.ToolRoots))
 	seen := map[string]struct{}{}
-	addGrant := func(path string, access PathAccess) error {
+	addGrant := func(path string, access PathAccess, grantAncestors bool) error {
 		canonical, resolveErr := canonicalExistingPath(path)
 		if resolveErr != nil {
 			return resolveErr
@@ -153,12 +176,31 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 			if validateErr := validateToolGrant(canonical); validateErr != nil {
 				return validateErr
 			}
+			if !requiresExplicitToolGrant(canonical) {
+				seen[key] = struct{}{}
+				return nil
+			}
 		}
-		if grantErr := GrantWindowsAppContainerPath(canonical, profile.SID, access); grantErr != nil {
+		var ancestorChanges []string
+		if grantAncestors {
+			var ancestorErr error
+			ancestorChanges, ancestorErr = EnsureWindowsAppContainerAncestorAccess(canonical, profile.SID)
+			if ancestorErr != nil {
+				return ancestorErr
+			}
+		}
+		changed, grantErr := EnsureWindowsAppContainerPath(canonical, profile.SID, access)
+		if grantErr != nil {
+			_ = cleanupChangedAncestorAccess(ancestorChanges, profile.SID)
 			return grantErr
 		}
 		seen[key] = struct{}{}
-		grants = append(grants, grant{path: canonical, access: access})
+		for _, ancestor := range ancestorChanges {
+			grants = append(grants, grant{path: ancestor, access: PathAccessTraverse})
+		}
+		if changed {
+			grants = append(grants, grant{path: canonical, access: access})
+		}
 		return nil
 	}
 	defer func() {
@@ -169,23 +211,31 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 		}
 	}()
 
-	if err := addGrant(worktreeRoot, PathAccessReadWrite); err != nil {
+	// A one-time administrator Environment grant is already present, so Ensure
+	// returns changed=false and it is preserved. User-writable roots that ADM can
+	// prepare itself remain transient and are revoked when this execution ends.
+	if err := addGrant(worktreeRoot, PathAccessReadWrite, true); err != nil {
 		return ExecutionResult{}, fmt.Errorf("grant sandbox worktree: %w", err)
 	}
-	if err := addGrant(runtimeRoot, PathAccessReadWrite); err != nil {
+	if err := addGrant(runtimeRoot, PathAccessReadWrite, false); err != nil {
 		return ExecutionResult{}, fmt.Errorf("grant sandbox runtime root: %w", err)
 	}
-	if err := addGrant(filepath.Dir(executable), PathAccessReadOnly); err != nil {
+	if !pathWithin(runtimeRoot, dirs.CacheRoot) {
+		if err := addGrant(dirs.CacheRoot, PathAccessReadWrite, false); err != nil {
+			return ExecutionResult{}, fmt.Errorf("grant sandbox persistent cache root: %w", err)
+		}
+	}
+	if err := addGrant(filepath.Dir(executable), PathAccessReadOnly, false); err != nil {
 		return ExecutionResult{}, fmt.Errorf("grant sandbox executable directory: %w", err)
 	}
-	if err := addGrant(executable, PathAccessReadOnly); err != nil {
+	if err := addGrant(executable, PathAccessReadOnly, false); err != nil {
 		return ExecutionResult{}, fmt.Errorf("grant sandbox executable: %w", err)
 	}
 	for _, root := range request.ToolRoots {
 		if strings.TrimSpace(root) == "" {
 			continue
 		}
-		if err := addGrant(root, PathAccessReadOnly); err != nil {
+		if err := addGrant(root, PathAccessReadOnly, false); err != nil {
 			// Tool roots are discovered from the host toolchain and can disappear
 			// between discovery and ACL application (for example CI toolcache
 			// junction rotation). Missing optional roots are safe to skip: they
@@ -207,6 +257,7 @@ func Execute(ctx context.Context, request ExecutionRequest) (result ExecutionRes
 		Cwd:            cwd,
 		Environment:    environment,
 		ProfileSID:     profile.SID,
+		Capabilities:   append([]string(nil), request.Capabilities...),
 		MaxOutputBytes: request.MaxOutputBytes,
 		Stdout:         request.Stdout,
 		Stderr:         request.Stderr,
