@@ -8,14 +8,21 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"sync"
+	"time"
 	"unicode/utf16"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-const procThreadAttributeSecurityCapabilities = 0x00020009
+const (
+	procThreadAttributeSecurityCapabilities = 0x00020009
+	windowsProcessWaitPollInterval          = 25 * time.Millisecond
+	windowsJobTerminationGrace              = 2 * time.Second
+	windowsProcessTerminationGrace          = 1 * time.Second
+	windowsPipeDrainGrace                   = 1500 * time.Millisecond
+	windowsPipeCancelGrace                  = 500 * time.Millisecond
+)
 
 type sidAndAttributes struct {
 	SID        *windows.SID
@@ -134,12 +141,13 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 
 	stdoutCapture := newLaunchCapture(request.MaxOutputBytes, request.Stdout)
 	stderrCapture := newLaunchCapture(request.MaxOutputBytes, request.Stderr)
-	var copies sync.WaitGroup
-	copies.Add(2)
-	go copyWindowsPipe(&copies, pipes.stdoutRead, stdoutCapture)
+	stdoutCopy := startWindowsPipeCopy(pipes.stdoutRead, stdoutCapture)
 	pipes.stdoutRead = 0
-	go copyWindowsPipe(&copies, pipes.stderrRead, stderrCapture)
+	stderrCopy := startWindowsPipeCopy(pipes.stderrRead, stderrCapture)
 	pipes.stderrRead = 0
+	pipeCopies := []*windowsPipeCopy{stdoutCopy, stderrCopy}
+	copiesDone := windowsPipeCopiesDone(pipeCopies)
+	defer closeWindowsPipeCopies(pipeCopies)
 
 	startup := windows.StartupInfoEx{}
 	startup.StartupInfo.Cb = uint32(unsafe.Sizeof(startup))
@@ -171,7 +179,10 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 		pipes.stdoutWrite = 0
 		_ = windows.CloseHandle(pipes.stderrWrite)
 		pipes.stderrWrite = 0
-		copies.Wait()
+		pipeErr := waitWindowsPipeCopies(copiesDone, pipeCopies)
+		if pipeErr != nil {
+			return launchCaptureResult(false, -1, stdoutCapture, stderrCapture), fmt.Errorf("create AppContainer process: %w; %v", createErr, pipeErr)
+		}
 		return launchCaptureResult(false, -1, stdoutCapture, stderrCapture), fmt.Errorf("create AppContainer process: %w", createErr)
 	}
 	defer windows.CloseHandle(process.Thread)
@@ -183,43 +194,32 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 
 	if err := windows.AssignProcessToJobObject(job, process.Process); err != nil {
 		_ = windows.TerminateProcess(process.Process, 1)
-		copies.Wait()
+		_ = waitWindowsProcessHandle(process.Process, windowsProcessTerminationGrace)
+		pipeErr := waitWindowsPipeCopies(copiesDone, pipeCopies)
+		if pipeErr != nil {
+			return launchCaptureResult(true, -1, stdoutCapture, stderrCapture), fmt.Errorf("assign AppContainer process to job: %w; %v", err, pipeErr)
+		}
 		return launchCaptureResult(true, -1, stdoutCapture, stderrCapture), fmt.Errorf("assign AppContainer process to job: %w", err)
 	}
 	if _, err := windows.ResumeThread(process.Thread); err != nil {
 		_ = windows.TerminateJobObject(job, 1)
-		copies.Wait()
+		if waitErr := waitWindowsProcessHandle(process.Process, windowsJobTerminationGrace); waitErr != nil {
+			_ = windows.TerminateProcess(process.Process, 1)
+			_ = waitWindowsProcessHandle(process.Process, windowsProcessTerminationGrace)
+		}
+		pipeErr := waitWindowsPipeCopies(copiesDone, pipeCopies)
+		if pipeErr != nil {
+			return launchCaptureResult(true, -1, stdoutCapture, stderrCapture), fmt.Errorf("resume AppContainer process: %w; %v", err, pipeErr)
+		}
 		return launchCaptureResult(true, -1, stdoutCapture, stderrCapture), fmt.Errorf("resume AppContainer process: %w", err)
 	}
 
-	waitDone := make(chan error, 1)
-	go func() {
-		status, waitErr := windows.WaitForSingleObject(process.Process, windows.INFINITE)
-		if waitErr != nil {
-			waitDone <- waitErr
-			return
-		}
-		if status != windows.WAIT_OBJECT_0 {
-			waitDone <- fmt.Errorf("unexpected process wait status 0x%x", status)
-			return
-		}
-		waitDone <- nil
-	}()
+	contextErr, waitErr := waitWindowsProcessContext(ctx, process.Process, job)
 
-	var waitErr error
-	var contextErr error
-	select {
-	case waitErr = <-waitDone:
-	case <-ctx.Done():
-		contextErr = ctx.Err()
-		_ = windows.TerminateJobObject(job, 1)
-		waitErr = <-waitDone
-	}
-
-	// A verifier command owns its process tree. Once the root command exits,
-	// terminate any descendants that are still alive before collecting output.
-	_ = windows.TerminateJobObject(job, 0)
-	copies.Wait()
+	// A sandbox command owns its process tree. Once the root command exits (or
+	// cancellation starts), terminate descendants before draining stdout/stderr.
+	descendantErr := windows.TerminateJobObject(job, 0)
+	pipeErr := waitWindowsPipeCopies(copiesDone, pipeCopies)
 
 	var exitCode uint32
 	if err := windows.GetExitCodeProcess(process.Process, &exitCode); err != nil {
@@ -227,12 +227,116 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 	}
 	result := launchCaptureResult(true, int(exitCode), stdoutCapture, stderrCapture)
 	if contextErr != nil {
+		if waitErr != nil || descendantErr != nil || pipeErr != nil {
+			return result, fmt.Errorf("%w; sandbox cleanup: process_wait=%v descendant_kill=%v pipe_drain=%v", contextErr, waitErr, descendantErr, pipeErr)
+		}
 		return result, contextErr
 	}
 	if waitErr != nil {
 		return result, fmt.Errorf("wait for AppContainer process: %w", waitErr)
 	}
+	if descendantErr != nil {
+		return result, fmt.Errorf("terminate AppContainer descendants: %w", descendantErr)
+	}
+	if pipeErr != nil {
+		return result, pipeErr
+	}
 	return result, nil
+}
+
+func waitWindowsProcessContext(ctx context.Context, process, job windows.Handle) (contextErr error, waitErr error) {
+	for {
+		status, err := windows.WaitForSingleObject(process, uint32(windowsProcessWaitPollInterval/time.Millisecond))
+		if err != nil {
+			return nil, err
+		}
+		switch status {
+		case windows.WAIT_OBJECT_0:
+			return nil, nil
+		case windows.WAIT_TIMEOUT:
+		default:
+			return nil, fmt.Errorf("unexpected process wait status 0x%x", status)
+		}
+
+		select {
+		case <-ctx.Done():
+			contextErr = ctx.Err()
+			jobKillErr := windows.TerminateJobObject(job, 1)
+			jobWaitErr := waitWindowsProcessHandle(process, windowsJobTerminationGrace)
+			if jobWaitErr == nil {
+				if jobKillErr != nil {
+					return contextErr, fmt.Errorf("terminate AppContainer job after cancellation: %w", jobKillErr)
+				}
+				return contextErr, nil
+			}
+
+			processKillErr := windows.TerminateProcess(process, 1)
+			processWaitErr := waitWindowsProcessHandle(process, windowsProcessTerminationGrace)
+			if processWaitErr != nil {
+				return contextErr, fmt.Errorf(
+					"AppContainer process did not stop after cancellation: job_kill=%v job_wait=%v process_kill=%v process_wait=%v",
+					jobKillErr, jobWaitErr, processKillErr, processWaitErr,
+				)
+			}
+			if processKillErr != nil {
+				return contextErr, fmt.Errorf("force terminate AppContainer process after cancellation: %w", processKillErr)
+			}
+			return contextErr, nil
+		default:
+		}
+	}
+}
+
+func waitWindowsProcessHandle(process windows.Handle, timeout time.Duration) error {
+	milliseconds := uint32(timeout / time.Millisecond)
+	if milliseconds == 0 {
+		milliseconds = 1
+	}
+	status, err := windows.WaitForSingleObject(process, milliseconds)
+	if err != nil {
+		return err
+	}
+	switch status {
+	case windows.WAIT_OBJECT_0:
+		return nil
+	case windows.WAIT_TIMEOUT:
+		return fmt.Errorf("process did not stop within %s", timeout)
+	default:
+		return fmt.Errorf("unexpected process wait status 0x%x", status)
+	}
+}
+
+func waitWindowsPipeCopies(done <-chan struct{}, copies []*windowsPipeCopy) error {
+	return waitWindowsPipeCopiesWithGrace(done, copies, windowsPipeDrainGrace, windowsPipeCancelGrace)
+}
+
+func waitWindowsPipeCopiesWithGrace(done <-chan struct{}, copies []*windowsPipeCopy, drainGrace, cancelGrace time.Duration) error {
+	if waitWindowsDone(done, drainGrace) {
+		return nil
+	}
+	for _, copy := range copies {
+		if copy != nil {
+			// A child or descendant can keep an inherited stdout/stderr handle
+			// alive after the root process exits. Cancel the parent's pending
+			// pipe reads so output collection cannot stall Run completion.
+			copy.cancel()
+		}
+	}
+	if waitWindowsDone(done, cancelGrace) {
+		return nil
+	}
+	return fmt.Errorf("sandbox stdout/stderr did not drain within %s after process exit/cancellation", drainGrace+cancelGrace)
+}
+
+func waitWindowsDone(done <-chan struct{}, timeout time.Duration) bool {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 func windowsCapabilitySID(name string) (*windows.SID, error) {
@@ -290,15 +394,59 @@ func (p *windowsChildPipes) closeAll() {
 	}
 }
 
-func copyWindowsPipe(group *sync.WaitGroup, handle windows.Handle, target io.Writer) {
-	defer group.Done()
-	file := os.NewFile(uintptr(handle), "adm-sandbox-pipe")
-	if file == nil {
+type windowsPipeCopy struct {
+	file *os.File
+	done chan struct{}
+}
+
+func startWindowsPipeCopy(handle windows.Handle, target io.Writer) *windowsPipeCopy {
+	copy := &windowsPipeCopy{
+		file: os.NewFile(uintptr(handle), "adm-sandbox-pipe"),
+		done: make(chan struct{}),
+	}
+	if copy.file == nil {
 		_ = windows.CloseHandle(handle)
+		close(copy.done)
+		return copy
+	}
+	go func() {
+		defer close(copy.done)
+		_, _ = io.Copy(target, copy.file)
+	}()
+	return copy
+}
+
+func windowsPipeCopiesDone(copies []*windowsPipeCopy) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for _, copy := range copies {
+			if copy != nil {
+				<-copy.done
+			}
+		}
+	}()
+	return done
+}
+
+func closeWindowsPipeCopies(copies []*windowsPipeCopy) {
+	for _, copy := range copies {
+		if copy != nil && copy.file != nil {
+			_ = copy.file.Close()
+		}
+	}
+}
+
+func (c *windowsPipeCopy) cancel() {
+	if c == nil || c.file == nil {
 		return
 	}
-	defer file.Close()
-	_, _ = io.Copy(target, file)
+	select {
+	case <-c.done:
+		return
+	default:
+		_ = windows.CancelIoEx(windows.Handle(c.file.Fd()), nil)
+	}
 }
 
 func launchCaptureResult(started bool, exitCode int, stdout, stderr *launchCapture) LaunchResult {
