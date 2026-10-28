@@ -60,14 +60,14 @@ func TestCompactAgentSurfaceStaysUnderToolLimitAndDispatchesLegacyActions(t *tes
 		t.Fatalf("compact help did not preserve legacy schema metadata: %s", helpText)
 	}
 
-	gitStatus := callGatewayTool(t, ctx, agent, "adm_git", map[string]any{
-		"action": "status",
+	environmentInspect := callGatewayTool(t, ctx, agent, "adm_environment", map[string]any{
+		"action": "inspect",
 		"arguments": map[string]any{
 			"environment_id": environment.ID,
 		},
 	})
-	if gitStatus.IsError {
-		t.Fatalf("adm_git status failed: %s", toolText(t, gitStatus))
+	if environmentInspect.IsError || !strings.Contains(toolText(t, environmentInspect), environment.ID) {
+		t.Fatalf("adm_environment inspect failed: %s", toolText(t, environmentInspect))
 	}
 
 	read := callGatewayTool(t, ctx, agent, "adm_file", map[string]any{
