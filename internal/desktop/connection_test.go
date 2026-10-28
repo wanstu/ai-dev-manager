@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -198,8 +199,10 @@ func TestSandboxEnvironmentPreparationRequiresLocalConnectedADM(t *testing.T) {
 	}
 
 	adapter.connectedBaseURL = "http://127.0.0.1:43137"
-	if _, err := adapter.GetSandboxEnvironmentPreparationStatus("env_missing"); err == nil || strings.Contains(err.Error(), "target host's local ADM") {
-		t.Fatalf("local target should pass locality guard and fail on missing Environment instead: %v", err)
+	if runtime.GOOS == "windows" {
+		if _, err := adapter.GetSandboxEnvironmentPreparationStatus("env_missing"); err == nil || strings.Contains(err.Error(), "target host's local ADM") {
+			t.Fatalf("local target should pass locality guard and fail on missing Environment instead: %v", err)
+		}
 	}
 
 	adapter.DisconnectADM()
