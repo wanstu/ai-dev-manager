@@ -17,12 +17,19 @@ import (
 
 const procThreadAttributeSecurityCapabilities = 0x00020009
 
+type sidAndAttributes struct {
+	SID        *windows.SID
+	Attributes uint32
+}
+
 type securityCapabilities struct {
 	AppContainerSID *windows.SID
-	Capabilities    *windows.SIDAndAttributes
+	Capabilities    *sidAndAttributes
 	CapabilityCount uint32
 	Reserved        uint32
 }
+
+const seGroupEnabled = 0x00000004
 
 type windowsChildPipes struct {
 	stdinRead   windows.Handle
@@ -42,6 +49,21 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 	sidPinner.Pin(sid)
 	defer sidPinner.Unpin()
 
+	var capabilityPinner runtime.Pinner
+	defer capabilityPinner.Unpin()
+	capabilityEntries := make([]sidAndAttributes, 0, len(request.Capabilities))
+	for _, name := range request.Capabilities {
+		capabilitySID, capabilityErr := windowsCapabilitySID(name)
+		if capabilityErr != nil {
+			return LaunchResult{}, capabilityErr
+		}
+		capabilityPinner.Pin(capabilitySID)
+		capabilityEntries = append(capabilityEntries, sidAndAttributes{SID: capabilitySID, Attributes: seGroupEnabled})
+	}
+	if len(capabilityEntries) > 0 {
+		capabilityPinner.Pin(&capabilityEntries[0])
+	}
+
 	pipes, err := newWindowsChildPipes()
 	if err != nil {
 		return LaunchResult{}, err
@@ -55,6 +77,10 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 	defer attrs.Delete()
 
 	capabilities := securityCapabilities{AppContainerSID: sid}
+	if len(capabilityEntries) > 0 {
+		capabilities.Capabilities = &capabilityEntries[0]
+		capabilities.CapabilityCount = uint32(len(capabilityEntries))
+	}
 	if err := attrs.Update(
 		procThreadAttributeSecurityCapabilities,
 		unsafe.Pointer(&capabilities),
@@ -138,6 +164,7 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 		&process,
 	)
 	runtime.KeepAlive(handles)
+	runtime.KeepAlive(capabilityEntries)
 	runtime.KeepAlive(capabilities)
 	if createErr != nil {
 		_ = windows.CloseHandle(pipes.stdoutWrite)
@@ -206,6 +233,16 @@ func launchPlatform(ctx context.Context, request LaunchRequest) (LaunchResult, e
 		return result, fmt.Errorf("wait for AppContainer process: %w", waitErr)
 	}
 	return result, nil
+}
+
+func windowsCapabilitySID(name string) (*windows.SID, error) {
+	switch name {
+	case CapabilityInternetClient:
+		// SECURITY_CAPABILITY_INTERNET_CLIENT = S-1-15-3-1.
+		return windows.StringToSid("S-1-15-3-1")
+	default:
+		return nil, fmt.Errorf("unsupported Windows AppContainer capability %q", name)
+	}
 }
 
 func newWindowsChildPipes() (*windowsChildPipes, error) {
