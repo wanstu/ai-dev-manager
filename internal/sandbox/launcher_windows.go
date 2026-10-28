@@ -253,7 +253,7 @@ func waitWindowsProcessContext(ctx context.Context, process, job windows.Handle)
 		switch status {
 		case windows.WAIT_OBJECT_0:
 			return nil, nil
-		case windows.WAIT_TIMEOUT:
+		case uint32(windows.WAIT_TIMEOUT):
 		default:
 			return nil, fmt.Errorf("unexpected process wait status 0x%x", status)
 		}
@@ -299,7 +299,7 @@ func waitWindowsProcessHandle(process windows.Handle, timeout time.Duration) err
 	switch status {
 	case windows.WAIT_OBJECT_0:
 		return nil
-	case windows.WAIT_TIMEOUT:
+	case uint32(windows.WAIT_TIMEOUT):
 		return fmt.Errorf("process did not stop within %s", timeout)
 	default:
 		return fmt.Errorf("unexpected process wait status 0x%x", status)
