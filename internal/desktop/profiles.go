@@ -321,5 +321,6 @@ func (a *Adapter) DisconnectADM() {
 	if a != nil {
 		a.management = nil
 		a.runtime = nil
+		a.connectedBaseURL = ""
 	}
 }
