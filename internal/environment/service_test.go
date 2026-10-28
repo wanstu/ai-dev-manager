@@ -375,10 +375,13 @@ func TestRemoveEnvironmentProtectsActiveWriterAndNeverDeletesRoot(t *testing.T) 
 func TestRemoveEnvironmentHostCleanupMustSucceedBeforeStateDeletion(t *testing.T) {
 	service, envA, _, _ := newLeaseTestService(t)
 	calls := 0
-	service.SetBeforeRemove(func(environment model.Environment) error {
+	service.SetBeforeRemove(func(environment model.Environment, workspace model.Workspace) error {
 		calls++
 		if environment.ID != envA.ID {
 			t.Fatalf("cleanup environment=%s want %s", environment.ID, envA.ID)
+		}
+		if workspace.ID != envA.WorkspaceID {
+			t.Fatalf("cleanup workspace=%s want %s", workspace.ID, envA.WorkspaceID)
 		}
 		return fmt.Errorf("sandbox acl cleanup blocked")
 	})
@@ -393,7 +396,7 @@ func TestRemoveEnvironmentHostCleanupMustSucceedBeforeStateDeletion(t *testing.T
 		t.Fatalf("Environment record disappeared after failed host cleanup: %v", err)
 	}
 
-	service.SetBeforeRemove(func(model.Environment) error { return nil })
+	service.SetBeforeRemove(func(model.Environment, model.Workspace) error { return nil })
 	if _, err := service.Remove(envA.ID); err != nil {
 		t.Fatalf("Environment removal did not recover after host cleanup succeeded: %v", err)
 	}
