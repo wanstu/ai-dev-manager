@@ -2444,7 +2444,7 @@ func RunStdio(ctx context.Context, service *app.Service) error {
 	defer cancelOwner()
 	go owner.Reconcile(ownerCtx)
 	go owner.monitorExpiredTemporaryEnvironments(ownerCtx)
-	return newServer(service, owner).Run(ctx, &mcp.StdioTransport{})
+	return newCompactAgentServer(service, owner).Run(ctx, &mcp.StdioTransport{})
 }
 
 func NewHTTPHandler(service *app.Service) http.Handler {
@@ -2456,7 +2456,7 @@ func newHTTPHandler(service *app.Service, owner *runtimeOwner) http.Handler {
 }
 
 func newHTTPHandlerWithShutdown(service *app.Service, owner *runtimeOwner, shutdown func()) http.Handler {
-	agentServer := newServer(service, owner)
+	agentServer := newCompactAgentServer(service, owner)
 	adminServer := newServerForSurface(service, owner, serverSurfaceAdmin)
 	newSurfaceHandler := func(server *mcp.Server, surface serverSurface) http.Handler {
 		base := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
