@@ -5,6 +5,7 @@ package sandbox
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"golang.org/x/sys/windows"
 )
@@ -63,6 +64,26 @@ func cleanupEnvironmentAccessPlatform(status EnvironmentAccessStatus) (Environme
 		status.Prepared = false
 		status.HasAnyGrant = false
 		status.Message = "Environment has no persistent AppContainer profile or ACL grant"
+		return status, nil
+	}
+
+	if _, statErr := os.Stat(status.Root); statErr != nil {
+		if !os.IsNotExist(statErr) {
+			return status, fmt.Errorf("inspect Environment root before AppContainer cleanup: %w", statErr)
+		}
+		// Managed worktree cleanup may remove the directory before ADM metadata
+		// cleanup runs. The directory ACL disappears with the directory, so only
+		// the stable AppContainer profile remains to be removed.
+		if err := DeleteWindowsAppContainerProfile(status.ProfileName); err != nil {
+			return status, fmt.Errorf("delete Environment AppContainer profile after root removal: %w", err)
+		}
+		status.ProfilePresent = false
+		status.ProfileSID = ""
+		status.Prepared = false
+		status.HasAnyGrant = false
+		status.CanAutoPrepare = false
+		status.RequiresAdmin = false
+		status.Message = "Environment root was already removed; AppContainer profile was removed"
 		return status, nil
 	}
 
