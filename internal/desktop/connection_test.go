@@ -187,6 +187,27 @@ func TestDesktopBlocksIncompatibleGatewayManagementButAllowsForceStop(t *testing
 	}
 }
 
+func TestSandboxEnvironmentPreparationRequiresLocalConnectedADM(t *testing.T) {
+	adapter := NewAdapter(management.New(app.New(filepath.Join(t.TempDir(), "state.json"))))
+	adapter.connectedBaseURL = "https://adm.example.test:8443"
+	if _, err := adapter.GetSandboxEnvironmentPreparationStatus("env_remote"); err == nil || !strings.Contains(err.Error(), "target host's local ADM") {
+		t.Fatalf("remote Desktop connection unexpectedly allowed local sandbox ACL preparation: %v", err)
+	}
+	if _, err := adapter.EnableSandboxEnvironmentPreparation("env_remote"); err == nil || !strings.Contains(err.Error(), "target host's local ADM") {
+		t.Fatalf("remote Desktop connection unexpectedly allowed elevated local sandbox ACL preparation: %v", err)
+	}
+
+	adapter.connectedBaseURL = "http://127.0.0.1:43137"
+	if _, err := adapter.GetSandboxEnvironmentPreparationStatus("env_missing"); err == nil || strings.Contains(err.Error(), "target host's local ADM") {
+		t.Fatalf("local target should pass locality guard and fail on missing Environment instead: %v", err)
+	}
+
+	adapter.DisconnectADM()
+	if adapter.connectedBaseURL != "" {
+		t.Fatalf("DisconnectADM left connected Base URL %q", adapter.connectedBaseURL)
+	}
+}
+
 func TestDesktopTargetSemanticsMatchGatewayTarget(t *testing.T) {
 	for _, raw := range []string{
 		"http://127.0.0.1:43137/",
