@@ -68,11 +68,15 @@ func (s *Service) RunPreparedVerifierSandbox(
 	if goRoot := verifierSandboxGoRoot(baseEnvironment, prepared.ExecutablePath); goRoot != "" {
 		extraEnvironment["GOROOT"] = goRoot
 		extraEnvironment["GOTELEMETRY"] = "off"
+		extraEnvironment["GOTOOLCHAIN"] = "local"
 	}
 
 	result, err := sandbox.Execute(ctx, sandbox.ExecutionRequest{
-		Scope:            prepared.Environment.ID + ":" + executionID,
+		// Verifiers share the same stable per-Environment AppContainer identity
+		// as direct Agent exec; only the runtime directory is per execution.
+		Scope:            prepared.Environment.ID,
 		RuntimeRoot:      filepath.Join(s.SandboxRoot, prepared.Environment.ID, executionID),
+		CacheRoot:        filepath.Join(s.SandboxRoot, prepared.Environment.ID, "cache"),
 		WorktreeRoot:     prepared.Environment.Root,
 		Executable:       prepared.ExecutablePath,
 		Args:             append([]string(nil), prepared.Definition.Args...),
@@ -80,6 +84,7 @@ func (s *Service) RunPreparedVerifierSandbox(
 		BaseEnvironment:  baseEnvironment,
 		ExtraEnvironment: extraEnvironment,
 		ToolRoots:        verifierSandboxToolRoots(baseEnvironment, prepared.ExecutablePath),
+		Capabilities:     sandboxCapabilitiesForCommand(prepared.ExecutablePath, prepared.Definition.Args),
 		MaxOutputBytes:   normalizeVerifierOutputLimit(maxOutputBytes),
 		Stdout:           stdout,
 		Stderr:           stderr,
@@ -158,6 +163,14 @@ func normalizeVerifierOutputLimit(value int) int {
 		return 4 * 1024 * 1024
 	}
 	return value
+}
+
+func sandboxCapabilitiesForCommand(executable string, args []string) []string {
+	name := strings.ToLower(strings.TrimSuffix(filepath.Base(strings.TrimSpace(executable)), filepath.Ext(executable)))
+	if name == "go" && len(args) >= 2 && args[0] == "mod" && args[1] == "download" {
+		return []string{sandbox.CapabilityInternetClient}
+	}
+	return nil
 }
 
 func verifierSandboxToolRoots(environment []string, executable string) []string {
