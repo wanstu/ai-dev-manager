@@ -1181,22 +1181,16 @@ func TestHTTPGatewayPersistsContextAcrossProcessRestart(t *testing.T) {
 	second := startGateway()
 	secondSession := connectHTTPWithRetry(t, ctx, agentEndpoint)
 	defer secondSession.Close()
-	inspected, err := secondSession.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "environment_inspect",
-		Arguments: map[string]any{"environment_id": environmentID},
-	})
-	if err != nil || inspected.IsError || !strings.Contains(toolText(t, inspected), environmentID) {
-		t.Fatalf("environment_inspect after restart failed: err=%v result=%+v", err, inspected)
+	inspected := callGatewayTool(t, ctx, secondSession, "environment_inspect", map[string]any{"environment_id": environmentID})
+	if inspected.IsError || !strings.Contains(toolText(t, inspected), environmentID) {
+		t.Fatalf("environment_inspect after restart failed: result=%+v", inspected)
 	}
-	memoryResult, err := secondSession.CallTool(ctx, &mcp.CallToolParams{
-		Name: "memory_environment_read",
-		Arguments: map[string]any{
-			"environment_id": environmentID,
-			"key":            "restart-check",
-		},
+	memoryResult := callGatewayTool(t, ctx, secondSession, "memory_environment_read", map[string]any{
+		"environment_id": environmentID,
+		"key":            "restart-check",
 	})
-	if err != nil || memoryResult.IsError || !strings.Contains(toolText(t, memoryResult), "persisted") {
-		t.Fatalf("Environment-private Memory after restart failed: err=%v result=%+v", err, memoryResult)
+	if memoryResult.IsError || !strings.Contains(toolText(t, memoryResult), "persisted") {
+		t.Fatalf("Environment-private Memory after restart failed: result=%+v", memoryResult)
 	}
 	_ = secondSession.Close()
 	stopGateway(second)
@@ -1256,23 +1250,33 @@ func TestHTTPGatewaySeparatesAgentAndAdminMCPPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentNames := toolNames(agentTools.Tools)
-	for _, required := range []string{"gateway_info", "environment_inspect", "environment_injection_plan", "environment_writer_acquire", "read", "compare_files", "project_analyze", "code_intelligence_info", "code_intelligence_query", "code_intelligence_status", "code_intelligence_references", "code_intelligence_hierarchy", "project_index_query", "project_investigate_php", "project_call_graph", "project_index_status", "write", "environment_mcp_tools", "environment_skill_read"} {
+	if len(agentNames) > compactAgentToolLimit {
+		t.Fatalf("compact Agent MCP exposes %d tools; limit=%d tools=%v", len(agentNames), compactAgentToolLimit, agentNames)
+	}
+	for _, required := range []string{
+		"adm_help", "adm_gateway", "adm_environment", "adm_writer", "adm_file",
+		"adm_project", "adm_code", "adm_mcp", "adm_skill", "adm_verifier",
+	} {
 		if !contains(agentNames, required) {
-			t.Fatalf("Agent MCP missing %q: %v", required, agentNames)
+			t.Fatalf("compact Agent MCP missing %q: %v", required, agentNames)
 		}
 	}
-	for _, permissionGated := range []string{"global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read", "exec", "process_start", "run_start", "project_index_auto_set", "host_directory_list", "environment_worktree_create", "environment_worktree_destroy", "environment_worktree_cleanup_stale", "environment_worktree_migrate_temporary", "environment_temporary_promote", "environment_temporary_cleanup", "environment_verifier_agent_host_execution_set", "management_snapshot", "worktree_settings_get", "worktree_settings_set", "host_environment_status", "host_environment_refresh", "workspace_add", "environment_create", "environment_workspace_options", "environment_workspace_recommendations", "environment_workspace_set", "environment_verifier_add", "environment_verifier_remove", "exec_allow", "exec_block", "gateway_access_policy_set", "secret_list", "secret_set", "secret_delete", "mcp_add", "mcp_import_apply", "environment_mcp_set", "skill_source_add", "skill_source_update", "skill_availability_list", "environment_skill_set", "resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote", "memory_global_write", "memory_global_delete", "strong_permission_control_set"} {
-		if !contains(agentNames, permissionGated) {
-			t.Fatalf("permission-gated tool %q must remain visible in Agent MCP: %v", permissionGated, agentNames)
+	for _, legacy := range []string{"gateway_info", "environment_inspect", "environment_writer_acquire", "read", "gateway_diagnostics"} {
+		if contains(agentNames, legacy) {
+			t.Fatalf("legacy Agent tool %q leaked into compact MCP: %v", legacy, agentNames)
 		}
+	}
+	help := callGatewayTool(t, ctx, agentSession, "adm_help", map[string]any{"group": "gateway", "action": "diagnostics"})
+	if help.IsError || !strings.Contains(toolText(t, help), `"permission":"admin_only"`) || !strings.Contains(toolText(t, help), `"legacy_name":"gateway_diagnostics"`) {
+		t.Fatalf("compact help did not preserve Admin-only discoverability: %s", toolText(t, help))
 	}
 	deniedAdminTool := callGatewayTool(t, ctx, agentSession, "gateway_diagnostics", map[string]any{})
 	if !deniedAdminTool.IsError || !strings.Contains(toolText(t, deniedAdminTool), "requires the Admin surface") {
 		t.Fatalf("Agent permission denial must explain Admin requirement: %s", toolText(t, deniedAdminTool))
 	}
-	agentInfo, err := agentSession.CallTool(ctx, &mcp.CallToolParams{Name: "gateway_info", Arguments: map[string]any{}})
-	if err != nil || agentInfo.IsError || !strings.Contains(toolText(t, agentInfo), "agent") {
-		t.Fatalf("Agent gateway_info failed: err=%v result=%+v", err, agentInfo)
+	agentInfo := callGatewayTool(t, ctx, agentSession, "gateway_info", map[string]any{})
+	if agentInfo.IsError || !strings.Contains(toolText(t, agentInfo), "agent") {
+		t.Fatalf("Agent gateway_info failed: result=%+v", agentInfo)
 	}
 
 	adminSession := connect("/admin/mcp", "adm-v2-admin-http-test")
