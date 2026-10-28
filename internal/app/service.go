@@ -84,6 +84,7 @@ func New(statePath string) *Service {
 		indexStore:              newProjectIndexStore(statePath),
 		writerHeartbeatInterval: defaultWriterHeartbeatInterval,
 	}
+	environments.SetBeforeRemove(result.CleanupEnvironmentSandboxAccess)
 	environments.SetOnRemoved(result.CleanupProjectIndex)
 	return result
 }
