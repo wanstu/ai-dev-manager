@@ -219,7 +219,7 @@ func execCapabilityFacts(
 	}
 	sandboxEnvironment := sandbox.EnvironmentAccessStatus{}
 	if strongPermissionEnabled && sandboxAvailable && rootErr == nil {
-		sandboxEnvironment = sandbox.InspectEnvironmentAccess(env.ID, env.Root)
+		sandboxEnvironment = sandbox.InspectEnvironmentWorkspaceAccess(env.ID, ws.Path, env.Root)
 	}
 	evidence := []model.CapabilityEvidence{environmentEvidence(env, ws), writerEvidence(env), {
 		Kind: capabilityKindExec,
