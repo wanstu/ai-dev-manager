@@ -292,6 +292,9 @@ func (o *runtimeOwner) completeAgentRun(run *ownedAgentRun, result runtimepkg.Co
 		}
 		if run.message == "" {
 			run.message = fmt.Sprintf("command timed out after %dms", run.timeoutMS)
+			if err != nil && err.Error() != context.DeadlineExceeded.Error() {
+				run.message += ": " + err.Error()
+			}
 		}
 	case err != nil:
 		var exitErr *exec.ExitError
