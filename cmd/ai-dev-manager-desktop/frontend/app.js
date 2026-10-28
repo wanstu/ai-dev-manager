@@ -1439,19 +1439,29 @@ function renderSandboxHostPreparation(status) {
   const supported = Boolean(status?.supported);
   const prepared = Boolean(status?.null_device_prepared);
   const bootTask = Boolean(status?.boot_task_installed);
-  const ready = supported && prepared && bootTask;
-  elements.sandboxHostPreparationBadge.dataset.state = ready ? 'available' : (supported ? 'degraded' : 'unconfigured');
-  elements.sandboxHostPreparationBadge.textContent = ready ? '已启用' : (supported ? (prepared ? '当前已生效 · 待完成开机恢复' : '未启用') : '不适用');
-  elements.sandboxHostPreparationEnable.hidden = !supported || ready;
-  elements.sandboxHostPreparationEnable.textContent = prepared ? '完成开机自动恢复' : '启用强沙盒';
-  elements.sandboxHostPreparationEnable.disabled = !supported || ready;
+  const bootTaskVerified = Boolean(status?.boot_task_verified);
+  const configured = supported && prepared && bootTask;
+  const verified = configured && bootTaskVerified;
+  elements.sandboxHostPreparationBadge.dataset.state = verified ? 'available' : (supported ? 'degraded' : 'unconfigured');
+  elements.sandboxHostPreparationBadge.textContent = verified
+    ? '已启用'
+    : (configured ? '当前可用 · 开机恢复未验证' : (supported ? (prepared ? '当前已生效 · 待完成开机恢复' : '未启用') : '不适用'));
+  elements.sandboxHostPreparationEnable.hidden = !supported || verified;
+  elements.sandboxHostPreparationEnable.textContent = configured && !verified
+    ? '重新安装并验证开机恢复'
+    : (prepared ? '完成开机自动恢复' : '启用强沙盒');
+  elements.sandboxHostPreparationEnable.disabled = !supported || verified;
   elements.sandboxHostPreparationRefresh.disabled = false;
   if (!supported) {
     elements.sandboxHostPreparationSummary.textContent = status?.message || '当前平台不需要 Windows 强沙盒。';
     return;
   }
-  if (ready) {
+  if (verified) {
     elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒已启用：当前可以安全运行受控的构建、测试等进程，重启电脑后也会自动恢复。';
+    return;
+  }
+  if (configured) {
+    elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒当前可用，但开机恢复任务未能被当前进程验证。';
     return;
   }
   if (prepared) {
@@ -3627,6 +3637,58 @@ function renderDiagnosticsPage() {
   elements.diagnosticsPageContent.replaceChildren(...environmentDiagnosticGroups(managementInspection));
   elements.diagnosticsPageContent.classList.remove('empty');
 }
+async function prepareEnvironmentSandboxAccess(environmentID) {
+  environmentID = String(environmentID || '').trim();
+  if (!environmentID || window.ADMWebSurface) return;
+  if (!window.confirm(
+    '这个 Environment 的强沙盒需要一次管理员 ACL 准备。\n\n' +
+    'ADM 只会把当前 Environment ID 传给提权子进程；子进程会从本机 ADM 状态重新解析项目路径，不接受任意路径。\n\n' +
+    'Windows UAC 可能被 360 等安全软件接管。ADM 不以弹窗是否出现作为成功依据，只验证最终 ACL 是否真的生效。继续？'
+  )) return;
+
+  const token = detailGeneration;
+  const connection = connectionGeneration;
+  setStatus('正在准备 Environment 强沙盒 ACL…', 'loading');
+  try {
+    const status = await desktopAdapter().EnableSandboxEnvironmentPreparation(environmentID);
+    if (!status?.prepared) throw new Error(status?.message || 'Environment 强沙盒 ACL 未通过最终验证');
+    if (connection !== connectionGeneration) return;
+    const inspection = await desktopAdapter().InspectEnvironment(environmentID);
+    if (connection !== connectionGeneration) return;
+    if (managementEnvironmentID === environmentID) {
+      managementInspection = inspection;
+      managementCapabilityFacts = capabilityMap(inspection?.capability_report);
+      renderDiagnosticsPage();
+    }
+    if (token === detailGeneration && selectedEnvironmentID === environmentID) {
+      renderEnvironmentDetailFromInspection(inspection, token);
+    }
+    setStatus('Environment 强沙盒 ACL 已准备并验证', 'success');
+  } catch (error) {
+    if (connection === connectionGeneration) setStatus('Environment 强沙盒 ACL 准备失败：' + errorText(error), 'error');
+  }
+}
+
+async function removeEnvironmentRecord(environmentID) {
+  environmentID = String(environmentID || '').trim();
+  if (!environmentID) return;
+  try {
+    return await desktopAdapter().RemoveEnvironment(environmentID);
+  } catch (error) {
+    const message = errorText(error);
+    if (window.ADMWebSurface || !message.includes('host cleanup failed')) throw error;
+    try {
+      const cleanup = await desktopAdapter().CleanupSandboxEnvironmentPreparation(environmentID);
+      if (cleanup?.profile_present || cleanup?.has_any_grant) {
+        throw new Error(cleanup?.message || 'Environment 强沙盒 ACL 未完全清理');
+      }
+    } catch (cleanupError) {
+      throw new Error(message + '；本机强沙盒权限清理失败：' + errorText(cleanupError));
+    }
+    return desktopAdapter().RemoveEnvironment(environmentID);
+  }
+}
+
 async function forceReleaseEnvironmentWriter(environmentID) {
   environmentID = String(environmentID || '').trim();
   if (!environmentID) return;
@@ -3687,6 +3749,17 @@ function renderEnvironmentDetailFromInspection(inspection, token = detailGenerat
     writerRow,
     detailRow('Private Memory count', safeNumber(environment.private_memory_count) + ' entries'),
   ];
+  const execFact = facts.get('shell.exec');
+  if (!window.ADMWebSurface && execFact?.reason_code === 'sandbox_environment_acl_requires_admin') {
+    const button = createActionButton('准备强沙盒权限', 'prepare-sandbox-environment', environment.environment_id);
+    button.title = '为当前 Environment 的稳定 AppContainer SID 做一次管理员 ACL 准备；不会开放任意路径提权';
+    button.addEventListener('click', () => prepareEnvironmentSandboxAccess(environment.environment_id));
+    authorityRows.push(detailActionRow(
+      'Strong sandbox ACL',
+      execFact.message || '需要一次管理员 ACL 准备',
+      button
+    ));
+  }
   const unresolvedRows = [
     detailRow('MCP IDs', safeArray(inspection?.unresolved_mcp_ids).join(', ') || 'None'),
     detailRow('Skill IDs', safeArray(inspection?.unresolved_skill_ids).join(', ') || 'None'),
@@ -4595,7 +4668,7 @@ elements.environmentList.addEventListener('click', async (event) => {
   if (button.dataset.action === 'execute-temporary-environment-cleanup') { await executeTemporaryEnvironmentCleanup(environment); return; }
   if (button.dataset.action === 'workspace-environment') { if (environment) await openEnvironmentWorkspaceDialog(environment); return; }
   if (button.dataset.action === 'rename-environment') { openRenameDialog('Environment', environment?.name || '', (name) => desktopAdapter().RenameEnvironment(id, name)); }
-  if (button.dataset.action === 'remove-environment' && window.confirm('只移除 ADM Environment 记录，不删除 root 或项目文件。继续？\n' + (environment?.root || id))) await runMutation('移除 Environment', () => desktopAdapter().RemoveEnvironment(id));
+  if (button.dataset.action === 'remove-environment' && window.confirm('只移除 ADM Environment 记录，不删除 root 或项目文件。继续？\n' + (environment?.root || id))) await runMutation('移除 Environment', () => removeEnvironmentRecord(id));
 });
 elements.execList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="remove-executable"]'); if (button) await runMutation('移除 executable', () => desktopAdapter().RemoveExecutable(button.dataset.id)); });
 elements.execBlacklistList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="unblock-executable"]'); if (button) await runMutation('移出命令黑名单', () => desktopAdapter().UnblockExecutable(button.dataset.id)); });
