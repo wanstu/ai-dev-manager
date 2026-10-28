@@ -33,8 +33,8 @@ func TestGatewayDiagnosticsToolIsAdminOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !contains(toolNames(agentTools.Tools), "gateway_diagnostics") {
-		t.Fatal("gateway_diagnostics must remain discoverable in Agent MCP")
+	if !contains(toolNames(agentTools.Tools), "adm_gateway") {
+		t.Fatal("compact Agent MCP missing adm_gateway")
 	}
 	denied := callGatewayTool(t, ctx, agent, "gateway_diagnostics", map[string]any{})
 	if !denied.IsError || !strings.Contains(toolText(t, denied), "requires the Admin surface") {
