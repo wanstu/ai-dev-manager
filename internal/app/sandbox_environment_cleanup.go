@@ -14,7 +14,11 @@ func (s *Service) EnsureEnvironmentSandboxAccess(environment model.Environment) 
 	if strings.TrimSpace(s.SandboxRoot) == "" {
 		return fmt.Errorf("sandbox runtime root is not configured")
 	}
-	status, err := sandbox.PrepareEnvironmentAccess(environment.ID, environment.Root)
+	workspace, err := s.Workspaces.Get(environment.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	status, err := sandbox.PrepareEnvironmentWorkspaceAccess(environment.ID, workspace.Path, environment.Root)
 	if err != nil {
 		return err
 	}
@@ -58,9 +62,13 @@ func (s *Service) CleanupEnvironmentSandboxAccess(environment model.Environment)
 		}
 	}
 
-	status := sandbox.InspectEnvironmentAccess(environment.ID, environment.Root)
+	workspace, err := s.Workspaces.Get(environment.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	status := sandbox.InspectEnvironmentWorkspaceAccess(environment.ID, workspace.Path, environment.Root)
 	if status.ProfilePresent || status.HasAnyGrant {
-		cleaned, err := sandbox.CleanupEnvironmentAccess(environment.ID, environment.Root)
+		cleaned, err := sandbox.CleanupEnvironmentWorkspaceAccess(environment.ID, workspace.Path, environment.Root)
 		if err != nil {
 			return err
 		}
