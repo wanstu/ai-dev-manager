@@ -11,22 +11,49 @@ import (
 )
 
 const (
-	errorAlreadyExists            = 183
-	errorNotFound                 = 1168
-	hresultWin32Base       uint32 = 0x80070000
+	errorAlreadyExists        = 183
+	errorNotFound             = 1168
+	hresultWin32Base   uint32 = 0x80070000
 )
 
 var (
-	userenvDLL                         = windows.NewLazySystemDLL("userenv.dll")
-	procCreateAppContainerProfile      = userenvDLL.NewProc("CreateAppContainerProfile")
-	procDeriveAppContainerSIDFromName  = userenvDLL.NewProc("DeriveAppContainerSidFromAppContainerName")
-	procDeleteAppContainerProfile      = userenvDLL.NewProc("DeleteAppContainerProfile")
+	userenvDLL                        = windows.NewLazySystemDLL("userenv.dll")
+	procCreateAppContainerProfile     = userenvDLL.NewProc("CreateAppContainerProfile")
+	procDeriveAppContainerSIDFromName = userenvDLL.NewProc("DeriveAppContainerSidFromAppContainerName")
+	procDeleteAppContainerProfile     = userenvDLL.NewProc("DeleteAppContainerProfile")
 )
 
 func WindowsAppContainerAvailable() bool {
 	return procCreateAppContainerProfile.Find() == nil &&
 		procDeriveAppContainerSIDFromName.Find() == nil &&
 		procDeleteAppContainerProfile.Find() == nil
+}
+
+func DeriveWindowsAppContainerProfile(name string) (AppContainerProfile, error) {
+	if !WindowsAppContainerAvailable() {
+		return AppContainerProfile{}, fmt.Errorf("Windows AppContainer APIs are unavailable")
+	}
+	namePtr, err := windows.UTF16PtrFromString(name)
+	if err != nil {
+		return AppContainerProfile{}, err
+	}
+	var sid *windows.SID
+	result, _, callErr := procDeriveAppContainerSIDFromName.Call(
+		uintptr(unsafe.Pointer(namePtr)),
+		uintptr(unsafe.Pointer(&sid)),
+	)
+	hr := uint32(result)
+	if hresultFailed(hr) {
+		if callErr != nil && callErr != syscall.Errno(0) {
+			return AppContainerProfile{}, fmt.Errorf("DeriveAppContainerSidFromAppContainerName failed: HRESULT 0x%08x: %w", hr, callErr)
+		}
+		return AppContainerProfile{}, fmt.Errorf("DeriveAppContainerSidFromAppContainerName failed: HRESULT 0x%08x", hr)
+	}
+	if sid == nil {
+		return AppContainerProfile{}, fmt.Errorf("AppContainer profile returned an empty SID")
+	}
+	defer windows.FreeSid(sid)
+	return AppContainerProfile{Name: name, SID: sid.String()}, nil
 }
 
 func EnsureWindowsAppContainerProfile(name string) (AppContainerProfile, bool, error) {
