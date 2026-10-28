@@ -25,7 +25,7 @@ import (
 const (
 	serverName             = "adm"
 	runtimeOwnerHeader     = "X-ADM-Runtime-Owner"
-	gatewayToolsetRevision = "2026-10-22.1"
+	gatewayToolsetRevision = "2026-10-28.2"
 )
 
 var serverVersion = productversion.Current()
