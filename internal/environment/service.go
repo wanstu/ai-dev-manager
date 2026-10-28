@@ -45,7 +45,7 @@ type Service struct {
 	now                  func() time.Time
 	writerLeaseTTL       time.Duration
 	writerObservationDir string
-	beforeRemove         func(model.Environment) error
+	beforeRemove         func(model.Environment, model.Workspace) error
 	onRemoved            func(string) error
 }
 
@@ -62,7 +62,9 @@ func New(s *store.Store, workspaces *workspace.Service) *Service {
 // SetBeforeRemove registers host-side cleanup that must succeed before an
 // Environment record is removed. The callback must not call back into the
 // Environment/store service because it runs inside the state update lock.
-func (s *Service) SetBeforeRemove(fn func(model.Environment) error) { s.beforeRemove = fn }
+func (s *Service) SetBeforeRemove(fn func(model.Environment, model.Workspace) error) {
+	s.beforeRemove = fn
+}
 
 // SetOnRemoved registers ADM-owned metadata cleanup after a successful
 // Environment deletion. It is configured once during application setup.
@@ -438,7 +440,11 @@ func (s *Service) Remove(id string) (model.Environment, error) {
 			return fmt.Errorf("environment %s cannot be removed while an active writer lease exists", target.ID)
 		}
 		if s.beforeRemove != nil {
-			if cleanupErr := s.beforeRemove(target); cleanupErr != nil {
+			workspace, workspaceErr := workspaceForState(state, target.WorkspaceID)
+			if workspaceErr != nil {
+				return workspaceErr
+			}
+			if cleanupErr := s.beforeRemove(target, workspace); cleanupErr != nil {
 				return fmt.Errorf("environment %s host cleanup failed: %w", target.ID, cleanupErr)
 			}
 		}
@@ -476,7 +482,11 @@ func (s *Service) RemoveManaged(id string) (model.Environment, model.ManagedWork
 			return fmt.Errorf("environment %s cannot be removed while state is %q", target.ID, target.State)
 		}
 		if s.beforeRemove != nil {
-			if cleanupErr := s.beforeRemove(target); cleanupErr != nil {
+			workspace, workspaceErr := workspaceForState(state, target.WorkspaceID)
+			if workspaceErr != nil {
+				return workspaceErr
+			}
+			if cleanupErr := s.beforeRemove(target, workspace); cleanupErr != nil {
 				return fmt.Errorf("environment %s host cleanup failed: %w", target.ID, cleanupErr)
 			}
 		}
@@ -893,6 +903,15 @@ func cloneVerifierDefinitions(values []model.VerifierDefinition) []model.Verifie
 		result[i].Args = append([]string(nil), values[i].Args...)
 	}
 	return result
+}
+
+func workspaceForState(state *model.State, id string) (model.Workspace, error) {
+	for _, workspace := range state.Workspaces {
+		if workspace.ID == id {
+			return workspace, nil
+		}
+	}
+	return model.Workspace{}, fmt.Errorf("workspace %q not found", id)
 }
 
 func findEnvironment(values []model.Environment, id string) int {
