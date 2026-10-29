@@ -21,8 +21,8 @@ func TestCreateTemporaryEnvironmentAgentCannotExpandWorkspaceAuthority(t *testin
 		Name:        "agent-existing-root",
 		OwnerID:     "agent-owner",
 		TTLSeconds:  60,
-	}); err == nil || !strings.Contains(err.Error(), "managed_worktree mode with source_environment_id") {
-		t.Fatalf("Agent existing_root authority was not rejected: %v", err)
+	}); err == nil || !strings.Contains(err.Error(), "source_environment_id") || !strings.Contains(err.Error(), "does not require Admin") {
+		t.Fatalf("Agent existing_root authority was not rejected with recovery guidance: %v", err)
 	}
 
 	if _, err := service.CreateTemporaryEnvironment(context.Background(), "agent", model.TemporaryEnvironmentCreateRequest{

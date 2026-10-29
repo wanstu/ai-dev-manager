@@ -93,8 +93,12 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		if strings.Contains(strings.ToLower(string(encodedCleanup)), `"force"`) {
 			t.Fatalf("%s temporary cleanup unexpectedly exposes force: %s", surface, encodedCleanup)
 		}
-		if !strings.Contains(strings.ToLower(byName["environment_temporary_create"].Description), "provenance") || !strings.Contains(strings.ToLower(byName["environment_temporary_create"].Description), "not adm task orchestration") {
+		description := strings.ToLower(byName["environment_temporary_create"].Description)
+		if !strings.Contains(description, "provenance") || !strings.Contains(description, "not adm task orchestration") {
 			t.Fatalf("%s temporary create description lost provenance boundary: %q", surface, byName["environment_temporary_create"].Description)
+		}
+		if !strings.Contains(description, "dirty source checkout") || !strings.Contains(description, "migration denial does not mean admin") {
+			t.Fatalf("%s temporary create description lost Agent recovery guidance: %q", surface, byName["environment_temporary_create"].Description)
 		}
 		if byName["environment_create"] == nil {
 			t.Fatalf("%s surface must keep generic durable environment_create discoverable", surface)

@@ -55,7 +55,7 @@ func (s *Service) CreateTemporaryEnvironment(ctx context.Context, creatorSurface
 			request.SourceEnvironmentID == "" ||
 			request.WorkspaceID != "" ||
 			request.Root != "" {
-			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("Agent temporary Environment creation requires managed_worktree mode with source_environment_id; existing_root and workspace-derived authority are Admin-only")
+			return model.TemporaryEnvironmentCreateResult{}, fmt.Errorf("Agent temporary Environment creation requires mode=managed_worktree with source_environment_id. workspace_id/existing_root are Admin-only, but managed worktree creation itself does not require Admin: select the existing source Environment and retry with source_environment_id. A dirty source checkout is allowed; uncommitted changes are not migrated automatically")
 		}
 	}
 
