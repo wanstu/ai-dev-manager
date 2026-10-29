@@ -1068,6 +1068,7 @@ func agentSafeGitCommand(ctx context.Context, git, dir string, args ...string) *
 	fullArgs := []string{
 		"--no-pager",
 		"-c", "core.fsmonitor=false",
+		"-c", "safe.directory=" + filepath.ToSlash(dir),
 		"-c", "core.attributesFile=" + os.DevNull,
 		"-c", "core.excludesFile=" + os.DevNull,
 		"-c", "core.hooksPath=" + os.DevNull,
