@@ -283,8 +283,44 @@ func TestAgentManagedWorktreeRejectsMigrationAndFilterCheckout(t *testing.T) {
 		"branch_name":                 "test/agent-safe-migrate",
 		"migrate_uncommitted_changes": true,
 	})
-	if !migration.IsError || !strings.Contains(toolText(t, migration), "does not migrate uncommitted changes") {
-		t.Fatalf("Agent-safe worktree migration was not rejected: %s", toolText(t, migration))
+	migrationText := toolText(t, migration)
+	if !migration.IsError ||
+		!strings.Contains(migrationText, "does not migrate uncommitted changes") ||
+		!strings.Contains(migrationText, "migrate_uncommitted_changes=false") ||
+		!strings.Contains(migrationText, "Admin is not required") {
+		t.Fatalf("Agent-safe worktree migration was not rejected with recovery guidance: %s", migrationText)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "local-only.txt"), []byte("dirty source must remain untouched\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dirtySource := callGatewayTool(t, ctx, agent, "environment_temporary_create", map[string]any{
+		"source_environment_id":       source.ID,
+		"name":                        "agent-safe-dirty-source",
+		"owner_id":                    "agent-safe-owner",
+		"ttl_seconds":                 3600,
+		"mode":                        model.TemporaryEnvironmentModeManagedWorktree,
+		"branch_name":                 "test/agent-safe-dirty-source",
+		"migrate_uncommitted_changes": false,
+	})
+	if dirtySource.IsError {
+		t.Fatalf("Agent-safe clean worktree from dirty source failed: %s", toolText(t, dirtySource))
+	}
+	items, err := service.ManagedWorktrees()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("managed worktrees after dirty-source create=%+v", items)
+	}
+	if _, err := service.Environments.AcquireWriter(items[0].EnvironmentID, "agent-safe-dirty-cleanup"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Isolation.Destroy(ctx, items[0].EnvironmentID, "agent-safe-dirty-cleanup", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "local-only.txt")); err != nil {
+		t.Fatalf("dirty source file was modified or removed: %v", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.txt filter=unsafe\n"), 0o644); err != nil {

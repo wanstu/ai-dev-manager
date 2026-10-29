@@ -1077,11 +1077,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(env, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. This is the preferred Agent path for task isolation. Agent callers may only derive managed_worktree mode from an explicit source_environment_id; existing_root and workspace-derived authority remain administrative. Only administrators can promote a temporary Environment to durable. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_temporary_create", Description: "Create one fresh temporary Environment with explicit lifecycle owner and positive TTL. This is the preferred Agent path for task isolation. Agent callers should derive managed_worktree mode from an explicit source_environment_id, never workspace_id. A dirty source checkout is allowed; use migrate_uncommitted_changes=false and reapply only needed changes inside the new Environment. workspace_id/existing_root authority remain administrative, but a migration denial does not mean Admin is required to create the managed worktree. Only administrators can promote a temporary Environment to durable. owner_id/session_id/run_id are retention provenance only, not ADM task orchestration."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in TemporaryEnvironmentCreateInput) (*mcp.CallToolResult, any, error) {
 			if surface == serverSurfaceAgent {
 				if strings.TrimSpace(in.Mode) != model.TemporaryEnvironmentModeManagedWorktree || strings.TrimSpace(in.SourceEnvironmentID) == "" || strings.TrimSpace(in.WorkspaceID) != "" || strings.TrimSpace(in.Root) != "" {
-					return toolResult(nil, fmt.Errorf("Agent temporary Environment creation requires managed_worktree mode with source_environment_id; existing_root and workspace-derived authority are Admin-only"))
+					return toolResult(nil, fmt.Errorf("Agent temporary Environment creation requires mode=managed_worktree with source_environment_id. workspace_id/existing_root are Admin-only, but managed worktree creation itself does not require Admin: select the existing source Environment and retry with source_environment_id. A dirty source checkout is allowed; uncommitted changes are not migrated automatically"))
 				}
 			}
 			value, err := service.CreateTemporaryEnvironment(ctx, string(surface), model.TemporaryEnvironmentCreateRequest{

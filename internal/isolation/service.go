@@ -169,7 +169,7 @@ func (s *Service) createWithRetention(ctx context.Context, workspaceID, sourceEn
 		return CreateResult{}, fmt.Errorf("Agent-safe worktree creation requires source_environment_id")
 	}
 	if options.AgentSafe && options.MigrateUncommittedChanges {
-		return CreateResult{}, fmt.Errorf("Agent-safe worktree creation does not migrate uncommitted changes; apply changes inside the new Environment instead")
+		return CreateResult{}, fmt.Errorf("Agent-safe worktree creation does not migrate uncommitted changes. Retry with migrate_uncommitted_changes=false; the source checkout may remain dirty and is left untouched. Reapply only the needed changes inside the new Environment. Admin is not required to create the managed worktree")
 	}
 	if options.AgentSafe && !agentSafeManagedSource {
 		if err := validateAgentSafeGitMetadataRoot(sourceRoot); err != nil {
