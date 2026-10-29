@@ -50,11 +50,6 @@ func (s *Service) PrepareSandboxExecution(
 	if err != nil {
 		return PreparedSandboxExecution{}, err
 	}
-	if s.SandboxExecutionSupport().Platform == "windows" {
-		if err := s.EnsureEnvironmentSandboxAccess(env); err != nil {
-			return PreparedSandboxExecution{}, fmt.Errorf("prepare Environment strong-sandbox access: %w", err)
-		}
-	}
 	s.recordFullAuthorizationBypass(rt, environmentID, executable, surface)
 	cmd, err := rt.PrepareCommand(ctx, executable, args, cwd)
 	if err != nil {
@@ -62,6 +57,11 @@ func (s *Service) PrepareSandboxExecution(
 			s.recordExecDenial(environmentID, executable, surface, err.Error())
 		}
 		return PreparedSandboxExecution{}, err
+	}
+	if s.SandboxExecutionSupport().Platform == "windows" {
+		if err := s.EnsureEnvironmentSandboxAccess(ctx, env); err != nil {
+			return PreparedSandboxExecution{}, fmt.Errorf("prepare Environment strong-sandbox access: %w", err)
+		}
 	}
 	return PreparedSandboxExecution{
 		Environment:    env,
@@ -151,15 +151,21 @@ func (s *Service) ExecSandbox(
 	timeoutMS int64,
 	maxOutputBytes int,
 ) (any, error) {
-	prepared, err := s.PrepareSandboxExecution(ctx, environmentID, owner, executable, args, cwd, "exec_sandbox")
-	if err != nil {
-		return nil, err
-	}
 	if timeoutMS <= 0 {
 		timeoutMS = 30000
 	}
+	execCtx, timeoutCancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
+	defer timeoutCancel()
 
-	commandCtx, cancel := context.WithCancel(ctx)
+	prepared, err := s.PrepareSandboxExecution(execCtx, environmentID, owner, executable, args, cwd, "exec_sandbox")
+	if err != nil {
+		if execCtx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("command timed out after %dms: %v", timeoutMS, err)
+		}
+		return nil, err
+	}
+
+	commandCtx, cancel := context.WithCancel(execCtx)
 	heartbeatDone := make(chan error, 1)
 	go func() {
 		interval := s.heartbeatInterval()
@@ -186,10 +192,8 @@ func (s *Service) ExecSandbox(
 		"surface":        "exec",
 		"execution_mode": "sandbox",
 	})
-	execCtx, timeoutCancel := context.WithTimeout(commandCtx, time.Duration(timeoutMS)*time.Millisecond)
-	result, execErr := s.RunPreparedSandboxExecution(execCtx, prepared, "", maxOutputBytes, nil, nil)
+	result, execErr := s.RunPreparedSandboxExecution(commandCtx, prepared, "", maxOutputBytes, nil, nil)
 	timedOut := execCtx.Err() == context.DeadlineExceeded
-	timeoutCancel()
 	cancel()
 	heartbeatErr := <-heartbeatDone
 
