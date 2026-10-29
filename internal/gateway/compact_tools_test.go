@@ -60,6 +60,23 @@ func TestCompactAgentSurfaceStaysUnderToolLimitAndDispatchesLegacyActions(t *tes
 		t.Fatalf("compact help did not preserve legacy schema metadata: %s", helpText)
 	}
 
+	execHelp := callGatewayTool(t, ctx, agent, "adm_help", map[string]any{
+		"group":  "exec",
+		"action": "run",
+	})
+	execHelpText := toolText(t, execHelp)
+	if execHelp.IsError || !strings.Contains(execHelpText, "execution_mode") || !strings.Contains(execHelpText, "auto, host, or sandbox") {
+		t.Fatalf("compact exec help lost explicit execution mode schema/description: %s", execHelpText)
+	}
+	runHelp := callGatewayTool(t, ctx, agent, "adm_help", map[string]any{
+		"group":  "run",
+		"action": "start",
+	})
+	runHelpText := toolText(t, runHelp)
+	if runHelp.IsError || !strings.Contains(runHelpText, "execution_mode") || !strings.Contains(runHelpText, "auto, host, or sandbox") {
+		t.Fatalf("compact run help lost explicit execution mode schema/description: %s", runHelpText)
+	}
+
 	environmentInspect := callGatewayTool(t, ctx, agent, "adm_environment", map[string]any{
 		"action": "inspect",
 		"arguments": map[string]any{

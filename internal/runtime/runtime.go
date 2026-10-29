@@ -67,10 +67,11 @@ type DeleteResult struct {
 }
 
 type CommandResult struct {
-	ExitCode int    `json:"exit_code"`
-	Stdout   string `json:"stdout,omitempty"`
-	Stderr   string `json:"stderr,omitempty"`
-	Started  bool   `json:"-"`
+	ExitCode      int    `json:"exit_code"`
+	Stdout        string `json:"stdout,omitempty"`
+	Stderr        string `json:"stderr,omitempty"`
+	ExecutionMode string `json:"execution_mode,omitempty"`
+	Started       bool   `json:"-"`
 }
 
 type GitStatusEntry struct {

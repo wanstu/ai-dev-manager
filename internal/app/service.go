@@ -816,6 +816,7 @@ func (s *Service) Exec(ctx context.Context, environmentID, owner, executable str
 	s.recordFullAuthorizationBypass(rt, environmentID, executable, "exec")
 	s.Log("info", "exec.start", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "exec"})
 	result, execErr := rt.Exec(commandCtx, executable, args, cwd, timeoutMS, maxOutputBytes)
+	result.ExecutionMode = "host"
 	if result.Started {
 		_ = s.RecordExecUsage(environmentID, executable, "exec")
 	}

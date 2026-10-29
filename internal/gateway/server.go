@@ -588,6 +588,7 @@ type ExecInput struct {
 	Cwd            string   `json:"cwd,omitempty"`
 	TimeoutMS      int64    `json:"timeout_ms,omitempty"`
 	MaxOutputBytes int      `json:"max_output_bytes,omitempty"`
+	ExecutionMode  string   `json:"execution_mode,omitempty"`
 }
 
 type ProcessStartInput struct {
@@ -618,6 +619,7 @@ type RunStartInput struct {
 	Cwd            string   `json:"cwd,omitempty"`
 	TimeoutMS      int64    `json:"timeout_ms,omitempty"`
 	MaxOutputBytes int      `json:"max_output_bytes,omitempty"`
+	ExecutionMode  string   `json:"execution_mode,omitempty"`
 }
 
 type RunInput struct {
@@ -708,15 +710,48 @@ func onOff(enabled bool) string {
 	return "disabled"
 }
 
-func agentStrongSandboxExecution(service *app.Service, surface serverSurface) (bool, error) {
-	if surface != serverSurfaceAgent {
-		return false, nil
+const (
+	commandExecutionModeAuto    = "auto"
+	commandExecutionModeHost    = "host"
+	commandExecutionModeSandbox = "sandbox"
+)
+
+func resolveCommandExecutionMode(service *app.Service, surface serverSurface, requested string) (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(requested))
+	if mode == "" {
+		mode = commandExecutionModeAuto
 	}
+	switch mode {
+	case commandExecutionModeSandbox:
+		// Explicit sandbox execution is an execution capability, not a Strong
+		// Permission Control setting. Do not read or depend on Strong state here.
+		return commandExecutionModeSandbox, nil
+	case commandExecutionModeAuto, commandExecutionModeHost:
+	default:
+		return "", fmt.Errorf("invalid execution_mode %q; expected auto, host, or sandbox", requested)
+	}
+
+	if surface != serverSurfaceAgent {
+		if mode == commandExecutionModeAuto {
+			return commandExecutionModeHost, nil
+		}
+		return mode, nil
+	}
+
 	status, err := service.StrongPermissionControlStatus()
 	if err != nil {
-		return false, fmt.Errorf("read Strong Permission Control status: %w", err)
+		return "", fmt.Errorf("read Strong Permission Control status: %w", err)
 	}
-	return status.Enabled, nil
+	if status.Enabled {
+		if mode == commandExecutionModeHost {
+			return "", fmt.Errorf("execution_mode=host is not allowed on the Agent surface while Strong Permission Control is enabled; use execution_mode=sandbox or auto")
+		}
+		return commandExecutionModeSandbox, nil
+	}
+	if mode == commandExecutionModeAuto {
+		return commandExecutionModeHost, nil
+	}
+	return commandExecutionModeHost, nil
 }
 
 func agentToolPermission(name string) agentToolPermissionClass {
@@ -2058,15 +2093,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec", Description: "Run one explicitly authorized executable inside an Environment root. Agent calls use the strong OS sandbox while Strong Permission Control is enabled; relaxed/Admin calls use host Runtime execution. Requires the matching writer_owner."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "exec", Description: "Run one explicitly authorized executable inside an Environment root. execution_mode defaults to auto and accepts auto, host, or sandbox. On the Agent surface, auto uses sandbox while Strong Permission Control is enabled and host otherwise; explicit sandbox is always allowed when the OS sandbox is available, while explicit host is rejected when Strong Permission Control is enabled. Admin auto defaults to host. Requires the matching writer_owner."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in ExecInput) (*mcp.CallToolResult, any, error) {
-			sandboxed, err := agentStrongSandboxExecution(service, surface)
+			executionMode, err := resolveCommandExecutionMode(service, surface, in.ExecutionMode)
 			if err != nil {
 				return toolResult(nil, err)
-			}
-			executionMode := "host"
-			if sandboxed {
-				executionMode = "sandbox"
 			}
 			if owner != nil {
 				stopObservation, observeErr := owner.beginWriterObservation(in.EnvironmentID, in.WriterOwner, owner.writerObservation("exec", "", 0, in.Executable, in.Cwd, executionMode, "", ""))
@@ -2076,7 +2107,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				defer stopObservation()
 			}
 			var value any
-			if sandboxed {
+			if executionMode == commandExecutionModeSandbox {
 				value, err = service.ExecSandbox(ctx, in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
 			} else {
 				value, err = service.Exec(ctx, in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
@@ -2129,17 +2160,17 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "run_start", Description: "Start one asynchronous single-command Agent Run owned by this Gateway. Agent calls use the strong OS sandbox while Strong Permission Control is enabled; relaxed/Admin calls use host Runtime execution. Requires the matching Environment writer_owner and reuses the existing Runtime allowlist/cwd policy."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "run_start", Description: "Start one asynchronous single-command Agent Run owned by this Gateway. execution_mode defaults to auto and accepts auto, host, or sandbox. On the Agent surface, auto uses sandbox while Strong Permission Control is enabled and host otherwise; explicit sandbox is always allowed when the OS sandbox is available, while explicit host is rejected when Strong Permission Control is enabled. Admin auto defaults to host. Requires the matching Environment writer_owner and reuses the existing Runtime allowlist/cwd policy."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in RunStartInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
 			}
-			sandboxed, err := agentStrongSandboxExecution(service, surface)
+			executionMode, err := resolveCommandExecutionMode(service, surface, in.ExecutionMode)
 			if err != nil {
 				return toolResult(nil, err)
 			}
 			var value agentRunStatus
-			if sandboxed {
+			if executionMode == commandExecutionModeSandbox {
 				value, err = owner.StartAgentRunSandboxed(in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
 			} else {
 				value, err = owner.StartAgentRun(in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.TimeoutMS, in.MaxOutputBytes)
