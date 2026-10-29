@@ -49,14 +49,9 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := toolNames(tools.Tools)
-	for _, required := range []string{"environment_worktree_list"} {
+	for _, required := range []string{"adm_environment", "adm_writer"} {
 		if !contains(names, required) {
-			t.Fatalf("missing managed worktree tool %q in %v", required, names)
-		}
-	}
-	for _, permissionGated := range []string{"environment_worktree_create", "environment_worktree_destroy"} {
-		if !contains(names, permissionGated) {
-			t.Fatalf("permission-gated managed worktree tool %q must remain visible in Agent surface: %v", permissionGated, names)
+			t.Fatalf("compact Agent surface missing %q in %v", required, names)
 		}
 	}
 	agentDenied := callGatewayTool(t, ctx, session, "environment_worktree_create", map[string]any{"workspace_id": ws.ID, "name": "denied", "branch_name": "test/denied"})
@@ -99,9 +94,9 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 	if !pathutil.Within(filepath.Join(filepath.Dir(statePath), "worktrees"), managed.Root) {
 		t.Fatalf("managed root %s is not under ADM-owned state root", managed.Root)
 	}
-	listed, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "environment_worktree_list", Arguments: map[string]any{}})
-	if err != nil || listed.IsError || !strings.Contains(toolText(t, listed), managed.ID) || !strings.Contains(toolText(t, listed), managed.Branch) {
-		t.Fatalf("environment_worktree_list failed: err=%v result=%+v", err, listed)
+	listed := callGatewayTool(t, ctx, session, "environment_worktree_list", map[string]any{})
+	if listed.IsError || !strings.Contains(toolText(t, listed), managed.ID) || !strings.Contains(toolText(t, listed), managed.Branch) {
+		t.Fatalf("environment_worktree_list failed: result=%+v", listed)
 	}
 	blockedRemove, err := adminSession.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "environment_remove",
@@ -113,12 +108,12 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 	if !blockedRemove.IsError {
 		t.Fatalf("generic environment_remove must refuse managed worktree: %+v", blockedRemove)
 	}
-	acquired, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "environment_writer_acquire",
-		Arguments: map[string]any{"environment_id": managed.EnvironmentID, "owner": "gateway-writer"},
+	acquired := callGatewayTool(t, ctx, session, "environment_writer_acquire", map[string]any{
+		"environment_id": managed.EnvironmentID,
+		"owner":          "gateway-writer",
 	})
-	if err != nil || acquired.IsError {
-		t.Fatalf("managed writer acquire failed: err=%v result=%+v", err, acquired)
+	if acquired.IsError {
+		t.Fatalf("managed writer acquire failed: result=%+v", acquired)
 	}
 	destroyed, err := adminSession.CallTool(ctx, &mcp.CallToolParams{
 		Name: "environment_worktree_destroy",

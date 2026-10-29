@@ -38,6 +38,7 @@ func (a *Adapter) ConnectADM(input ADMConnectionInput) (ADMConnectionStatus, err
 		if a != nil {
 			a.management = nil
 			a.runtime = nil
+			a.connectedBaseURL = ""
 		}
 		return ADMConnectionStatus{}, err
 	}
@@ -45,9 +46,11 @@ func (a *Adapter) ConnectADM(input ADMConnectionInput) (ADMConnectionStatus, err
 		client := adminmcp.NewWithAPIKey(status.AdminMCPURL, a.connectionAPIKey(status.BaseURL, input.APIKey))
 		a.management = client
 		a.runtime = client
+		a.connectedBaseURL = status.BaseURL
 	} else {
 		a.management = nil
 		a.runtime = nil
+		a.connectedBaseURL = ""
 	}
 	return status, nil
 }
@@ -69,6 +72,7 @@ func (a *Adapter) StartLocalADM(input ADMConnectionInput) (ADMConnectionStatus, 
 		client := adminmcp.NewWithAPIKey(status.AdminMCPURL, a.connectionAPIKey(status.BaseURL, input.APIKey))
 		a.management = client
 		a.runtime = client
+		a.connectedBaseURL = status.BaseURL
 		return status, nil
 	case gateway.HTTPStateIncompatible:
 		return status, fmt.Errorf("refusing to start local ADM because %s is incompatible: %s", status.BaseURL, status.Detail)
@@ -91,6 +95,7 @@ func (a *Adapter) StartLocalADM(input ADMConnectionInput) (ADMConnectionStatus, 
 	client := adminmcp.NewWithAPIKey(connected.AdminMCPURL, a.connectionAPIKey(connected.BaseURL, input.APIKey))
 	a.management = client
 	a.runtime = client
+	a.connectedBaseURL = connected.BaseURL
 	return connected, nil
 }
 
@@ -108,6 +113,7 @@ func (a *Adapter) StopLocalADM(input ADMConnectionInput) (ADMConnectionStatus, e
 	}
 	a.management = nil
 	a.runtime = nil
+	a.connectedBaseURL = ""
 	return desktopConnectionStatus(stopped), nil
 }
 

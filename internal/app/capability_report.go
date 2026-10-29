@@ -12,6 +12,7 @@ import (
 	"ai-dev-manager-v2/internal/catalog"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/runtime"
+	"ai-dev-manager-v2/internal/sandbox"
 )
 
 const capabilitySourceStatic = "app.static"
@@ -216,15 +217,22 @@ func execCapabilityFacts(
 			agentExecutionMode = "unavailable"
 		}
 	}
+	sandboxEnvironment := sandbox.EnvironmentAccessStatus{}
+	if strongPermissionEnabled && sandboxAvailable && rootErr == nil {
+		sandboxEnvironment = sandbox.InspectEnvironmentWorkspaceAccess(env.ID, ws.Path, env.Root)
+	}
 	evidence := []model.CapabilityEvidence{environmentEvidence(env, ws), writerEvidence(env), {
 		Kind: capabilityKindExec,
 		Details: map[string]string{
-			"allowed_executable_count":  strconv.Itoa(len(allowed)),
-			"full_authorization":        strconv.FormatBool(fullAuthorization),
-			"strong_permission_control": strconv.FormatBool(strongPermissionEnabled),
-			"agent_execution_mode":      agentExecutionMode,
-			"strong_sandbox_available":  strconv.FormatBool(sandboxAvailable),
-			"strong_sandbox_platform":   strings.TrimSpace(sandboxPlatform),
+			"allowed_executable_count":        strconv.Itoa(len(allowed)),
+			"full_authorization":              strconv.FormatBool(fullAuthorization),
+			"strong_permission_control":       strconv.FormatBool(strongPermissionEnabled),
+			"agent_execution_mode":            agentExecutionMode,
+			"strong_sandbox_available":        strconv.FormatBool(sandboxAvailable),
+			"strong_sandbox_platform":         strings.TrimSpace(sandboxPlatform),
+			"sandbox_environment_prepared":    strconv.FormatBool(sandboxEnvironment.Prepared),
+			"sandbox_environment_auto_prep":   strconv.FormatBool(sandboxEnvironment.CanAutoPrepare),
+			"sandbox_environment_needs_admin": strconv.FormatBool(sandboxEnvironment.RequiresAdmin),
 		},
 	}}
 	if rootErr != nil {
@@ -243,6 +251,36 @@ func execCapabilityFacts(
 			capabilityKindExec,
 			model.CapabilityStateUnavailable,
 			"strong_sandbox_unavailable",
+			message,
+			true,
+			evidence,
+		)}, false
+	}
+	if strongPermissionEnabled && sandboxAvailable && sandboxEnvironment.RequiresAdmin {
+		message := sandboxEnvironment.Message
+		if strings.TrimSpace(message) == "" {
+			message = "Environment root requires one-time administrator preparation before Agent commands can run in the strong OS sandbox."
+		}
+		return []model.CapabilityFact{capabilityFact(
+			runtime.CapabilityExec,
+			capabilityKindExec,
+			model.CapabilityStateUnavailable,
+			"sandbox_environment_acl_requires_admin",
+			message,
+			true,
+			evidence,
+		)}, false
+	}
+	if strongPermissionEnabled && sandboxAvailable && !sandboxEnvironment.Prepared && !sandboxEnvironment.CanAutoPrepare {
+		message := sandboxEnvironment.Message
+		if strings.TrimSpace(message) == "" {
+			message = "Environment strong-sandbox ACL readiness could not be established."
+		}
+		return []model.CapabilityFact{capabilityFact(
+			runtime.CapabilityExec,
+			capabilityKindExec,
+			model.CapabilityStateUnavailable,
+			"sandbox_environment_acl_unavailable",
 			message,
 			true,
 			evidence,

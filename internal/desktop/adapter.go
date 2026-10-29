@@ -7,10 +7,11 @@ import (
 )
 
 type Adapter struct {
-	profilesPath    string
-	preferencesPath string
-	management      managementBackend
-	runtime         runtimeBackend
+	profilesPath     string
+	preferencesPath  string
+	connectedBaseURL string
+	management       managementBackend
+	runtime          runtimeBackend
 }
 
 // NewAdapter retains an explicit local backend for tests and offline/recovery callers.

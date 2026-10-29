@@ -1,8 +1,10 @@
 package environment
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -367,6 +369,36 @@ func TestRemoveEnvironmentProtectsActiveWriterAndNeverDeletesRoot(t *testing.T) 
 	}
 	if data, err := os.ReadFile(marker); err != nil || string(data) != "keep" {
 		t.Fatalf("environment removal must not delete root files: data=%q err=%v", data, err)
+	}
+}
+
+func TestRemoveEnvironmentHostCleanupMustSucceedBeforeStateDeletion(t *testing.T) {
+	service, envA, _, _ := newLeaseTestService(t)
+	calls := 0
+	service.SetBeforeRemove(func(environment model.Environment, workspace model.Workspace) error {
+		calls++
+		if environment.ID != envA.ID {
+			t.Fatalf("cleanup environment=%s want %s", environment.ID, envA.ID)
+		}
+		if workspace.ID != envA.WorkspaceID {
+			t.Fatalf("cleanup workspace=%s want %s", workspace.ID, envA.WorkspaceID)
+		}
+		return fmt.Errorf("sandbox acl cleanup blocked")
+	})
+
+	if _, err := service.Remove(envA.ID); err == nil || !strings.Contains(err.Error(), "host cleanup failed") {
+		t.Fatalf("host cleanup failure did not block Environment removal: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("before-remove cleanup calls=%d want 1", calls)
+	}
+	if _, err := service.Get(envA.ID); err != nil {
+		t.Fatalf("Environment record disappeared after failed host cleanup: %v", err)
+	}
+
+	service.SetBeforeRemove(func(model.Environment, model.Workspace) error { return nil })
+	if _, err := service.Remove(envA.ID); err != nil {
+		t.Fatalf("Environment removal did not recover after host cleanup succeeded: %v", err)
 	}
 }
 

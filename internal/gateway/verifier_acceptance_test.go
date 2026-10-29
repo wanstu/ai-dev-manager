@@ -178,18 +178,12 @@ func TestDeliberateVerifierTimeout(t *testing.T) {
 
 func callVerifierAcceptanceHTTP(t *testing.T, ctx context.Context, session *mcp.ClientSession, environmentID, verifierID string, maxOutputBytes int) verifier.Result {
 	t.Helper()
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name: "environment_verifier_run",
-		Arguments: map[string]any{
-			"environment_id":   environmentID,
-			"writer_owner":     "verifier-http-owner",
-			"verifier_id":      verifierID,
-			"max_output_bytes": maxOutputBytes,
-		},
+	result := callGatewayTool(t, ctx, session, "environment_verifier_run", map[string]any{
+		"environment_id":   environmentID,
+		"writer_owner":     "verifier-http-owner",
+		"verifier_id":      verifierID,
+		"max_output_bytes": maxOutputBytes,
 	})
-	if err != nil {
-		t.Fatalf("environment_verifier_run %s transport error: %v", verifierID, err)
-	}
 	if result.IsError {
 		t.Fatalf("environment_verifier_run %s returned tool error: %s", verifierID, toolText(t, result))
 	}

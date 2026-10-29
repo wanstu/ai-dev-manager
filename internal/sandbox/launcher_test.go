@@ -9,18 +9,22 @@ import (
 func TestLaunchRequestValidate(t *testing.T) {
 	base := t.TempDir()
 	valid := LaunchRequest{
-		Executable: filepath.Join(base, "tool.exe"),
-		Cwd:        base,
-		ProfileSID: "S-1-15-2-1",
+		Executable:   filepath.Join(base, "tool.exe"),
+		Cwd:          base,
+		ProfileSID:   "S-1-15-2-1",
+		Capabilities: []string{CapabilityInternetClient},
 	}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid request rejected: %v", err)
 	}
 	for name, mutate := range map[string]func(*LaunchRequest){
-		"missing executable": func(v *LaunchRequest) { v.Executable = "" },
+		"missing executable":  func(v *LaunchRequest) { v.Executable = "" },
 		"relative executable": func(v *LaunchRequest) { v.Executable = "tool.exe" },
-		"relative cwd": func(v *LaunchRequest) { v.Cwd = "." },
-		"missing SID": func(v *LaunchRequest) { v.ProfileSID = "" },
+		"relative cwd":        func(v *LaunchRequest) { v.Cwd = "." },
+		"missing SID":         func(v *LaunchRequest) { v.ProfileSID = "" },
+		"unsupported capability": func(v *LaunchRequest) {
+			v.Capabilities = []string{"privateNetworkClientServer"}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			value := valid

@@ -22,14 +22,14 @@ type GitLogEntry struct {
 }
 
 type GitRemoteInfo struct {
-	Name     string   `json:"name"`
+	Name      string   `json:"name"`
 	FetchURLs []string `json:"fetch_urls,omitempty"`
 	PushURLs  []string `json:"push_urls,omitempty"`
 }
 
 type GitTagInfo struct {
-	Name   string `json:"name"`
-	Commit string `json:"commit"`
+	Name    string `json:"name"`
+	Commit  string `json:"commit"`
 	Subject string `json:"subject,omitempty"`
 }
 
@@ -867,6 +867,7 @@ func (r *Runtime) remoteGitCommand(ctx context.Context, git string, hostCredenti
 	fullArgs := []string{
 		"--no-pager",
 		"-c", "core.fsmonitor=false",
+		"-c", "safe.directory=" + filepath.ToSlash(r.root),
 		"-c", "core.attributesFile=" + os.DevNull,
 		"-c", "core.excludesFile=" + os.DevNull,
 		"-c", "core.hooksPath=" + os.DevNull,

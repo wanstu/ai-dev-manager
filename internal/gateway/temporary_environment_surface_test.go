@@ -46,47 +46,58 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		for _, tool := range tools.Tools {
 			byName[tool.Name] = tool
 		}
-		for _, name := range []string{"environment_temporary_create", "environment_temporary_status"} {
-			if byName[name] == nil {
-				t.Fatalf("%s surface missing %s", surface, name)
-			}
-		}
 		if surface == "agent" {
-			for _, name := range []string{"environment_temporary_promote", "environment_temporary_cleanup"} {
-				if byName[name] == nil {
-					t.Fatalf("Agent surface must keep temporary lifecycle tool %s discoverable", name)
+			if byName["adm_environment"] == nil {
+				t.Fatalf("compact Agent surface missing adm_environment: %v", toolNames(tools.Tools))
+			}
+			for _, action := range []string{"temporary_create", "temporary_status", "temporary_promote", "temporary_cleanup"} {
+				help := callGatewayTool(t, ctx, session, "adm_help", map[string]any{"group": "environment", "action": action})
+				if help.IsError {
+					t.Fatalf("compact temporary action %s is not discoverable: %s", action, toolText(t, help))
 				}
+				if action == "temporary_create" {
+					helpText := strings.ToLower(toolText(t, help))
+					if !strings.Contains(helpText, "provenance") || !strings.Contains(helpText, "not adm task orchestration") {
+						t.Fatalf("compact temporary create help lost provenance boundary: %s", toolText(t, help))
+					}
+				}
+			}
+			promoteHelp := callGatewayTool(t, ctx, session, "adm_help", map[string]any{"group": "environment", "action": "temporary_promote"})
+			if !strings.Contains(toolText(t, promoteHelp), `"permission":"admin_only"`) {
+				t.Fatalf("compact temporary promote help lost Admin-only permission: %s", toolText(t, promoteHelp))
 			}
 			promoteDenied := callGatewayTool(t, ctx, session, "environment_temporary_promote", map[string]any{"environment_id": "env_missing", "owner_id": "missing"})
 			if !promoteDenied.IsError || !strings.Contains(toolText(t, promoteDenied), "requires the Admin surface") {
 				t.Fatalf("Agent promote denial must explain Admin requirement: %s", toolText(t, promoteDenied))
 			}
-		} else {
-			for _, name := range []string{"environment_temporary_promote", "environment_temporary_cleanup"} {
-				if byName[name] == nil {
-					t.Fatalf("Admin surface missing %s", name)
-				}
+			durableCreateHelp := callGatewayTool(t, ctx, session, "adm_help", map[string]any{"group": "environment", "action": "create"})
+			if durableCreateHelp.IsError || !strings.Contains(toolText(t, durableCreateHelp), `"permission":"admin_only"`) {
+				t.Fatalf("compact durable Environment create help lost Admin boundary: %s", toolText(t, durableCreateHelp))
 			}
-			encodedCleanup, err := json.Marshal(byName["environment_temporary_cleanup"])
-			if err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(strings.ToLower(string(encodedCleanup)), `"force"`) {
-				t.Fatalf("%s temporary cleanup unexpectedly exposes force: %s", surface, encodedCleanup)
-			}
-		}
-		if !strings.Contains(strings.ToLower(byName["environment_temporary_create"].Description), "provenance") || !strings.Contains(strings.ToLower(byName["environment_temporary_create"].Description), "not adm task orchestration") {
-			t.Fatalf("%s temporary create description lost provenance boundary: %q", surface, byName["environment_temporary_create"].Description)
-		}
-		_, hasDurableCreate := byName["environment_create"]
-		if !hasDurableCreate {
-			t.Fatalf("%s surface must keep generic durable environment_create discoverable", surface)
-		}
-		if surface == "agent" {
 			denied := callGatewayTool(t, ctx, session, "environment_create", map[string]any{"workspace_id": workspace.ID, "name": "denied"})
 			if !denied.IsError || !strings.Contains(toolText(t, denied), "requires the Admin surface") {
 				t.Fatalf("Agent durable create denial must explain Admin requirement: %s", toolText(t, denied))
 			}
+			continue
+		}
+
+		for _, name := range []string{"environment_temporary_create", "environment_temporary_status", "environment_temporary_promote", "environment_temporary_cleanup"} {
+			if byName[name] == nil {
+				t.Fatalf("Admin surface missing %s", name)
+			}
+		}
+		encodedCleanup, err := json.Marshal(byName["environment_temporary_cleanup"])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(strings.ToLower(string(encodedCleanup)), `"force"`) {
+			t.Fatalf("%s temporary cleanup unexpectedly exposes force: %s", surface, encodedCleanup)
+		}
+		if !strings.Contains(strings.ToLower(byName["environment_temporary_create"].Description), "provenance") || !strings.Contains(strings.ToLower(byName["environment_temporary_create"].Description), "not adm task orchestration") {
+			t.Fatalf("%s temporary create description lost provenance boundary: %q", surface, byName["environment_temporary_create"].Description)
+		}
+		if byName["environment_create"] == nil {
+			t.Fatalf("%s surface must keep generic durable environment_create discoverable", surface)
 		}
 	}
 
@@ -166,11 +177,11 @@ func TestTemporaryEnvironmentSharedHTTPPlainLifecycleAuthorityAndTargeting(t *te
 		t.Fatalf("temporary Environment ordinary read failed: %s", toolText(t, read))
 	}
 
-	unauthorizedPromote, unauthorizedErr := agent.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "environment_temporary_promote",
-		Arguments: map[string]any{"environment_id": created.Environment.ID, "owner_id": "lifecycle-owner-a"},
+	unauthorizedPromote := callGatewayTool(t, ctx, agent, "environment_temporary_promote", map[string]any{
+		"environment_id": created.Environment.ID,
+		"owner_id":       "lifecycle-owner-a",
 	})
-	if unauthorizedErr == nil && unauthorizedPromote != nil && !unauthorizedPromote.IsError {
+	if !unauthorizedPromote.IsError {
 		t.Fatalf("Agent promoted its own temporary Environment: %s", toolText(t, unauthorizedPromote))
 	}
 	unchanged, err := service.Environments.Get(created.Environment.ID)

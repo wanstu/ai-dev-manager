@@ -619,6 +619,7 @@ func (r *Runtime) readOnlyGitCommand(ctx context.Context, git string, args ...st
 	fullArgs := []string{
 		"--no-pager",
 		"-c", "core.fsmonitor=false",
+		"-c", "safe.directory=" + filepath.ToSlash(r.root),
 		"-c", "core.attributesFile=" + os.DevNull,
 		"-c", "core.excludesFile=" + os.DevNull,
 		"--work-tree=" + r.root,
@@ -782,7 +783,7 @@ func (r *Runtime) gitCommitIdentity(ctx context.Context, git string) (authorName
 	committerEmail = environmentValue(r.baseEnvironment, "GIT_COMMITTER_EMAIL")
 
 	readConfig := func(key string) (string, error) {
-		cmd := exec.CommandContext(ctx, git, "--no-pager", "-C", r.root, "config", "--get", key)
+		cmd := exec.CommandContext(ctx, git, "--no-pager", "-c", "safe.directory="+filepath.ToSlash(r.root), "-C", r.root, "config", "--get", key)
 		configureCommand(cmd)
 		cmd.Env = sanitizeGitEnvironment(r.baseEnvironment)
 		cmd.Env = replaceEnvironmentValue(cmd.Env, "GIT_CONFIG_NOSYSTEM", "1")
@@ -826,6 +827,7 @@ func (r *Runtime) controlledGitCommand(ctx context.Context, git string, args ...
 	fullArgs := []string{
 		"--no-pager",
 		"-c", "core.fsmonitor=false",
+		"-c", "safe.directory=" + filepath.ToSlash(r.root),
 		"-c", "core.attributesFile=" + os.DevNull,
 		"-c", "core.excludesFile=" + os.DevNull,
 		"-c", "core.hooksPath=" + os.DevNull,

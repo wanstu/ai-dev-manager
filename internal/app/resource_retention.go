@@ -112,7 +112,7 @@ func (s *Service) ResourceRetentionCleanup(ctx context.Context, request model.Re
 	err := s.Store.Update(func(state *model.State) error {
 		now := time.Now().UTC()
 		report := resourceRetentionReportFromState(*state, now)
-		result = executeRetentionCleanup(state, report, now, nil, nil)
+		result = executeRetentionCleanup(state, report, now, nil, nil, s.CleanupEnvironmentSandboxAccess)
 		return nil
 	})
 	if err != nil {
@@ -163,7 +163,7 @@ func (s *Service) ResourceRetentionCleanupFromRuntimeReport(ctx context.Context,
 		now := time.Now().UTC()
 		currentReport := resourceRetentionReportFromState(*state, now)
 		currentReport = intersectRetentionReport(currentReport, report)
-		result = executeRetentionCleanup(state, currentReport, now, runtimeEligibleEnvironments, runtimeEligibleMCPs)
+		result = executeRetentionCleanup(state, currentReport, now, runtimeEligibleEnvironments, runtimeEligibleMCPs, s.CleanupEnvironmentSandboxAccess)
 		return nil
 	})
 	if err != nil {
@@ -264,7 +264,13 @@ func resourceRetentionReportFromState(state model.State, now time.Time) model.Re
 	return model.ResourceRetentionReport{GeneratedAt: now, Resources: items}
 }
 
-func executeRetentionCleanup(state *model.State, report model.ResourceRetentionReport, now time.Time, runtimeEligibleEnvironmentIDs, runtimeEligibleMCPIDs map[string]struct{}) model.ResourceRetentionCleanupResult {
+func executeRetentionCleanup(
+	state *model.State,
+	report model.ResourceRetentionReport,
+	now time.Time,
+	runtimeEligibleEnvironmentIDs, runtimeEligibleMCPIDs map[string]struct{},
+	beforeEnvironmentRemove func(model.Environment, model.Workspace) error,
+) model.ResourceRetentionCleanupResult {
 	result := model.ResourceRetentionCleanupResult{GeneratedAt: now, DryRun: false, Report: report}
 	removableEnvironments := map[string]struct{}{}
 	removableSources := map[string]struct{}{}
@@ -326,7 +332,15 @@ func executeRetentionCleanup(state *model.State, report model.ResourceRetentionR
 		if _, ok := removableEnvironments[item.ID]; !ok {
 			continue
 		}
-		environment, removed := removeEnvironmentState(state, item.ID, now)
+		environment, removed, cleanupErr := removeEnvironmentState(state, item.ID, now, beforeEnvironmentRemove)
+		if cleanupErr != nil {
+			blocked := item
+			blocked.CleanupEligible = false
+			blocked.CleanupState = model.RetentionCleanupBlocked
+			blocked.Blockers = uniqueStrings(append(blocked.Blockers, "environment_host_cleanup_failed"))
+			result.Skipped = append(result.Skipped, blocked)
+			continue
+		}
 		if !removed {
 			continue
 		}
@@ -590,10 +604,15 @@ func skillBelongsToRemovedSource(state model.State, skillID string, sourceIDs ma
 	return false
 }
 
-func removeEnvironmentState(state *model.State, id string, now time.Time) (model.Environment, bool) {
+func removeEnvironmentState(
+	state *model.State,
+	id string,
+	now time.Time,
+	beforeRemove func(model.Environment, model.Workspace) error,
+) (model.Environment, bool, error) {
 	for _, managed := range state.ManagedWorktrees {
 		if managed.EnvironmentID == id {
-			return model.Environment{}, false
+			return model.Environment{}, false, nil
 		}
 	}
 	for i := range state.Environments {
@@ -602,13 +621,28 @@ func removeEnvironmentState(state *model.State, id string, now time.Time) (model
 		}
 		environment := state.Environments[i]
 		if strings.TrimSpace(environment.State) != "ready" || writerActiveAt(environment.Writer, now) {
-			return model.Environment{}, false
+			return model.Environment{}, false, nil
+		}
+		if beforeRemove != nil {
+			var workspace model.Workspace
+			for _, candidate := range state.Workspaces {
+				if candidate.ID == environment.WorkspaceID {
+					workspace = candidate
+					break
+				}
+			}
+			if workspace.ID == "" {
+				return environment, false, fmt.Errorf("workspace %q not found", environment.WorkspaceID)
+			}
+			if err := beforeRemove(environment, workspace); err != nil {
+				return environment, false, err
+			}
 		}
 		environment.Writer = nil
 		state.Environments = append(state.Environments[:i], state.Environments[i+1:]...)
-		return environment, true
+		return environment, true, nil
 	}
-	return model.Environment{}, false
+	return model.Environment{}, false, nil
 }
 
 func removeSkillSourceState(state *model.State, id string) (model.SkillSource, []model.CatalogEntry, bool) {

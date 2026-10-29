@@ -44,6 +44,21 @@ func TestAsyncVerifierToolsSharedAgentAdminSurface(t *testing.T) {
 		for _, tool := range tools.Tools {
 			descriptions[tool.Name] = tool.Description
 		}
+		if surface == "agent" {
+			if _, ok := descriptions["adm_verifier"]; !ok {
+				t.Fatalf("compact Agent surface missing adm_verifier: %v", toolNames(tools.Tools))
+			}
+			startHelp := callGatewayTool(t, ctx, session, "adm_help", map[string]any{"group": "verifier", "action": "run_start"})
+			if startHelp.IsError || !strings.Contains(strings.ToLower(toolText(t, startHelp)), "long") {
+				t.Fatalf("compact verifier run_start help is incomplete: %s", toolText(t, startHelp))
+			}
+			runHelp := callGatewayTool(t, ctx, session, "adm_help", map[string]any{"group": "verifier", "action": "run"})
+			runHelpText := toolText(t, runHelp)
+			if runHelp.IsError || !strings.Contains(strings.ToLower(runHelpText), "blocks") || !strings.Contains(runHelpText, "environment_verifier_run_start") {
+				t.Fatalf("compact verifier run help is incomplete: %s", runHelpText)
+			}
+			continue
+		}
 		for _, name := range []string{"environment_verifier_run_start", "environment_verifier_run_list", "environment_verifier_run_status", "environment_verifier_run_cancel"} {
 			if _, ok := descriptions[name]; !ok {
 				t.Fatalf("%s surface missing %s", surface, name)

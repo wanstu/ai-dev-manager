@@ -56,7 +56,7 @@ func TestBuildEnvironmentDropsSecretsAndRedirectsProfileAndCaches(t *testing.T) 
 func TestBuildEnvironmentAllowsTrustedADMOverrides(t *testing.T) {
 	dirs := DefaultRuntimeDirs(filepath.Join(t.TempDir(), "sandbox"))
 	got, err := BuildEnvironment([]string{"PATH=old"}, dirs, map[string]string{
-		"PATH":            "new",
+		"PATH":             "new",
 		"ADM_SANDBOX_MODE": "strong",
 	})
 	if err != nil {
@@ -68,11 +68,17 @@ func TestBuildEnvironmentAllowsTrustedADMOverrides(t *testing.T) {
 	}
 }
 
-func TestRuntimeDirsRejectEscape(t *testing.T) {
+func TestRuntimeDirsAllowEnvironmentPersistentCacheAndRejectEscape(t *testing.T) {
 	base := t.TempDir()
-	dirs := DefaultRuntimeDirs(filepath.Join(base, "sandbox"))
+	environmentRoot := filepath.Join(base, "environment")
+	dirs := DefaultRuntimeDirs(filepath.Join(environmentRoot, "execution"))
+	dirs.CacheRoot = filepath.Join(environmentRoot, "cache")
+	if err := dirs.Validate(); err != nil {
+		t.Fatalf("Environment-persistent cache should be valid: %v", err)
+	}
+
 	dirs.CacheRoot = filepath.Join(base, "outside")
 	if err := dirs.Validate(); err == nil {
-		t.Fatal("expected cache root outside sandbox runtime root to be rejected")
+		t.Fatal("expected cache root outside Environment sandbox root to be rejected")
 	}
 }

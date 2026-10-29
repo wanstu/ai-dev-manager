@@ -50,6 +50,11 @@ func (s *Service) PrepareSandboxExecution(
 	if err != nil {
 		return PreparedSandboxExecution{}, err
 	}
+	if s.SandboxExecutionSupport().Platform == "windows" {
+		if err := s.EnsureEnvironmentSandboxAccess(env); err != nil {
+			return PreparedSandboxExecution{}, fmt.Errorf("prepare Environment strong-sandbox access: %w", err)
+		}
+	}
 	s.recordFullAuthorizationBypass(rt, environmentID, executable, surface)
 	cmd, err := rt.PrepareCommand(ctx, executable, args, cwd)
 	if err != nil {
@@ -103,11 +108,16 @@ func (s *Service) RunPreparedSandboxExecution(
 	if goRoot := verifierSandboxGoRoot(baseEnvironment, prepared.ExecutablePath); goRoot != "" {
 		extraEnvironment["GOROOT"] = goRoot
 		extraEnvironment["GOTELEMETRY"] = "off"
+		extraEnvironment["GOTOOLCHAIN"] = "local"
 	}
 
 	result, err := sandbox.Execute(ctx, sandbox.ExecutionRequest{
-		Scope:            prepared.Environment.ID + ":" + executionID,
+		// Keep the AppContainer identity stable per Environment. The execution ID
+		// still isolates runtime/cache directories, while the stable SID allows a
+		// one-time administrator ACL preparation to be reused safely.
+		Scope:            prepared.Environment.ID,
 		RuntimeRoot:      filepath.Join(s.SandboxRoot, prepared.Environment.ID, executionID),
+		CacheRoot:        filepath.Join(s.SandboxRoot, prepared.Environment.ID, "cache"),
 		WorktreeRoot:     prepared.Environment.Root,
 		Executable:       prepared.ExecutablePath,
 		Args:             append([]string(nil), prepared.Args...),
@@ -115,6 +125,7 @@ func (s *Service) RunPreparedSandboxExecution(
 		BaseEnvironment:  baseEnvironment,
 		ExtraEnvironment: extraEnvironment,
 		ToolRoots:        verifierSandboxToolRoots(baseEnvironment, prepared.ExecutablePath),
+		Capabilities:     sandboxCapabilitiesForCommand(prepared.ExecutablePath, prepared.Args),
 		MaxOutputBytes:   normalizeVerifierOutputLimit(maxOutputBytes),
 		Stdout:           stdout,
 		Stderr:           stderr,
@@ -185,6 +196,9 @@ func (s *Service) ExecSandbox(
 		return nil, fmt.Errorf("writer heartbeat failed: %w", heartbeatErr)
 	}
 	if timedOut {
+		if execErr != nil && execErr.Error() != context.DeadlineExceeded.Error() {
+			return nil, fmt.Errorf("command timed out after %dms: %v", timeoutMS, execErr)
+		}
 		return nil, fmt.Errorf("command timed out after %dms", timeoutMS)
 	}
 	if execErr != nil {

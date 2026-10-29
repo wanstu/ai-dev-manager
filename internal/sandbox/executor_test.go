@@ -12,7 +12,8 @@ func TestExecutionRequestValidate(t *testing.T) {
 	base := t.TempDir()
 	request := ExecutionRequest{
 		Scope:        "env:test",
-		RuntimeRoot:  filepath.Join(base, "runtime"),
+		RuntimeRoot:  filepath.Join(base, "env-test", "run-1"),
+		CacheRoot:    filepath.Join(base, "env-test", "cache"),
 		WorktreeRoot: filepath.Join(base, "worktree"),
 		Executable:   filepath.Join(base, "tool.exe"),
 		Cwd:          filepath.Join(base, "worktree"),
@@ -21,12 +22,19 @@ func TestExecutionRequestValidate(t *testing.T) {
 		t.Fatalf("valid execution request rejected: %v", err)
 	}
 	for name, mutate := range map[string]func(*ExecutionRequest){
-		"empty scope": func(v *ExecutionRequest) { v.Scope = "" },
+		"empty scope":      func(v *ExecutionRequest) { v.Scope = "" },
 		"relative runtime": func(v *ExecutionRequest) { v.RuntimeRoot = "runtime" },
-		"relative worktree": func(v *ExecutionRequest) { v.WorktreeRoot = "worktree" },
+		"relative cache":   func(v *ExecutionRequest) { v.CacheRoot = "cache" },
+		"cache outside environment sandbox root": func(v *ExecutionRequest) {
+			v.CacheRoot = filepath.Join(base, "other-env", "cache")
+		},
+		"cache inside execution runtime": func(v *ExecutionRequest) {
+			v.CacheRoot = filepath.Join(base, "env-test", "run-1", "cache")
+		},
+		"relative worktree":   func(v *ExecutionRequest) { v.WorktreeRoot = "worktree" },
 		"relative executable": func(v *ExecutionRequest) { v.Executable = "tool" },
-		"relative cwd": func(v *ExecutionRequest) { v.Cwd = "." },
-		"negative output": func(v *ExecutionRequest) { v.MaxOutputBytes = -1 },
+		"relative cwd":        func(v *ExecutionRequest) { v.Cwd = "." },
+		"negative output":     func(v *ExecutionRequest) { v.MaxOutputBytes = -1 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			value := request

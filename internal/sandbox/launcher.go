@@ -15,12 +15,15 @@ const (
 	maxLaunchOutputBytes     = 4 * 1024 * 1024
 )
 
+const CapabilityInternetClient = "internetClient"
+
 type LaunchRequest struct {
 	Executable     string    `json:"executable"`
 	Args           []string  `json:"args,omitempty"`
 	Cwd            string    `json:"cwd"`
 	Environment    []string  `json:"environment,omitempty"`
 	ProfileSID     string    `json:"profile_sid"`
+	Capabilities   []string  `json:"capabilities,omitempty"`
 	MaxOutputBytes int       `json:"max_output_bytes,omitempty"`
 	Stdout         io.Writer `json:"-"`
 	Stderr         io.Writer `json:"-"`
@@ -47,6 +50,11 @@ func (r LaunchRequest) Validate() error {
 	}
 	if strings.TrimSpace(r.ProfileSID) == "" {
 		return fmt.Errorf("sandbox AppContainer SID is required")
+	}
+	for _, capability := range r.Capabilities {
+		if capability != CapabilityInternetClient {
+			return fmt.Errorf("unsupported sandbox capability %q", capability)
+		}
 	}
 	if r.MaxOutputBytes < 0 {
 		return fmt.Errorf("sandbox max_output_bytes must be nonnegative")

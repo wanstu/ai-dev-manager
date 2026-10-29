@@ -2,7 +2,34 @@
 
 package sandbox
 
-import "testing"
+import (
+	"io"
+	"testing"
+	"time"
+
+	"golang.org/x/sys/windows"
+)
+
+func TestWaitWindowsPipeCopiesCancelsBlockedRead(t *testing.T) {
+	var readHandle, writeHandle windows.Handle
+	if err := windows.CreatePipe(&readHandle, &writeHandle, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(writeHandle)
+
+	copy := startWindowsPipeCopy(readHandle, io.Discard)
+	copies := []*windowsPipeCopy{copy}
+	done := windowsPipeCopiesDone(copies)
+	defer closeWindowsPipeCopies(copies)
+
+	started := time.Now()
+	if err := waitWindowsPipeCopiesWithGrace(done, copies, 20*time.Millisecond, 200*time.Millisecond); err != nil {
+		t.Fatalf("blocked pipe copy did not cancel: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("blocked pipe cancellation took too long: %s", elapsed)
+	}
+}
 
 func TestWindowsEnvironmentBlock(t *testing.T) {
 	block, err := windowsEnvironmentBlock([]string{"A=1", "B=2"})

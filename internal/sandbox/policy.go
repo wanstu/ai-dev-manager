@@ -17,14 +17,14 @@ type RuntimeDirs struct {
 }
 
 type Support struct {
-	Platform                   string   `json:"platform"`
-	Supported                  bool     `json:"supported"`
-	EnvironmentSanitization    bool     `json:"environment_sanitization"`
-	ProcessTreeBoundary        bool     `json:"process_tree_boundary"`
-	DedicatedIdentitySupported bool     `json:"dedicated_identity_supported"`
-	StrongFileBoundarySupported bool    `json:"strong_file_boundary_supported"`
-	RequiresAdminSetup         bool     `json:"requires_admin_setup"`
-	Notes                      []string `json:"notes,omitempty"`
+	Platform                    string   `json:"platform"`
+	Supported                   bool     `json:"supported"`
+	EnvironmentSanitization     bool     `json:"environment_sanitization"`
+	ProcessTreeBoundary         bool     `json:"process_tree_boundary"`
+	DedicatedIdentitySupported  bool     `json:"dedicated_identity_supported"`
+	StrongFileBoundarySupported bool     `json:"strong_file_boundary_supported"`
+	RequiresAdminSetup          bool     `json:"requires_admin_setup"`
+	Notes                       []string `json:"notes,omitempty"`
 }
 
 var inheritedEnvironmentKeys = map[string]struct{}{
@@ -74,7 +74,6 @@ func (d RuntimeDirs) Validate() error {
 	for name, value := range map[string]string{
 		"profile_root": d.ProfileRoot,
 		"temp_root":    d.TempRoot,
-		"cache_root":   d.CacheRoot,
 		"build_root":   d.BuildRoot,
 	} {
 		if strings.TrimSpace(value) == "" || !filepath.IsAbs(value) {
@@ -82,6 +81,15 @@ func (d RuntimeDirs) Validate() error {
 		}
 		if !pathWithin(d.Root, value) {
 			return fmt.Errorf("sandbox %s must stay within runtime root", name)
+		}
+	}
+	if strings.TrimSpace(d.CacheRoot) == "" || !filepath.IsAbs(d.CacheRoot) {
+		return fmt.Errorf("sandbox cache_root must be absolute")
+	}
+	if !pathWithin(d.Root, d.CacheRoot) {
+		environmentRuntimeRoot := filepath.Dir(d.Root)
+		if !pathWithin(environmentRuntimeRoot, d.CacheRoot) || pathWithin(d.Root, d.CacheRoot) {
+			return fmt.Errorf("sandbox cache_root must stay within the Environment sandbox root")
 		}
 	}
 	return nil

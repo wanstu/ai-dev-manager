@@ -55,17 +55,23 @@ func main() {
 }
 
 func runSandboxHostPreparationMode(args []string) (bool, error) {
-	if len(args) != 1 {
-		return false, nil
+	if len(args) == 1 {
+		switch args[0] {
+		case "--sandbox-host-prep-install":
+			return true, desktop.RunSandboxHostPreparationInstall()
+		case "--sandbox-host-prep-boot":
+			return true, desktop.RunSandboxHostPreparationBoot()
+		}
 	}
-	switch args[0] {
-	case "--sandbox-host-prep-install":
-		return true, desktop.RunSandboxHostPreparationInstall()
-	case "--sandbox-host-prep-boot":
-		return true, desktop.RunSandboxHostPreparationBoot()
-	default:
-		return false, nil
+	if len(args) == 2 {
+		switch args[0] {
+		case "--sandbox-environment-prep":
+			return true, desktop.RunSandboxEnvironmentPreparation(args[1])
+		case "--sandbox-environment-cleanup":
+			return true, desktop.RunSandboxEnvironmentCleanup(args[1])
+		}
 	}
+	return false, nil
 }
 
 func desktopLaunchOptions(args []string) (bool, error) {
