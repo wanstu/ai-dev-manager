@@ -131,10 +131,11 @@ func (s *Service) RunPreparedSandboxExecution(
 		Stderr:           stderr,
 	})
 	command := runtime.CommandResult{
-		Started:  result.Started,
-		ExitCode: result.ExitCode,
-		Stdout:   result.Stdout,
-		Stderr:   result.Stderr,
+		Started:       result.Started,
+		ExitCode:      result.ExitCode,
+		Stdout:        result.Stdout,
+		Stderr:        result.Stderr,
+		ExecutionMode: "sandbox",
 	}
 	if command.Started {
 		_ = s.RecordExecUsage(prepared.Environment.ID, prepared.Executable, "sandbox")

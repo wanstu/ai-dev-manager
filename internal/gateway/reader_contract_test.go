@@ -16,6 +16,8 @@ func TestGatewayAgentInstructionsKeepReadAccessLeaseFree(t *testing.T) {
 		"require no reader lease and no writer lease",
 		"Never acquire a writer merely to browse, inspect, search, review, or understand code",
 		"acquire it only immediately before an operation whose tool contract explicitly requires writer_owner",
+		"execution_mode=auto|host|sandbox",
+		"sandbox is an explicit execution capability independent of Strong Permission Control",
 	} {
 		if !strings.Contains(gatewayAgentInstructions, required) {
 			t.Fatalf("gateway agent instructions missing reader contract %q: %s", required, gatewayAgentInstructions)

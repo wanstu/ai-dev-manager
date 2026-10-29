@@ -218,21 +218,25 @@ func execCapabilityFacts(
 		}
 	}
 	sandboxEnvironment := sandbox.EnvironmentAccessStatus{}
-	if strongPermissionEnabled && sandboxAvailable && rootErr == nil {
+	if sandboxAvailable && rootErr == nil {
 		sandboxEnvironment = sandbox.InspectEnvironmentWorkspaceAccess(env.ID, ws.Path, env.Root)
 	}
 	evidence := []model.CapabilityEvidence{environmentEvidence(env, ws), writerEvidence(env), {
 		Kind: capabilityKindExec,
 		Details: map[string]string{
-			"allowed_executable_count":        strconv.Itoa(len(allowed)),
-			"full_authorization":              strconv.FormatBool(fullAuthorization),
-			"strong_permission_control":       strconv.FormatBool(strongPermissionEnabled),
-			"agent_execution_mode":            agentExecutionMode,
-			"strong_sandbox_available":        strconv.FormatBool(sandboxAvailable),
-			"strong_sandbox_platform":         strings.TrimSpace(sandboxPlatform),
-			"sandbox_environment_prepared":    strconv.FormatBool(sandboxEnvironment.Prepared),
-			"sandbox_environment_auto_prep":   strconv.FormatBool(sandboxEnvironment.CanAutoPrepare),
-			"sandbox_environment_needs_admin": strconv.FormatBool(sandboxEnvironment.RequiresAdmin),
+			"allowed_executable_count":         strconv.Itoa(len(allowed)),
+			"full_authorization":               strconv.FormatBool(fullAuthorization),
+			"strong_permission_control":        strconv.FormatBool(strongPermissionEnabled),
+			"agent_execution_mode":             agentExecutionMode,
+			"agent_default_execution_mode":     agentExecutionMode,
+			"agent_execution_mode_options":     "auto,host,sandbox",
+			"agent_explicit_host_allowed":      strconv.FormatBool(!strongPermissionEnabled),
+			"agent_explicit_sandbox_supported": strconv.FormatBool(sandboxAvailable),
+			"strong_sandbox_available":         strconv.FormatBool(sandboxAvailable),
+			"strong_sandbox_platform":          strings.TrimSpace(sandboxPlatform),
+			"sandbox_environment_prepared":     strconv.FormatBool(sandboxEnvironment.Prepared),
+			"sandbox_environment_auto_prep":    strconv.FormatBool(sandboxEnvironment.CanAutoPrepare),
+			"sandbox_environment_needs_admin":  strconv.FormatBool(sandboxEnvironment.RequiresAdmin),
 		},
 	}}
 	if rootErr != nil {

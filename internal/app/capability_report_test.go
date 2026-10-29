@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -394,6 +395,18 @@ func TestCapabilityReportReflectsAgentSandboxExecutionMode(t *testing.T) {
 	relaxedEvidence := relaxedFact.Evidence[len(relaxedFact.Evidence)-1].Details
 	if relaxedEvidence["agent_execution_mode"] != "host" {
 		t.Fatalf("relaxed agent_execution_mode=%q, want host", relaxedEvidence["agent_execution_mode"])
+	}
+	if relaxedEvidence["agent_default_execution_mode"] != "host" {
+		t.Fatalf("relaxed agent_default_execution_mode=%q, want host", relaxedEvidence["agent_default_execution_mode"])
+	}
+	if relaxedEvidence["agent_execution_mode_options"] != "auto,host,sandbox" {
+		t.Fatalf("execution mode options=%q", relaxedEvidence["agent_execution_mode_options"])
+	}
+	if relaxedEvidence["agent_explicit_host_allowed"] != "true" {
+		t.Fatalf("relaxed explicit host allowed=%q, want true", relaxedEvidence["agent_explicit_host_allowed"])
+	}
+	if relaxedEvidence["agent_explicit_sandbox_supported"] != strconv.FormatBool(service.SandboxExecutionAvailable()) {
+		t.Fatalf("explicit sandbox supported=%q, sandbox available=%v", relaxedEvidence["agent_explicit_sandbox_supported"], service.SandboxExecutionAvailable())
 	}
 }
 
