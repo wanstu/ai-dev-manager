@@ -8,6 +8,7 @@ type SandboxHostPreparationStatus struct {
 	NullDevicePrepared bool   `json:"null_device_prepared"`
 	BootTaskInstalled  bool   `json:"boot_task_installed"`
 	BootTaskVerified   bool   `json:"boot_task_verified"`
+	ACLBrokerReady     bool   `json:"acl_broker_ready"`
 	RequiresAdminSetup bool   `json:"requires_admin_setup"`
 	Message            string `json:"message,omitempty"`
 }

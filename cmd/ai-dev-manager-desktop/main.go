@@ -96,6 +96,8 @@ func runGatewayChild(args []string) error {
 		return err
 	}
 	service := app.New(statePath)
+	service.SetSandboxEnvironmentElevationRequester(desktop.RequestSandboxEnvironmentPreparation)
+	service.SetSandboxEnvironmentCleanupRequester(desktop.RequestSandboxEnvironmentCleanup)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return gateway.RunHTTP(ctx, service, *listen)

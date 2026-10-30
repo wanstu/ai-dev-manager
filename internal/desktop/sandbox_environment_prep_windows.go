@@ -3,6 +3,7 @@
 package desktop
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -45,6 +46,10 @@ func sandboxEnvironmentPreparationStatus(environmentID string) (sandbox.Environm
 }
 
 func enableSandboxEnvironmentPreparation(environmentID string) (sandbox.EnvironmentAccessStatus, error) {
+	return enableSandboxEnvironmentPreparationContext(context.Background(), environmentID)
+}
+
+func enableSandboxEnvironmentPreparationContext(ctx context.Context, environmentID string) (sandbox.EnvironmentAccessStatus, error) {
 	status, err := sandboxEnvironmentPreparationStatus(environmentID)
 	if err != nil {
 		return status, err
@@ -52,12 +57,33 @@ func enableSandboxEnvironmentPreparation(environmentID string) (sandbox.Environm
 	if status.Prepared {
 		return status, nil
 	}
+	id, workspaceRoot, root, resolveErr := localSandboxEnvironment(environmentID)
+	if resolveErr != nil {
+		return status, resolveErr
+	}
 	if status.CanAutoPrepare {
-		id, workspaceRoot, root, resolveErr := localSandboxEnvironment(environmentID)
-		if resolveErr != nil {
-			return status, resolveErr
-		}
 		return sandbox.PrepareEnvironmentWorkspaceAccess(id, workspaceRoot, root)
+	}
+	profileName, profileErr := sandbox.StableAppContainerProfileName(id)
+	if profileErr != nil {
+		return status, profileErr
+	}
+	profile, _, profileErr := sandbox.EnsureWindowsAppContainerProfile(profileName)
+	if profileErr != nil {
+		return status, fmt.Errorf("prepare Environment AppContainer profile before ACL broker: %w", profileErr)
+	}
+	if _, brokerErr := requestSandboxACLBroker(ctx, sandboxACLBrokerRequest{
+		Operation:       sandboxACLOpPrepare,
+		EnvironmentID:   id,
+		ProfileSID:      profile.SID,
+		WorkspaceRoot:   workspaceRoot,
+		EnvironmentRoot: root,
+	}); brokerErr == nil {
+		current := sandbox.InspectEnvironmentWorkspaceAccess(id, workspaceRoot, root)
+		if !current.Prepared {
+			return current, fmt.Errorf("Sandbox ACL broker completed without a verified Environment grant")
+		}
+		return current, nil
 	}
 
 	executable, err := os.Executable()
@@ -85,19 +111,32 @@ func enableSandboxEnvironmentPreparation(environmentID string) (sandbox.Environm
 
 	// Security products can replace or intercept the visible UAC flow. Do not
 	// trust ShellExecute success; only the resulting ACL is authoritative.
-	deadline := time.Now().Add(90 * time.Second)
-	for time.Now().Before(deadline) {
+	deadline := time.NewTimer(90 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(300 * time.Millisecond)
+	defer ticker.Stop()
+	for {
 		current, statusErr := sandboxEnvironmentPreparationStatus(environmentID)
 		if statusErr == nil && current.Prepared {
 			return current, nil
 		}
-		time.Sleep(300 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			current, _ := sandboxEnvironmentPreparationStatus(environmentID)
+			return current, ctx.Err()
+		case <-deadline.C:
+			current, _ := sandboxEnvironmentPreparationStatus(environmentID)
+			return current, fmt.Errorf("administrator Environment sandbox preparation did not produce a verifiable ACL")
+		case <-ticker.C:
+		}
 	}
-	current, _ := sandboxEnvironmentPreparationStatus(environmentID)
-	return current, fmt.Errorf("administrator Environment sandbox preparation did not produce a verifiable ACL")
 }
 
 func cleanupSandboxEnvironmentPreparation(environmentID string) (sandbox.EnvironmentAccessStatus, error) {
+	return cleanupSandboxEnvironmentPreparationContext(context.Background(), environmentID)
+}
+
+func cleanupSandboxEnvironmentPreparationContext(ctx context.Context, environmentID string) (sandbox.EnvironmentAccessStatus, error) {
 	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
 	if err != nil {
 		return sandbox.EnvironmentAccessStatus{}, err
@@ -108,6 +147,38 @@ func cleanupSandboxEnvironmentPreparation(environmentID string) (sandbox.Environ
 	}
 	if !status.RequiresAdmin {
 		return status, cleanupErr
+	}
+	profileSID := strings.TrimSpace(status.ProfileSID)
+	if profileSID == "" {
+		profileName := strings.TrimSpace(status.ProfileName)
+		if profileName == "" {
+			var nameErr error
+			profileName, nameErr = sandbox.StableAppContainerProfileName(id)
+			if nameErr != nil {
+				return status, nameErr
+			}
+		}
+		profile, deriveErr := sandbox.DeriveWindowsAppContainerProfile(profileName)
+		if deriveErr != nil {
+			return status, fmt.Errorf("derive Environment AppContainer profile before ACL broker cleanup: %w", deriveErr)
+		}
+		profileSID = profile.SID
+	}
+	if _, brokerErr := requestSandboxACLBroker(ctx, sandboxACLBrokerRequest{
+		Operation:       sandboxACLOpCleanup,
+		EnvironmentID:   id,
+		ProfileSID:      profileSID,
+		WorkspaceRoot:   workspaceRoot,
+		EnvironmentRoot: root,
+	}); brokerErr == nil {
+		current, localCleanupErr := sandbox.CleanupEnvironmentWorkspaceAccess(id, workspaceRoot, root)
+		if localCleanupErr != nil {
+			return current, fmt.Errorf("finalize Environment profile cleanup after ACL broker: %w", localCleanupErr)
+		}
+		if current.ProfilePresent || current.HasAnyGrant {
+			return current, fmt.Errorf("Sandbox ACL broker cleanup completed without removing all persistent grants")
+		}
+		return current, nil
 	}
 
 	executable, err := os.Executable()
@@ -132,23 +203,34 @@ func cleanupSandboxEnvironmentPreparation(environmentID string) (sandbox.Environ
 
 	// As with preparation, endpoint-security software may own the visible UAC
 	// experience. Success is defined only by the profile/grants disappearing.
-	deadline := time.Now().Add(90 * time.Second)
-	for time.Now().Before(deadline) {
+	deadline := time.NewTimer(90 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(300 * time.Millisecond)
+	defer ticker.Stop()
+	for {
 		current, statusErr := sandboxEnvironmentPreparationStatus(environmentID)
 		if statusErr == nil && !current.ProfilePresent && !current.HasAnyGrant {
 			return current, nil
 		}
-		time.Sleep(300 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			current, _ := sandboxEnvironmentPreparationStatus(environmentID)
+			return current, ctx.Err()
+		case <-deadline.C:
+			current, _ := sandboxEnvironmentPreparationStatus(environmentID)
+			return current, fmt.Errorf("administrator Environment sandbox cleanup did not produce a verifiable result")
+		case <-ticker.C:
+		}
 	}
-	current, _ := sandboxEnvironmentPreparationStatus(environmentID)
-	return current, fmt.Errorf("administrator Environment sandbox cleanup did not produce a verifiable result")
 }
 
-// RunSandboxEnvironmentPreparation is the elevated hidden Desktop mode. It
-// accepts only an Environment ID and resolves the root from local ADM state.
+// RunSandboxEnvironmentPreparation is the hidden Desktop entry point used by
+// both ordinary-user broker requests and the elevated UAC fallback. Ordinary
+// callers first use the protected SYSTEM ACL broker; an elevated fallback
+// performs the narrow local ACL operation directly.
 func RunSandboxEnvironmentPreparation(environmentID string) error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
-		return fmt.Errorf("Environment sandbox preparation requires administrator elevation")
+		return RequestSandboxEnvironmentPreparation(context.Background(), environmentID)
 	}
 	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
 	if err != nil {
@@ -166,7 +248,7 @@ func RunSandboxEnvironmentPreparation(environmentID string) error {
 
 func RunSandboxEnvironmentCleanup(environmentID string) error {
 	if !windows.GetCurrentProcessToken().IsElevated() {
-		return fmt.Errorf("Environment sandbox cleanup requires administrator elevation")
+		return RequestSandboxEnvironmentCleanup(context.Background(), environmentID)
 	}
 	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
 	if err != nil {

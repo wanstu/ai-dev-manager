@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -38,4 +39,32 @@ func (a *Adapter) CleanupSandboxEnvironmentPreparation(environmentID string) (sa
 		return sandbox.EnvironmentAccessStatus{EnvironmentID: strings.TrimSpace(environmentID)}, err
 	}
 	return cleanupSandboxEnvironmentPreparation(environmentID)
+}
+
+// RequestSandboxEnvironmentPreparation is used by the local Desktop Gateway
+// child when Sandbox execution needs a one-time ACL grant. Only the stable
+// Environment ID crosses the elevation boundary; elevated code resolves paths
+// from local ADM state and never accepts arbitrary host paths from the caller.
+func RequestSandboxEnvironmentPreparation(ctx context.Context, environmentID string) error {
+	status, err := enableSandboxEnvironmentPreparationContext(ctx, environmentID)
+	if err != nil {
+		return err
+	}
+	if !status.Prepared {
+		return fmt.Errorf("Environment sandbox ACL preparation completed without a verified grant")
+	}
+	return nil
+}
+
+// RequestSandboxEnvironmentCleanup mirrors preparation for lifecycle teardown.
+// Elevated code again receives only the stable Environment ID.
+func RequestSandboxEnvironmentCleanup(ctx context.Context, environmentID string) error {
+	status, err := cleanupSandboxEnvironmentPreparationContext(ctx, environmentID)
+	if err != nil {
+		return err
+	}
+	if status.ProfilePresent || status.HasAnyGrant {
+		return fmt.Errorf("Environment sandbox ACL cleanup completed without removing all persistent grants")
+	}
+	return nil
 }

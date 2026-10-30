@@ -3,6 +3,7 @@
 package desktop
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,13 +28,15 @@ const (
 func sandboxHostPreparationStatus() SandboxHostPreparationStatus {
 	report := sandbox.InspectHostPreparation()
 	taskInstalled, taskVerified, taskErr := sandboxHostPrepBootTaskStatus()
+	brokerReady := sandboxACLBrokerReady()
 	status := SandboxHostPreparationStatus{
 		Platform:           "windows",
 		Supported:          true,
 		NullDevicePrepared: report.NullDevicePrepared,
 		BootTaskInstalled:  taskInstalled,
 		BootTaskVerified:   taskVerified,
-		RequiresAdminSetup: !report.NullDevicePrepared || !taskInstalled || !taskVerified,
+		ACLBrokerReady:     brokerReady,
+		RequiresAdminSetup: !report.NullDevicePrepared || !taskInstalled || !taskVerified || !brokerReady,
 		Message:            report.Message,
 	}
 	if taskErr != nil {
@@ -47,8 +50,10 @@ func sandboxHostPreparationStatus() SandboxHostPreparationStatus {
 		status.Message = "强沙盒当前已经生效，但还需要完成一次管理员确认，才能保证重启电脑后继续可用"
 	} else if report.NullDevicePrepared && taskInstalled && !taskVerified {
 		status.Message = "强沙盒当前可用；开机恢复标记存在，但任务查询无法验证，可能被安全软件或系统权限拦截"
+	} else if report.NullDevicePrepared && taskInstalled && !brokerReady {
+		status.Message = "强沙盒基础能力已准备，但 Sandbox ACL broker 未运行；需要修复受保护的开机任务"
 	} else if report.NullDevicePrepared && taskInstalled {
-		status.Message = "强沙盒已启用：当前可用，重启电脑后也会自动恢复"
+		status.Message = "强沙盒已启用：当前可用，Sandbox ACL broker 已运行，重启电脑后也会自动恢复"
 	}
 	return status
 }
@@ -84,7 +89,7 @@ func enableSandboxHostPreparation() (SandboxHostPreparationStatus, error) {
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
 		status := sandboxHostPreparationStatus()
-		if status.NullDevicePrepared && status.BootTaskInstalled {
+		if status.NullDevicePrepared && status.BootTaskInstalled && status.ACLBrokerReady {
 			return status, nil
 		}
 		time.Sleep(300 * time.Millisecond)
@@ -104,17 +109,36 @@ func RunSandboxHostPreparationInstall() error {
 	if err != nil {
 		return fmt.Errorf("resolve Desktop executable: %w", err)
 	}
+	userSID, err := currentWindowsUserSID()
+	if err != nil {
+		return fmt.Errorf("resolve Desktop install user SID: %w", err)
+	}
 	helper, err := sandboxHostPrepMachineExecutable()
 	if err != nil {
 		return err
 	}
-	if err := copyProtectedHostPrepExecutable(source, helper); err != nil {
+	_ = endSandboxHostPrepBootTask()
+	if err := waitSandboxACLBrokerStopped(10 * time.Second); err != nil {
 		return err
+	}
+	copyDeadline := time.Now().Add(10 * time.Second)
+	for {
+		copyErr := copyProtectedHostPrepExecutable(source, helper)
+		if copyErr == nil {
+			break
+		}
+		if !errors.Is(copyErr, windows.ERROR_ACCESS_DENIED) && !errors.Is(copyErr, windows.ERROR_SHARING_VIOLATION) {
+			return copyErr
+		}
+		if time.Now().After(copyDeadline) {
+			return fmt.Errorf("replace protected sandbox host-prep executable after stopping previous broker: %w", copyErr)
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 	if err := registerSandboxHostPrepBootTask(helper); err != nil {
 		return err
 	}
-	if err := writeSandboxHostPrepReadyMarker(helper); err != nil {
+	if err := writeSandboxHostPrepReadyMarker(helper, userSID); err != nil {
 		_ = removeSandboxHostPrepBootTask()
 		return err
 	}
@@ -122,15 +146,28 @@ func RunSandboxHostPreparationInstall() error {
 		_ = removeSandboxHostPrepBootTask()
 		return err
 	}
-	status := sandboxHostPreparationStatus()
-	if !status.NullDevicePrepared || !status.BootTaskInstalled {
-		return fmt.Errorf("sandbox host preparation completed but readiness verification failed")
+	if err := startSandboxHostPrepBootTask(); err != nil {
+		_ = removeSandboxHostPrepBootTask()
+		return err
 	}
-	return nil
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if sandboxACLBrokerReady() {
+			status := sandboxHostPreparationStatus()
+			if status.NullDevicePrepared && status.BootTaskInstalled {
+				return nil
+			}
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return fmt.Errorf("sandbox host preparation completed but ACL broker did not become ready")
 }
 
 func RunSandboxHostPreparationBoot() error {
-	return sandbox.PrepareNullDeviceHost()
+	if err := sandbox.PrepareNullDeviceHost(); err != nil {
+		return err
+	}
+	return RunSandboxACLBroker()
 }
 
 func sandboxHostPrepMachineExecutable() (string, error) {
@@ -213,11 +250,46 @@ func registerSandboxHostPrepBootTask(helper string) error {
 	return nil
 }
 
+func waitSandboxACLBrokerStopped(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !sandboxACLBrokerReady() {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("previous sandbox ACL broker did not stop before protected helper replacement")
+}
+
+func startSandboxHostPrepBootTask() error {
+	schtasks, err := sandboxHostPrepSystemExecutable("schtasks.exe")
+	if err != nil {
+		return err
+	}
+	command := hiddenWindowsCommand(schtasks, "/Run", "/TN", sandboxHostPrepTaskName)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("start sandbox host-prep task: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func endSandboxHostPrepBootTask() error {
+	schtasks, err := sandboxHostPrepSystemExecutable("schtasks.exe")
+	if err != nil {
+		return err
+	}
+	command := hiddenWindowsCommand(schtasks, "/End", "/TN", sandboxHostPrepTaskName)
+	_ = command.Run()
+	return nil
+}
+
 func removeSandboxHostPrepBootTask() error {
 	schtasks, err := sandboxHostPrepSystemExecutable("schtasks.exe")
 	if err != nil {
 		return err
 	}
+	_ = endSandboxHostPrepBootTask()
 	command := hiddenWindowsCommand(schtasks, "/Delete", "/TN", sandboxHostPrepTaskName, "/F")
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -254,7 +326,18 @@ func sandboxHostPrepReadyMarkerPath() (string, error) {
 	return filepath.Join(filepath.Dir(helper), sandboxHostPrepReadyMarkerName), nil
 }
 
-func writeSandboxHostPrepReadyMarker(helper string) error {
+func currentWindowsUserSID() (string, error) {
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		return "", err
+	}
+	if user == nil || user.User.Sid == nil {
+		return "", fmt.Errorf("current Windows token has no user SID")
+	}
+	return user.User.Sid.String(), nil
+}
+
+func writeSandboxHostPrepReadyMarker(helper, userSID string) error {
 	marker, err := sandboxHostPrepReadyMarkerPath()
 	if err != nil {
 		return err
@@ -262,7 +345,10 @@ func writeSandboxHostPrepReadyMarker(helper string) error {
 	if filepath.Clean(filepath.Dir(marker)) != filepath.Clean(filepath.Dir(helper)) {
 		return fmt.Errorf("sandbox host-prep readiness marker escaped protected helper directory")
 	}
-	payload := []byte("task=" + sandboxHostPrepTaskName + "\nhelper=" + filepath.Base(helper) + "\n")
+	if _, err := windows.StringToSid(strings.TrimSpace(userSID)); err != nil {
+		return fmt.Errorf("invalid sandbox host-prep user SID: %w", err)
+	}
+	payload := []byte("task=" + sandboxHostPrepTaskName + "\nhelper=" + filepath.Base(helper) + "\nuser_sid=" + strings.TrimSpace(userSID) + "\n")
 	temp, err := os.CreateTemp(filepath.Dir(marker), "sandbox-host-prep-*.ready")
 	if err != nil {
 		return fmt.Errorf("create sandbox host-prep readiness marker: %w", err)
@@ -290,6 +376,28 @@ func writeSandboxHostPrepReadyMarker(helper string) error {
 	}
 	cleanup = false
 	return nil
+}
+
+func sandboxHostPrepInstalledUserSID() (string, error) {
+	marker, err := sandboxHostPrepReadyMarkerPath()
+	if err != nil {
+		return "", err
+	}
+	payload, err := os.ReadFile(marker)
+	if err != nil {
+		return "", fmt.Errorf("read sandbox host-prep readiness marker: %w", err)
+	}
+	for _, line := range strings.Split(string(payload), "\n") {
+		if !strings.HasPrefix(line, "user_sid=") {
+			continue
+		}
+		sid := strings.TrimSpace(strings.TrimPrefix(line, "user_sid="))
+		if _, err := windows.StringToSid(sid); err != nil {
+			return "", fmt.Errorf("invalid installed sandbox host-prep user SID: %w", err)
+		}
+		return sid, nil
+	}
+	return "", fmt.Errorf("sandbox host-prep readiness marker has no installed user SID")
 }
 
 func removeSandboxHostPrepReadyMarker() error {

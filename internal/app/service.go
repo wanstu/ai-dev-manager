@@ -28,23 +28,26 @@ import (
 )
 
 type Service struct {
-	Store                   *store.Store
-	Secrets                 *secretvault.Store
-	Workspaces              *workspace.Service
-	Environments            *environment.Service
-	Isolation               *isolation.Service
-	HostEnvironment         *hostenv.Manager
-	MCPs                    *catalog.MCPService
-	Skills                  *catalog.Service
-	Memory                  *memory.Service
-	Logger                  *logging.Logger
-	Verifiers               *verifier.Service
-	SandboxRoot             string
-	CodeIntelligence        codeintel.Provider
-	indexStore              *projectIndexStore
-	indexJobsMu             sync.Mutex
-	indexJobs               map[string]*projectIndexJob
-	writerHeartbeatInterval func(time.Duration) time.Duration
+	Store                              *store.Store
+	Secrets                            *secretvault.Store
+	Workspaces                         *workspace.Service
+	Environments                       *environment.Service
+	Isolation                          *isolation.Service
+	HostEnvironment                    *hostenv.Manager
+	MCPs                               *catalog.MCPService
+	Skills                             *catalog.Service
+	Memory                             *memory.Service
+	Logger                             *logging.Logger
+	Verifiers                          *verifier.Service
+	SandboxRoot                        string
+	CodeIntelligence                   codeintel.Provider
+	indexStore                         *projectIndexStore
+	indexJobsMu                        sync.Mutex
+	indexJobs                          map[string]*projectIndexJob
+	writerHeartbeatInterval            func(time.Duration) time.Duration
+	sandboxEnvironmentPrepMu           sync.Mutex
+	sandboxEnvironmentElevationRequest func(context.Context, string) error
+	sandboxEnvironmentCleanupRequest   func(context.Context, string) error
 }
 
 type EnvironmentSummary struct {

@@ -153,130 +153,18 @@ func prepareEnvironmentAccessPlatform(status EnvironmentAccessStatus) (Environme
 }
 
 func inspectEnvironmentWorkspaceAccessPlatform(status EnvironmentAccessStatus, workspaceRoot string) EnvironmentAccessStatus {
-	paths, err := environmentWorkspaceTraversePaths(workspaceRoot, status.Root)
-	if err != nil {
-		status.Prepared = false
-		status.CanAutoPrepare = false
-		status.Message = err.Error()
-		return status
-	}
-	if len(paths) == 0 {
-		return status
-	}
-
-	if !status.ProfilePresent || status.ProfileSID == "" {
-		auto := status.CanAutoPrepare
-		for _, path := range paths {
-			writable, writableErr := WindowsPathDACLWritable(path)
-			if writableErr != nil {
-				status.Prepared = false
-				status.CanAutoPrepare = false
-				status.Message = writableErr.Error()
-				return status
-			}
-			auto = auto && writable
-		}
-		status.CanAutoPrepare = auto
-		status.RequiresAdmin = !auto
-		if status.RequiresAdmin {
-			status.Message = "Environment path traversal requires one-time administrator ACL preparation inside the Workspace"
-		} else {
-			status.Message = "Gateway can prepare Environment root and Workspace traversal ACLs without administrator elevation"
-		}
-		return status
-	}
-
-	allTraverseGranted := true
-	allMissingWritable := true
-	anyTraverseGrant := false
-	for _, path := range paths {
-		granted, grantErr := WindowsAppContainerPathAccessGranted(path, status.ProfileSID, PathAccessTraverse)
-		if grantErr != nil {
-			status.Prepared = false
-			status.CanAutoPrepare = false
-			status.Message = grantErr.Error()
-			return status
-		}
-		if granted {
-			anyTraverseGrant = true
-			continue
-		}
-		allTraverseGranted = false
-		writable, writableErr := WindowsPathDACLWritable(path)
-		if writableErr != nil {
-			status.Prepared = false
-			status.CanAutoPrepare = false
-			status.Message = writableErr.Error()
-			return status
-		}
-		allMissingWritable = allMissingWritable && writable
-	}
-	status.HasAnyGrant = status.HasAnyGrant || anyTraverseGrant
-	if status.Prepared && allTraverseGranted {
-		status.CanAutoPrepare = true
-		status.RequiresAdmin = false
-		status.Message = "Environment root and Workspace traversal ACLs are prepared for the stable AppContainer SID"
-		return status
-	}
-
-	status.Prepared = false
-	status.CanAutoPrepare = status.CanAutoPrepare && allMissingWritable
-	status.RequiresAdmin = !status.CanAutoPrepare
-	if status.RequiresAdmin {
-		status.Message = "Environment Workspace traversal requires one-time administrator ACL preparation"
-	} else {
-		status.Message = "Gateway can complete the Environment Workspace traversal ACL preparation automatically"
-	}
+	// Workspace/root relationship is validated by the caller. AppContainer can
+	// open an explicitly granted Environment root without mutating ancestor
+	// directory ACLs, so persistent preparation is intentionally root-only.
 	return status
 }
 
 func prepareEnvironmentWorkspaceAccessPlatform(status EnvironmentAccessStatus, workspaceRoot string) (EnvironmentAccessStatus, error) {
-	prepared, err := prepareEnvironmentAccessPlatform(status)
-	if err != nil {
-		return prepared, err
-	}
-	paths, err := environmentWorkspaceTraversePaths(workspaceRoot, prepared.Root)
-	if err != nil {
-		return prepared, err
-	}
-	for _, path := range paths {
-		if _, grantErr := EnsureWindowsAppContainerPath(path, prepared.ProfileSID, PathAccessTraverse); grantErr != nil {
-			if errors.Is(grantErr, windows.ERROR_ACCESS_DENIED) {
-				prepared.RequiresAdmin = true
-				prepared.CanAutoPrepare = false
-			}
-			return prepared, fmt.Errorf("prepare Environment Workspace traversal ACL on %s: %w", path, grantErr)
-		}
-	}
-	verified := inspectEnvironmentWorkspaceAccessPlatform(prepared, workspaceRoot)
-	if !verified.Prepared {
-		return verified, fmt.Errorf("Environment Workspace ACL preparation completed without a fully verified root/traversal grant")
-	}
-	return verified, nil
+	// Keep persistent authority scoped to the Environment root. Never grant the
+	// stable AppContainer SID access to Workspace/ancestor directories.
+	return prepareEnvironmentAccessPlatform(status)
 }
 
 func cleanupEnvironmentWorkspaceAccessPlatform(status EnvironmentAccessStatus, workspaceRoot string) (EnvironmentAccessStatus, error) {
-	if status.ProfilePresent && status.ProfileSID != "" {
-		paths, err := environmentWorkspaceTraversePaths(workspaceRoot, status.Root)
-		if err != nil {
-			return status, err
-		}
-		for index := len(paths) - 1; index >= 0; index-- {
-			path := paths[index]
-			granted, grantErr := WindowsAppContainerPathAccessGranted(path, status.ProfileSID, PathAccessTraverse)
-			if grantErr != nil {
-				return status, grantErr
-			}
-			if !granted {
-				continue
-			}
-			if revokeErr := RevokeWindowsAppContainerPath(path, status.ProfileSID); revokeErr != nil {
-				if errors.Is(revokeErr, windows.ERROR_ACCESS_DENIED) {
-					status.RequiresAdmin = true
-				}
-				return status, fmt.Errorf("revoke Environment Workspace traversal ACL from %s: %w", path, revokeErr)
-			}
-		}
-	}
 	return cleanupEnvironmentAccessPlatform(status)
 }
