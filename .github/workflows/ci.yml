@@ -207,6 +207,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Sandbox host-prep boot task was not registered" }
           $helper = Join-Path $env:ProgramFiles 'AI Dev Manager\adm-sandbox-host-prep.exe'
           if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { throw "Protected sandbox host-prep helper is missing: $helper" }
+          schtasks.exe /End /TN "AI Dev Manager Sandbox Host Prep" | Out-Null
+          Start-Sleep -Milliseconds 500
           schtasks.exe /Delete /TN "AI Dev Manager Sandbox Host Prep" /F | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "Could not remove sandbox host-prep CI task" }
           Remove-Item -LiteralPath $helper -Force
