@@ -10,6 +10,22 @@ import (
 	"testing"
 )
 
+func assertSameExistingPath(t *testing.T, got, want string) {
+	t.Helper()
+
+	gotInfo, err := os.Stat(got)
+	if err != nil {
+		t.Fatalf("stat got path %q: %v", got, err)
+	}
+	wantInfo, err := os.Stat(want)
+	if err != nil {
+		t.Fatalf("stat want path %q: %v", want, err)
+	}
+	if !os.SameFile(gotInfo, wantInfo) {
+		t.Fatalf("path %q does not refer to the same file as %q", got, want)
+	}
+}
+
 func TestVerifierSandboxJavaRootInfersJDKFromAbsoluteExecutable(t *testing.T) {
 	jdkRoot := filepath.Join(t.TempDir(), "jdk-25")
 	binDir := filepath.Join(jdkRoot, "bin")
@@ -19,9 +35,7 @@ func TestVerifierSandboxJavaRootInfersJDKFromAbsoluteExecutable(t *testing.T) {
 	executable := filepath.Join(binDir, "java.exe")
 
 	got := verifierSandboxJavaRoot(nil, executable)
-	if !strings.EqualFold(filepath.Clean(got), filepath.Clean(jdkRoot)) {
-		t.Fatalf("java root=%q, want %q", got, jdkRoot)
-	}
+	assertSameExistingPath(t, got, jdkRoot)
 }
 
 func TestVerifierSandboxJavaRootPrefersExecutableJDKOverStaleJavaHome(t *testing.T) {
@@ -36,9 +50,7 @@ func TestVerifierSandboxJavaRootPrefersExecutableJDKOverStaleJavaHome(t *testing
 	executable := filepath.Join(executableJDK, "bin", "javac.exe")
 
 	got := verifierSandboxJavaRoot([]string{"JAVA_HOME=" + staleJavaHome}, executable)
-	if !strings.EqualFold(filepath.Clean(got), filepath.Clean(executableJDK)) {
-		t.Fatalf("java root=%q, want executable JDK %q", got, executableJDK)
-	}
+	assertSameExistingPath(t, got, executableJDK)
 }
 
 func TestVerifierSandboxJavaRootFallsBackToJavaHome(t *testing.T) {
@@ -48,9 +60,7 @@ func TestVerifierSandboxJavaRootFallsBackToJavaHome(t *testing.T) {
 	}
 
 	got := verifierSandboxJavaRoot([]string{"JAVA_HOME=" + javaHome}, "java")
-	if !strings.EqualFold(filepath.Clean(got), filepath.Clean(javaHome)) {
-		t.Fatalf("java root=%q, want JAVA_HOME %q", got, javaHome)
-	}
+	assertSameExistingPath(t, got, javaHome)
 }
 
 func TestVerifierSandboxToolRootsGrantWholeJDKForJava(t *testing.T) {
@@ -60,9 +70,10 @@ func TestVerifierSandboxToolRootsGrantWholeJDKForJava(t *testing.T) {
 	}
 
 	roots := verifierSandboxToolRoots(nil, filepath.Join(jdkRoot, "bin", "java.exe"))
-	if len(roots) != 1 || !strings.EqualFold(filepath.Clean(roots[0]), filepath.Clean(jdkRoot)) {
+	if len(roots) != 1 {
 		t.Fatalf("tool roots=%v, want only JDK root %q", roots, jdkRoot)
 	}
+	assertSameExistingPath(t, roots[0], jdkRoot)
 }
 
 func TestVerifierSandboxToolRootsIncludeJavaForGradleAndMaven(t *testing.T) {
@@ -88,9 +99,7 @@ func TestVerifierSandboxToolRootsIncludeJavaForGradleAndMaven(t *testing.T) {
 			t.Fatalf("%s roots=%v, want %v", name, roots, want)
 		}
 		for i := range want {
-			if !strings.EqualFold(filepath.Clean(roots[i]), filepath.Clean(want[i])) {
-				t.Fatalf("%s root[%d]=%q, want %q", name, i, roots[i], want[i])
-			}
+			assertSameExistingPath(t, roots[i], want[i])
 		}
 	}
 
