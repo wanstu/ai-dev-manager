@@ -57,7 +57,7 @@ func requestSandboxExecutionTraversal(ctx context.Context, environmentID, operat
 		WorkspaceRoot:   workspaceRoot,
 		EnvironmentRoot: root,
 	}); err != nil {
-		return err
+		return actionableSandboxACLBrokerError(err)
 	}
 	return nil
 }

@@ -127,6 +127,7 @@
     null_device_prepared: false,
     boot_task_installed: false,
     boot_task_verified: false,
+    acl_broker_ready: false,
     requires_admin_setup: false,
     message: 'Windows 强沙盒只能在本机 Desktop 中配置。',
   });
