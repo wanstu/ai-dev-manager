@@ -70,7 +70,7 @@ const fakeBridge = String.raw`<script>
   };
   const skillSourcesA = [{skill_source_id:'source-a', root:'C:\\fixtures\\skills', support_roots:[], last_refresh_status:'ok'}];
   const environmentMemory = {'env-a':[{key:'private-sentinel', value:'env-a-private-visible'}], 'env-b':[{key:'private-sentinel', value:'env-b-private-visible'}]};
-  const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false, verifierAgentAllowed:false};
+  const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false, verifierAgentAllowed:false, sandboxBrokerReady:false};
   const record = (name, args) => calls.push({name, args});
   const recomputeEnvironment = (env, snapshot=snapshotA) => {
     if(!env) return env;
@@ -140,10 +140,27 @@ const fakeBridge = String.raw`<script>
     async ListProcesses(id){ record('ListProcesses',[id]); if(state.failProcesses) throw new Error('processes unavailable'); if(state.hideProcess && id==='env-a') return []; return [{id:id==='env-b'?'proc-b':'proc-a', state:'running', pid:id==='env-b'?3333:2222, listening_ports:[8080]}]; },
     async GetProcessLogs(id,processID){ record('GetProcessLogs',[id,processID]); if(state.delayProcessLogs && id==='env-a') await new Promise(resolve=>setTimeout(resolve,180)); return {stdout:id==='env-b'?'PROCESS_B_LOG':'PROCESS_A_LOG', stderr:'', stdout_truncated:id==='env-a', stderr_truncated:false}; },
     async ListRuns(id){ record('ListRuns',[id]); return [{id:id==='env-b'?'run-b':'run-a', state:'succeeded', executable:'go', args:['test'], stdout:id==='env-b'?'RUN_B_OUTPUT':'RUN_A_OUTPUT', stderr:'', exit_code:0, stdout_truncated:false, stderr_truncated:false}]; },
+    async GetRuntimeWriterDiagnostics(id){ record('GetRuntimeWriterDiagnostics',[id]); return {environment_id:id, attribution:id==='env-a'?'lease_observation':'none', owner_fingerprint:id==='env-a'?'writer-a':'', last_seen_at:'2026-09-12T04:00:00Z', expires_at:'2026-09-12T04:05:00Z', heartbeat_interval_seconds:30, heartbeat_sources:[], gateway_owner:{pid:0}}; },
     async ListGlobalMemory(){ record('ListGlobalMemory',[]); return [{key:'sentinel', value:'visible-after-explicit-load'}]; },
     async ListEnvironmentMemory(id){ record('ListEnvironmentMemory',[id]); return structuredClone(environmentMemory[id] || []); },
     async WriteEnvironmentMemory(id,key,value){ record('WriteEnvironmentMemory',[id,key,value]); environmentMemory[id] = (environmentMemory[id] || []).filter(entry=>entry.key!==key); environmentMemory[id].push({key,value}); return null; },
     async GetDesktopPreferences(){ record('GetDesktopPreferences',[]); return {launch_at_login_supported:false, launch_at_login:false}; },
+    async GetSandboxHostPreparationStatus(){
+      record('GetSandboxHostPreparationStatus',[]);
+      return {
+        platform:'windows', supported:true, null_device_prepared:true, boot_task_installed:true, boot_task_verified:true,
+        acl_broker_ready:state.sandboxBrokerReady, requires_admin_setup:!state.sandboxBrokerReady,
+        message:state.sandboxBrokerReady ? 'fixture sandbox ready' : 'fixture legacy Host Prep task has no ACL broker',
+      };
+    },
+    async EnableSandboxHostPreparation(){
+      record('EnableSandboxHostPreparation',[]);
+      state.sandboxBrokerReady=true;
+      return {
+        platform:'windows', supported:true, null_device_prepared:true, boot_task_installed:true, boot_task_verified:true,
+        acl_broker_ready:true, requires_admin_setup:false, message:'fixture sandbox repaired',
+      };
+    },
     async SetLaunchAtLogin(value){ record('SetLaunchAtLogin',[value]); return {launch_at_login_supported:false, launch_at_login:false}; },
   };
   window.go = {desktop:{Adapter:adapter}};
@@ -203,6 +220,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('workspaceCount').textContent==='2', 'successful snapshot renders count');
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='EnableSandboxHostPreparation'), 'focused Desktop detects legacy Host Prep without ACL broker and triggers repair');
+    check(window.__fakeADM.confirmations.filter(message=>message.includes('ACL broker 未运行')).length===1, 'sandbox broker migration asks once before administrator repair');
+    await waitFor(() => window.__fakeADM.state.sandboxBrokerReady && document.getElementById('sandboxHostPreparationBadge').textContent==='已启用', 'sandbox broker repair reaches verified ready state');
+    check(window.__fakeADM.calls.filter(c=>c.name==='EnableSandboxHostPreparation').length===1, 'sandbox broker migration repair runs exactly once after focus');
+    window.dispatchEvent(new Event('focus')); await sleep();
+    check(window.__fakeADM.calls.filter(c=>c.name==='EnableSandboxHostPreparation').length===1, 'sandbox broker repair is not repeated after recovery');
 
     if (new URLSearchParams(location.search).get('focus') === 'filters') {
       const update=(id,value)=>{ const el=document.getElementById(id); el.value=value; el.dispatchEvent(new Event(el.tagName==='INPUT'?'input':'change',{bubbles:true})); };

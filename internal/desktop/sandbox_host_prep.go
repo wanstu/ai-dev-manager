@@ -1,6 +1,9 @@
 package desktop
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type SandboxHostPreparationStatus struct {
 	Platform           string `json:"platform"`
@@ -23,4 +26,11 @@ func (a *Adapter) EnableSandboxHostPreparation() (SandboxHostPreparationStatus, 
 		return status, fmt.Errorf("enable strong sandbox: %w", err)
 	}
 	return status, nil
+}
+
+func actionableSandboxACLBrokerError(err error) error {
+	if !errors.Is(err, errSandboxACLBrokerUnavailable) {
+		return err
+	}
+	return fmt.Errorf("%w; open ADM Desktop Settings and repair Windows strong sandbox Host Prep, then accept the one-time administrator confirmation", err)
 }
