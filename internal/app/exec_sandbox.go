@@ -110,6 +110,14 @@ func (s *Service) RunPreparedSandboxExecution(
 		extraEnvironment["GOTELEMETRY"] = "off"
 		extraEnvironment["GOTOOLCHAIN"] = "local"
 	}
+	if javaRoot := verifierSandboxJavaRoot(baseEnvironment, prepared.ExecutablePath); javaRoot != "" {
+		extraEnvironment["JAVA_HOME"] = javaRoot
+	}
+
+	finishTraversal, err := s.beginSandboxExecutionTraversal(ctx, prepared.Environment.ID)
+	if err != nil {
+		return runtime.CommandResult{}, err
+	}
 
 	result, err := sandbox.Execute(ctx, sandbox.ExecutionRequest{
 		// Keep the AppContainer identity stable per Environment. The execution ID
@@ -130,6 +138,7 @@ func (s *Service) RunPreparedSandboxExecution(
 		Stdout:           stdout,
 		Stderr:           stderr,
 	})
+	err = finishTraversal(err)
 	command := runtime.CommandResult{
 		Started:       result.Started,
 		ExitCode:      result.ExitCode,

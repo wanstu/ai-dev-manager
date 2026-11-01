@@ -70,6 +70,19 @@ func (s *Service) RunPreparedVerifierSandbox(
 		extraEnvironment["GOTELEMETRY"] = "off"
 		extraEnvironment["GOTOOLCHAIN"] = "local"
 	}
+	if javaRoot := verifierSandboxJavaRoot(baseEnvironment, prepared.ExecutablePath); javaRoot != "" {
+		extraEnvironment["JAVA_HOME"] = javaRoot
+	}
+
+	if s.SandboxExecutionSupport().Platform == "windows" {
+		if err := s.EnsureEnvironmentSandboxAccess(ctx, prepared.Environment); err != nil {
+			return runtime.CommandResult{}, fmt.Errorf("prepare Environment strong-sandbox access: %w", err)
+		}
+	}
+	finishTraversal, err := s.beginSandboxExecutionTraversal(ctx, prepared.Environment.ID)
+	if err != nil {
+		return runtime.CommandResult{}, err
+	}
 
 	result, err := sandbox.Execute(ctx, sandbox.ExecutionRequest{
 		// Verifiers share the same stable per-Environment AppContainer identity
@@ -89,6 +102,7 @@ func (s *Service) RunPreparedVerifierSandbox(
 		Stdout:           stdout,
 		Stderr:           stderr,
 	})
+	err = finishTraversal(err)
 	command := runtime.CommandResult{
 		Started:  result.Started,
 		ExitCode: result.ExitCode,
@@ -203,16 +217,47 @@ func verifierSandboxToolRoots(environment []string, executable string) []string 
 	switch name {
 	case "go":
 		add(verifierSandboxGoRoot(environment, executable))
-	case "java", "javac":
-		add(environmentLookup(environment, "JAVA_HOME"))
+	case "java", "javac", "javaw":
+		add(verifierSandboxJavaRoot(environment, executable))
 	case "dotnet":
 		add(environmentLookup(environment, "DOTNET_ROOT"))
-	case "mvn":
+	case "mvn", "mvnw":
 		add(environmentLookup(environment, "MAVEN_HOME"))
+		add(verifierSandboxJavaRoot(environment, ""))
 	case "gradle", "gradlew":
 		add(environmentLookup(environment, "GRADLE_HOME"))
+		add(verifierSandboxJavaRoot(environment, ""))
 	}
 	return roots
+}
+
+func verifierSandboxJavaRoot(environment []string, executable string) string {
+	var candidates []string
+	executable = strings.TrimSpace(executable)
+	name := strings.ToLower(strings.TrimSuffix(filepath.Base(executable), filepath.Ext(executable)))
+	if filepath.IsAbs(executable) && (name == "java" || name == "javac" || name == "javaw") {
+		binDir := filepath.Dir(executable)
+		if strings.EqualFold(filepath.Base(binDir), "bin") {
+			candidates = append(candidates, filepath.Dir(binDir))
+		}
+	}
+	candidates = append(candidates, environmentLookup(environment, "JAVA_HOME"))
+
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || !filepath.IsAbs(candidate) {
+			continue
+		}
+		resolved, err := sandbox.ResolveExistingPath(filepath.Clean(candidate))
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(resolved)
+		if err == nil && info.IsDir() {
+			return filepath.Clean(resolved)
+		}
+	}
+	return ""
 }
 
 func verifierSandboxGoRoot(environment []string, executable string) string {

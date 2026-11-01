@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/sandbox"
@@ -21,6 +23,58 @@ func (s *Service) SetSandboxEnvironmentCleanupRequester(requester func(context.C
 	s.sandboxEnvironmentPrepMu.Lock()
 	defer s.sandboxEnvironmentPrepMu.Unlock()
 	s.sandboxEnvironmentCleanupRequest = requester
+}
+
+func (s *Service) SetSandboxExecutionTraversalRequester(
+	enter func(context.Context, string) error,
+	leave func(context.Context, string) error,
+) {
+	s.sandboxEnvironmentPrepMu.Lock()
+	defer s.sandboxEnvironmentPrepMu.Unlock()
+	s.sandboxExecutionTraversalEnterRequest = enter
+	s.sandboxExecutionTraversalLeaveRequest = leave
+}
+
+func (s *Service) beginSandboxExecutionTraversal(ctx context.Context, environmentID string) (func(error) error, error) {
+	if s.SandboxExecutionSupport().Platform != "windows" {
+		return func(executionErr error) error { return executionErr }, nil
+	}
+
+	environment, err := s.Environments.Get(environmentID)
+	if err != nil {
+		return nil, err
+	}
+	workspace, err := s.Workspaces.Get(environment.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	traversalRoot, err := sandbox.ResolveEnvironmentTraversalRoot(workspace.Path, environment.Root)
+	if err != nil {
+		return nil, err
+	}
+	if strings.EqualFold(filepath.Clean(traversalRoot), filepath.Clean(environment.Root)) {
+		return func(executionErr error) error { return executionErr }, nil
+	}
+
+	s.sandboxEnvironmentPrepMu.Lock()
+	enter := s.sandboxExecutionTraversalEnterRequest
+	leave := s.sandboxExecutionTraversalLeaveRequest
+	s.sandboxEnvironmentPrepMu.Unlock()
+	if enter == nil || leave == nil {
+		return nil, fmt.Errorf("Windows sandbox execution traversal broker is not configured")
+	}
+	if err := enter(ctx, environmentID); err != nil {
+		return nil, fmt.Errorf("prepare transient Windows sandbox traversal ACL: %w", err)
+	}
+
+	return func(executionErr error) error {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		if leaveErr := leave(cleanupCtx, environmentID); leaveErr != nil {
+			return errors.Join(executionErr, fmt.Errorf("cleanup transient Windows sandbox traversal ACL: %w", leaveErr))
+		}
+		return executionErr
+	}, nil
 }
 
 func (s *Service) EnsureEnvironmentSandboxAccess(ctx context.Context, environment model.Environment) error {

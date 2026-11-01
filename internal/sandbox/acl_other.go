@@ -12,12 +12,24 @@ const (
 	PathAccessReadWrite PathAccess = "read_write"
 )
 
+func WindowsAppContainerPathHasGrant(path, sidText string) (bool, error) {
+	return false, fmt.Errorf("Windows AppContainer ACLs are unavailable on this platform")
+}
+
 func WindowsAppContainerPathAccessGranted(path, sidText string, access PathAccess) (bool, error) {
 	return false, fmt.Errorf("Windows AppContainer ACLs are unavailable on this platform")
 }
 
 func EnsureWindowsAppContainerPath(path, sidText string, access PathAccess) (bool, error) {
 	return false, fmt.Errorf("Windows AppContainer ACLs are unavailable on this platform")
+}
+
+func EnsureWindowsAppContainerPathLocal(path, sidText string, access PathAccess) (bool, error) {
+	return false, fmt.Errorf("Windows AppContainer ACLs are unavailable on this platform")
+}
+
+func RevokeWindowsAppContainerPathLocal(path, sidText string) error {
+	return fmt.Errorf("Windows AppContainer ACLs are unavailable on this platform")
 }
 
 func GrantWindowsAppContainerPath(path, sidText string, access PathAccess) error {
