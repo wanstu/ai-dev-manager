@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -21,12 +22,14 @@ import (
 )
 
 const (
-	sandboxACLPipeName        = `\\.\pipe\AI-Dev-Manager-Sandbox-ACL-v7`
-	sandboxACLOpPing          = "ping"
-	sandboxACLOpPrepare       = "prepare"
-	sandboxACLOpCleanup       = "cleanup"
-	sandboxACLMaxClients      = 16
-	sandboxACLMaxRequestBytes = 64 * 1024
+	sandboxACLPipeName         = `\\.\pipe\AI-Dev-Manager-Sandbox-ACL-v9`
+	sandboxACLOpPing           = "ping"
+	sandboxACLOpPrepare        = "prepare"
+	sandboxACLOpCleanup        = "cleanup"
+	sandboxACLOpExecutionEnter = "execution_enter"
+	sandboxACLOpExecutionLeave = "execution_leave"
+	sandboxACLMaxClients       = 16
+	sandboxACLMaxRequestBytes  = 64 * 1024
 )
 
 var errSandboxACLBrokerUnavailable = errors.New("sandbox ACL broker is unavailable")
@@ -42,6 +45,18 @@ type sandboxACLBrokerRequest struct {
 type sandboxACLBrokerResponse struct {
 	Status sandbox.EnvironmentAccessStatus `json:"status,omitempty"`
 	Error  string                          `json:"error,omitempty"`
+}
+
+type sandboxACLExecutionLease struct {
+	RefCount   int
+	OwnedPaths []string
+}
+
+var sandboxACLExecutionState = struct {
+	sync.Mutex
+	leases map[string]*sandboxACLExecutionLease
+}{
+	leases: map[string]*sandboxACLExecutionLease{},
 }
 
 func RunSandboxACLBroker() error {
@@ -109,7 +124,9 @@ func serveSandboxACLBrokerClient(pipe windows.Handle, allowedSID string) error {
 	if request.Operation == sandboxACLOpPing {
 		return writeSandboxACLBrokerResponse(file, sandboxACLBrokerResponse{})
 	}
-	if request.Operation != sandboxACLOpPrepare && request.Operation != sandboxACLOpCleanup {
+	switch request.Operation {
+	case sandboxACLOpPrepare, sandboxACLOpCleanup, sandboxACLOpExecutionEnter, sandboxACLOpExecutionLeave:
+	default:
 		return writeSandboxACLBrokerResponse(file, sandboxACLBrokerResponse{Error: "unsupported operation"})
 	}
 	if err := validateSandboxACLBrokerRequest(pipe, allowedSID, request); err != nil {
@@ -117,10 +134,15 @@ func serveSandboxACLBrokerClient(pipe windows.Handle, allowedSID string) error {
 	}
 
 	var err error
-	if request.Operation == sandboxACLOpPrepare {
+	switch request.Operation {
+	case sandboxACLOpPrepare:
 		err = prepareSandboxACLBrokerAccess(request)
-	} else {
+	case sandboxACLOpCleanup:
 		err = cleanupSandboxACLBrokerAccess(request)
+	case sandboxACLOpExecutionEnter:
+		err = enterSandboxACLBrokerExecution(request)
+	case sandboxACLOpExecutionLeave:
+		err = leaveSandboxACLBrokerExecution(request)
 	}
 	response := sandboxACLBrokerResponse{}
 	if err != nil {
@@ -161,6 +183,127 @@ func cleanupSandboxACLBrokerAccess(request sandboxACLBrokerRequest) error {
 			return fmt.Errorf("revoke Environment root ACL: %w", err)
 		}
 	}
+	return nil
+}
+
+func sandboxACLExecutionLeaseKey(request sandboxACLBrokerRequest) string {
+	return strings.ToLower(strings.Join([]string{
+		strings.TrimSpace(request.EnvironmentID),
+		strings.TrimSpace(request.ProfileSID),
+		filepath.Clean(strings.TrimSpace(request.WorkspaceRoot)),
+		filepath.Clean(strings.TrimSpace(request.EnvironmentRoot)),
+	}, "|"))
+}
+
+func enterSandboxACLBrokerExecution(request sandboxACLBrokerRequest) error {
+	profileSID := strings.TrimSpace(request.ProfileSID)
+	traversalRoot, err := sandbox.ResolveEnvironmentTraversalRoot(request.WorkspaceRoot, request.EnvironmentRoot)
+	if err != nil {
+		return err
+	}
+	paths := sandboxACLTraversalPaths(traversalRoot, request.EnvironmentRoot)
+	key := sandboxACLExecutionLeaseKey(request)
+
+	sandboxACLExecutionState.Lock()
+	defer sandboxACLExecutionState.Unlock()
+
+	lease := sandboxACLExecutionState.leases[key]
+	if lease != nil && lease.RefCount > 0 {
+		lease.RefCount++
+		return nil
+	}
+	if lease == nil {
+		lease = &sandboxACLExecutionLease{}
+		sandboxACLExecutionState.leases[key] = lease
+	}
+	owned := make(map[string]struct{}, len(lease.OwnedPaths))
+	for _, path := range lease.OwnedPaths {
+		owned[strings.ToLower(filepath.Clean(path))] = struct{}{}
+	}
+
+	rollback := func(cause error) error {
+		var rollbackErr error
+		for index := len(lease.OwnedPaths) - 1; index >= 0; index-- {
+			if revokeErr := sandbox.RevokeWindowsAppContainerPathLocal(lease.OwnedPaths[index], profileSID); revokeErr != nil {
+				rollbackErr = errors.Join(rollbackErr, revokeErr)
+			}
+		}
+		delete(sandboxACLExecutionState.leases, key)
+		if rollbackErr != nil {
+			return errors.Join(cause, fmt.Errorf("rollback transient sandbox traversal ACLs: %w", rollbackErr))
+		}
+		return cause
+	}
+
+	for _, path := range paths {
+		path = filepath.Clean(path)
+		granted, grantErr := sandbox.WindowsAppContainerPathAccessGranted(path, profileSID, sandbox.PathAccessTraverse)
+		if grantErr != nil {
+			return rollback(fmt.Errorf("inspect transient traversal ACL on %s: %w", path, grantErr))
+		}
+		if granted {
+			continue
+		}
+		pathKey := strings.ToLower(path)
+		if _, ok := owned[pathKey]; !ok {
+			hasAny, anyErr := sandbox.WindowsAppContainerPathHasGrant(path, profileSID)
+			if anyErr != nil {
+				return rollback(fmt.Errorf("inspect existing AppContainer ACL on %s: %w", path, anyErr))
+			}
+			if hasAny {
+				return rollback(fmt.Errorf("existing AppContainer ACL on %s does not satisfy traversal; refusing transient overlay", path))
+			}
+		}
+		changed, ensureErr := sandbox.EnsureWindowsAppContainerPathLocal(path, profileSID, sandbox.PathAccessTraverse)
+		if ensureErr != nil {
+			return rollback(fmt.Errorf("grant transient sandbox traversal ACL on %s: %w", path, ensureErr))
+		}
+		if changed {
+			if _, ok := owned[pathKey]; !ok {
+				lease.OwnedPaths = append(lease.OwnedPaths, path)
+				owned[pathKey] = struct{}{}
+			}
+		}
+		verified, verifyErr := sandbox.WindowsAppContainerPathAccessGranted(path, profileSID, sandbox.PathAccessTraverse)
+		if verifyErr != nil {
+			return rollback(fmt.Errorf("verify transient traversal ACL on %s: %w", path, verifyErr))
+		}
+		if !verified {
+			return rollback(fmt.Errorf("transient sandbox traversal ACL verification failed on %s", path))
+		}
+	}
+	lease.RefCount = 1
+	return nil
+}
+
+func leaveSandboxACLBrokerExecution(request sandboxACLBrokerRequest) error {
+	profileSID := strings.TrimSpace(request.ProfileSID)
+	key := sandboxACLExecutionLeaseKey(request)
+
+	sandboxACLExecutionState.Lock()
+	defer sandboxACLExecutionState.Unlock()
+
+	lease := sandboxACLExecutionState.leases[key]
+	if lease == nil {
+		return nil
+	}
+	if lease.RefCount > 1 {
+		lease.RefCount--
+		return nil
+	}
+	lease.RefCount = 0
+
+	var cleanupErr error
+	for index := len(lease.OwnedPaths) - 1; index >= 0; index-- {
+		path := lease.OwnedPaths[index]
+		if err := sandbox.RevokeWindowsAppContainerPathLocal(path, profileSID); err != nil {
+			cleanupErr = errors.Join(cleanupErr, fmt.Errorf("revoke transient sandbox traversal ACL from %s: %w", path, err))
+		}
+	}
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	delete(sandboxACLExecutionState.leases, key)
 	return nil
 }
 

@@ -9,6 +9,14 @@ import (
 	"ai-dev-manager-v2/internal/sandbox"
 )
 
+func RequestSandboxExecutionTraversalEnter(context.Context, string) error {
+	return nil
+}
+
+func RequestSandboxExecutionTraversalLeave(context.Context, string) error {
+	return nil
+}
+
 func sandboxEnvironmentPreparationStatus(environmentID string) (sandbox.EnvironmentAccessStatus, error) {
 	return sandbox.EnvironmentAccessStatus{EnvironmentID: environmentID}, nil
 }

@@ -37,6 +37,39 @@ func localSandboxEnvironment(environmentID string) (string, string, string, erro
 	return environment.ID, workspace.Path, environment.Root, nil
 }
 
+func requestSandboxExecutionTraversal(ctx context.Context, environmentID, operation string) error {
+	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
+	if err != nil {
+		return err
+	}
+	profileName, err := sandbox.StableAppContainerProfileName(id)
+	if err != nil {
+		return err
+	}
+	profile, err := sandbox.DeriveWindowsAppContainerProfile(profileName)
+	if err != nil {
+		return fmt.Errorf("derive Environment AppContainer profile for transient traversal ACL: %w", err)
+	}
+	if _, err := requestSandboxACLBroker(ctx, sandboxACLBrokerRequest{
+		Operation:       operation,
+		EnvironmentID:   id,
+		ProfileSID:      profile.SID,
+		WorkspaceRoot:   workspaceRoot,
+		EnvironmentRoot: root,
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func RequestSandboxExecutionTraversalEnter(ctx context.Context, environmentID string) error {
+	return requestSandboxExecutionTraversal(ctx, environmentID, sandboxACLOpExecutionEnter)
+}
+
+func RequestSandboxExecutionTraversalLeave(ctx context.Context, environmentID string) error {
+	return requestSandboxExecutionTraversal(ctx, environmentID, sandboxACLOpExecutionLeave)
+}
+
 func sandboxEnvironmentPreparationStatus(environmentID string) (sandbox.EnvironmentAccessStatus, error) {
 	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
 	if err != nil {

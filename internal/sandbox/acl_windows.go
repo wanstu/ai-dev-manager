@@ -37,6 +37,50 @@ func windowsPathAccessMask(access PathAccess) (windows.ACCESS_MASK, error) {
 	return mask, nil
 }
 
+// WindowsAppContainerPathHasGrant reports whether any allow ACE already exists
+// for the AppContainer SID. Transient traversal grants use this to avoid
+// overlaying caller-owned permissions that a later cleanup could not safely
+// distinguish from ADM-owned state.
+func WindowsAppContainerPathHasGrant(path, sidText string) (bool, error) {
+	path = filepath.Clean(path)
+	if _, err := os.Stat(path); err != nil {
+		return false, err
+	}
+	sid, err := windows.StringToSid(sidText)
+	if err != nil {
+		return false, fmt.Errorf("parse AppContainer SID: %w", err)
+	}
+	var pinner runtime.Pinner
+	pinner.Pin(sid)
+	defer pinner.Unpin()
+
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return false, fmt.Errorf("read DACL for %s: %w", path, err)
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		return false, fmt.Errorf("read DACL for %s: %w", path, err)
+	}
+	if dacl == nil {
+		return true, nil
+	}
+	for index := uint16(0); index < dacl.AceCount; index++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err := windows.GetAce(dacl, uint32(index), &ace); err != nil || ace == nil {
+			continue
+		}
+		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE {
+			continue
+		}
+		aceSID := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+		if windows.EqualSid(aceSID, sid) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // WindowsAppContainerPathAccessGranted reports whether the path already has a
 // sufficient allow ACE for the AppContainer SID. This is intentionally
 // read-only so ordinary Gateway execution can reuse a one-time elevated grant
@@ -156,6 +200,151 @@ func EnsureWindowsAppContainerPath(path, sidText string, access PathAccess) (cha
 		return false, fmt.Errorf("grant AppContainer access to %s: %w", path, err)
 	}
 	return true, nil
+}
+
+// EnsureWindowsAppContainerPathLocal grants a non-inheritable ACE by updating
+// the already-open filesystem object handle. It is intended for transient
+// traversal grants on ancestor directories, where ADM must never propagate an
+// ACL change into the directory tree.
+func EnsureWindowsAppContainerPathLocal(path, sidText string, access PathAccess) (changed bool, err error) {
+	if access != PathAccessTraverse {
+		return false, fmt.Errorf("local AppContainer ACL updates support traverse access only")
+	}
+	path = filepath.Clean(path)
+	info, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("local traversal ACL target must be a directory: %s", path)
+	}
+	granted, err := WindowsAppContainerPathAccessGranted(path, sidText, access)
+	if err != nil {
+		return false, err
+	}
+	if granted {
+		return false, nil
+	}
+	sid, err := windows.StringToSid(sidText)
+	if err != nil {
+		return false, fmt.Errorf("parse AppContainer SID: %w", err)
+	}
+	var pinner runtime.Pinner
+	pinner.Pin(sid)
+	defer pinner.Unpin()
+
+	handle, err := openWindowsPathSecurityHandle(path)
+	if err != nil {
+		return false, err
+	}
+	defer windows.CloseHandle(handle)
+
+	sd, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return false, fmt.Errorf("read DACL for %s: %w", path, err)
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		return false, fmt.Errorf("read DACL for %s: %w", path, err)
+	}
+	mask, err := windowsPathAccessMask(access)
+	if err != nil {
+		return false, err
+	}
+	entry := windows.EXPLICIT_ACCESS{
+		AccessPermissions: mask,
+		AccessMode:        windows.GRANT_ACCESS,
+		Inheritance:       windows.NO_INHERITANCE,
+		Trustee: windows.TRUSTEE{
+			MultipleTrusteeOperation: windows.NO_MULTIPLE_TRUSTEE,
+			TrusteeForm:              windows.TRUSTEE_IS_SID,
+			TrusteeType:              windows.TRUSTEE_IS_UNKNOWN,
+			TrusteeValue:             windows.TrusteeValueFromSID(sid),
+		},
+	}
+	updated, err := windows.ACLFromEntries([]windows.EXPLICIT_ACCESS{entry}, dacl)
+	if err != nil {
+		return false, fmt.Errorf("build local DACL for %s: %w", path, err)
+	}
+	if err := windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION, nil, nil, updated, nil); err != nil {
+		return false, fmt.Errorf("grant local AppContainer traversal access to %s: %w", path, err)
+	}
+	return true, nil
+}
+
+func RevokeWindowsAppContainerPathLocal(path, sidText string) error {
+	path = filepath.Clean(path)
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("local traversal ACL target must be a directory: %s", path)
+	}
+	sid, err := windows.StringToSid(sidText)
+	if err != nil {
+		return fmt.Errorf("parse AppContainer SID: %w", err)
+	}
+	var pinner runtime.Pinner
+	pinner.Pin(sid)
+	defer pinner.Unpin()
+
+	handle, err := openWindowsPathSecurityHandle(path)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle)
+
+	sd, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return fmt.Errorf("read DACL for %s: %w", path, err)
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		return fmt.Errorf("read DACL for %s: %w", path, err)
+	}
+	entry := windows.EXPLICIT_ACCESS{
+		AccessMode:  windows.REVOKE_ACCESS,
+		Inheritance: windows.NO_INHERITANCE,
+		Trustee: windows.TRUSTEE{
+			MultipleTrusteeOperation: windows.NO_MULTIPLE_TRUSTEE,
+			TrusteeForm:              windows.TRUSTEE_IS_SID,
+			TrusteeType:              windows.TRUSTEE_IS_UNKNOWN,
+			TrusteeValue:             windows.TrusteeValueFromSID(sid),
+		},
+	}
+	updated, err := windows.ACLFromEntries([]windows.EXPLICIT_ACCESS{entry}, dacl)
+	if err != nil {
+		return fmt.Errorf("build local revoked DACL for %s: %w", path, err)
+	}
+	if err := windows.SetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION, nil, nil, updated, nil); err != nil {
+		return fmt.Errorf("revoke local AppContainer traversal access from %s: %w", path, err)
+	}
+	return nil
+}
+
+func openWindowsPathSecurityHandle(path string) (windows.Handle, error) {
+	const (
+		readControlAccess = 0x00020000
+		writeDACAccess    = 0x00040000
+	)
+	pathPtr, err := windows.UTF16PtrFromString(filepath.Clean(path))
+	if err != nil {
+		return 0, err
+	}
+	handle, err := windows.CreateFile(
+		pathPtr,
+		readControlAccess|writeDACAccess,
+		windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE,
+		nil,
+		windows.OPEN_EXISTING,
+		windows.FILE_FLAG_BACKUP_SEMANTICS,
+		0,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("open %s for local DACL update: %w", path, err)
+	}
+	return handle, nil
 }
 
 func GrantWindowsAppContainerPath(path, sidText string, access PathAccess) error {
