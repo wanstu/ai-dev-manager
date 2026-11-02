@@ -208,8 +208,22 @@ jobs:
           $helper = Join-Path $env:ProgramFiles 'AI Dev Manager\adm-sandbox-host-prep.exe'
           if (-not (Test-Path -LiteralPath $helper -PathType Leaf)) { throw "Protected sandbox host-prep helper is missing: $helper" }
           $env:ADM_SANDBOX_ACL_BROKER_E2E = '1'
-          go test -count=1 ./internal/desktop -run '^TestSandboxACLBrokerExecutionTraversalE2E$' -v
-          if ($LASTEXITCODE -ne 0) { throw "Sandbox ACL broker execution traversal E2E failed" }
+          $e2eOutput = @(& go test -count=1 ./internal/desktop -run '^TestSandboxACLBrokerExecutionTraversalE2E$' -json 2>&1)
+          $e2eExit = $LASTEXITCODE
+          $e2eOutput | ForEach-Object { Write-Host $_ }
+          if ($e2eExit -ne 0) { throw "Sandbox ACL broker execution traversal E2E failed with exit code $e2eExit" }
+          $e2ePassed = $false
+          foreach ($line in $e2eOutput) {
+            try {
+              $event = $line | ConvertFrom-Json -ErrorAction Stop
+              if ($event.Action -eq 'pass' -and $event.Test -eq 'TestSandboxACLBrokerExecutionTraversalE2E') {
+                $e2ePassed = $true
+              }
+            } catch {
+              # Preserve non-JSON diagnostics in the log; they are not pass evidence.
+            }
+          }
+          if (-not $e2ePassed) { throw "Sandbox ACL broker execution traversal E2E produced no explicit test PASS event" }
           Remove-Item Env:ADM_SANDBOX_ACL_BROKER_E2E -ErrorAction SilentlyContinue
           schtasks.exe /End /TN "AI Dev Manager Sandbox Host Prep" | Out-Null
           Start-Sleep -Milliseconds 500
