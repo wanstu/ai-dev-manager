@@ -54,9 +54,13 @@ func TestGatewayManagedWorktreeLifecycleIsOptionalAndSafe(t *testing.T) {
 			t.Fatalf("compact Agent surface missing %q in %v", required, names)
 		}
 	}
-	agentDenied := callGatewayTool(t, ctx, session, "environment_worktree_create", map[string]any{"workspace_id": ws.ID, "name": "denied", "branch_name": "test/denied"})
-	if !agentDenied.IsError || !strings.Contains(toolText(t, agentDenied), "requires the Admin surface") {
-		t.Fatalf("Agent worktree create denial must explain Admin requirement: %s", toolText(t, agentDenied))
+	agentDenied := callGatewayTool(t, ctx, session, "adm_environment", map[string]any{
+		"action":    "worktree_create",
+		"arguments": map[string]any{"workspace_id": ws.ID, "name": "denied", "branch_name": "test/denied"},
+	})
+	agentDeniedText := toolText(t, agentDenied)
+	if !agentDenied.IsError || !strings.Contains(agentDeniedText, "temporary_create") || !strings.Contains(agentDeniedText, "mode=managed_worktree") || !strings.Contains(agentDeniedText, "must not stop or ask the user") {
+		t.Fatalf("Agent worktree create denial must route to the Agent-safe temporary worktree path: %s", agentDeniedText)
 	}
 	adminTools, err := adminSession.ListTools(ctx, nil)
 	if err != nil {

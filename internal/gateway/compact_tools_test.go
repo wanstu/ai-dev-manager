@@ -37,12 +37,20 @@ func TestCompactAgentSurfaceStaysUnderToolLimitAndDispatchesLegacyActions(t *tes
 		t.Fatalf("compact Agent surface exposes %d tools; limit=%d", len(listed.Tools), compactAgentToolLimit)
 	}
 	available := map[string]bool{}
+	descriptions := map[string]string{}
 	for _, tool := range listed.Tools {
 		available[tool.Name] = true
+		descriptions[tool.Name] = tool.Description
 	}
 	for _, name := range []string{"adm_help", "adm_file", "adm_git", "adm_environment", "adm_gateway"} {
 		if !available[name] {
 			t.Fatalf("compact Agent surface missing %q; tools=%v", name, toolNames(listed.Tools))
+		}
+	}
+	environmentDescription := descriptions["adm_environment"]
+	for _, expected := range []string{"temporary_create", "managed_worktree", "source_environment_id", "worktree_create being Admin-only"} {
+		if !strings.Contains(environmentDescription, expected) {
+			t.Fatalf("adm_environment description lost Agent worktree routing hint %q: %s", expected, environmentDescription)
 		}
 	}
 	for _, legacy := range []string{"git_status", "read", "environment_capability_report", "gateway_access_status"} {
@@ -75,6 +83,29 @@ func TestCompactAgentSurfaceStaysUnderToolLimitAndDispatchesLegacyActions(t *tes
 	runHelpText := toolText(t, runHelp)
 	if runHelp.IsError || !strings.Contains(runHelpText, "execution_mode") || !strings.Contains(runHelpText, "auto, host, or sandbox") {
 		t.Fatalf("compact run help lost explicit execution mode schema/description: %s", runHelpText)
+	}
+
+	worktreeHelp := callGatewayTool(t, ctx, agent, "adm_help", map[string]any{
+		"group":  "environment",
+		"action": "worktree_create",
+	})
+	worktreeHelpText := toolText(t, worktreeHelp)
+	for _, expected := range []string{"\"permission\":\"admin_only\"", "\"agent_recovery\"", "\"action\":\"temporary_create\"", "\"mode\":\"managed_worktree\"", "\"source_environment_id\""} {
+		if worktreeHelp.IsError || !strings.Contains(worktreeHelpText, expected) {
+			t.Fatalf("compact worktree help lost Agent-safe recovery %q: %s", expected, worktreeHelpText)
+		}
+	}
+	wrongWorktreeAction := callGatewayTool(t, ctx, agent, "adm_environment", map[string]any{
+		"action": "worktree_create",
+		"arguments": map[string]any{
+			"source_environment_id": environment.ID,
+			"name":                  "wrong-path",
+			"branch_name":           "test/wrong-path",
+		},
+	})
+	wrongWorktreeText := toolText(t, wrongWorktreeAction)
+	if !wrongWorktreeAction.IsError || !strings.Contains(wrongWorktreeText, "temporary_create") || !strings.Contains(wrongWorktreeText, "must not stop or ask the user") {
+		t.Fatalf("wrong Agent worktree action did not return executable recovery guidance: %s", wrongWorktreeText)
 	}
 
 	environmentInspect := callGatewayTool(t, ctx, agent, "adm_environment", map[string]any{
@@ -124,7 +155,7 @@ func TestCompactAgentHelpListsGroupsWithoutLegacyTopLevelExplosion(t *testing.T)
 	if result.IsError {
 		t.Fatalf("adm_help failed: %s", textValue)
 	}
-	for _, expected := range []string{`"git"`, `"environment"`, `"file"`, `"gateway"`, `"tool_count"`} {
+	for _, expected := range []string{`"git"`, `"environment"`, `"file"`, `"gateway"`, `"tool_count"`, `"agent_workflows"`, `"create_git_worktree"`, `"temporary_create"`, `"managed_worktree"`} {
 		if !strings.Contains(textValue, expected) {
 			t.Fatalf("adm_help missing %s: %s", expected, textValue)
 		}

@@ -270,6 +270,14 @@ func sortContextCapabilities(items []model.EnvironmentContextCapability) {
 
 func environmentContextGuidance(facts map[string]model.CapabilityFact, mcps []model.EnvironmentContextMCP, skills []model.EnvironmentContextSkill, verifiers []model.EnvironmentContextVerifier) []model.EnvironmentContextGuidance {
 	guidance := []model.EnvironmentContextGuidance{}
+	isolationState := model.CapabilityStateUnconfigured
+	if fact, ok := facts["isolation.managed_worktree"]; ok {
+		isolationState = fact.State
+	}
+	guidance = append(guidance, model.EnvironmentContextGuidance{
+		Operation: "development.isolation", State: isolationState, RequiresWriter: false,
+		Message: "This state describes whether the current Environment is already an ADM-managed worktree; it is not an Agent permission denial. For ordinary Git task isolation, an Agent should create a fresh temporary managed worktree with environment_temporary_create using mode=managed_worktree, source_environment_id, explicit owner_id, positive ttl_seconds, ASCII branch_name, and migrate_uncommitted_changes=false. environment_worktree_create is the Admin convenience path and must not be used to conclude that the Agent needs the user to create a Worktree manually.",
+	})
 	inspectState := combinedCapabilityState(facts, runtime.CapabilityTree, runtime.CapabilityRead, runtime.CapabilitySearch)
 	guidance = append(guidance, model.EnvironmentContextGuidance{
 		Operation: "files.inspect", State: inspectState, RequiresWriter: false,

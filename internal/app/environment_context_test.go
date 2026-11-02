@@ -64,6 +64,10 @@ func TestEnvironmentContextBundlePlainNonGitNeedsNoOptionalCapabilityOrWriter(t 
 	if mutation.State != model.CapabilityStateAvailable || !mutation.RequiresWriter {
 		t.Fatalf("mutation guidance=%+v", mutation)
 	}
+	isolationGuidance := contextGuidance(t, bundle, "development.isolation")
+	if isolationGuidance.RequiresWriter || !strings.Contains(isolationGuidance.Message, "environment_temporary_create") || !strings.Contains(isolationGuidance.Message, "not an Agent permission denial") || !strings.Contains(isolationGuidance.Message, "environment_worktree_create") {
+		t.Fatalf("development isolation guidance is not actionable: %+v", isolationGuidance)
+	}
 	if len(bundle.MCPs) != 0 || len(bundle.Skills) != 0 || len(bundle.Verifiers) != 0 {
 		t.Fatalf("unexpected optional summaries: mcps=%+v skills=%+v verifiers=%+v", bundle.MCPs, bundle.Skills, bundle.Verifiers)
 	}
