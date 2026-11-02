@@ -9,7 +9,10 @@ import (
 	"ai-dev-manager-v2/internal/sandbox"
 )
 
-var errSandboxACLBrokerUnavailable = errors.New("sandbox ACL broker is unavailable")
+var (
+	errSandboxACLBrokerUnavailable = errors.New("sandbox ACL broker is unavailable")
+	errSandboxACLBrokerTimeout     = errors.New("sandbox ACL broker request timed out")
+)
 
 type sandboxACLBrokerRequest struct {
 	Operation       string
