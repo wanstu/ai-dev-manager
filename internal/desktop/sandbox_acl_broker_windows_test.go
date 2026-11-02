@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/sandbox"
+	"ai-dev-manager-v2/internal/store"
 )
 
 func TestSandboxACLTraversalPaths(t *testing.T) {
@@ -26,18 +28,43 @@ func TestSandboxACLTraversalPaths(t *testing.T) {
 	}
 }
 
+func sandboxACLBrokerE2EEnvironment(t *testing.T) (string, string, string) {
+	t.Helper()
+	if environmentID := strings.TrimSpace(os.Getenv("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID")); environmentID != "" {
+		id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id, workspaceRoot, root
+	}
+
+	t.Setenv("ADM_V2_HOME", t.TempDir())
+	statePath, err := store.DefaultPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := app.New(statePath)
+	workspaceRoot := t.TempDir()
+	root := filepath.Join(workspaceRoot, "environment")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := service.Workspaces.Add(workspaceRoot, "sandbox-broker-e2e")
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := service.Environments.Create(workspace.ID, "sandbox-broker-e2e", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return environment.ID, workspaceRoot, root
+}
+
 func TestSandboxACLBrokerExecutionTraversalE2E(t *testing.T) {
 	if os.Getenv("ADM_SANDBOX_ACL_BROKER_E2E") != "1" {
 		t.Skip("set ADM_SANDBOX_ACL_BROKER_E2E=1 for protected SYSTEM broker E2E")
 	}
-	environmentID := strings.TrimSpace(os.Getenv("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID"))
-	if environmentID == "" {
-		t.Fatal("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID is required")
-	}
-	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	id, workspaceRoot, root := sandboxACLBrokerE2EEnvironment(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -176,14 +203,7 @@ func TestSandboxACLBrokerE2E(t *testing.T) {
 	if os.Getenv("ADM_SANDBOX_ACL_BROKER_E2E") != "1" {
 		t.Skip("set ADM_SANDBOX_ACL_BROKER_E2E=1 for protected SYSTEM broker E2E")
 	}
-	environmentID := strings.TrimSpace(os.Getenv("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID"))
-	if environmentID == "" {
-		t.Fatal("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID is required")
-	}
-	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	id, workspaceRoot, root := sandboxACLBrokerE2EEnvironment(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -307,14 +327,7 @@ func TestSandboxACLBrokerRejectsMismatchedEnvironmentSIDE2E(t *testing.T) {
 	if os.Getenv("ADM_SANDBOX_ACL_BROKER_E2E") != "1" {
 		t.Skip("set ADM_SANDBOX_ACL_BROKER_E2E=1 for protected SYSTEM broker E2E")
 	}
-	environmentID := strings.TrimSpace(os.Getenv("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID"))
-	if environmentID == "" {
-		t.Fatal("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID is required")
-	}
-	id, workspaceRoot, root, err := localSandboxEnvironment(environmentID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	id, workspaceRoot, root := sandboxACLBrokerE2EEnvironment(t)
 	otherName, err := sandbox.StableAppContainerProfileName(id + "-mismatch")
 	if err != nil {
 		t.Fatal(err)
@@ -343,10 +356,7 @@ func TestSandboxEnvironmentPreparationUsesBrokerE2E(t *testing.T) {
 	if os.Getenv("ADM_SANDBOX_ACL_BROKER_E2E") != "1" {
 		t.Skip("set ADM_SANDBOX_ACL_BROKER_E2E=1 for protected SYSTEM broker integration E2E")
 	}
-	environmentID := strings.TrimSpace(os.Getenv("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID"))
-	if environmentID == "" {
-		t.Fatal("ADM_SANDBOX_ACL_BROKER_ENVIRONMENT_ID is required")
-	}
+	environmentID, _, _ := sandboxACLBrokerE2EEnvironment(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 

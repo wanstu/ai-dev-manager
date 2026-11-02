@@ -32,7 +32,10 @@ const (
 	sandboxACLMaxRequestBytes  = 64 * 1024
 )
 
-var errSandboxACLBrokerUnavailable = errors.New("sandbox ACL broker is unavailable")
+var (
+	errSandboxACLBrokerUnavailable = errors.New("sandbox ACL broker is unavailable")
+	errSandboxACLBrokerTimeout     = errors.New("sandbox ACL broker request timed out")
+)
 
 type sandboxACLBrokerRequest struct {
 	Operation       string `json:"operation"`
@@ -48,6 +51,7 @@ type sandboxACLBrokerResponse struct {
 }
 
 type sandboxACLExecutionLease struct {
+	sync.Mutex
 	RefCount   int
 	OwnedPaths []string
 }
@@ -57,6 +61,23 @@ var sandboxACLExecutionState = struct {
 	leases map[string]*sandboxACLExecutionLease
 }{
 	leases: map[string]*sandboxACLExecutionLease{},
+}
+
+func sandboxACLExecutionLeaseFor(key string) *sandboxACLExecutionLease {
+	sandboxACLExecutionState.Lock()
+	defer sandboxACLExecutionState.Unlock()
+	lease := sandboxACLExecutionState.leases[key]
+	if lease == nil {
+		lease = &sandboxACLExecutionLease{}
+		sandboxACLExecutionState.leases[key] = lease
+	}
+	return lease
+}
+
+func sandboxACLExecutionLeaseExisting(key string) *sandboxACLExecutionLease {
+	sandboxACLExecutionState.Lock()
+	defer sandboxACLExecutionState.Unlock()
+	return sandboxACLExecutionState.leases[key]
 }
 
 func RunSandboxACLBroker() error {
@@ -203,18 +224,13 @@ func enterSandboxACLBrokerExecution(request sandboxACLBrokerRequest) error {
 	}
 	paths := sandboxACLTraversalPaths(traversalRoot, request.EnvironmentRoot)
 	key := sandboxACLExecutionLeaseKey(request)
+	lease := sandboxACLExecutionLeaseFor(key)
+	lease.Lock()
+	defer lease.Unlock()
 
-	sandboxACLExecutionState.Lock()
-	defer sandboxACLExecutionState.Unlock()
-
-	lease := sandboxACLExecutionState.leases[key]
-	if lease != nil && lease.RefCount > 0 {
+	if lease.RefCount > 0 {
 		lease.RefCount++
 		return nil
-	}
-	if lease == nil {
-		lease = &sandboxACLExecutionLease{}
-		sandboxACLExecutionState.leases[key] = lease
 	}
 	owned := make(map[string]struct{}, len(lease.OwnedPaths))
 	for _, path := range lease.OwnedPaths {
@@ -228,7 +244,8 @@ func enterSandboxACLBrokerExecution(request sandboxACLBrokerRequest) error {
 				rollbackErr = errors.Join(rollbackErr, revokeErr)
 			}
 		}
-		delete(sandboxACLExecutionState.leases, key)
+		lease.RefCount = 0
+		lease.OwnedPaths = nil
 		if rollbackErr != nil {
 			return errors.Join(cause, fmt.Errorf("rollback transient sandbox traversal ACLs: %w", rollbackErr))
 		}
@@ -279,14 +296,12 @@ func enterSandboxACLBrokerExecution(request sandboxACLBrokerRequest) error {
 func leaveSandboxACLBrokerExecution(request sandboxACLBrokerRequest) error {
 	profileSID := strings.TrimSpace(request.ProfileSID)
 	key := sandboxACLExecutionLeaseKey(request)
-
-	sandboxACLExecutionState.Lock()
-	defer sandboxACLExecutionState.Unlock()
-
-	lease := sandboxACLExecutionState.leases[key]
+	lease := sandboxACLExecutionLeaseExisting(key)
 	if lease == nil {
 		return nil
 	}
+	lease.Lock()
+	defer lease.Unlock()
 	if lease.RefCount > 1 {
 		lease.RefCount--
 		return nil
@@ -303,7 +318,7 @@ func leaveSandboxACLBrokerExecution(request sandboxACLBrokerRequest) error {
 	if cleanupErr != nil {
 		return cleanupErr
 	}
-	delete(sandboxACLExecutionState.leases, key)
+	lease.OwnedPaths = nil
 	return nil
 }
 
@@ -489,17 +504,38 @@ func requestSandboxACLBroker(ctx context.Context, request sandboxACLBrokerReques
 				return sandbox.EnvironmentAccessStatus{}, fmt.Errorf("wrap sandbox ACL broker client handle")
 			}
 			defer file.Close()
-			if err := json.NewEncoder(file).Encode(request); err != nil {
-				return sandbox.EnvironmentAccessStatus{}, err
+			type brokerIOResult struct {
+				response sandboxACLBrokerResponse
+				err      error
 			}
-			var response sandboxACLBrokerResponse
-			if err := json.NewDecoder(file).Decode(&response); err != nil {
-				return sandbox.EnvironmentAccessStatus{}, err
+			resultCh := make(chan brokerIOResult, 1)
+			go func() {
+				if encodeErr := json.NewEncoder(file).Encode(request); encodeErr != nil {
+					resultCh <- brokerIOResult{err: encodeErr}
+					return
+				}
+				var response sandboxACLBrokerResponse
+				decodeErr := json.NewDecoder(file).Decode(&response)
+				resultCh <- brokerIOResult{response: response, err: decodeErr}
+			}()
+			timer := time.NewTimer(5 * time.Second)
+			defer timer.Stop()
+			select {
+			case result := <-resultCh:
+				if result.err != nil {
+					return sandbox.EnvironmentAccessStatus{}, result.err
+				}
+				if strings.TrimSpace(result.response.Error) != "" {
+					return result.response.Status, fmt.Errorf("%s", result.response.Error)
+				}
+				return result.response.Status, nil
+			case <-ctx.Done():
+				_ = file.Close()
+				return sandbox.EnvironmentAccessStatus{}, ctx.Err()
+			case <-timer.C:
+				_ = file.Close()
+				return sandbox.EnvironmentAccessStatus{}, fmt.Errorf("%w: operation %s exceeded 5s", errSandboxACLBrokerTimeout, request.Operation)
 			}
-			if strings.TrimSpace(response.Error) != "" {
-				return response.Status, fmt.Errorf("%s", response.Error)
-			}
-			return response.Status, nil
 		}
 		if !errors.Is(err, windows.ERROR_FILE_NOT_FOUND) && !errors.Is(err, windows.ERROR_PIPE_BUSY) {
 			return sandbox.EnvironmentAccessStatus{}, fmt.Errorf("connect sandbox ACL broker: %w", err)
