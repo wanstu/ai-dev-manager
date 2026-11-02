@@ -70,7 +70,7 @@ const fakeBridge = String.raw`<script>
   };
   const skillSourcesA = [{skill_source_id:'source-a', root:'C:\\fixtures\\skills', support_roots:[], last_refresh_status:'ok'}];
   const environmentMemory = {'env-a':[{key:'private-sentinel', value:'env-a-private-visible'}], 'env-b':[{key:'private-sentinel', value:'env-b-private-visible'}]};
-  const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false, verifierAgentAllowed:false, sandboxBrokerReady:false};
+  const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false, verifierAgentAllowed:false, sandboxBrokerReady:false, strongPermissionEnabled:true};
   const record = (name, args) => calls.push({name, args});
   const recomputeEnvironment = (env, snapshot=snapshotA) => {
     if(!env) return env;
@@ -95,6 +95,22 @@ const fakeBridge = String.raw`<script>
     async ConnectADM(input){ record('ConnectADM',[input]); const base=profiles.find(p=>p.id===activeID)?.base_url || input?.base_url || ''; return {state:'running', base_url:base, health_url:base+'/healthz', agent_mcp_url:base+'/mcp', admin_mcp_url:base+'/admin/mcp', pid:1234, version:'browser-fixture', local_bootstrap_eligible:false}; },
     async StartLocalADM(input){ record('StartLocalADM',[input]); const base=profiles.find(p=>p.id===activeID)?.base_url || input?.base_url || ''; return {state:'running', base_url:base, health_url:base+'/healthz', agent_mcp_url:base+'/mcp', admin_mcp_url:base+'/admin/mcp', pid:4321, version:'browser-fixture', local_bootstrap_eligible:true}; },
     async GetSnapshot(){ record('GetSnapshot',[]); return activeID==='profile-b' ? structuredClone(snapshotB) : structuredClone(snapshotA); },
+    async GetStrongPermissionControlStatus(){
+      record('GetStrongPermissionControlStatus',[]);
+      return {
+        enabled:state.strongPermissionEnabled,
+        mode:state.strongPermissionEnabled?'strong':'v1.4.4_compatible',
+        compatibility:state.strongPermissionEnabled?'current':'v1.4.4',
+        default_enabled:true,
+        requires_reconnect:false,
+        message:state.strongPermissionEnabled?'fixture strong permission enabled':'fixture strong permission disabled',
+      };
+    },
+    async SetStrongPermissionControl(enabled){
+      record('SetStrongPermissionControl',[enabled]);
+      state.strongPermissionEnabled=Boolean(enabled);
+      return this.GetStrongPermissionControlStatus();
+    },
     async DiscoverWorkspace(id,input){
       record('DiscoverWorkspace',[id,input]); const delayed=state.delayDiscovery; if(delayed) await new Promise(resolve=>setTimeout(resolve,180)); if(state.failDiscovery) throw new Error('fixture discovery failure');
       const limits={max_depth:input?.max_depth||4,max_entries:input?.max_entries||2000,max_candidates:input?.max_candidates||50,max_digest_entries:input?.max_digest_entries||100,max_output_bytes:input?.max_output_bytes||65536};
@@ -470,6 +486,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.body.textContent.includes('Saved connection profile') && document.body.textContent.includes('Runtime endpoints') && document.body.textContent.includes('Local service lifecycle'), 'Gateway page groups profile endpoints and local lifecycle controls');
     check(document.getElementById('gatewayStartButton') && document.getElementById('gatewayStopButton') && document.getElementById('gatewayRefreshButton'), 'Gateway grouped page preserves lifecycle buttons');    await clickRoute('exec-allowlist');
     check(document.getElementById('managementContextPanel').hidden, 'Exec allowlist route hides Management Context');
+    const strongToggle=document.getElementById('strongPermissionControl');
+    check(strongToggle.checked && !strongToggle.disabled, 'Strong permission control starts enabled and interactive');
+    const strongSetCallsBefore=window.__fakeADM.calls.filter(c=>c.name==='SetStrongPermissionControl').length;
+    strongToggle.checked=false;
+    strongToggle.dispatchEvent(new Event('change',{bubbles:true}));
+    await waitFor(() => document.getElementById('confirmationDialog').open, 'Strong permission disable opens in-app confirmation');
+    document.querySelector('#confirmationDialog button[value="cancel"]').click();
+    await waitFor(() => !document.getElementById('confirmationDialog').open && strongToggle.checked, 'Cancelling strong permission disable restores toggle');
+    check(window.__fakeADM.calls.filter(c=>c.name==='SetStrongPermissionControl').length===strongSetCallsBefore, 'Cancelling strong permission disable does not persist change');
+    strongToggle.checked=false;
+    strongToggle.dispatchEvent(new Event('change',{bubbles:true}));
+    await waitFor(() => document.getElementById('confirmationDialog').open, 'Strong permission disable confirmation reopens');
+    document.getElementById('confirmationDialogConfirmButton').click();
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='SetStrongPermissionControl' && c.args[0]===false), 'Confirmed strong permission disable persists through adapter');
+    await waitFor(() => !strongToggle.checked && document.getElementById('strongPermissionControlModeLabel').textContent.includes('已关闭'), 'Confirmed strong permission disable updates UI');
     check(document.body.textContent.includes('Allowed executables') && document.getElementById('execList') && document.querySelector('[data-dialog-open="execDialog"]'), 'Exec allowlist grouping preserves explicit allow/remove surface');
     check(document.getElementById('execBlockedCount').textContent==='7' && document.getElementById('execBlockedList').textContent.includes('blocked_python_fixture'), 'Exec allowlist renders denied executable observations sorted by count');
     check(document.getElementById('execBlockedList').textContent.indexOf('blocked_python_fixture') < document.getElementById('execBlockedList').textContent.indexOf('blocked_node_fixture'), 'Exec denied executable observations are sorted by count');

@@ -1813,7 +1813,10 @@ async function refreshStrongPermissionControlStatus() {
 async function saveStrongPermissionControl() {
   const enabled = Boolean(elements.strongPermissionControl.checked);
   const previousEnabled = strongPermissionControlStatus?.enabled !== false;
-  if (!enabled && previousEnabled && !window.confirm('关闭强权限控制后，Agent 将可以使用更多宿主机能力，包括命令执行、stdio MCP、Git SSH 和宿主 Verifier。开发会更灵活，但 Agent 对本机的执行能力也会更大。Admin、密钥和 Secret 等管理权限仍不会开放。确认关闭？')) {
+  if (!enabled && previousEnabled && !await confirmInApp(
+    '关闭强权限控制后，Agent 将可以使用更多宿主机能力，包括命令执行、stdio MCP、Git SSH 和宿主 Verifier。\n\n开发会更灵活，但 Agent 对本机的执行能力也会更大。Admin、密钥和 Secret 等管理权限仍不会开放。',
+    {title:'关闭强权限控制？', confirmText:'确认关闭', danger:true},
+  )) {
     renderStrongPermissionControlStatus(strongPermissionControlStatus);
     return;
   }
