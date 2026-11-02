@@ -136,6 +136,9 @@ func registerCompactGroup(
 		group,
 		strings.Join(actionNames, ", "),
 	)
+	if hint := compactGroupAgentHint(group); hint != "" {
+		description += " " + hint
+	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "adm_" + group,
 		Description: description,
@@ -149,6 +152,9 @@ func registerCompactGroup(
 				action,
 				strings.Join(actionNames, ", "),
 			)
+		}
+		if recovery := compactActionAgentRecovery(entry); recovery != nil {
+			return nil, nil, fmt.Errorf("%s", recovery["message"])
 		}
 		result, err := callLegacy(ctx, entry.legacyName, in.Arguments)
 		if err != nil {
@@ -181,9 +187,10 @@ func registerCompactHelp(server *mcp.Server, groups map[string]map[string]compac
 				out[name] = actions
 			}
 			return toolResult(map[string]any{
-				"tool_count": len(groupNames) + 1,
-				"groups":     out,
-				"usage":      "call adm_<group> with {action, arguments}; call adm_help with group/action for an exact input schema",
+				"tool_count":      len(groupNames) + 1,
+				"groups":          out,
+				"usage":           "call adm_<group> with {action, arguments}; call adm_help with group/action for an exact input schema",
+				"agent_workflows": compactAgentWorkflows(),
 			}, nil)
 		}
 
@@ -220,13 +227,64 @@ func compactActionHelp(entry compactAction) map[string]any {
 	case agentToolPermissionStrongOnly:
 		permission = "relaxed_agent_only"
 	}
-	return map[string]any{
+	out := map[string]any{
 		"group":        entry.group,
 		"action":       entry.action,
 		"legacy_name":  entry.legacyName,
 		"description":  entry.tool.Description,
 		"permission":   permission,
 		"input_schema": entry.tool.InputSchema,
+	}
+	if recovery := compactActionAgentRecovery(entry); recovery != nil {
+		out["agent_recovery"] = recovery
+	}
+	return out
+}
+
+func compactGroupAgentHint(group string) string {
+	switch group {
+	case "environment":
+		return "Agent development isolation rule: create a new Git worktree with action=temporary_create and arguments mode=managed_worktree, source_environment_id, owner_id, positive ttl_seconds, ASCII branch_name, and migrate_uncommitted_changes=false. Do not infer from worktree_create being Admin-only that the Agent cannot create worktrees; worktree_create is the Admin convenience path, while temporary_create is the Agent-safe path."
+	default:
+		return ""
+	}
+}
+
+func compactAgentWorkflows() map[string]any {
+	return map[string]any{
+		"create_git_worktree": map[string]any{
+			"group":  "environment",
+			"action": "temporary_create",
+			"arguments": map[string]any{
+				"mode":                        "managed_worktree",
+				"source_environment_id":       "<source_environment_id>",
+				"owner_id":                    "<stable_owner_id>",
+				"ttl_seconds":                 "<positive_integer>",
+				"branch_name":                 "<ascii_branch_name>",
+				"migrate_uncommitted_changes": false,
+			},
+			"rule": "Agent must use this path for ordinary Git task isolation. A dirty source checkout is allowed. Do not ask the user to create a Worktree in the Admin UI merely because environment/worktree_create is Admin-only.",
+		},
+	}
+}
+
+func compactActionAgentRecovery(entry compactAction) map[string]any {
+	if entry.group != "environment" || entry.action != "worktree_create" {
+		return nil
+	}
+	return map[string]any{
+		"reason": "admin_action_has_agent_safe_equivalent",
+		"group":  "environment",
+		"action": "temporary_create",
+		"arguments": map[string]any{
+			"mode":                        "managed_worktree",
+			"source_environment_id":       "<source_environment_id>",
+			"owner_id":                    "<stable_owner_id>",
+			"ttl_seconds":                 "<positive_integer>",
+			"branch_name":                 "<ascii_branch_name>",
+			"migrate_uncommitted_changes": false,
+		},
+		"message": "ADM Agent must not stop or ask the user to create a Worktree manually: environment/worktree_create is Admin-only, but ordinary Agent worktree creation is supported through environment/temporary_create with mode=managed_worktree and source_environment_id. Use that Agent-safe action instead.",
 	}
 }
 

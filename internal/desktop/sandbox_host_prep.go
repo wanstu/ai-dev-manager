@@ -29,7 +29,7 @@ func (a *Adapter) EnableSandboxHostPreparation() (SandboxHostPreparationStatus, 
 }
 
 func actionableSandboxACLBrokerError(err error) error {
-	if !errors.Is(err, errSandboxACLBrokerUnavailable) {
+	if !errors.Is(err, errSandboxACLBrokerUnavailable) && !errors.Is(err, errSandboxACLBrokerTimeout) {
 		return err
 	}
 	return fmt.Errorf("%w; open ADM Desktop Settings and repair Windows strong sandbox Host Prep, then accept the one-time administrator confirmation", err)
