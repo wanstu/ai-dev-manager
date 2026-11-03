@@ -81,8 +81,9 @@ github.com/wailsapp/wails/v2 v2.15.0 h1:u7cHK+UesZOlYxyJxfYLteaCPhws6UsZoDdqUeju
 github.com/wailsapp/wails/v2 v2.15.0/go.mod h1:scxrgwfsv6yR6fE6cCF+Flfl+JeU+SR87T9x4kILJ6M=
 github.com/wanstu/mcp-center-core v0.1.2 h1:giDCTW0MXlru9Cijc5wxYKqmv9AbMI4luNVKq38LMUc=
 github.com/wanstu/mcp-center-core v0.1.2/go.mod h1:eDXyiV5qVCEux3kBJ7X/OFu/GoGQme3VH08IJoEjWu0=
-github.com/wanstu/wails-desktop-kit v0.12.1 h1:RhoPUouPi4xoNy8C/0eCYOs1I7hldKv5JSeVitNTTms=
 github.com/wanstu/wails-desktop-kit v0.12.1/go.mod h1:3PHy0sjNqcLwurVZfihR+31U84ZIp7EfDsgYiPbyPaQ=
+github.com/wanstu/wails-desktop-kit v0.12.2 h1:GxdRfvqq0Y3MQiCjuxoKOVEpNga9w7s6rsL5I0raS+0=
+github.com/wanstu/wails-desktop-kit v0.12.2/go.mod h1:3PHy0sjNqcLwurVZfihR+31U84ZIp7EfDsgYiPbyPaQ=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=
 github.com/yosida95/uritemplate/v3 v3.0.2/go.mod h1:ILOh0sOhIJR3+L/8afwt/kE++YT040gmv5BQTMR2HP4=
 golang.org/x/crypto v0.57.0 h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=
