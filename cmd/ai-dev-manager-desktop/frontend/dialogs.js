@@ -18,6 +18,29 @@ function closeFormDialog(form) {
  if (dialog) closeEditorDialog(dialog.id);
 }
 function activeEditorDialog() { return [...document.querySelectorAll('dialog[open]')].at(-1); }
+function confirmInApp(message, options = {}) {
+ const dialog = document.getElementById('confirmationDialog');
+ const title = document.getElementById('confirmationDialogTitle');
+ const body = document.getElementById('confirmationDialogMessage');
+ const confirmButton = document.getElementById('confirmationDialogConfirmButton');
+ if (!dialog || !title || !body || !confirmButton || typeof dialog.showModal !== 'function') {
+  return Promise.resolve(typeof window.confirm === 'function' ? window.confirm(String(message || '')) : false);
+ }
+ if (dialog.open) dialog.close('cancel');
+ dialog.returnValue = '';
+ title.textContent = String(options.title || '确认操作');
+ body.textContent = String(message || '');
+ confirmButton.textContent = String(options.confirmText || '确认');
+ confirmButton.classList.toggle('danger-button', options.danger !== false);
+ dialogOpeners.set(dialog, document.activeElement);
+ document.body.classList.add('has-editor-dialog');
+ return new Promise((resolve) => {
+  const onClose = () => resolve(dialog.returnValue === 'confirm');
+  dialog.addEventListener('close', onClose, {once:true});
+  dialog.showModal();
+  confirmButton.focus({preventScroll:true});
+ });
+}
 document.addEventListener('click', (event) => {
  const opener = event.target.closest('[data-dialog-open]');
  if (opener) {

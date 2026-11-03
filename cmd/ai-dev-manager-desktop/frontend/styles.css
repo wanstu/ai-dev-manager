@@ -382,6 +382,9 @@ body.has-editor-dialog { overflow: hidden; }
 .gateway-profile-field select { min-width: 0; width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
 .gateway-profile-field input[readonly] { background: #f9fafb; color: #6b7280; }
 .editor-dialog .memory-form { grid-template-columns: 1fr; }
+.confirmation-dialog { width: min(560px, calc(100vw - 48px)); }
+.confirmation-dialog-message { margin: 20px 22px 4px; color: #374151; line-height: 1.65; white-space: pre-line; overflow-wrap: anywhere; }
+.confirmation-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px 20px; }
 .bulk-assignment-dialog > .editor-hint { margin: 16px 22px 0; }
 .bulk-assignment-dialog > .skill-bulk-actions { padding: 12px 22px; border-bottom: 1px solid #f0f1f3; }
 .bulk-assignment-dialog .bulk-environment-list { max-height: 320px; margin: 0 22px; border: 1px solid #e5e7eb; border-radius: 10px; }
