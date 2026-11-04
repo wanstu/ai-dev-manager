@@ -6,7 +6,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/wailsapp/wails/v2 v2.15.0
-	github.com/wanstu/wails-desktop-kit v0.12.2
+	github.com/wanstu/wails-desktop-kit v0.12.3
 	golang.org/x/sys v0.48.0
 )
 
