@@ -156,7 +156,7 @@ func TestRuntimeOwnerReusesSessionAndClosesIt(t *testing.T) {
 	}
 }
 
-func TestRuntimeOwnerRestartRebuildsPersistedDesiredState(t *testing.T) {
+func TestRuntimeOwnerRestartKeepsPersistedDesiredStateLazy(t *testing.T) {
 	service, environmentID, mcpID := runtimeOwnerTestService(t)
 
 	first := newRuntimeOwner(service)
@@ -167,8 +167,15 @@ func TestRuntimeOwnerRestartRebuildsPersistedDesiredState(t *testing.T) {
 		return firstSession, nil
 	}
 	first.Reconcile(context.Background())
+	if firstConnects != 0 || first.Info().OwnedMCPSessions != 0 {
+		t.Fatalf("startup reconcile eagerly connected: connects=%d info=%+v", firstConnects, first.Info())
+	}
+	status, err := first.Status(context.Background(), environmentID, mcpID)
+	if err != nil || status.State != app.MCPHealthHealthy {
+		t.Fatalf("lazy first status=%+v err=%v", status, err)
+	}
 	if firstConnects != 1 || first.Info().OwnedMCPSessions != 1 {
-		t.Fatalf("first owner connects=%d info=%+v", firstConnects, first.Info())
+		t.Fatalf("first lazy activation connects=%d info=%+v", firstConnects, first.Info())
 	}
 	firstID := first.Info().ID
 	if err := first.Close(); err != nil {
@@ -184,18 +191,18 @@ func TestRuntimeOwnerRestartRebuildsPersistedDesiredState(t *testing.T) {
 	}
 	second.Reconcile(context.Background())
 	defer second.Close()
-	if secondConnects != 1 || second.Info().OwnedMCPSessions != 1 {
-		t.Fatalf("second owner connects=%d info=%+v", secondConnects, second.Info())
+	if secondConnects != 0 || second.Info().OwnedMCPSessions != 0 {
+		t.Fatalf("restart eagerly reconnected configured MCPs: connects=%d info=%+v", secondConnects, second.Info())
 	}
 	if second.Info().ID == firstID {
 		t.Fatalf("restart reused owner id %q", firstID)
 	}
-	status, err := second.Status(context.Background(), environmentID, mcpID)
+	status, err = second.Status(context.Background(), environmentID, mcpID)
 	if err != nil || status.State != app.MCPHealthHealthy {
-		t.Fatalf("rebuilt status=%+v err=%v", status, err)
+		t.Fatalf("lazy rebuilt status=%+v err=%v", status, err)
 	}
-	if secondConnects != 1 {
-		t.Fatalf("rebuilt owner reconnected unnecessarily: %d", secondConnects)
+	if secondConnects != 1 || second.Info().OwnedMCPSessions != 1 {
+		t.Fatalf("second lazy activation connects=%d info=%+v", secondConnects, second.Info())
 	}
 }
 

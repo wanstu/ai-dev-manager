@@ -645,22 +645,22 @@ func TestRuntimeOwnerRealHTTPRestartReconciliation(t *testing.T) {
 		}
 		running = nil
 	}
-	waitUpstreamRequests := func(minimum int64) {
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) && requests.Load() < minimum {
-			time.Sleep(20 * time.Millisecond)
-		}
-		if got := requests.Load(); got < minimum {
-			t.Fatalf("upstream requests=%d want at least %d", got, minimum)
-		}
-	}
-
 	firstProcess, firstStatus := startGateway()
-	waitUpstreamRequests(1)
+	if got := requests.Load(); got != 0 {
+		t.Fatalf("Gateway startup eagerly contacted configured MCP: requests=%d", got)
+	}
 	ctx := context.Background()
 	var firstInventoryAt, firstLastCheckAt string
 	for i := 0; i < 2; i++ {
 		session := connectHTTPWithRetry(t, ctx, endpoint)
+		status := callGatewayTool(t, ctx, session, "environment_mcp_status", map[string]any{
+			"environment_id": environment.ID,
+			"mcp_id":         entry.ID,
+		})
+		if status.IsError || !strings.Contains(toolText(t, status), "healthy") {
+			_ = session.Close()
+			t.Fatalf("client %d owner status failed: %s", i+1, toolText(t, status))
+		}
 		var info *mcp.CallToolResult
 		var infoText string
 		deadline := time.Now().Add(5 * time.Second)
@@ -676,14 +676,6 @@ func TestRuntimeOwnerRealHTTPRestartReconciliation(t *testing.T) {
 			inspection := callGatewayTool(t, ctx, session, "environment_mcp_inspect", map[string]any{"environment_id": environment.ID, "mcp_id": entry.ID})
 			_ = session.Close()
 			t.Fatalf("client %d did not observe owner %q: %s inspection=%s upstream_requests=%d", i+1, firstStatus.OwnerID, infoText, toolText(t, inspection), requests.Load())
-		}
-		status := callGatewayTool(t, ctx, session, "environment_mcp_status", map[string]any{
-			"environment_id": environment.ID,
-			"mcp_id":         entry.ID,
-		})
-		if status.IsError || !strings.Contains(toolText(t, status), "healthy") {
-			_ = session.Close()
-			t.Fatalf("client %d owner status failed: %s", i+1, toolText(t, status))
 		}
 		if i == 0 {
 			inspection := callGatewayTool(t, ctx, session, "environment_mcp_inspect", map[string]any{"environment_id": environment.ID, "mcp_id": entry.ID})
@@ -719,7 +711,9 @@ func TestRuntimeOwnerRealHTTPRestartReconciliation(t *testing.T) {
 	if secondStatus.OwnerID == firstStatus.OwnerID {
 		t.Fatalf("Gateway restart reused runtime owner %q", firstStatus.OwnerID)
 	}
-	waitUpstreamRequests(firstRunRequests + 1)
+	if got := requests.Load(); got != firstRunRequests {
+		t.Fatalf("Gateway restart eagerly contacted configured MCP: requests=%d want %d", got, firstRunRequests)
+	}
 	secondSession := connectHTTPWithRetry(t, ctx, endpoint)
 	secondStatusResult := callGatewayTool(t, ctx, secondSession, "environment_mcp_status", map[string]any{
 		"environment_id": environment.ID,

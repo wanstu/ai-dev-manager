@@ -21,9 +21,10 @@ import (
 )
 
 const (
-	runtimeOwnerReconcileTimeout = 10 * time.Second
-	runtimeOwnerMonitorTick      = 100 * time.Millisecond
-	runtimeOwnerInventoryLimit   = 256
+	runtimeOwnerReconcileTimeout  = 10 * time.Second
+	runtimeOwnerActiveMonitorTick = time.Second
+	runtimeOwnerIdleMonitorTick   = 5 * time.Second
+	runtimeOwnerInventoryLimit    = 256
 )
 
 var (
@@ -385,22 +386,22 @@ func (o *runtimeOwner) Reconcile(ctx context.Context) {
 	if o == nil || o.service == nil {
 		return
 	}
+	_ = ctx
 	environments, err := o.service.Environments.List()
 	if err != nil {
 		return
 	}
+	// Configuration is not runtime activity. Do not eagerly connect every MCP
+	// inherited by every Environment on Gateway startup. Keep only already-owned
+	// runtime keys that are still desired; first real Status/ListTools/CallTool
+	// use will establish the session lazily.
 	desired := make(map[runtimeOwnerKey]struct{})
 	for _, env := range environments {
-		// Expired temporary Environments must not be reactivated at startup.
 		if expiredTemporaryEnvironment(env, time.Now().UTC()) {
 			continue
 		}
 		for _, mcpID := range env.EnabledMCPIDs {
-			key := runtimeOwnerKey{environmentID: env.ID, mcpID: mcpID}
-			desired[key] = struct{}{}
-			probeCtx, cancel := context.WithTimeout(ctx, runtimeOwnerReconcileTimeout)
-			_, _ = o.Status(probeCtx, env.ID, mcpID)
-			cancel()
+			desired[runtimeOwnerKey{environmentID: env.ID, mcpID: mcpID}] = struct{}{}
 		}
 	}
 	o.pruneToDesired(desired)

@@ -58,25 +58,47 @@ func (o *runtimeOwner) Refresh(ctx context.Context, environmentID, mcpID string)
 	return observation, nil
 }
 
+func runtimeOwnerMonitorInterval(active bool) time.Duration {
+	if active {
+		return runtimeOwnerActiveMonitorTick
+	}
+	return runtimeOwnerIdleMonitorTick
+}
+
 func (o *runtimeOwner) monitor() {
-	ticker := time.NewTicker(runtimeOwnerMonitorTick)
-	defer ticker.Stop()
+	// Preserve the original deferred-first-check behavior so callers can
+	// finish configuring the runtime owner before background health work
+	// starts. After the first scan, completely idle owners back off to the
+	// longer idle interval.
+	timer := time.NewTimer(runtimeOwnerActiveMonitorTick)
+	defer timer.Stop()
 	for {
 		select {
 		case <-o.ctx.Done():
 			return
-		case now := <-ticker.C:
-			o.monitorOnce(now.UTC())
+		case now := <-timer.C:
+			active := o.monitorOnce(now.UTC())
+			timer.Reset(runtimeOwnerMonitorInterval(active))
 		}
 	}
 }
 
-func (o *runtimeOwner) monitorOnce(now time.Time) {
+func (o *runtimeOwner) monitorOnce(now time.Time) bool {
 	environments, err := o.service.Environments.List()
 	if err != nil {
-		return
+		return false
 	}
+	definitions, err := o.service.MCPs.List()
+	if err != nil {
+		return false
+	}
+	definitionsByID := make(map[string]model.MCPDefinition, len(definitions))
+	for _, definition := range definitions {
+		definitionsByID[definition.ID] = definition
+	}
+
 	desired := make(map[runtimeOwnerKey]struct{})
+	active := false
 	for _, environment := range environments {
 		// Idle MCP connections for expired temporary Environments should
 		// close instead of preventing cleanup indefinitely.
@@ -86,25 +108,32 @@ func (o *runtimeOwner) monitorOnce(now time.Time) {
 		for _, mcpID := range environment.EnabledMCPIDs {
 			key := runtimeOwnerKey{environmentID: environment.ID, mcpID: mcpID}
 			desired[key] = struct{}{}
-			definition, err := o.service.MCPs.Get(mcpID)
-			if err != nil {
+			definition, ok := definitionsByID[mcpID]
+			if !ok {
 				o.drop(key)
 				continue
 			}
 			o.invalidateChangedDesiredConfig(key, definition)
 			observation, observed := o.observation(key)
 			if o.session(key) != nil {
+				active = true
 				if definition.HealthPolicy.HealthCheckEnabled && checkDue(observation.LastCheckAt, definition.HealthPolicy.CheckIntervalSeconds, now) {
 					go o.backgroundPing(key, definition.HealthPolicy)
 				}
 				continue
 			}
-			if definition.HealthPolicy.AutoReconnect && (!observed || observation.NextReconnectAt == nil || !observation.NextReconnectAt.After(now)) {
-				go o.backgroundReconnect(key, definition.HealthPolicy)
+			// Auto-reconnect only after this runtime key was actually used and
+			// observed. A merely configured/inherited MCP must stay lazy.
+			if observed && (observation.InFlight || definition.HealthPolicy.AutoReconnect) {
+				active = true
+				if definition.HealthPolicy.AutoReconnect && (observation.NextReconnectAt == nil || !observation.NextReconnectAt.After(now)) {
+					go o.backgroundReconnect(key, definition.HealthPolicy)
+				}
 			}
 		}
 	}
 	o.pruneToDesired(desired)
+	return active
 }
 
 func (o *runtimeOwner) backgroundPing(key runtimeOwnerKey, policy model.MCPHealthPolicy) {
