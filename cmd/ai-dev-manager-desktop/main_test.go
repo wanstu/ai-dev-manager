@@ -338,7 +338,7 @@ func TestEmbeddedFrontendUsesDesktopManagementAndGatewayBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"GetConnectionProfiles", "SaveConnectionProfile", "SelectConnectionProfile", "DeleteConnectionProfile", "DisconnectADM", "withConnectionTransition", "desktopStartup", "start_service_on_desktop_launch", "connectionStartOnDesktopLaunch", "desktopPendingRequests", "desktopRequestQueue"} {
+	for _, required := range []string{"GetConnectionProfiles", "SaveConnectionProfile", "SelectConnectionProfile", "DeleteConnectionProfile", "DisconnectADM", "withConnectionTransition", "desktopStartup", "start_service_on_desktop_launch", "connectionStartOnDesktopLaunch", "desktopPendingRequests", "desktopRequestQueue", "blockUI: false", "queueMicrotask"} {
 		if !strings.Contains(string(connections), required) {
 			t.Fatalf("desktop connections.js missing %q", required)
 		}

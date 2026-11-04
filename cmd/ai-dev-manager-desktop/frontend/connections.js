@@ -45,10 +45,12 @@ function renderConnectionProfiles() {
  elements.gatewayRefreshButton.disabled = !active;
  elements.refreshButton.disabled = !active;
 }
-async function withConnectionTransition(action) {
+async function withConnectionTransition(action, options = {}) {
  if (connectionSwitching) return;
  connectionSwitching = true;
- const main = document.querySelector('main'); main.inert = true;
+ const blockUI = options.blockUI !== false;
+ const main = document.querySelector('main');
+ if (blockUI && main) main.inert = true;
  try {
   // Let old request continuations and their follow-up reads finish on the old target.
   do { await new Promise(resolve => setTimeout(resolve, desktopRequestQueueIdleDelay)); } while (desktopPendingRequests);
@@ -56,7 +58,9 @@ async function withConnectionTransition(action) {
  } catch (error) {
   setStatus('连接配置失败：' + (error?.message || String(error)), 'error');
  } finally {
-  connectionSwitching = false; main.inert = false; renderConnectionProfiles();
+  connectionSwitching = false;
+  if (blockUI && main) main.inert = false;
+  renderConnectionProfiles();
  }
 }
 async function connectSelectedProfile(options = {}) {
@@ -70,8 +74,14 @@ async function connectSelectedProfile(options = {}) {
   try {
    const status = await desktopAdapter().StartLocalADM({base_url: profile.base_url});
    renderGatewayStatus(status);
-   if (status?.state === 'running') await refreshSnapshot('本地 ADM Service 已随 Desktop 启动');
-   else { clearManagementData(); setStatus('ADM Service 未运行；管理数据未加载', 'error'); }
+   if (status?.state === 'running') {
+    setStatus('本地 ADM Service 已启动，正在后台加载管理数据…', 'loading');
+    queueMicrotask(() => {
+     refreshSnapshot('本地 ADM Service 已随 Desktop 启动').catch((error) => {
+      setStatus('ADM 管理数据后台加载失败：' + (error?.message || String(error)), 'error');
+     });
+    });
+   } else { clearManagementData(); setStatus('ADM Service 未运行；管理数据未加载', 'error'); }
   } catch (error) {
    clearManagementData();
    setStatus('随 Desktop 启动 ADM Service 失败：' + (error?.message || String(error)), 'error');
@@ -86,7 +96,7 @@ async function initializeConnectionProfiles() {
   connectionProfiles = await desktopAdapter().GetConnectionProfiles();
   connectionProfilesLoaded = true;
   await connectSelectedProfile({desktopStartup: true});
- });
+ }, {blockUI: false});
 }
 function editConnectionProfile(profile) {
  document.getElementById('connectionID').value = profile?.id || '';
