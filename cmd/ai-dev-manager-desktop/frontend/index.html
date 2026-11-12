@@ -313,17 +313,17 @@
     </div>
 
     <div class="route-page-stack">
-      <article class="panel management-page" data-management-page="workspaces" hidden>
-        <div class="panel-heading"><div><h2 data-page-heading>Workspaces</h2><p>登记允许 ADM 使用的本地目录。</p></div><span id="workspaceBadge" class="badge">0</span></div>
-        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="workspaceDialog">添加 Workspace</button></div>
-        <div class="list-toolbar project-list-toolbar">
-          <label class="filter-field"><span>搜索</span><input id="workspaceFilter" type="search" placeholder="名称 / ID / 完整路径"></label>
-          <label class="filter-field compact-filter"><span>Environment</span><select id="workspaceEnvironmentFilter"><option value="all">全部</option><option value="with">有 Environment</option><option value="empty">无 Environment</option></select></label>
-          <label class="filter-field compact-filter"><span>排序</span><select id="workspaceSort"><option value="name">名称 A–Z</option><option value="count-desc">Environment 最多</option><option value="count-asc">Environment 最少</option></select></label>
+      <article class="panel management-page workspace-page" data-management-page="workspaces" hidden>
+        <div class="panel-heading"><div><h2 data-page-heading>工作区</h2><p>登记允许 ADM 使用的本地目录。</p></div><span id="workspaceBadge" class="badge">0</span></div>
+        <div class="editor-toolbar"><button type="button" class="secondary-button" data-dialog-open="workspaceDialog">添加工作区</button></div>
+        <div class="list-toolbar project-list-toolbar workspace-list-toolbar">
+          <label class="filter-field workspace-search-field"><span>搜索</span><input id="workspaceFilter" type="search" placeholder="名称 / ID / 完整路径"></label>
+          <label class="filter-field compact-filter"><span>环境</span><select id="workspaceEnvironmentFilter"><option value="all">全部</option><option value="with">有环境</option><option value="empty">无环境</option></select></label>
+          <label class="filter-field compact-filter"><span>排序</span><select id="workspaceSort"><option value="name">名称 A–Z</option><option value="count-desc">环境数量最多</option><option value="count-asc">环境数量最少</option></select></label>
           <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="workspaces">重置</button>
           <span class="visible-count">显示 <strong id="workspaceVisibleCount">0</strong> / <strong id="workspaceListTotalCount">0</strong></span>
         </div>
-        <div id="workspaceList" class="list filtered-project-list empty">暂无 Workspace</div>
+        <div id="workspaceList" class="list filtered-project-list workspace-list empty">暂无工作区</div>
       </article>
       <article class="panel management-page" data-management-page="environments" hidden>
         <div class="panel-heading"><div><h2 data-page-heading>Environments</h2><p>创建持久开发上下文；Git 不是前置条件。</p></div><span id="environmentBadge" class="badge">0</span></div>
