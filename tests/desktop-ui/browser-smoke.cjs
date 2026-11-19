@@ -70,7 +70,7 @@ const fakeBridge = String.raw`<script>
   };
   const skillSourcesA = [{skill_source_id:'source-a', root:'C:\\fixtures\\skills', support_roots:[], last_refresh_status:'ok'}];
   const environmentMemory = {'env-a':[{key:'private-sentinel', value:'env-a-private-visible'}], 'env-b':[{key:'private-sentinel', value:'env-b-private-visible'}]};
-  const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false, verifierAgentAllowed:false, sandboxBrokerReady:false, strongPermissionEnabled:true};
+  const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false, verifierAgentAllowed:false, sandboxBrokerReady:false, strongPermissionEnabled:true, autoConfirmInApp:true};
   const record = (name, args) => calls.push({name, args});
   const recomputeEnvironment = (env, snapshot=snapshotA) => {
     if(!env) return env;
@@ -207,6 +207,15 @@ const fakeBridge = String.raw`<script>
     }};
   }
   window.runtime = {EventsOn(){}, EventsEmit(){}};
+  document.addEventListener('DOMContentLoaded', () => {
+    const realConfirmInApp = window.confirmInApp;
+    if (typeof realConfirmInApp !== 'function') return;
+    window.confirmInApp = (message, options = {}) => {
+      if (!state.autoConfirmInApp) return realConfirmInApp(message, options);
+      confirmations.push(String(message || ''));
+      return true;
+    };
+  });
   window.confirm = (message) => { confirmations.push(String(message || '')); return true; };
   Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{writeText:async(text)=>{ window.__copiedText=String(text || ''); }}});
   window.DesktopKit = {clipboard:{writeText:async(text)=>{ window.__copiedText=String(text || ''); }}};
@@ -489,6 +498,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const strongToggle=document.getElementById('strongPermissionControl');
     check(strongToggle.checked && !strongToggle.disabled, 'Strong permission control starts enabled and interactive');
     const strongSetCallsBefore=window.__fakeADM.calls.filter(c=>c.name==='SetStrongPermissionControl').length;
+    window.__fakeADM.state.autoConfirmInApp=false;
     strongToggle.checked=false;
     strongToggle.dispatchEvent(new Event('change',{bubbles:true}));
     await waitFor(() => document.getElementById('confirmationDialog').open, 'Strong permission disable opens in-app confirmation');
@@ -501,6 +511,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('confirmationDialogConfirmButton').click();
     await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='SetStrongPermissionControl' && c.args[0]===false), 'Confirmed strong permission disable persists through adapter');
     await waitFor(() => !strongToggle.checked && document.getElementById('strongPermissionControlModeLabel').textContent.includes('已关闭'), 'Confirmed strong permission disable updates UI');
+    window.__fakeADM.state.autoConfirmInApp=true;
     check(document.body.textContent.includes('Allowed executables') && document.getElementById('execList') && document.querySelector('[data-dialog-open="execDialog"]'), 'Exec allowlist grouping preserves explicit allow/remove surface');
     check(document.getElementById('execBlockedCount').textContent==='7' && document.getElementById('execBlockedList').textContent.includes('blocked_python_fixture'), 'Exec allowlist renders denied executable observations sorted by count');
     check(document.getElementById('execBlockedList').textContent.indexOf('blocked_python_fixture') < document.getElementById('execBlockedList').textContent.indexOf('blocked_node_fixture'), 'Exec denied executable observations are sorted by count');
@@ -932,7 +943,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('capabilityAssignmentEnableButton').click();
     const bulkProgressPanel=document.getElementById('capabilityAssignmentProgressPanel');
     const bulkProgress=document.getElementById('capabilityAssignmentProgress');
-    check(!bulkProgressPanel.hidden && bulkProgress.max===4, 'Batch progress starts with exact operation count');
+    await waitFor(() => !bulkProgressPanel.hidden && bulkProgress.max===4, 'Batch progress starts with exact operation count');
     check(document.getElementById('capabilityAssignmentCloseButton').disabled && document.getElementById('capabilityAssignmentEnableButton').disabled && document.getElementById('capabilityAssignmentDisableButton').disabled, 'Batch UI locks repeat actions while processing');
     await waitFor(() => bulkProgress.value===3, 'Progress advances before final slow operation completes');
     check(document.getElementById('capabilityAssignmentProgressCount').textContent==='3 / 4', 'Progress updates incrementally instead of only at end');
@@ -955,7 +966,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const beforeWorkspaceCalls=window.__fakeADM.calls.filter(c=>c.name==='SetWorkspaceMCP'&&c.args[0]==='ws-b'&&c.args[1]==='mcp-a').length;
     const beforeEnvCalls=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentMCP').length;
     document.getElementById('capabilityAssignmentEnableButton').click();
-    check(document.getElementById('capabilityAssignmentProgress').max===2, 'Workspace-only progress reflects target-resource pair count');
+    await waitFor(() => document.getElementById('capabilityAssignmentProgress').max===2, 'Workspace-only progress reflects target-resource pair count');
     await waitFor(()=>window.__fakeADM.calls.filter(c=>c.name==='SetWorkspaceMCP'&&c.args[0]==='ws-b'&&c.args[1]==='mcp-a'&&c.args[2]===true).length>beforeWorkspaceCalls,'Workspace-only batch enable called');
     check(window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentMCP').length===beforeEnvCalls,'Workspace-only batch does not change Environment explicit settings');
     check(document.getElementById('capabilityAssignmentResult').textContent.includes('Workspace 1'),'batch result reports affected Workspace count');
