@@ -1511,7 +1511,7 @@ async function loadSandboxHostPreparation(showMessage = false, offerRepair = fal
 async function maybeOfferSandboxHostRepair(status) {
   if (sandboxHostRepairPrompted || !sandboxHostPreparationNeedsRepair(status)) return;
   sandboxHostRepairPrompted = true;
-  const confirmed = window.confirm('检测到 Windows 强沙盒的 ACL broker 未运行。这通常发生在升级后受保护的 Host Prep 任务仍是旧版本。现在修复？\n\n修复只会更新强沙盒 Host Prep，并需要一次 Windows 管理员确认；不会给 Agent 管理员权限。');
+  const confirmed = await confirmInApp('检测到 Windows 强沙盒的 ACL broker 未运行。这通常发生在升级后受保护的 Host Prep 任务仍是旧版本。现在修复？\n\n修复只会更新强沙盒 Host Prep，并需要一次 Windows 管理员确认；不会给 Agent 管理员权限。');
   if (!confirmed) {
     setStatus('Windows 强沙盒需要修复；可在“设置”中点击“修复强沙盒”重新执行。', 'error');
     return;
@@ -1529,7 +1529,7 @@ async function enableSandboxHostPreparation(options = {}) {
       repair = false;
     }
   }
-  if (!options?.skipConfirm && !window.confirm(repair
+  if (!options?.skipConfirm && !await confirmInApp(repair
     ? '修复 Windows 强沙盒需要一次管理员确认，用来更新受保护的 Host Prep 任务并启动 ACL broker。不会给 Agent 开放管理员权限。继续？'
     : '这一步需要一次 Windows 管理员确认，用来保证强沙盒在电脑重启后仍然自动可用。不会给 Agent 开放管理员权限。继续？')) return;
   elements.sandboxHostPreparationEnable.disabled = true;
@@ -1854,7 +1854,7 @@ async function saveGatewayAllowedHosts() {
   if (enabled && gatewayAccessStatus?.admin_api_key_configured && !profile?.api_key_configured) {
     return setStatus('当前 Desktop 连接尚未保存 Admin Key，请先配置再启用白名单。', 'error');
   }
-  if (enabled && !window.confirm('启用白名单可能使不符合规则的远程客户端立即断开。请确认当前访问域名、实际来源 IP 或反向代理 IP 已包含在允许范围内。继续保存？')) return;
+  if (enabled && !await confirmInApp('启用白名单可能使不符合规则的远程客户端立即断开。请确认当前访问域名、实际来源 IP 或反向代理 IP 已包含在允许范围内。继续保存？')) return;
   await runMutation('保存 Gateway 访问策略', () => desktopAdapter().SetGatewayAccessPolicy(enabled, hosts, ips));
 }
 async function rotateGatewayAPIKey(kind) {
@@ -1864,7 +1864,7 @@ async function rotateGatewayAPIKey(kind) {
   const warning = admin
     ? '轮换 Admin Key 后，当前 Desktop 连接会自动更新；其他使用旧 Key 的客户端会断开。继续？'
     : '轮换 Agent Key 后，所有使用旧 Key 的 Agent/MCP 客户端都需要更新。继续？';
-  if (!window.confirm(warning)) return;
+  if (!await confirmInApp(warning)) return;
   try {
     const value = String(admin
       ? await desktopAdapter().RotateGatewayAdminAPIKey()
@@ -1900,7 +1900,7 @@ async function setGatewayAdminAPIKey() {
   });
 }
 async function clearGatewayAdminAPIKey() {
-  if (!window.confirm('清除 Admin API Key 后，/admin/mcp 将无法进行远程鉴权，直到重新配置。继续？')) return;
+  if (!await confirmInApp('清除 Admin API Key 后，/admin/mcp 将无法进行远程鉴权，直到重新配置。继续？')) return;
   await runMutation('清除 Admin API Key', () => desktopAdapter().ClearGatewayAdminAPIKey());
 }
 async function setGatewayAgentAPIKey() {
@@ -1914,12 +1914,12 @@ async function setGatewayAgentAPIKey() {
   });
 }
 async function clearGatewayAgentAPIKey() {
-  if (!window.confirm('清除 Agent API Key 后，/mcp 将无法进行远程鉴权，直到重新配置。继续？')) return;
+  if (!await confirmInApp('清除 Agent API Key 后，/mcp 将无法进行远程鉴权，直到重新配置。继续？')) return;
   await runMutation('清除 Agent API Key', () => desktopAdapter().ClearGatewayAgentAPIKey());
 }
 async function saveExecAuthorizationMode() {
   const full = elements.execAuthorizationMode.value === 'full';
-  if (full && !window.confirm('Full 模式允许执行未列入 allowlist 的 executable；这些调用仍会记录审计。确认开启？')) {
+  if (full && !await confirmInApp('Full 模式允许执行未列入 allowlist 的 executable；这些调用仍会记录审计。确认开启？')) {
     renderExecAuthorizationStatus(execAuthorizationStatus);
     return;
   }
@@ -2844,7 +2844,7 @@ async function refreshMCPSecrets(){
       const note=document.createElement('small');note.textContent='已加密保存 · 内容不可查看';
       const remove=document.createElement('button');remove.type='button';remove.className='secondary-button small-button';
       remove.textContent='删除';remove.addEventListener('click',async()=>{
-        if(!window.confirm('删除密钥 '+item.name+'？仍被 MCP 使用时系统会拒绝删除。'))return;
+        if(!await confirmInApp('删除密钥 '+item.name+'？仍被 MCP 使用时系统会拒绝删除。'))return;
         try{await desktopAdapter().DeleteSecret(item.name);setStatus('密钥已删除：'+item.name,'success');await refreshMCPSecrets();}
         catch(error){setStatus('删除密钥失败：'+errorText(error),'error');}
       });
@@ -2967,7 +2967,7 @@ async function clearMissingEnvironmentSelections(kind) {
   const workspaceCount = new Set(operations.filter((operation) => operation.scope === 'workspace').map((operation) => operation.workspaceID)).size;
   const environmentCount = new Set(operations.filter((operation) => operation.scope === 'environment').map((operation) => operation.environmentID)).size;
   const resourceCount = new Set(operations.map((operation) => operation.resourceID)).size;
-  if (!window.confirm(`将清除 ${resourceCount} 个不存在的 ${label} ID，共 ${operations.length} 条引用（Workspace ${workspaceCount} 个 · Environment ${environmentCount} 个）。继续？`)) return;
+  if (!await confirmInApp(`将清除 ${resourceCount} 个不存在的 ${label} ID，共 ${operations.length} 条引用（Workspace ${workspaceCount} 个 · Environment ${environmentCount} 个）。继续？`)) return;
   const requestGeneration = connectionGeneration;
   if (kind === 'mcp') mcpBulkBusy = true; else skillBulkBusy = true;
   updateMCPBulkControls(); updateSkillBulkControls(); setStatus(`正在清理不存在的 ${label} 引用…`, 'loading');
@@ -3068,7 +3068,7 @@ async function probeAllSkillAvailability() {
 async function runSelectedBatch(kind, label, ids, mutate, rerender) {
   const uniqueIDs = [...new Set(safeArray(ids))].filter(Boolean);
   if (!uniqueIDs.length) return setStatus('请先勾选需要批量操作的项目。', 'error');
-  if (!window.confirm(label + '：已勾选的 ' + uniqueIDs.length + ' 项？')) return;
+  if (!await confirmInApp(label + '：已勾选的 ' + uniqueIDs.length + ' 项？')) return;
   const requestGeneration = connectionGeneration;
   if (kind === 'mcp') mcpBulkBusy = true;
   else skillBulkBusy = true;
@@ -3191,7 +3191,7 @@ async function runCapabilityAssignment(enabled){
  ];
  if(!operations.length)return setStatus('请先选择资源及至少一个 Workspace 或 Environment。','error');
  const actionLabel=enabled?'开启':'关闭';
- if(!window.confirm(`将在 ${workspaceIDs.length} 个 Workspace、${envIDs.length} 个 Environment 中${actionLabel} MCP/Skill，共 ${operations.length} 组设置。Workspace 设置会被环境继承，关闭环境显式设置不会覆盖 Workspace 继承。继续？`))return;
+ if(!await confirmInApp(`将在 ${workspaceIDs.length} 个 Workspace、${envIDs.length} 个 Environment 中${actionLabel} MCP/Skill，共 ${operations.length} 组设置。Workspace 设置会被环境继承，关闭环境显式设置不会覆盖 Workspace 继承。继续？`))return;
  const requestGeneration=connectionGeneration;
  capabilityAssignmentBusy=true;renderCapabilityAssignmentDialog();updateMCPBulkControls();updateSkillBulkControls();
  emptyMessage(elements.capabilityAssignmentResult,'正在执行，结果完成后将在这里显示。');
@@ -3250,7 +3250,7 @@ async function removeSkillCatalogEntries(ids, label) {
   if (!targets.length) return;
   const sourceManaged = targets.filter((entry) => entry.source_id).length; const legacy = targets.length - sourceManaged;
   const confirmation = `${label} ${targets.length} 个 Skill？\n\n只删除 ADM catalog metadata，不删除磁盘文件。删除时会同步清理 Workspace 和 Environment 中对这些 Skill ID 的选择。${sourceManaged ? `\n其中 ${sourceManaged} 个是 source-managed，之后刷新 Source 可能重新发现并恢复为新的 catalog 状态。` : ''}\nLegacy: ${legacy} · Source-managed: ${sourceManaged}`;
-  if (!window.confirm(confirmation)) return;
+  if (!await confirmInApp(confirmation)) return;
   const requestGeneration = connectionGeneration; skillBulkBusy = true; explicitSkillAvailabilityProbe = null; updateSkillBulkControls(); setStatus(`${label}…`, 'loading');
   const failures = []; let removed = 0;
   try {
@@ -3685,7 +3685,7 @@ function renderDiagnosticsPage() {
 async function prepareEnvironmentSandboxAccess(environmentID) {
   environmentID = String(environmentID || '').trim();
   if (!environmentID || window.ADMWebSurface) return;
-  if (!window.confirm(
+  if (!await confirmInApp(
     '这个 Environment 的强沙盒需要一次管理员 ACL 准备。\n\n' +
     'ADM 只会把当前 Environment ID 传给提权子进程；子进程会从本机 ADM 状态重新解析项目路径，不接受任意路径。\n\n' +
     'Windows UAC 可能被 360 等安全软件接管。ADM 不以弹窗是否出现作为成功依据，只验证最终 ACL 是否真的生效。继续？'
@@ -3741,7 +3741,7 @@ async function forceReleaseEnvironmentWriter(environmentID) {
   if (!current?.writer || current.environment_id !== environmentID) {
     return setStatus('当前 Environment 已没有 active Writer。', 'success');
   }
-  if (!window.confirm(
+  if (!await confirmInApp(
     '确定强制释放这个 Environment 的 Writer 锁？\n\n' +
     '这会立即取消当前持锁会话的写入权限。正在运行的进程或任务不会被自动停止，但后续写入会失去该 Writer 授权。\n\n' +
     '仅在确认锁已失效、持锁会话异常退出或需要管理员恢复时使用。'
@@ -3972,7 +3972,7 @@ async function cleanupExpiredTemporaryEnvironments() {
     }
     const names = eligible.slice(0, 8).map((item) => item.name || item.id).join('\n');
     const suffix = eligible.length > 8 ? `\n…以及另外 ${eligible.length - 8} 个` : '';
-    if (!window.confirm(`将清理 ${eligible.length} 个已过期且通过安全检查的 temporary Environment。\n\n${names}${suffix}\n\n有 blocker 的 Environment 不会被强制删除。继续？`)) {
+    if (!await confirmInApp(`将清理 ${eligible.length} 个已过期且通过安全检查的 temporary Environment。\n\n${names}${suffix}\n\n有 blocker 的 Environment 不会被强制删除。继续？`)) {
       setStatus('已取消清理；未修改 Environment。', 'success');
       return;
     }
@@ -4010,7 +4010,7 @@ async function forceCleanupExpiredTemporaryEnvironments() {
     if (preservedRoots.length) warnings.push(`${preservedRoots.length} 个目录已不再是 Git Worktree：只移除 ADM/Worktree 元数据，目录内容原样保留。`);
     if (!warnings.length) warnings.push('这些 Environment 均已通过强制回收检查；已提交的 managed branch 会保留。');
     const warning = warnings.join('\n');
-    if (!window.confirm(`强制回收 ${eligible.length} 个已过期 temporary Environment？\n\n${warning}\n\n${names}${suffix}\n\n运行中的任务、Writer、根目录越界或 Git common-dir 被替换的 Worktree 仍不会被删除。`)) {
+    if (!await confirmInApp(`强制回收 ${eligible.length} 个已过期 temporary Environment？\n\n${warning}\n\n${names}${suffix}\n\n运行中的任务、Writer、根目录越界或 Git common-dir 被替换的 Worktree 仍不会被删除。`)) {
       setStatus('已取消强制清理；未修改 Environment。', 'success');
       return;
     }
@@ -4119,7 +4119,7 @@ async function executeStaleWorktreeCleanup() {
   if (!selected.length) return;
   const forceLegacy = staleWorktreeCleanupForceLegacy();
   const forceNote = forceLegacy ? '\n\n已开启历史临时强制回收：仅 managed_worktree_temporary 可丢弃未提交/ignored 内容；Durable 不会被强制。' : '';
-  if (!window.confirm(`将清理已选的 ${selected.length} 个闲置 managed worktree。\n\n会删除对应 Worktree 目录和 Environment 记录，但保留 Git 分支；执行前会重新检查运行状态。${forceNote}\n\n继续？`)) return;
+  if (!await confirmInApp(`将清理已选的 ${selected.length} 个闲置 managed worktree。\n\n会删除对应 Worktree 目录和 Environment 记录，但保留 Git 分支；执行前会重新检查运行状态。${forceNote}\n\n继续？`)) return;
   elements.staleWorktreeCleanupExecuteButton.disabled = true;
   elements.staleWorktreeCleanupRefreshButton.disabled = true;
   elements.staleWorktreeCleanupResult.textContent = '正在重新检查并清理…';
@@ -4178,7 +4178,7 @@ async function previewTemporaryEnvironmentCleanup(environment) {
 async function promoteTemporaryEnvironment(environment) {
   if (!environment?.environment_id) return;
   const ownerID = temporaryLifecycleOwner(environment); if (!ownerID) return setStatus('Temporary Environment 缺少 lifecycle owner，不能 promote。', 'error');
-  if (!window.confirm(`将同一个 Environment 保留为 durable？不会复制 root、Memory 或创建新 Environment。\n${environment.name || environment.environment_id}\nOwner: ${ownerID}`)) return;
+  if (!await confirmInApp(`将同一个 Environment 保留为 durable？不会复制 root、Memory 或创建新 Environment。\n${environment.name || environment.environment_id}\nOwner: ${ownerID}`)) return;
   const requestGeneration = connectionGeneration, id = environment.environment_id; setStatus('正在 promote temporary Environment…', 'loading');
   try {
     const status = await desktopAdapter().PromoteTemporaryEnvironment(id, ownerID);
@@ -4194,7 +4194,7 @@ async function executeTemporaryEnvironmentCleanup(environment) {
   if (!temporaryCleanupPreviewIDs.has(id) || !status?.cleanup_eligible) return setStatus('请先执行 cleanup preview；只有最新预览明确 eligible 才能确认清理。', 'error');
   if (!ownerID) return setStatus('Temporary Environment 缺少 lifecycle owner，不能清理。', 'error');
   const managed = Boolean(status.managed_worktree); const effect = managed ? 'ADM-managed worktree root 会被移除，managed branch 会保留。' : '只移除 ADM Environment 状态；Workspace/root/project files 不会被删除。';
-  if (!window.confirm(`确认清理这个 temporary Environment？\n${environment.name || id}\n${effect}\n没有 force 路径。`)) return;
+  if (!await confirmInApp(`确认清理这个 temporary Environment？\n${environment.name || id}\n${effect}\n没有 force 路径。`)) return;
   const requestGeneration = connectionGeneration; setStatus('正在执行 temporary Environment cleanup…', 'loading');
   try {
     await desktopAdapter().CleanupTemporaryEnvironment(id, ownerID, true);
@@ -4373,7 +4373,7 @@ elements.verifierList.addEventListener('click', async (event) => {
   if (button.dataset.action === 'toggle-verifier-agent') {
     if (runtimePendingActionKey) return;
     const allowed = button.dataset.allowed !== '1';
-    if (allowed && !window.confirm('允许 AI 通过这个 Verifier 在宿主机执行项目代码？\n\n在 OS 沙箱完成前，这意味着该 Verifier 及其项目代码具有当前 Windows 用户可访问的文件权限。只应对你信任的 test / lint / build Verifier 开启。')) return;
+    if (allowed && !await confirmInApp('允许 AI 通过这个 Verifier 在宿主机执行项目代码？\n\n在 OS 沙箱完成前，这意味着该 Verifier 及其项目代码具有当前 Windows 用户可访问的文件权限。只应对你信任的 test / lint / build Verifier 开启。')) return;
     const actionKey = `verifier-agent:${verifierID}`; runtimePendingActionKey = actionKey; renderRuntime();
     setStatus(allowed ? '正在允许 AI 运行 Verifier…' : '正在撤销 AI 运行 Verifier…', 'loading');
     try {
@@ -4552,14 +4552,14 @@ elements.mcpList.addEventListener('click', async (event) => {
       if (requestGeneration === connectionGeneration) renderMCPManager(safeArray(currentSnapshot?.mcps));
     }
   }
-  if (button.dataset.action === 'remove-mcp' && window.confirm(`这是全局删除，不是只从当前 Environment 禁用。删除时会同时从所有 Workspace / Environment 选择中清除这个 MCP ID。继续？\n${entry?.name || id}`)) await runMutation('删除全局 MCP 定义', async () => { await desktopAdapter().RemoveMCP(id); clearMCPObservedHealth(id); if (editingMCPID === id) resetMCPEditor(true, false); });
+  if (button.dataset.action === 'remove-mcp' && await confirmInApp(`这是全局删除，不是只从当前 Environment 禁用。删除时会同时从所有 Workspace / Environment 选择中清除这个 MCP ID。继续？\n${entry?.name || id}`)) await runMutation('删除全局 MCP 定义', async () => { await desktopAdapter().RemoveMCP(id); clearMCPObservedHealth(id); if (editingMCPID === id) resetMCPEditor(true, false); });
 });
 
 elements.skillSourceList.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-action]'); if (!button) return; const id = button.dataset.id; const source = skillSources.find((item) => item.skill_source_id === id);
   if (button.dataset.action === 'edit-skill-source') { beginSkillSourceEdit(source); return; }
   if (button.dataset.action === 'refresh-skill-source') await runMutation('刷新 Skill source', () => desktopAdapter().RefreshSkillSource(id));
-  if (button.dataset.action === 'remove-skill-source' && window.confirm(`删除全局 Skill source 及它发现的 Skill 条目。删除 Source 时会同时从所有 Workspace / Environment 选择中清除其已删除 Skill ID。继续？\n${source?.root || id}`)) await runMutation('删除 Skill source', () => desktopAdapter().RemoveSkillSource(id));
+  if (button.dataset.action === 'remove-skill-source' && await confirmInApp(`删除全局 Skill source 及它发现的 Skill 条目。删除 Source 时会同时从所有 Workspace / Environment 选择中清除其已删除 Skill ID。继续？\n${source?.root || id}`)) await runMutation('删除 Skill source', () => desktopAdapter().RemoveSkillSource(id));
 });
 elements.skillList.addEventListener('change', async (event) => {
   const input = event.target.closest('input[data-action]'); if (!input) return;
@@ -4568,7 +4568,7 @@ elements.skillList.addEventListener('change', async (event) => {
   if (input.dataset.action === 'workspace-skill' && managementWorkspaceID) await runMutation('更新当前 Workspace Skill 继承', () => desktopAdapter().SetWorkspaceSkill(managementWorkspaceID, input.dataset.id, input.checked));
   if (input.dataset.action === 'environment-skill' && managementEnvironmentID) await runMutation('更新当前 Environment Skill 选择', () => desktopAdapter().SetEnvironmentSkill(managementEnvironmentID, input.dataset.id, input.checked));
 });
-elements.skillList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="remove-skill"]'); if (!button) return; if (window.confirm(`删除这个全局 Skill 条目？删除时会同时从所有 Workspace / Environment 选择中清除这个 Skill ID。Source-managed Skill 应通过 Source 管理。\n${button.dataset.id}`)) await runMutation('删除 Skill 条目', () => desktopAdapter().RemoveSkill(button.dataset.id)); });
+elements.skillList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="remove-skill"]'); if (!button) return; if (await confirmInApp(`删除这个全局 Skill 条目？删除时会同时从所有 Workspace / Environment 选择中清除这个 Skill ID。Source-managed Skill 应通过 Source 管理。\n${button.dataset.id}`)) await runMutation('删除 Skill 条目', () => desktopAdapter().RemoveSkill(button.dataset.id)); });
 
 elements.workspaceBrowseButton.addEventListener('click', () => openHostDirectoryPicker(elements.workspacePath));
 elements.environmentBrowseButton.addEventListener('click', () => openHostDirectoryPicker(elements.environmentRoot));
@@ -4675,7 +4675,7 @@ elements.workspaceList.addEventListener('click', async (event) => {
     return;
   }
   if (button.dataset.action === 'rename-workspace') { openRenameDialog('Workspace', workspace?.name || '', (name) => desktopAdapter().RenameWorkspace(id, name)); return; }
-  if (button.dataset.action === 'remove-workspace' && window.confirm(`只移除 ADM Workspace 记录，不删除目录。继续？\n${workspace?.path || id}`)) await runMutation('移除 Workspace', () => desktopAdapter().RemoveWorkspace(id));
+  if (button.dataset.action === 'remove-workspace' && await confirmInApp(`只移除 ADM Workspace 记录，不删除目录。继续？\n${workspace?.path || id}`)) await runMutation('移除 Workspace', () => desktopAdapter().RemoveWorkspace(id));
 });
 elements.environmentList.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-action]'); if (!button) return; const id = button.dataset.id, environment = safeArray(currentSnapshot?.environments).find((item) => item.environment_id === id);
@@ -4713,7 +4713,7 @@ elements.environmentList.addEventListener('click', async (event) => {
   if (button.dataset.action === 'execute-temporary-environment-cleanup') { await executeTemporaryEnvironmentCleanup(environment); return; }
   if (button.dataset.action === 'workspace-environment') { if (environment) await openEnvironmentWorkspaceDialog(environment); return; }
   if (button.dataset.action === 'rename-environment') { openRenameDialog('Environment', environment?.name || '', (name) => desktopAdapter().RenameEnvironment(id, name)); }
-  if (button.dataset.action === 'remove-environment' && window.confirm('只移除 ADM Environment 记录，不删除 root 或项目文件。继续？\n' + (environment?.root || id))) await runMutation('移除 Environment', () => removeEnvironmentRecord(id));
+  if (button.dataset.action === 'remove-environment' && await confirmInApp('只移除 ADM Environment 记录，不删除 root 或项目文件。继续？\n' + (environment?.root || id))) await runMutation('移除 Environment', () => removeEnvironmentRecord(id));
 });
 elements.execList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="remove-executable"]'); if (button) await runMutation('移除 executable', () => desktopAdapter().RemoveExecutable(button.dataset.id)); });
 elements.execBlacklistList.addEventListener('click', async (event) => { const button = event.target.closest('button[data-action="unblock-executable"]'); if (button) await runMutation('移出命令黑名单', () => desktopAdapter().UnblockExecutable(button.dataset.id)); });
@@ -4726,7 +4726,7 @@ elements.execBlockedList.addEventListener('click', async (event) => {
 });
 elements.execClearAllBlockedButton.addEventListener('click', async () => {
   if (elements.execClearAllBlockedButton.disabled) return;
-  if (!window.confirm('清理全部被拦截 executable 记录？不会修改 allowlist。')) return;
+  if (!await confirmInApp('清理全部被拦截 executable 记录？不会修改 allowlist。')) return;
   await runMutation('清理全部被拦截 executable', () => desktopAdapter().ClearAllExecDenials());
 });
 async function handleSelectionChange(event, kind) {
@@ -4832,7 +4832,7 @@ document.getElementById('migrateManagedWorktreesButton')?.addEventListener('clic
     const preview = await desktopAdapter().MigrateManagedWorktreesToTemporary(false);
     const count = safeArray(preview?.candidates).length;
     if (!count) { setStatus('没有需要迁移的持久化 worktree。', 'success'); return; }
-    if (!window.confirm(`将 ${count} 个历史持久化 worktree 转为临时 Env，赋予新的 30 天有效期。仅修改 ADM 生命周期元数据，不删除工作目录、代码或 Git 分支。到期清理仍逐项执行 Git 和运行状态安全检查。继续？`)) return;
+    if (!await confirmInApp(`将 ${count} 个历史持久化 worktree 转为临时 Env，赋予新的 30 天有效期。仅修改 ADM 生命周期元数据，不删除工作目录、代码或 Git 分支。到期清理仍逐项执行 Git 和运行状态安全检查。继续？`)) return;
     const result = await desktopAdapter().MigrateManagedWorktreesToTemporary(true);
     await refreshSnapshot();
     setStatus(`已迁移 ${safeArray(result?.converted).length} 个 worktree；未删除文件或 Git 分支。`, 'success');

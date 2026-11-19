@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io/fs"
 	"regexp"
 	"testing"
@@ -90,5 +91,28 @@ func TestFrontendElementsObjectHasUniqueKeys(t *testing.T) {
 			continue
 		}
 		seen[key] = struct{}{}
+	}
+}
+
+func TestDesktopFrontendDoesNotUseNativeConfirm(t *testing.T) {
+	assets, err := frontendAssets()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := fs.ReadDir(assets, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || len(entry.Name()) < 3 || entry.Name()[len(entry.Name())-3:] != ".js" {
+			continue
+		}
+		data, err := fs.ReadFile(assets, entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(data, []byte("window.confirm(")) {
+			t.Errorf("%s uses window.confirm; Desktop confirmations must use confirmInApp for WKWebView compatibility", entry.Name())
+		}
 	}
 }
