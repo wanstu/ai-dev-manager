@@ -24,7 +24,7 @@ function confirmInApp(message, options = {}) {
  const body = document.getElementById('confirmationDialogMessage');
  const confirmButton = document.getElementById('confirmationDialogConfirmButton');
  if (!dialog || !title || !body || !confirmButton || typeof dialog.showModal !== 'function') {
-  return Promise.resolve(typeof window.confirm === 'function' ? window.confirm(String(message || '')) : false);
+  return Promise.resolve(false);
  }
  if (dialog.open) dialog.close('cancel');
  dialog.returnValue = '';

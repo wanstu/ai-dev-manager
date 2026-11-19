@@ -159,9 +159,9 @@ document.addEventListener('DOMContentLoaded', () => {
    });
   } finally { button.disabled = false; }
  });
- document.getElementById('deleteConnection').addEventListener('click', () => {
+ document.getElementById('deleteConnection').addEventListener('click', async () => {
   const profile = activeConnectionProfile();
-  if (!profile || !window.confirm('删除保存的连接“' + profile.name + '”？不会停止 ADM 服务或删除服务数据。')) return;
+  if (!profile || !await confirmInApp('删除保存的连接“' + profile.name + '”？不会停止 ADM 服务或删除服务数据。')) return;
   withConnectionTransition(async () => {
    connectionProfiles = await desktopAdapter().DeleteConnectionProfile(profile.id);
    await connectSelectedProfile();
