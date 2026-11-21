@@ -20,7 +20,7 @@ import (
 
 const devProcessTestWriter = "phase6-process-writer"
 
-func TestRuntimeOwnerDevProcessLifecycleAcrossAgentSessions(t *testing.T) {
+func TestRuntimeOwnerDevProcessSurvivesAgentSessionWithoutHoldingWriter(t *testing.T) {
 	service, environmentID, root := devProcessTestService(t)
 	portFile := filepath.Join(root, "server.port")
 	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")
@@ -49,6 +49,21 @@ func TestRuntimeOwnerDevProcessLifecycleAcrossAgentSessions(t *testing.T) {
 	_ = first.Close()
 
 	port := waitDevProcessPortFile(t, portFile)
+	if _, err := service.Environments.ReleaseWriter(environmentID, devProcessTestWriter, false); err != nil {
+		t.Fatalf("release launch writer: %v", err)
+	}
+	if environment, err := service.Environments.Get(environmentID); err != nil {
+		t.Fatal(err)
+	} else if environment.Writer != nil {
+		t.Fatalf("running process retained writer lease: %+v", environment.Writer)
+	}
+
+	const nextWriter = "phase6-process-writer-next"
+	if _, err := service.Environments.AcquireWriter(environmentID, nextWriter); err != nil {
+		t.Fatalf("acquire replacement writer: %v", err)
+	}
+	defer service.Environments.ReleaseWriter(environmentID, nextWriter, false)
+
 	second := connectInMemory(t, ctx, server)
 	defer second.Close()
 	waitGatewayProcessPort(t, ctx, second, environmentID, processID, port)
@@ -72,12 +87,12 @@ func TestRuntimeOwnerDevProcessLifecycleAcrossAgentSessions(t *testing.T) {
 		"process_id":     processID,
 	})
 	if !wrongWriter.IsError {
-		t.Fatalf("wrong writer stopped process: %s", toolText(t, wrongWriter))
+		t.Fatalf("non-current writer stopped process: %s", toolText(t, wrongWriter))
 	}
 
 	stopped := callGatewayTool(t, ctx, second, "process_stop", map[string]any{
 		"environment_id": environmentID,
-		"writer_owner":   devProcessTestWriter,
+		"writer_owner":   nextWriter,
 		"process_id":     processID,
 	})
 	if stopped.IsError || !strings.Contains(toolText(t, stopped), `"state":"exited"`) {
@@ -112,7 +127,7 @@ func TestRuntimeOwnerDropEnvironmentStopsAndForgetsDevProcess(t *testing.T) {
 	}
 }
 
-func TestProcessStartRenewsWriterLeaseBeforeChildLifetime(t *testing.T) {
+func TestProcessStartRenewsWriterLeaseAtLaunch(t *testing.T) {
 	service, environmentID, root := devProcessTestService(t)
 	portFile := filepath.Join(root, "lease.port")
 	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")

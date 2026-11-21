@@ -50,7 +50,6 @@ type devProcessLogs struct {
 type ownedDevProcess struct {
 	id            string
 	environmentID string
-	writerOwner   string
 	executable    string
 	cwd           string
 	cmd           *exec.Cmd
@@ -67,6 +66,8 @@ type ownedDevProcess struct {
 	errorKind string
 }
 
+// StartDevProcess treats a development service as a Gateway-owned runtime resource, not as a writer lease.
+// The current writer gates launch and stop operations, while long-lived mutation authority belongs to Agent Runs/verifiers.
 func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable string, args []string, cwd string, maxLogBytes int) (devProcessStatus, error) {
 	if o == nil || o.service == nil {
 		return devProcessStatus{}, fmt.Errorf("runtime owner is not initialized")
@@ -111,7 +112,6 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 	process := &ownedDevProcess{
 		id:            processID,
 		environmentID: environmentID,
-		writerOwner:   writerOwner,
 		executable:    executable,
 		cwd:           cwd,
 		cmd:           cmd,
@@ -122,18 +122,12 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 		state:         devProcessRunning,
 		startedAt:     time.Now().UTC(),
 	}
-	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("process", process.id, cmd.Process.Pid, executable, cwd, "host", "", "")); err != nil {
-		cancel()
-		_ = cmd.Wait()
-		return devProcessStatus{}, err
-	}
 	if err := o.installDevProcess(process); err != nil {
 		cancel()
 		_ = cmd.Wait()
 		return devProcessStatus{}, err
 	}
 	go o.waitDevProcess(process)
-	go o.heartbeatDevProcess(process)
 	return o.devProcessStatus(process), nil
 }
 
@@ -188,9 +182,6 @@ func (o *runtimeOwner) StopDevProcess(environmentID, writerOwner, processID stri
 	process, err := o.devProcess(environmentID, processID)
 	if err != nil {
 		return devProcessStatus{}, err
-	}
-	if process.writerOwner != writerOwner {
-		return devProcessStatus{}, fmt.Errorf("process %q belongs to another writer", processID)
 	}
 	process.cancel()
 	if err := waitOwnedProcess(process, devProcessStopTimeout); err != nil {
@@ -269,41 +260,8 @@ func (o *runtimeOwner) waitDevProcess(process *ownedDevProcess) {
 	}
 	process.mu.Unlock()
 	o.service.Log("info", "process.completed", map[string]string{"environment_id": process.environmentID, "executable": process.executable, "surface": "process", "exit_code": fmt.Sprint(exitCode), "error_kind": kind})
-	o.clearWriterObservation(process.environmentID, o.writerObservation("process", process.id, 0, "", "", "", "", ""))
 	process.cancel()
 	close(process.done)
-}
-
-func (o *runtimeOwner) heartbeatDevProcess(process *ownedDevProcess) {
-	interval := o.service.Environments.WriterLeaseTTL() / 3
-	if interval <= 0 {
-		interval = time.Second
-	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-process.done:
-			return
-		case <-ticker.C:
-			process.mu.Lock()
-			pid := 0
-			if process.cmd != nil && process.cmd.Process != nil {
-				pid = process.cmd.Process.Pid
-			}
-			observation := o.writerObservation("process", process.id, pid, process.executable, process.cwd, "host", "", "")
-			process.mu.Unlock()
-			if err := o.observeWriter(process.environmentID, process.writerOwner, observation); err != nil {
-				process.mu.Lock()
-				if process.errorKind == "" {
-					process.errorKind = "writer_heartbeat_failed"
-				}
-				process.mu.Unlock()
-				process.cancel()
-				return
-			}
-		}
-	}
 }
 
 func (o *runtimeOwner) dropDevProcessesForEnvironment(environmentID string) {
