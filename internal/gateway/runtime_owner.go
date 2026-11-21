@@ -262,12 +262,6 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 	diagnostics.HeartbeatIntervalSeconds = int64(interval / time.Second)
 
 	o.mu.Lock()
-	processes := make([]*ownedDevProcess, 0, len(o.processes))
-	for _, process := range o.processes {
-		if process.environmentID == environmentID {
-			processes = append(processes, process)
-		}
-	}
 	runs := make([]*ownedAgentRun, 0, len(o.runs))
 	for _, run := range o.runs {
 		if run.environmentID == environmentID {
@@ -282,27 +276,6 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 	}
 	o.mu.Unlock()
 
-	for _, process := range processes {
-		process.mu.Lock()
-		if process.writerOwner == lease.Owner && process.state == devProcessRunning {
-			source := writerHeartbeatSource{
-				Kind:           "process",
-				ID:             process.id,
-				State:          string(process.state),
-				Executable:     process.executable,
-				Cwd:            process.cwd,
-				GatewayOwnerID: o.id,
-				GatewayPID:     o.pid,
-				StartedAt:      process.startedAt,
-				ObservedAt:     lease.LastSeenAt,
-			}
-			if process.cmd != nil && process.cmd.Process != nil {
-				source.PID = process.cmd.Process.Pid
-			}
-			diagnostics.HeartbeatSources = append(diagnostics.HeartbeatSources, source)
-		}
-		process.mu.Unlock()
-	}
 	for _, run := range runs {
 		run.mu.Lock()
 		if run.writerOwner == lease.Owner && run.state == agentRunRunning {
