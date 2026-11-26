@@ -133,7 +133,7 @@ func (s *Service) RunVerifierSandboxed(ctx context.Context, environmentID, owner
 				heartbeatDone <- nil
 				return
 			case <-ticker.C:
-				if _, heartbeatErr := s.Environments.HeartbeatWriter(environmentID, owner); heartbeatErr != nil {
+				if _, heartbeatErr := s.Environments.RequireWriterLease(environmentID, owner, prepared.WriterLease); heartbeatErr != nil {
 					heartbeatDone <- heartbeatErr
 					cancel()
 					return
@@ -163,6 +163,9 @@ func (s *Service) RunVerifierSandboxed(ctx context.Context, environmentID, owner
 		return verifier.Result{}, classifyErr
 	}
 	result.ExecutionMode = verifierExecutionModeSandbox
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, prepared.WriterLease); err != nil {
+		return verifier.Result{}, err
+	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return verifier.Result{}, err
 	}

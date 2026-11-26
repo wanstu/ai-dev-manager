@@ -796,7 +796,8 @@ func TestRuntimeOwnerInspectAndRefreshTools(t *testing.T) {
 func TestWriterDiagnosticsAttributesMatchingRunningRunWithoutLeakingOwner(t *testing.T) {
 	service, environmentID, _ := runtimeOwnerTestService(t)
 	const writerOwner = "secret-writer-owner"
-	if _, err := service.Environments.AcquireWriter(environmentID, writerOwner); err != nil {
+	authority, err := service.Environments.AcquireWriter(environmentID, writerOwner)
+	if err != nil {
 		t.Fatal(err)
 	}
 	owner := newRuntimeOwner(service)
@@ -804,6 +805,7 @@ func TestWriterDiagnosticsAttributesMatchingRunningRunWithoutLeakingOwner(t *tes
 		id:            "run_writer_diagnostics",
 		environmentID: environmentID,
 		writerOwner:   writerOwner,
+		writerLease:   authority.Writer,
 		executable:    "cmd.exe",
 		cwd:           "java/adapters/26.2-fabric",
 		executionMode: "host",

@@ -249,6 +249,7 @@ type StaleManagedWorktreeCleanupInput struct {
 type WriterAcquireInput struct {
 	EnvironmentID string `json:"environment_id"`
 	Owner         string `json:"owner" jsonschema:"stable agent/session owner identifier"`
+	Force         bool   `json:"force,omitempty" jsonschema:"admin-only atomic replacement of the current Writer lease"`
 }
 
 type SecretSetInput struct {
@@ -1365,7 +1366,16 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_acquire", Description: "Acquire or renew the single writer lease for an Environment physical root. Use this only immediately before an operation that explicitly requires writer_owner; do not acquire a writer for tree/read/search or other read-only inspection."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
-			env, err := service.Environments.AcquireWriter(in.EnvironmentID, in.Owner)
+			var env model.Environment
+			var err error
+			if in.Force {
+				if surface != serverSurfaceAdmin {
+					return toolResult(nil, fmt.Errorf("force writer acquire is only available on the administrative surface"))
+				}
+				env, err = service.Environments.TakeoverWriter(in.EnvironmentID, in.Owner)
+			} else {
+				env, err = service.Environments.AcquireWriter(in.EnvironmentID, in.Owner)
+			}
 			if err == nil && owner != nil {
 				env, err = service.Environments.ObserveWriter(in.EnvironmentID, in.Owner, owner.writerObservation("lease", "", 0, "", "", "", "", ""))
 			}
@@ -1374,12 +1384,9 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_heartbeat", Description: "Renew an active writer lease without performing a file mutation."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
-			var env model.Environment
-			var err error
-			if owner != nil {
+			env, err := service.Environments.HeartbeatWriter(in.EnvironmentID, in.Owner)
+			if err == nil && owner != nil {
 				env, err = service.Environments.ObserveWriter(in.EnvironmentID, in.Owner, owner.writerObservation("heartbeat", "", 0, "", "", "", "", ""))
-			} else {
-				env, err = service.Environments.HeartbeatWriter(in.EnvironmentID, in.Owner)
 			}
 			return toolResult(env, err)
 		})

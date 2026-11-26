@@ -12,6 +12,7 @@ import (
 
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/identity"
+	"ai-dev-manager-v2/internal/model"
 	runtimepkg "ai-dev-manager-v2/internal/runtime"
 )
 
@@ -49,6 +50,7 @@ type ownedAgentRun struct {
 	id            string
 	environmentID string
 	writerOwner   string
+	writerLease   *model.WriterLease
 	executable    string
 	args          []string
 	cwd           string
@@ -78,7 +80,8 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 	if o == nil || o.service == nil {
 		return agentRunStatus{}, fmt.Errorf("runtime owner is not initialized")
 	}
-	if _, err := o.service.Environments.RequireWriter(environmentID, writerOwner); err != nil {
+	authority, err := o.service.Environments.RequireWriter(environmentID, writerOwner)
+	if err != nil {
 		return agentRunStatus{}, err
 	}
 	rt, _, err := o.service.Runtime(environmentID)
@@ -109,6 +112,7 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 		id:            runID,
 		environmentID: environmentID,
 		writerOwner:   writerOwner,
+		writerLease:   authority.Writer,
 		executable:    executable,
 		args:          append([]string(nil), args...),
 		cwd:           cwd,
@@ -125,7 +129,7 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 	}
 	cmd.Stdout = run.stdout
 	cmd.Stderr = run.stderr
-	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("run", run.id, 0, executable, cwd, run.executionMode, "", "")); err != nil {
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("run", run.id, 0, executable, cwd, run.executionMode, "", ""), run.writerLease); err != nil {
 		cancel()
 		return agentRunStatus{}, err
 	}
@@ -167,6 +171,7 @@ func (o *runtimeOwner) StartAgentRunSandboxed(environmentID, writerOwner, execut
 		id:            runID,
 		environmentID: environmentID,
 		writerOwner:   writerOwner,
+		writerLease:   prepared.WriterLease,
 		executable:    executable,
 		args:          append([]string(nil), args...),
 		cwd:           cwd,
@@ -181,7 +186,7 @@ func (o *runtimeOwner) StartAgentRunSandboxed(environmentID, writerOwner, execut
 		state:         agentRunRunning,
 		startedAt:     time.Now().UTC(),
 	}
-	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("run", run.id, 0, executable, cwd, run.executionMode, "", "")); err != nil {
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("run", run.id, 0, executable, cwd, run.executionMode, "", ""), run.writerLease); err != nil {
 		cancel()
 		return agentRunStatus{}, err
 	}
@@ -241,7 +246,12 @@ func (o *runtimeOwner) CancelAgentRun(environmentID, writerOwner, runID string) 
 }
 
 func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
-	err := cmd.Start()
+	_, err := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.writerLease)
+	if err == nil {
+		err = cmd.Start()
+	} else {
+		o.requestAgentRunCancel(run, "writer_heartbeat_failed", err.Error())
+	}
 	if err == nil {
 		run.mu.Lock()
 		if cmd.Process != nil {
@@ -249,7 +259,7 @@ func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 		}
 		pid := run.pid
 		run.mu.Unlock()
-		_ = o.observeWriter(run.environmentID, run.writerOwner, o.writerObservation("run", run.id, pid, run.executable, run.cwd, run.executionMode, "", ""))
+		_ = o.observeWriter(run.environmentID, run.writerOwner, o.writerObservation("run", run.id, pid, run.executable, run.cwd, run.executionMode, "", ""), run.writerLease)
 		_ = o.service.RecordExecUsage(run.environmentID, run.executable, "run_start")
 		err = cmd.Wait()
 	}
@@ -260,6 +270,11 @@ func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 }
 
 func (o *runtimeOwner) executeSandboxAgentRun(run *ownedAgentRun, prepared app.PreparedSandboxExecution) {
+	if _, err := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.writerLease); err != nil {
+		o.requestAgentRunCancel(run, "writer_heartbeat_failed", err.Error())
+		o.completeAgentRun(run, runtimepkg.CommandResult{}, err, false, false)
+		return
+	}
 	result, err := o.service.RunPreparedSandboxExecution(
 		run.ctx,
 		prepared,
@@ -276,6 +291,9 @@ func (o *runtimeOwner) executeSandboxAgentRun(run *ownedAgentRun, prepared app.P
 }
 
 func (o *runtimeOwner) completeAgentRun(run *ownedAgentRun, result runtimepkg.CommandResult, err error, stdoutTruncated, stderrTruncated bool) {
+	if _, authorityErr := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.writerLease); authorityErr != nil {
+		o.requestAgentRunCancel(run, "writer_heartbeat_failed", authorityErr.Error())
+	}
 	now := time.Now().UTC()
 	run.mu.Lock()
 	run.result = result
@@ -353,7 +371,7 @@ func (o *runtimeOwner) completeAgentRun(run *ownedAgentRun, result runtimepkg.Co
 }
 
 func (o *runtimeOwner) heartbeatAgentRun(run *ownedAgentRun) {
-	interval := o.service.Environments.WriterLeaseTTL() / 3
+	interval := time.Second
 	if interval <= 0 {
 		interval = time.Second
 	}
@@ -367,7 +385,7 @@ func (o *runtimeOwner) heartbeatAgentRun(run *ownedAgentRun) {
 			run.mu.Lock()
 			observation := o.writerObservation("run", run.id, run.pid, run.executable, run.cwd, run.executionMode, "", "")
 			run.mu.Unlock()
-			if err := o.observeWriter(run.environmentID, run.writerOwner, observation); err != nil {
+			if err := o.observeWriter(run.environmentID, run.writerOwner, observation, run.writerLease); err != nil {
 				o.requestAgentRunCancel(run, "writer_heartbeat_failed", err.Error())
 				return
 			}

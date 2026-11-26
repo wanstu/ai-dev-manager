@@ -95,7 +95,10 @@ func New(statePath string) *Service {
 }
 
 func defaultWriterHeartbeatInterval(ttl time.Duration) time.Duration {
-	interval := ttl / 3
+	interval := time.Second
+	if ttl/3 < interval {
+		interval = ttl / 3
+	}
 	if interval <= 0 {
 		return time.Second
 	}
@@ -789,7 +792,8 @@ func (s *Service) Delete(environmentID, owner, path string) (any, error) {
 }
 
 func (s *Service) Exec(ctx context.Context, environmentID, owner, executable string, args []string, cwd string, timeoutMS int64, maxOutputBytes int) (any, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, err := s.Environments.RequireWriter(environmentID, owner)
+	if err != nil {
 		return nil, err
 	}
 	rt, _, err := s.Runtime(environmentID)
@@ -809,7 +813,7 @@ func (s *Service) Exec(ctx context.Context, environmentID, owner, executable str
 				heartbeatDone <- nil
 				return
 			case <-ticker.C:
-				if _, heartbeatErr := s.Environments.HeartbeatWriter(environmentID, owner); heartbeatErr != nil {
+				if _, heartbeatErr := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); heartbeatErr != nil {
 					heartbeatDone <- heartbeatErr
 					cancel()
 					return
@@ -840,6 +844,9 @@ func (s *Service) Exec(ctx context.Context, environmentID, owner, executable str
 	}
 	if execErr != nil {
 		return nil, execErr
+	}
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); err != nil {
+		return nil, err
 	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return nil, err
@@ -879,7 +886,7 @@ func (s *Service) RunVerifier(ctx context.Context, environmentID, owner, verifie
 				heartbeatDone <- nil
 				return
 			case <-ticker.C:
-				if _, heartbeatErr := s.Environments.HeartbeatWriter(environmentID, owner); heartbeatErr != nil {
+				if _, heartbeatErr := s.Environments.RequireWriterLease(environmentID, owner, prepared.WriterLease); heartbeatErr != nil {
 					heartbeatDone <- heartbeatErr
 					cancel()
 					return
@@ -920,6 +927,9 @@ func (s *Service) RunVerifier(ctx context.Context, environmentID, owner, verifie
 		return verifier.Result{}, classifyErr
 	}
 	result.ExecutionMode = "host"
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, prepared.WriterLease); err != nil {
+		return verifier.Result{}, err
+	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return verifier.Result{}, err
 	}

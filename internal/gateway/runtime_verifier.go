@@ -107,7 +107,7 @@ func (o *runtimeOwner) StartVerifierRun(environmentID, writerOwner, verifierID s
 	}
 	cmd.Stdout = run.stdout
 	cmd.Stderr = run.stderr
-	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("verifier", run.id, 0, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name)); err != nil {
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("verifier", run.id, 0, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name), run.prepared.WriterLease); err != nil {
 		cancel()
 		return verifierRunStatus{}, err
 	}
@@ -147,7 +147,7 @@ func (o *runtimeOwner) StartVerifierRunSandboxed(environmentID, writerOwner, ver
 		stdout:        newOwnerOutputBuffer(maxOutputBytes),
 		stderr:        newOwnerOutputBuffer(maxOutputBytes),
 	}
-	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("verifier", run.id, 0, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name)); err != nil {
+	if err := o.observeWriter(environmentID, writerOwner, o.writerObservation("verifier", run.id, 0, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name), run.prepared.WriterLease); err != nil {
 		cancel()
 		return verifierRunStatus{}, err
 	}
@@ -211,6 +211,9 @@ func (o *runtimeOwner) CancelVerifierRun(environmentID, writerOwner, runID strin
 
 func (o *runtimeOwner) executeSandboxVerifierRun(run *ownedVerifierRun, maxOutputBytes int) {
 	commandStarted := time.Now()
+	if _, err := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease); err != nil {
+		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", err.Error())
+	}
 	commandResult, execErr := o.service.RunPreparedVerifierSandbox(
 		run.ctx,
 		run.prepared,
@@ -219,6 +222,9 @@ func (o *runtimeOwner) executeSandboxVerifierRun(run *ownedVerifierRun, maxOutpu
 		run.stdout,
 		run.stderr,
 	)
+	if _, authorityErr := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease); authorityErr != nil {
+		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", authorityErr.Error())
+	}
 	duration := time.Since(commandStarted)
 	now := time.Now().UTC()
 
@@ -274,7 +280,12 @@ func (o *runtimeOwner) executeSandboxVerifierRun(run *ownedVerifierRun, maxOutpu
 
 func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) {
 	commandStarted := time.Now()
-	err := cmd.Start()
+	_, err := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease)
+	if err == nil {
+		err = cmd.Start()
+	} else {
+		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", err.Error())
+	}
 	if err == nil {
 		run.mu.Lock()
 		if cmd.Process != nil {
@@ -282,9 +293,12 @@ func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) 
 		}
 		pid := run.pid
 		run.mu.Unlock()
-		_ = o.observeWriter(run.environmentID, run.writerOwner, o.writerObservation("verifier", run.id, pid, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name))
+		_ = o.observeWriter(run.environmentID, run.writerOwner, o.writerObservation("verifier", run.id, pid, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name), run.prepared.WriterLease)
 		_ = o.service.RecordExecUsage(run.environmentID, run.prepared.Definition.Executable, "verifier_async_start")
 		err = cmd.Wait()
+	}
+	if _, authorityErr := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease); authorityErr != nil {
+		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", authorityErr.Error())
 	}
 	duration := time.Since(commandStarted)
 	now := time.Now().UTC()
@@ -351,7 +365,7 @@ func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) 
 }
 
 func (o *runtimeOwner) heartbeatVerifierRun(run *ownedVerifierRun) {
-	interval := o.service.Environments.WriterLeaseTTL() / 3
+	interval := time.Second
 	if o.verifierHeartbeatInterval != nil {
 		interval = o.verifierHeartbeatInterval(o.service.Environments.WriterLeaseTTL())
 	}
@@ -368,7 +382,7 @@ func (o *runtimeOwner) heartbeatVerifierRun(run *ownedVerifierRun) {
 			run.mu.Lock()
 			observation := o.writerObservation("verifier", run.id, run.pid, run.prepared.Definition.Executable, run.prepared.Definition.Cwd, run.executionMode, run.prepared.Definition.ID, run.prepared.Definition.Name)
 			run.mu.Unlock()
-			if err := o.observeWriter(run.environmentID, run.writerOwner, observation); err != nil {
+			if err := o.observeWriter(run.environmentID, run.writerOwner, observation, run.prepared.WriterLease); err != nil {
 				o.requestVerifierRunCancel(run, "writer_heartbeat_failed", err.Error())
 				return
 			}

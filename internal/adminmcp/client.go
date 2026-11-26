@@ -95,6 +95,7 @@ type WriterDiagnostics struct {
 	EnvironmentID            string                  `json:"environment_id"`
 	Active                   bool                    `json:"active"`
 	OwnerFingerprint         string                  `json:"owner_fingerprint,omitempty"`
+	LastRenewalAction        string                  `json:"last_renewal_action,omitempty"`
 	AcquiredAt               *time.Time              `json:"acquired_at,omitempty"`
 	LastSeenAt               *time.Time              `json:"last_seen_at,omitempty"`
 	ExpiresAt                *time.Time              `json:"expires_at,omitempty"`
@@ -425,6 +426,10 @@ func (c *Client) RunCancel(environmentID, writerOwner, runID string) (RunStatus,
 
 func (c *Client) WriterAcquire(environmentID, owner string) (model.Environment, error) {
 	return callAdmin[model.Environment](c, context.Background(), "environment_writer_acquire", map[string]any{"environment_id": environmentID, "owner": owner})
+}
+
+func (c *Client) WriterTakeover(environmentID, owner string) (model.Environment, error) {
+	return callAdmin[model.Environment](c, context.Background(), "environment_writer_acquire", map[string]any{"environment_id": environmentID, "owner": owner, "force": true})
 }
 
 func (c *Client) WriterHeartbeat(environmentID, owner string) (model.Environment, error) {

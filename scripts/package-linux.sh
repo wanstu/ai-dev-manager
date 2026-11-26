@@ -81,7 +81,7 @@ description=$'AI Dev Manager local development control plane\nADM provides Works
     --input "$DESKTOP_BINARY" \
     --dist "$OUTPUT_DIR" \
     --app-name adm-desktop \
-    --asset-base "adm-$artifact_version" \
+    --asset-base "adm-desktop-$artifact_version" \
     --package-name adm \
     --package-version "$package_version" \
     --arch "$ARCH" \
@@ -97,4 +97,4 @@ description=$'AI Dev Manager local development control plane\nADM provides Works
 )
 
 echo "Linux packages:"
-find "$OUTPUT_DIR" -maxdepth 1 -type f -name "adm-$artifact_version-linux-$ARCH*" -print | sort
+find "$OUTPUT_DIR" -maxdepth 1 -type f -name "adm-desktop-$artifact_version-linux-$ARCH*" -print | sort

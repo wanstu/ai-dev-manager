@@ -87,3 +87,27 @@ func TestGatewayWriterAcquireRejectsOverlappingRootsAndAllowsSiblings(t *testing
 		t.Fatalf("sibling root should acquire writer concurrently: %s", toolText(t, result))
 	}
 }
+
+func TestWriterTakeoverAdminOnly(t *testing.T) {
+	service, environmentID, _ := agentRunTestService(t)
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	ctx := context.Background()
+	agent := connectInMemory(t, ctx, newServerForSurface(service, owner, serverSurfaceAgent))
+	defer agent.Close()
+	admin := connectInMemory(t, ctx, newServerForSurface(service, owner, serverSurfaceAdmin))
+	defer admin.Close()
+	args := map[string]any{"environment_id": environmentID, "owner": "admin-replacement", "force": true}
+	result := callGatewayTool(t, ctx, agent, "environment_writer_acquire", args)
+	if !result.IsError {
+		t.Fatal("agent force takeover succeeded")
+	}
+	result = callGatewayTool(t, ctx, admin, "environment_writer_acquire", args)
+	if result.IsError {
+		t.Fatalf("admin takeover failed: %s", toolText(t, result))
+	}
+	env, err := service.Environments.Get(environmentID)
+	if err != nil || env.Writer == nil || env.Writer.Owner != "admin-replacement" || env.Writer.LastRenewalAction != "admin_takeover" {
+		t.Fatalf("unexpected writer: %+v %v", env.Writer, err)
+	}
+}

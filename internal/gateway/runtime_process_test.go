@@ -127,7 +127,7 @@ func TestRuntimeOwnerDropEnvironmentStopsAndForgetsDevProcess(t *testing.T) {
 	}
 }
 
-func TestProcessStartRenewsWriterLeaseAtLaunch(t *testing.T) {
+func TestProcessStartDoesNotRenewWriterLease(t *testing.T) {
 	service, environmentID, root := devProcessTestService(t)
 	portFile := filepath.Join(root, "lease.port")
 	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")
@@ -157,11 +157,11 @@ func TestProcessStartRenewsWriterLeaseAtLaunch(t *testing.T) {
 	if after.Writer == nil {
 		t.Fatal("writer lease missing after process start")
 	}
-	if !after.Writer.LastSeenAt.After(before.Writer.LastSeenAt) {
-		t.Fatalf("process_start did not renew writer lease: before=%s after=%s", before.Writer.LastSeenAt, after.Writer.LastSeenAt)
+	if !after.Writer.LastSeenAt.Equal(before.Writer.LastSeenAt) {
+		t.Fatalf("process_start changed writer lease: before=%s after=%s", before.Writer.LastSeenAt, after.Writer.LastSeenAt)
 	}
-	if !after.Writer.ExpiresAt.After(before.Writer.ExpiresAt) {
-		t.Fatalf("process_start did not extend writer expiry: before=%s after=%s", before.Writer.ExpiresAt, after.Writer.ExpiresAt)
+	if !after.Writer.ExpiresAt.Equal(before.Writer.ExpiresAt) {
+		t.Fatalf("process_start changed writer expiry: before=%s after=%s", before.Writer.ExpiresAt, after.Writer.ExpiresAt)
 	}
 	_ = waitDevProcessPortFile(t, portFile)
 }

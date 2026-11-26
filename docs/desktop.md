@@ -14,9 +14,9 @@ Desktop release artifacts 按平台提供：
 adm-desktop-v1.2.0-windows-amd64.exe
 adm-desktop-v1.2.0-darwin-universal.zip
 adm-desktop-v1.2.0-linux-amd64
-adm-v1.2.0-linux-amd64.deb
-adm-v1.2.0-linux-amd64.tar.gz
-adm-v1.2.0-linux-amd64.sha256
+adm-desktop-v1.2.0-linux-amd64.deb
+adm-desktop-v1.2.0-linux-amd64.tar.gz
+adm-desktop-v1.2.0-linux-amd64.deb.sha256
 ```
 
 源码构建必须通过 Wails。Windows：
@@ -56,7 +56,7 @@ bash ./scripts/package-linux.sh dev dist/adm-desktop-dev-linux-amd64 dist amd64
 Debian 13 虚拟机优先使用 `.deb`：
 
 ```bash
-sudo apt install ./adm-dev-linux-amd64.deb
+sudo apt install ./adm-desktop-dev-linux-amd64.deb
 adm --help
 adm-desktop
 ```
@@ -65,8 +65,8 @@ adm-desktop
 
 ```bash
 sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-0
-tar -xzf adm-dev-linux-amd64.tar.gz
-cd adm-dev-linux-amd64
+tar -xzf adm-desktop-dev-linux-amd64.tar.gz
+cd adm-desktop-dev-linux-amd64
 ./bin/adm --help
 ./bin/adm-desktop
 ```

@@ -23,7 +23,7 @@ const elements = {
   workspaceBadge: document.getElementById('workspaceBadge'), environmentBadge: document.getElementById('environmentBadge'), execBadge: document.getElementById('execBadge'),
   mcpBadge: document.getElementById('mcpBadge'), skillBadge: document.getElementById('skillBadge'),
   managementContextPanel: document.getElementById('managementContextPanel'), managementWorkspace: document.getElementById('managementWorkspace'), managementEnvironment: document.getElementById('managementEnvironment'), managementEnvironmentHint: document.getElementById('managementEnvironmentHint'), createEnvironmentButton: document.getElementById('createEnvironmentButton'), editEnvironmentButton: document.getElementById('editEnvironmentButton'),
-  runtimeRefreshButton: document.getElementById('runtimeRefreshButton'), runtimeHint: document.getElementById('runtimeHint'), runtimeWriterOwnerInput: document.getElementById('runtimeWriterOwnerInput'), runtimeWriterAcquireButton: document.getElementById('runtimeWriterAcquireButton'), runtimeWriterReleaseButton: document.getElementById('runtimeWriterReleaseButton'), runtimeWriterHint: document.getElementById('runtimeWriterHint'), runtimeWriterDiagnostics: document.getElementById('runtimeWriterDiagnostics'), runtimeSubviewTabs: document.getElementById('runtimeSubviewTabs'), runtimeVerifierCount: document.getElementById('runtimeVerifierCount'), runtimeProcessCount: document.getElementById('runtimeProcessCount'), runtimeRunCount: document.getElementById('runtimeRunCount'), verifierList: document.getElementById('verifierList'), processList: document.getElementById('processList'), runList: document.getElementById('runList'), runtimeOutputMeta: document.getElementById('runtimeOutputMeta'), runtimeOutput: document.getElementById('runtimeOutput'),
+  runtimeRefreshButton: document.getElementById('runtimeRefreshButton'), runtimeHint: document.getElementById('runtimeHint'), runtimeWriterOwnerInput: document.getElementById('runtimeWriterOwnerInput'), runtimeWriterAcquireButton: document.getElementById('runtimeWriterAcquireButton'), runtimeWriterTakeoverButton: document.getElementById('runtimeWriterTakeoverButton'), runtimeWriterReleaseButton: document.getElementById('runtimeWriterReleaseButton'), runtimeWriterHint: document.getElementById('runtimeWriterHint'), runtimeWriterDiagnostics: document.getElementById('runtimeWriterDiagnostics'), runtimeSubviewTabs: document.getElementById('runtimeSubviewTabs'), runtimeVerifierCount: document.getElementById('runtimeVerifierCount'), runtimeProcessCount: document.getElementById('runtimeProcessCount'), runtimeRunCount: document.getElementById('runtimeRunCount'), verifierList: document.getElementById('verifierList'), processList: document.getElementById('processList'), runList: document.getElementById('runList'), runtimeOutputMeta: document.getElementById('runtimeOutputMeta'), runtimeOutput: document.getElementById('runtimeOutput'),
   mcpTotalCount: document.getElementById('mcpTotalCount'), mcpDefaultCount: document.getElementById('mcpDefaultCount'), mcpEnvironmentCount: document.getElementById('mcpEnvironmentCount'), mcpIssueCount: document.getElementById('mcpIssueCount'),
   mcpForm: document.getElementById('mcpForm'), mcpName: document.getElementById('mcpName'), mcpTransport: document.getElementById('mcpTransport'), mcpEndpointField: document.getElementById('mcpEndpointField'), mcpEndpoint: document.getElementById('mcpEndpoint'),
   mcpExecutableField: document.getElementById('mcpExecutableField'), mcpExecutable: document.getElementById('mcpExecutable'), mcpArgsField: document.getElementById('mcpArgsField'), mcpArgs: document.getElementById('mcpArgs'),
@@ -2135,20 +2135,21 @@ function renderRuntimeWriterDiagnostics(environment) {
   summary.className = 'runtime-writer-summary';
   const sources = safeArray(diagnostics.heartbeat_sources);
   const attribution = diagnostics.attribution === 'current_gateway_runtime'
-    ? `已归因到当前 Gateway · ${sources.length} 个续租源`
+    ? `已归因到当前 Gateway · ${sources.length} 个关联任务`
     : diagnostics.attribution === 'lease_observation'
-      ? '最新续租已归因到占锁 Gateway'
+      ? '已识别相关操作'
       : diagnostics.attribution === 'last_known_source'
-        ? '仅有上一次已识别来源；之后发生过未标注续租'
+        ? '仅有历史操作来源'
         : diagnostics.attribution === 'unattributed'
-          ? '没有可用的续租来源快照'
-          : '当前无续租来源';
+          ? '没有可用的关联操作快照'
+          : '当前无关联操作';
   const facts = [
     ['状态', attribution],
     ['Owner 指纹', diagnostics.owner_fingerprint || '—'],
     ['最近续租', writerDiagnosticTime(diagnostics.last_seen_at)],
     ['租约到期', writerDiagnosticTime(diagnostics.expires_at)],
-    ['自动心跳', diagnostics.heartbeat_interval_seconds ? `约每 ${diagnostics.heartbeat_interval_seconds}s` : '—'],
+    ['最后续期动作', ({acquire:'显式获取/续期',heartbeat:'显式 Heartbeat',admin_takeover:'管理员接管'})[diagnostics.last_renewal_action] || '未知（旧租约）'],
+    ['任务自动续期', '禁止'],
     ['Gateway', diagnostics.gateway_owner?.pid ? `PID ${diagnostics.gateway_owner.pid}` : '—'],
   ];
   for (const [label, value] of facts) {
@@ -2173,12 +2174,12 @@ function renderRuntimeWriterDiagnostics(environment) {
       const observedOnly = source.state === 'observed' || source.state === 'last_observed';
       const timing = observedOnly
         ? `${source.state === 'last_observed' ? '上次识别' : '最后观测'} ${writerDiagnosticTime(source.observed_at)}`
-        : `开始 ${writerDiagnosticTime(source.started_at)} · 最近续租 ${writerDiagnosticTime(source.observed_at)}`;
+        : `开始 ${writerDiagnosticTime(source.started_at)} · 租约最近续期 ${writerDiagnosticTime(diagnostics.last_seen_at)}`;
       const sourceMeaning = source.state === 'observed'
-        ? '该来源与当前 lease 的最新续租时间一致'
+        ? '与当前租约相关的操作记录，不代表自动续期'
         : source.state === 'last_observed'
-          ? '之后发生过未标注来源的续租；这里只能作为历史线索'
-          : '该运行项持有与当前 lease 相同的 Writer owner，因此会自动续租';
+          ? '历史线索，不代表任务仍在运行'
+          : '该运行项关联当前 Writer，只校验权限，不自动续期';
       meta.textContent = [verifier ? `Verifier ${verifier}` : '', timing, sourceMeaning].filter(Boolean).join(' · ');
       item.append(title, code, meta); list.append(item);
     }
@@ -2186,7 +2187,7 @@ function renderRuntimeWriterDiagnostics(environment) {
   } else {
     const warning = document.createElement('div');
     warning.className = 'warning-text';
-    warning.textContent = '当前 active Writer 没有可用的安全来源快照。通常表示它来自尚未升级的旧 Gateway、非 Gateway 直接调用，或历史 lease；升级后的 Gateway 会在每次续租时写入来源。';
+    warning.textContent = '当前没有关联操作快照；锁的有效期仅由会话或管理员显式获取和续期决定。';
     container.append(warning);
   }
 }
@@ -2199,15 +2200,16 @@ function renderRuntime() {
   elements.runtimeHint.textContent = !environment
     ? '选择 Management Environment 后可查看当前 Gateway owner 的运行状态。'
     : activeWriter && writerSources.length
-      ? `当前 Writer 正由 ${writerSourceLabel(writerSources[0])} ${writerSources[0].id || ''}${writerSources.length > 1 ? ` 等 ${writerSources.length} 个运行项` : ''}自动续租；原始 owner 凭证保持隐藏。`
+      ? `当前 Writer 关联 ${writerSourceLabel(writerSources[0])} ${writerSources[0].id || ''}${writerSources.length > 1 ? ` 等 ${writerSources.length} 个运行项` : ''}；运行任务不会自动续期，原始 owner 凭证保持隐藏。`
       : activeWriter
         ? '当前 Environment 有 active Writer；下方会显示租约时间和可归因的续租来源，原始 owner 凭证不会回显。'
         : '当前 Environment 没有 active Writer；可查看 owner-local 状态与日志，也可以显式获取一个 Writer。';
   if (elements.runtimeWriterOwnerInput && runtimeWriterCredential.environmentID === environment?.environment_id && document.activeElement !== elements.runtimeWriterOwnerInput) elements.runtimeWriterOwnerInput.value = runtimeWriterCredential.owner || '';
   elements.runtimeWriterOwnerInput.disabled = !environment || pending;
   elements.runtimeWriterAcquireButton.disabled = !environment || pending;
+  elements.runtimeWriterTakeoverButton.disabled = !activeWriter || pending;
   elements.runtimeWriterReleaseButton.disabled = !environment || pending || !writerAuthorized;
-  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存 Writer authority；下方诊断仍只展示安全指纹和占用来源，不回显原始 owner。' : activeWriter ? '检测到 active Writer。下方会说明当前锁是否由本 Gateway 的 Process / Run / Verifier 保活；原始 owner 凭证保持隐藏。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
+  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存 Writer authority；下方诊断仍只展示安全指纹和占用来源，不回显原始 owner。' : activeWriter ? '检测到 active Writer。下方显示当前锁及关联任务，任务不会自动续期；原始 owner 凭证保持隐藏。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
   renderRuntimeWriterDiagnostics(environment);
 
   renderRuntimeListState('verifiers', '没有配置 verifier', (verifiers, container) => {
@@ -3743,7 +3745,7 @@ async function forceReleaseEnvironmentWriter(environmentID) {
   }
   if (!await confirmInApp(
     '确定强制释放这个 Environment 的 Writer 锁？\n\n' +
-    '这会立即取消当前持锁会话的写入权限。正在运行的进程或任务不会被自动停止，但后续写入会失去该 Writer 授权。\n\n' +
+    '这会立即取消当前持锁会话的写入权限。常驻 Process 将继续运行；依赖 Writer 的 Run、Verifier 或命令会在检测到授权失效后取消。\n\n' +
     '仅在确认锁已失效、持锁会话异常退出或需要管理员恢复时使用。'
   )) return;
 
@@ -4343,6 +4345,17 @@ elements.runtimeWriterAcquireButton.addEventListener('click', async () => {
   await runMutation('获取 / 续租 Writer', async () => {
     await desktopAdapter().AcquireRuntimeWriter(environmentID, owner);
     runtimeWriterCredential = {environmentID, owner};
+  });
+});
+elements.runtimeWriterTakeoverButton.addEventListener('click', async () => {
+  const environment = currentEnvironment(); if (!environment?.writer) return;
+  if (!await confirmInApp('确定以管理员身份接管当前 Writer 锁？原会话的租约立即失效；常驻 Process 不停止，依赖旧租约的任务将在检测到授权失效后取消。')) return;
+  const environmentID = environment.environment_id;
+  const owner = generatedDesktopWriterOwner();
+  await runMutation('管理员接管 Writer', async () => {
+    await desktopAdapter().TakeoverRuntimeWriter(environmentID, owner);
+    runtimeWriterCredential = {environmentID, owner};
+    elements.runtimeWriterOwnerInput.value = owner;
   });
 });
 elements.runtimeWriterReleaseButton.addEventListener('click', async () => {

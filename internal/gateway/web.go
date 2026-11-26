@@ -851,6 +851,14 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.app.WriterAcquire(s1, s2)
+	case "TakeoverRuntimeWriter":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		return h.app.Environments.TakeoverWriter(s1, s2)
 	case "ReleaseRuntimeWriter":
 		if err := arg(0, &s1); err != nil {
 			return nil, err

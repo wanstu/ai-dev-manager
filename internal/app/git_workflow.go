@@ -116,7 +116,8 @@ func withGitWriter(
 	environmentID, owner string,
 	run func(context.Context, *runtime.Runtime) (any, error),
 ) (any, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, err := s.Environments.RequireWriter(environmentID, owner)
+	if err != nil {
 		return nil, err
 	}
 	rt, _, err := s.Runtime(environmentID)
@@ -136,7 +137,7 @@ func withGitWriter(
 				heartbeatDone <- nil
 				return
 			case <-ticker.C:
-				if _, heartbeatErr := s.Environments.HeartbeatWriter(environmentID, owner); heartbeatErr != nil {
+				if _, heartbeatErr := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); heartbeatErr != nil {
 					heartbeatDone <- heartbeatErr
 					cancel()
 					return
@@ -153,6 +154,9 @@ func withGitWriter(
 	}
 	if runErr != nil {
 		return nil, runErr
+	}
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); err != nil {
+		return nil, err
 	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return nil, err

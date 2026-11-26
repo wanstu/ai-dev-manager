@@ -13,7 +13,7 @@ import (
 	"ai-dev-manager-v2/internal/verifier"
 )
 
-func TestRunVerifierHeartbeatsWriterDuringLongRun(t *testing.T) {
+func TestRunVerifierDoesNotRenewWriterDuringLongRun(t *testing.T) {
 	root := t.TempDir()
 	service := New(filepath.Join(t.TempDir(), "state.json"))
 	service.writerHeartbeatInterval = func(time.Duration) time.Duration { return 20 * time.Millisecond }
@@ -63,8 +63,8 @@ func TestRunVerifierHeartbeatsWriterDuringLongRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Writer == nil || !after.Writer.LastSeenAt.After(initialLastSeen) {
-		t.Fatalf("writer heartbeat did not advance during verifier run: before=%s after=%+v", initialLastSeen, after.Writer)
+	if after.Writer == nil || !after.Writer.LastSeenAt.Equal(initialLastSeen) || !after.Writer.ExpiresAt.Equal(acquired.Writer.ExpiresAt) {
+		t.Fatalf("verifier run changed writer lease: before=%s after=%+v", initialLastSeen, after.Writer)
 	}
 }
 

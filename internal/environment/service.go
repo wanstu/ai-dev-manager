@@ -24,6 +24,7 @@ const (
 
 type WriterObservation struct {
 	EnvironmentID    string    `json:"environment_id"`
+	LeaseID          string    `json:"lease_id,omitempty"`
 	LeaseAcquiredAt  time.Time `json:"lease_acquired_at"`
 	OwnerFingerprint string    `json:"owner_fingerprint"`
 	GatewayOwnerID   string    `json:"gateway_owner_id,omitempty"`
@@ -551,6 +552,16 @@ func (s *Service) setSelection(id, value string, enabled, isMCP bool) (model.Env
 }
 
 func (s *Service) AcquireWriter(id, owner string) (model.Environment, error) {
+	return s.acquireWriter(id, owner, false)
+}
+
+// TakeoverWriter replaces a lease atomically in the state transaction.
+// The caller must enforce administrator authority.
+func (s *Service) TakeoverWriter(id, owner string) (model.Environment, error) {
+	return s.acquireWriter(id, owner, true)
+}
+
+func (s *Service) acquireWriter(id, owner string, takeover bool) (model.Environment, error) {
 	owner = strings.TrimSpace(owner)
 	if owner == "" {
 		return model.Environment{}, fmt.Errorf("writer owner is required")
@@ -568,17 +579,25 @@ func (s *Service) AcquireWriter(id, owner string) (model.Environment, error) {
 			target.Writer = nil
 			target.UpdatedAt = now
 		}
-		if target.Writer != nil && target.Writer.Owner != owner {
+		if !takeover && target.Writer != nil && target.Writer.Owner != owner {
 			return writerConflictError(target)
 		}
 		if conflict := s.activeWriterOverlap(state, idx, now); conflict != nil {
 			return writerConflictError(conflict)
 		}
-		if target.Writer == nil {
-			target.Writer = &model.WriterLease{Owner: owner, AcquiredAt: now}
+		if target.Writer == nil || takeover {
+			leaseID, err := identity.New("lease")
+			if err != nil {
+				return err
+			}
+			target.Writer = &model.WriterLease{ID: leaseID, Owner: owner, AcquiredAt: now}
 			newLease = true
 		}
-		s.renewWriter(target, now, false)
+		action := "acquire"
+		if takeover {
+			action = "admin_takeover"
+		}
+		s.renewWriter(target, now, action)
 		result = *target
 		return nil
 	})
@@ -621,7 +640,56 @@ func (s *Service) ReleaseWriter(id, owner string, force bool) (model.Environment
 	return result, err
 }
 
+// RequireWriter validates authority without renewing or persisting the lease.
 func (s *Service) RequireWriter(id, owner string) (model.Environment, error) {
+	owner = strings.TrimSpace(owner)
+	state, err := s.store.Load()
+	if err != nil {
+		return model.Environment{}, err
+	}
+	idx := findEnvironment(state.Environments, id)
+	if idx < 0 {
+		return model.Environment{}, fmt.Errorf("environment %q not found", id)
+	}
+	env := &state.Environments[idx]
+	now := s.nowUTC()
+	if env.Writer == nil || s.writerExpired(env.Writer, now) || env.Writer.Owner != owner {
+		return model.Environment{}, fmt.Errorf("environment %s is not owned by writer %q", id, owner)
+	}
+	if conflict := s.activeWriterOverlap(&state, idx, now); conflict != nil {
+		return model.Environment{}, writerConflictError(conflict)
+	}
+	return *env, nil
+}
+
+// SameWriterLease distinguishes successive acquisitions, including by the same owner.
+// Legacy leases have no ID; compare the acquisition time until a new lease is acquired.
+func SameWriterLease(a, b *model.WriterLease) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	if a.Owner != b.Owner {
+		return false
+	}
+	if a.ID != "" || b.ID != "" {
+		return a.ID != "" && a.ID == b.ID
+	}
+	return a.AcquiredAt.Equal(b.AcquiredAt)
+}
+
+func (s *Service) RequireWriterLease(id, owner string, lease *model.WriterLease) (model.Environment, error) {
+	current, err := s.RequireWriter(id, owner)
+	if err != nil {
+		return model.Environment{}, err
+	}
+	if !SameWriterLease(current.Writer, lease) {
+		return model.Environment{}, fmt.Errorf("writer lease was replaced for environment %s", id)
+	}
+	return current, nil
+}
+
+// HeartbeatWriter is an explicit lease renewal, never a runtime health check.
+func (s *Service) HeartbeatWriter(id, owner string) (model.Environment, error) {
 	owner = strings.TrimSpace(owner)
 	var result model.Environment
 	err := s.store.Update(func(state *model.State) error {
@@ -637,20 +705,22 @@ func (s *Service) RequireWriter(id, owner string) (model.Environment, error) {
 		if conflict := s.activeWriterOverlap(state, idx, now); conflict != nil {
 			return writerConflictError(conflict)
 		}
-		s.renewWriter(env, now, false)
+		s.renewWriter(env, now, "heartbeat")
 		result = *env
 		return nil
 	})
 	return result, err
 }
 
-func (s *Service) HeartbeatWriter(id, owner string) (model.Environment, error) {
-	return s.RequireWriter(id, owner)
-}
-
-func (s *Service) ObserveWriter(id, owner string, observation WriterObservation) (model.Environment, error) {
+func (s *Service) ObserveWriter(id, owner string, observation WriterObservation, expected ...*model.WriterLease) (model.Environment, error) {
 	owner = strings.TrimSpace(owner)
-	result, err := s.RequireWriter(id, owner)
+	var result model.Environment
+	var err error
+	if len(expected) > 0 {
+		result, err = s.RequireWriterLease(id, owner, expected[0])
+	} else {
+		result, err = s.RequireWriter(id, owner)
+	}
 	if err != nil {
 		return model.Environment{}, err
 	}
@@ -658,6 +728,7 @@ func (s *Service) ObserveWriter(id, owner string, observation WriterObservation)
 		return result, nil
 	}
 	observation.EnvironmentID = id
+	observation.LeaseID = result.Writer.ID
 	observation.LeaseAcquiredAt = result.Writer.AcquiredAt
 	observation.OwnerFingerprint = writerOwnerFingerprint(owner)
 	observation.ObservedAt = result.Writer.LastSeenAt
@@ -691,7 +762,7 @@ func (s *Service) WriterObservations(id string, lease *model.WriterLease) ([]Wri
 		if json.Unmarshal(data, &observation) != nil {
 			continue
 		}
-		if observation.EnvironmentID != id ||
+		if observation.EnvironmentID != id || observation.LeaseID != lease.ID ||
 			!observation.LeaseAcquiredAt.Equal(lease.AcquiredAt) ||
 			observation.OwnerFingerprint != fingerprint {
 			continue
@@ -771,7 +842,8 @@ func (s *Service) Touch(id, owner string) error {
 		if conflict := s.activeWriterOverlap(state, idx, now); conflict != nil {
 			return writerConflictError(conflict)
 		}
-		s.renewWriter(env, now, true)
+		env.LastActivityAt = now
+		env.UpdatedAt = now
 		return nil
 	})
 }
@@ -836,13 +908,11 @@ func unionSorted(left, right []string) []string {
 	return values
 }
 
-func (s *Service) renewWriter(env *model.Environment, now time.Time, activity bool) {
+func (s *Service) renewWriter(env *model.Environment, now time.Time, action string) {
 	env.Writer.LastSeenAt = now
 	env.Writer.ExpiresAt = now.Add(s.leaseTTL())
 	env.UpdatedAt = now
-	if activity {
-		env.LastActivityAt = now
-	}
+	env.Writer.LastRenewalAction = action
 }
 
 func (s *Service) leaseTTL() time.Duration {

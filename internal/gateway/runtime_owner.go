@@ -13,7 +13,7 @@ import (
 
 	"ai-dev-manager-v2/internal/app"
 	"ai-dev-manager-v2/internal/catalog"
-	"ai-dev-manager-v2/internal/environment"
+	environmentpkg "ai-dev-manager-v2/internal/environment"
 	"ai-dev-manager-v2/internal/model"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -75,6 +75,7 @@ type writerDiagnostics struct {
 	EnvironmentID            string                  `json:"environment_id"`
 	Active                   bool                    `json:"active"`
 	OwnerFingerprint         string                  `json:"owner_fingerprint,omitempty"`
+	LastRenewalAction        string                  `json:"last_renewal_action,omitempty"`
 	AcquiredAt               *time.Time              `json:"acquired_at,omitempty"`
 	LastSeenAt               *time.Time              `json:"last_seen_at,omitempty"`
 	ExpiresAt                *time.Time              `json:"expires_at,omitempty"`
@@ -155,11 +156,11 @@ func (o *runtimeOwner) Info() runtimeOwnerInfo {
 	}
 }
 
-func (o *runtimeOwner) writerObservation(sourceKind, sourceID string, sourcePID int, executable, cwd, executionMode, verifierID, verifierName string) environment.WriterObservation {
+func (o *runtimeOwner) writerObservation(sourceKind, sourceID string, sourcePID int, executable, cwd, executionMode, verifierID, verifierName string) environmentpkg.WriterObservation {
 	if o == nil {
-		return environment.WriterObservation{}
+		return environmentpkg.WriterObservation{}
 	}
-	return environment.WriterObservation{
+	return environmentpkg.WriterObservation{
 		GatewayOwnerID: o.id,
 		GatewayPID:     o.pid,
 		SourceKind:     sourceKind,
@@ -173,15 +174,15 @@ func (o *runtimeOwner) writerObservation(sourceKind, sourceID string, sourcePID 
 	}
 }
 
-func (o *runtimeOwner) observeWriter(environmentID, writerOwner string, observation environment.WriterObservation) error {
+func (o *runtimeOwner) observeWriter(environmentID, writerOwner string, observation environmentpkg.WriterObservation, expected ...*model.WriterLease) error {
 	if o == nil || o.service == nil {
 		return fmt.Errorf("runtime owner is not initialized")
 	}
-	_, err := o.service.Environments.ObserveWriter(environmentID, writerOwner, observation)
+	_, err := o.service.Environments.ObserveWriter(environmentID, writerOwner, observation, expected...)
 	return err
 }
 
-func (o *runtimeOwner) clearWriterObservation(environmentID string, observation environment.WriterObservation) {
+func (o *runtimeOwner) clearWriterObservation(environmentID string, observation environmentpkg.WriterObservation) {
 	if o == nil || o.service == nil {
 		return
 	}
@@ -192,11 +193,15 @@ func (o *runtimeOwner) nextWriterObservationID(prefix string) string {
 	return fmt.Sprintf("%s_%x", prefix, runtimeWriterObservationSequence.Add(1))
 }
 
-func (o *runtimeOwner) beginWriterObservation(environmentID, writerOwner string, observation environment.WriterObservation) (func(), error) {
+func (o *runtimeOwner) beginWriterObservation(environmentID, writerOwner string, observation environmentpkg.WriterObservation) (func(), error) {
 	if observation.SourceID == "" {
 		observation.SourceID = o.nextWriterObservationID(observation.SourceKind)
 	}
-	if err := o.observeWriter(environmentID, writerOwner, observation); err != nil {
+	authority, err := o.service.Environments.RequireWriter(environmentID, writerOwner)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.observeWriter(environmentID, writerOwner, observation, authority.Writer); err != nil {
 		return nil, err
 	}
 	stop := make(chan struct{})
@@ -213,7 +218,7 @@ func (o *runtimeOwner) beginWriterObservation(environmentID, writerOwner string,
 			case <-stop:
 				return
 			case <-ticker.C:
-				if err := o.observeWriter(environmentID, writerOwner, observation); err != nil {
+				if err := o.observeWriter(environmentID, writerOwner, observation, authority.Writer); err != nil {
 					o.clearWriterObservation(environmentID, observation)
 					return
 				}
@@ -255,6 +260,7 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 	diagnostics.ExpiresAt = &expiresAt
 	sum := sha256.Sum256([]byte(lease.Owner))
 	diagnostics.OwnerFingerprint = fmt.Sprintf("%x", sum[:6])
+	diagnostics.LastRenewalAction = lease.LastRenewalAction
 	interval := o.service.Environments.WriterLeaseTTL() / 3
 	if interval <= 0 {
 		interval = time.Second
@@ -278,7 +284,7 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 
 	for _, run := range runs {
 		run.mu.Lock()
-		if run.writerOwner == lease.Owner && run.state == agentRunRunning {
+		if environmentpkg.SameWriterLease(run.writerLease, &lease) && run.state == agentRunRunning {
 			diagnostics.HeartbeatSources = append(diagnostics.HeartbeatSources, writerHeartbeatSource{
 				Kind:           "run",
 				ID:             run.id,
@@ -297,7 +303,7 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 	}
 	for _, run := range verifierRuns {
 		run.mu.Lock()
-		if run.writerOwner == lease.Owner && run.state == verifierRunRunning {
+		if environmentpkg.SameWriterLease(run.prepared.WriterLease, &lease) && run.state == verifierRunRunning {
 			diagnostics.HeartbeatSources = append(diagnostics.HeartbeatSources, writerHeartbeatSource{
 				Kind:           "verifier",
 				ID:             run.id,
@@ -320,7 +326,7 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 	})
 	if len(diagnostics.HeartbeatSources) > 0 {
 		diagnostics.Attribution = "current_gateway_runtime"
-		diagnostics.Note = "Active Writer is being renewed by one or more running resources owned by this Gateway."
+		diagnostics.Note = "Running resources are associated with this Writer. They validate authority but do not renew the lease."
 		return diagnostics, nil
 	}
 	observations, observationErr := o.service.Environments.WriterObservations(environmentID, &lease)
@@ -328,7 +334,7 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 		observation := observations[0]
 		sourceState := "observed"
 		diagnostics.Attribution = "lease_observation"
-		diagnostics.Note = "The latest Writer renewal was attributed by the holding Gateway to this ephemeral safe source observation. The Writer owner credential is not included."
+		diagnostics.Note = "A safe source observation identifies a related operation, not necessarily an explicit lease renewal. The Writer owner credential is not included."
 		if !observation.ObservedAt.Equal(lease.LastSeenAt) {
 			sourceState = "last_observed"
 			diagnostics.Attribution = "last_known_source"

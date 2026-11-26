@@ -14,6 +14,7 @@ import (
 // both blocking execution and Gateway-owner asynchronous verifier runs. It is
 // intentionally process-local and contains no persisted runtime observation.
 type PreparedVerifierExecution struct {
+	WriterLease    *model.WriterLease
 	Definition     model.VerifierDefinition
 	Environment    model.Environment
 	Runtime        *runtime.Runtime
@@ -42,7 +43,8 @@ func (s *Service) PrepareVerifierExecution(ctx context.Context, environmentID, o
 	if !definition.Enabled {
 		return PreparedVerifierExecution{}, fmt.Errorf("verifier %q is disabled", verifierID)
 	}
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, err := s.Environments.RequireWriter(environmentID, owner)
+	if err != nil {
 		return PreparedVerifierExecution{}, err
 	}
 	rt, env, err := s.Runtime(environmentID)
@@ -58,6 +60,7 @@ func (s *Service) PrepareVerifierExecution(ctx context.Context, environmentID, o
 		return PreparedVerifierExecution{}, err
 	}
 	return PreparedVerifierExecution{
+		WriterLease:    authority.Writer,
 		Definition:     definition,
 		Environment:    env,
 		Runtime:        rt,
