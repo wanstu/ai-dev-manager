@@ -153,7 +153,9 @@ const fakeBridge = String.raw`<script>
     async RemoveSkill(id){ record('RemoveSkill',[id]); const index=snapshotA.skills.findIndex(skill=>skill.id===id); if(index<0) throw new Error('skill not found: '+id); snapshotA.skills.splice(index,1); for(const workspace of snapshotA.workspaces) workspace.enabled_skill_ids=(workspace.enabled_skill_ids||[]).filter(value=>value!==id); for(const env of snapshotA.environments){ env.explicit_skill_ids=(env.explicit_skill_ids||[]).filter(value=>value!==id); recomputeEnvironment(env); } return null; },
     async ListVerifiers(id){ record('ListVerifiers',[id]); if(state.failVerifiers) throw new Error('verifiers unavailable'); return [{verifier_id:id==='env-b'?'verifier-b':'verifier-a', name:id==='env-b'?'Verifier B':'Verifier A', kind:'test', executable:'go', args:['test','./...'], enabled:true, agent_host_execution_allowed:state.verifierAgentAllowed}]; },
     async SetVerifierAgentHostExecution(id,verifierID,allowed){ record('SetVerifierAgentHostExecution',[id,verifierID,allowed]); state.verifierAgentAllowed=Boolean(allowed); return {verifier_id:verifierID, enabled:true, agent_host_execution_allowed:state.verifierAgentAllowed}; },
-    async ListProcesses(id){ record('ListProcesses',[id]); if(state.failProcesses) throw new Error('processes unavailable'); if(state.hideProcess && id==='env-a') return []; return [{id:id==='env-b'?'proc-b':'proc-a', state:'running', pid:id==='env-b'?3333:2222, listening_ports:[8080]}]; },
+    async ListProcesses(id){ record('ListProcesses',[id]); if(state.failProcesses) throw new Error('processes unavailable'); if(state.hideProcess && id==='env-a') return []; const items=[{id:'proc-a',environment_id:'env-a',state:'running',pid:2222,executable:'node',listening_ports:[8080]},{id:'proc-b',environment_id:'env-b',state:'running',pid:3333,executable:'java',listening_ports:[8080]},...(state.extraProcesses||[])]; return items.filter(p=>!id||p.environment_id===id); },
+    async StartProcess(id,executable,args,cwd){ record('StartProcess',[id,executable,args,cwd]); const process={id:'proc-started',environment_id:id,state:'running',pid:4444,executable,cwd}; (state.extraProcesses ||= []).push(process); return process; },
+    async StopProcess(id,writerOwner,processID){ record('StopProcess',[id,writerOwner,processID]); const process=state.extraProcesses.find(p=>p.id===processID&&p.environment_id===id); if(!process) throw new Error('process not found'); process.state='exited'; return process; },
     async GetProcessLogs(id,processID){ record('GetProcessLogs',[id,processID]); if(state.delayProcessLogs && id==='env-a') await new Promise(resolve=>setTimeout(resolve,180)); return {stdout:id==='env-b'?'PROCESS_B_LOG':'PROCESS_A_LOG', stderr:'', stdout_truncated:id==='env-a', stderr_truncated:false}; },
     async ListRuns(id){ record('ListRuns',[id]); return [{id:id==='env-b'?'run-b':'run-a', state:'succeeded', executable:'go', args:['test'], stdout:id==='env-b'?'RUN_B_OUTPUT':'RUN_A_OUTPUT', stderr:'', exit_code:0, stdout_truncated:false, stderr_truncated:false}]; },
     async GetRuntimeWriterDiagnostics(id){ record('GetRuntimeWriterDiagnostics',[id]); return {environment_id:id, attribution:id==='env-a'?'lease_observation':'none', owner_fingerprint:id==='env-a'?'writer-a':'', last_seen_at:'2026-09-12T04:00:00Z', expires_at:'2026-09-12T04:05:00Z', heartbeat_interval_seconds:30, heartbeat_sources:[], gateway_owner:{pid:0}}; },
@@ -1092,7 +1094,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.querySelector('#runtimeSubviewTabs [data-runtime-subview="processes"]').click(); await sleep();
     document.querySelector('#processList button[data-action="process-logs"][data-id="proc-a"]').click(); await waitFor(() => document.getElementById('runtimeOutput').textContent.includes('PROCESS_A_LOG'), 'Process output rebound before disappearance');
     window.__fakeADM.state.hideProcess=true; document.getElementById('runtimeRefreshButton').click();
-    await waitFor(() => document.getElementById('processList').textContent.includes('没有 process'), 'authoritative Process disappearance refresh');
+    await waitFor(() => document.getElementById('processList').textContent.includes('没有 ADM 管理的常驻进程'), 'authoritative Process disappearance refresh');
     check(document.getElementById('runtimeOutput').textContent==='尚无输出' && document.getElementById('runtimeOutputMeta').textContent.includes('资源已不在最新'), 'successful list refresh clears output for disappeared resource');
     window.__fakeADM.state.hideProcess=false; document.getElementById('runtimeRefreshButton').click(); await waitFor(() => document.getElementById('processList').textContent.includes('proc-a'), 'Process restored for stale-log test');
     window.__fakeADM.state.delayProcessLogs=true;
@@ -1108,6 +1110,24 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(window.__fakeADM.calls.filter(c=>c.name==='ProbeMCPHealth').length===5, 'only the five explicit MCP probes were executed');
     const forbiddenAutoCalls=['RefreshSkillSource','RunVerifier','StopProcess','CancelRun','WriteGlobalMemory','WriteEnvironmentMemory'];
     check(!window.__fakeADM.calls.some(c=>forbiddenAutoCalls.includes(c.name)), 'navigation/refresh makes no implicit mutation call');
+
+    check(!document.getElementById('startManagedProcessButton').disabled, 'Admin may start managed process without Writer');
+    document.getElementById('startManagedProcessButton').click();
+    await waitFor(() => document.getElementById('managedProcessDialog').open, 'managed process dialog opens');
+    document.getElementById('managedProcessExecutable').value='npm';
+    document.getElementById('managedProcessArgs').value='["run","dev"]';
+    document.getElementById('managedProcessCwd').value='app';
+    document.getElementById('managedProcessSubmit').click();
+    await waitFor(() => !document.getElementById('managedProcessDialog').open && document.getElementById('processList').textContent.includes('proc-started'), 'Admin process start result rendered');
+    check(window.__fakeADM.calls.some(c=>c.name==='StartProcess'&&c.args[0]==='env-b'&&c.args[1]==='npm'&&c.args[2].join(' ')==='run dev'&&c.args[3]==='app'), 'Admin process start preserves structured argv and environment');
+    const stopManaged=document.querySelector('#processList button[data-action="stop-process"][data-id="proc-started"]');
+    check(stopManaged && !stopManaged.disabled, 'Admin can stop managed process without Writer');
+    stopManaged.click();
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='StopProcess'&&c.args[0]==='env-b'&&c.args[1]===''&&c.args[2]==='proc-started'), 'explicit administrator stop sends no writer credential');
+    await waitFor(() => !document.querySelector('#processList button[data-action="stop-process"][data-id="proc-started"]'), 'stopped process no longer offers stop');
+    runtimeWorkspaceSelect.value=''; runtimeWorkspaceSelect.dispatchEvent(new Event('change',{bubbles:true}));
+    await waitFor(() => document.getElementById('processList').textContent.includes('proc-a')&&document.getElementById('processList').textContent.includes('proc-b'), 'global process list shows multiple environments');
+    check(window.__fakeADM.calls.some(c=>c.name==='ListProcesses'&&c.args[0]===''), 'global process inventory uses admin query');
 
     await clickRoute('environments');
     window.__fakeADM.state.delayEnvironmentAInspection=true;

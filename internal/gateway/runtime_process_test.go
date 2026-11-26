@@ -372,3 +372,46 @@ func TestDevProcessHelper(t *testing.T) {
 		_ = connection.Close()
 	}
 }
+
+func TestAdminManagesLongProcessWithoutWriterLease(t *testing.T) {
+	service, environmentID, root := devProcessTestService(t)
+	if _, err := service.Environments.ReleaseWriter(environmentID, devProcessTestWriter, false); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")
+	portFile := filepath.Join(root, "admin-process.port")
+	t.Setenv("ADM_TEST_DEV_PROCESS_PORT_FILE", portFile)
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	ctx := context.Background()
+	admin := connectInMemory(t, ctx, newServerForSurface(service, owner, serverSurfaceAdmin))
+	defer admin.Close()
+	started := callGatewayTool(t, ctx, admin, "process_start", map[string]any{
+		"environment_id": environmentID, "executable": os.Args[0],
+		"args": []string{"-test.run=^TestDevProcessHelper$"},
+	})
+	if started.IsError {
+		t.Fatalf("admin start without Writer: %s", toolText(t, started))
+	}
+	id := processIDFromToolText(t, started)
+	port := waitDevProcessPortFile(t, portFile)
+	listed := callGatewayTool(t, ctx, admin, "process_list", map[string]any{"environment_id": ""})
+	if listed.IsError || !strings.Contains(toolText(t, listed), id) || !strings.Contains(toolText(t, listed), environmentID) {
+		t.Fatalf("all processes: %s", toolText(t, listed))
+	}
+	agent := connectInMemory(t, ctx, newServerForSurface(service, owner, serverSurfaceAgent))
+	defer agent.Close()
+	denied := callGatewayTool(t, ctx, agent, "process_stop", map[string]any{"environment_id": environmentID, "process_id": id})
+	if !denied.IsError {
+		t.Fatal("Agent bypassed stop authority")
+	}
+	stopped := callGatewayTool(t, ctx, admin, "process_stop", map[string]any{"environment_id": environmentID, "process_id": id})
+	if stopped.IsError || !strings.Contains(toolText(t, stopped), "exited") {
+		t.Fatalf("admin stop: %s", toolText(t, stopped))
+	}
+	waitPortReleased(t, port)
+	env, err := service.Environments.Get(environmentID)
+	if err != nil || env.Writer != nil {
+		t.Fatalf("process operation changed Writer: %+v %v", env.Writer, err)
+	}
+}

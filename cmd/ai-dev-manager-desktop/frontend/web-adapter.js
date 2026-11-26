@@ -21,7 +21,7 @@
     'SetEnvironmentMCP','SetEnvironmentSkill','ListEnvironmentSkills','ListGlobalMemory',
     'WriteGlobalMemory','DeleteGlobalMemory','ListEnvironmentMemory','WriteEnvironmentMemory',
     'DeleteEnvironmentMemory','AcquireRuntimeWriter','TakeoverRuntimeWriter','ReleaseRuntimeWriter','GetRuntimeWriterDiagnostics','ForceReleaseRuntimeWriter','ListVerifiers',
-    'RunVerifier','ListProcesses','GetProcessLogs','StopProcess','ListRuns','CancelRun',
+    'RunVerifier','StartProcess','ListProcesses','GetProcessLogs','StopProcess','ListRuns','CancelRun',
     'GetTemporaryEnvironmentStatus','PromoteTemporaryEnvironment','CleanupTemporaryEnvironment',
     'CleanupExpiredTemporaryEnvironments','CleanupStaleManagedWorktrees','MigrateManagedWorktreesToTemporary'
   ];

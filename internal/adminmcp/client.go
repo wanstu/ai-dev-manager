@@ -31,6 +31,9 @@ type Client struct {
 }
 
 type ProcessStatus struct {
+	Executable     string     `json:"executable"`
+	Cwd            string     `json:"cwd,omitempty"`
+	GatewayPID     int        `json:"gateway_pid"`
 	ID             string     `json:"id"`
 	EnvironmentID  string     `json:"environment_id"`
 	State          string     `json:"state"`
@@ -394,6 +397,10 @@ func (c *Client) VerifierRun(environmentID, writerOwner, verifierID string, maxO
 	return callAdmin[verifier.Result](c, context.Background(), "environment_verifier_run", map[string]any{
 		"environment_id": environmentID, "writer_owner": writerOwner, "verifier_id": verifierID, "max_output_bytes": maxOutputBytes,
 	})
+}
+
+func (c *Client) ProcessStart(environmentID, executable string, args []string, cwd string) (ProcessStatus, error) {
+	return callAdmin[ProcessStatus](c, context.Background(), "process_start", map[string]any{"environment_id": environmentID, "executable": executable, "args": args, "cwd": cwd})
 }
 
 func (c *Client) ProcessList(environmentID string) ([]ProcessStatus, error) {

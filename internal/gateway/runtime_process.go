@@ -28,6 +28,9 @@ const (
 )
 
 type devProcessStatus struct {
+	Executable     string          `json:"executable"`
+	Cwd            string          `json:"cwd,omitempty"`
+	GatewayPID     int             `json:"gateway_pid"`
 	ID             string          `json:"id"`
 	EnvironmentID  string          `json:"environment_id"`
 	State          devProcessState `json:"state"`
@@ -67,13 +70,21 @@ type ownedDevProcess struct {
 }
 
 // StartDevProcess treats a development service as a Gateway-owned runtime resource, not as a writer lease.
-// The current writer gates launch and stop operations, while long-lived mutation authority belongs to Agent Runs/verifiers.
+// Agent requests must have launch/stop authority. Administrator requests use
+// dedicated methods and never acquire or renew the project's writer lease.
 func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable string, args []string, cwd string, maxLogBytes int) (devProcessStatus, error) {
 	if o == nil || o.service == nil {
 		return devProcessStatus{}, fmt.Errorf("runtime owner is not initialized")
 	}
 	if _, err := o.service.Environments.RequireWriter(environmentID, writerOwner); err != nil {
 		return devProcessStatus{}, err
+	}
+	return o.StartDevProcessAdmin(environmentID, executable, args, cwd, maxLogBytes)
+}
+
+func (o *runtimeOwner) StartDevProcessAdmin(environmentID, executable string, args []string, cwd string, maxLogBytes int) (devProcessStatus, error) {
+	if o == nil || o.service == nil {
+		return devProcessStatus{}, fmt.Errorf("runtime owner is not initialized")
 	}
 	rt, _, err := o.service.Runtime(environmentID)
 	if err != nil {
@@ -135,10 +146,14 @@ func (o *runtimeOwner) ListDevProcesses(environmentID string) ([]devProcessStatu
 	if _, err := o.service.Environments.Get(environmentID); err != nil {
 		return nil, err
 	}
+	return o.listDevProcesses(environmentID), nil
+}
+
+func (o *runtimeOwner) listDevProcesses(environmentID string) []devProcessStatus {
 	o.mu.Lock()
 	items := make([]*ownedDevProcess, 0)
 	for _, process := range o.processes {
-		if process.environmentID == environmentID {
+		if environmentID == "" || process.environmentID == environmentID {
 			items = append(items, process)
 		}
 	}
@@ -148,7 +163,7 @@ func (o *runtimeOwner) ListDevProcesses(environmentID string) ([]devProcessStatu
 		statuses = append(statuses, o.devProcessStatus(process))
 	}
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].StartedAt.Before(statuses[j].StartedAt) })
-	return statuses, nil
+	return statuses
 }
 
 func (o *runtimeOwner) DevProcessStatus(environmentID, processID string) (devProcessStatus, error) {
@@ -179,6 +194,10 @@ func (o *runtimeOwner) StopDevProcess(environmentID, writerOwner, processID stri
 	if _, err := o.service.Environments.RequireWriter(environmentID, writerOwner); err != nil {
 		return devProcessStatus{}, err
 	}
+	return o.StopDevProcessAdmin(environmentID, processID)
+}
+
+func (o *runtimeOwner) StopDevProcessAdmin(environmentID, processID string) (devProcessStatus, error) {
 	process, err := o.devProcess(environmentID, processID)
 	if err != nil {
 		return devProcessStatus{}, err
@@ -216,6 +235,9 @@ func (o *runtimeOwner) devProcess(environmentID, processID string) (*ownedDevPro
 func (o *runtimeOwner) devProcessStatus(process *ownedDevProcess) devProcessStatus {
 	process.mu.Lock()
 	status := devProcessStatus{
+		Executable:    process.executable,
+		Cwd:           process.cwd,
+		GatewayPID:    o.pid,
 		ID:            process.id,
 		EnvironmentID: process.environmentID,
 		State:         process.state,

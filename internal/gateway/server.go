@@ -594,7 +594,7 @@ type ExecInput struct {
 
 type ProcessStartInput struct {
 	EnvironmentID string   `json:"environment_id"`
-	WriterOwner   string   `json:"writer_owner"`
+	WriterOwner   string   `json:"writer_owner,omitempty"`
 	Executable    string   `json:"executable"`
 	Args          []string `json:"args,omitempty"`
 	Cwd           string   `json:"cwd,omitempty"`
@@ -608,7 +608,7 @@ type ProcessInput struct {
 
 type ProcessStopInput struct {
 	EnvironmentID string `json:"environment_id"`
-	WriterOwner   string `json:"writer_owner"`
+	WriterOwner   string `json:"writer_owner,omitempty"`
 	ProcessID     string `json:"process_id"`
 }
 
@@ -2122,19 +2122,26 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_start", Description: "Start one allowlisted long-running development process owned by this Gateway. Requires the current Environment writer_owner for launch only; the running process does not retain or renew the writer lease."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_start", Description: "Start one allowlisted long-running development process owned by this Gateway. Agent requires current writer_owner for launch; Admin may omit it. The process never retains or renews the writer lease."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProcessStartInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			if surface == serverSurfaceAdmin && strings.TrimSpace(in.WriterOwner) == "" {
+				value, err := owner.StartDevProcessAdmin(in.EnvironmentID, in.Executable, in.Args, in.Cwd, in.MaxLogBytes)
+				return toolResult(value, err)
 			}
 			value, err := owner.StartDevProcess(in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.MaxLogBytes)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_list", Description: "List development processes owned by this Gateway for one Environment."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_list", Description: "List development processes owned by this Gateway for one Environment. Admin may use an empty environment_id to list all managed processes."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			if surface == serverSurfaceAdmin && strings.TrimSpace(in.EnvironmentID) == "" {
+				return toolResult(owner.listDevProcesses(""), nil)
 			}
 			value, err := owner.ListDevProcesses(in.EnvironmentID)
 			return toolResult(value, err)
@@ -2158,10 +2165,14 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_stop", Description: "Stop one Gateway-owned development process. Requires the current Environment writer_owner; it does not need to be the writer that launched the process. Arbitrary OS PIDs are not accepted."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_stop", Description: "Stop one Gateway-owned development process. Agent requires current writer_owner. Admin may omit it and stop managed processes without any Writer. Arbitrary OS PIDs are not accepted."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProcessStopInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			if surface == serverSurfaceAdmin && strings.TrimSpace(in.WriterOwner) == "" {
+				value, err := owner.StopDevProcessAdmin(in.EnvironmentID, in.ProcessID)
+				return toolResult(value, err)
 			}
 			value, err := owner.StopDevProcess(in.EnvironmentID, in.WriterOwner, in.ProcessID)
 			return toolResult(value, err)

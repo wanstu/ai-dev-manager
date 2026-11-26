@@ -896,12 +896,33 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.app.RunVerifier(ctx, s1, s2, s3, 64*1024)
+	case "StartProcess":
+		var args []string
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &args); err != nil {
+			return nil, err
+		}
+		if err := arg(3, &s3); err != nil {
+			return nil, err
+		}
+		if h.owner == nil {
+			return nil, errors.New("Gateway runtime owner is unavailable")
+		}
+		return h.owner.StartDevProcessAdmin(s1, s2, args, s3, 0)
 	case "ListProcesses":
 		if err := arg(0, &s1); err != nil {
 			return nil, err
 		}
 		if h.owner == nil {
 			return nil, errors.New("Gateway runtime owner is unavailable")
+		}
+		if s1 == "" {
+			return h.owner.listDevProcesses(""), nil
 		}
 		return h.owner.ListDevProcesses(s1)
 	case "GetProcessLogs":
@@ -927,6 +948,9 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 		}
 		if h.owner == nil {
 			return nil, errors.New("Gateway runtime owner is unavailable")
+		}
+		if s2 == "" {
+			return h.owner.StopDevProcessAdmin(s1, s3)
 		}
 		return h.owner.StopDevProcess(s1, s2, s3)
 	case "ListRuns":

@@ -112,6 +112,7 @@ type runtimeBackend interface {
 	VerifierList(string) ([]model.VerifierDefinition, error)
 	VerifierAgentHostExecutionSet(string, string, bool) (model.VerifierDefinition, error)
 	VerifierRun(string, string, string, int) (verifier.Result, error)
+	ProcessStart(string, string, []string, string) (adminmcp.ProcessStatus, error)
 	ProcessList(string) ([]adminmcp.ProcessStatus, error)
 	ProcessStatus(string, string) (adminmcp.ProcessStatus, error)
 	ProcessLogs(string, string) (adminmcp.ProcessLogs, error)

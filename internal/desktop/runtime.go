@@ -87,6 +87,14 @@ func (a *Adapter) RunVerifier(environmentID, writerOwner, verifierID string) (ve
 	return a.runtime.VerifierRun(environmentID, writerOwner, verifierID, 64*1024)
 }
 
+// StartProcess launches an ADM-owned development service via the Admin surface.
+func (a *Adapter) StartProcess(environmentID, executable string, args []string, cwd string) (adminmcp.ProcessStatus, error) {
+	if err := a.readyRuntime(); err != nil {
+		return adminmcp.ProcessStatus{}, err
+	}
+	return a.runtime.ProcessStart(environmentID, executable, args, cwd)
+}
+
 func (a *Adapter) ListProcesses(environmentID string) ([]adminmcp.ProcessStatus, error) {
 	if err := a.readyRuntime(); err != nil {
 		return nil, err
