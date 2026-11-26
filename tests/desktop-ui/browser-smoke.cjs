@@ -256,6 +256,14 @@ window.addEventListener('DOMContentLoaded', async () => {
     await waitFor(() => document.getElementById('dashboardDataState')?.dataset.state==='success', 'initial dashboard success');
     check(location.hash==='#/overview', 'default hash canonicalizes to overview');
     check(document.getElementById('workspaceCount').textContent==='2', 'successful snapshot renders count');
+    document.getElementById('overviewRuntimeRefresh').click();
+    await waitFor(()=>document.getElementById('overviewRunningCount').textContent==='2','Overview reads all current Gateway processes');
+    check(document.getElementById('overviewUnconfirmedCount').textContent==='1','Overview separates unconfirmed history from live processes');
+    window.__fakeADM.state.failProcesses=true;
+    document.getElementById('overviewRuntimeRefresh').click();
+    await waitFor(()=>document.getElementById('overviewRuntimeDetail').textContent.includes('运行概况不可用'),'Overview reports unavailable runtime rather than zero');
+    check(document.getElementById('overviewRunningCount').textContent==='—'&&document.getElementById('workspaceCount').textContent==='2','Runtime failure keeps resource snapshot independent');
+    window.__fakeADM.state.failProcesses=false;
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
     window.dispatchEvent(new Event('focus'));
@@ -1181,6 +1189,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     await waitFor(() => document.querySelector('#verifierList button[data-action="toggle-verifier-agent"][data-id="verifier-a"]'), 'Verifier list recovers after local failure');
     check(!document.querySelector('[data-runtime-subview-panel="verifiers"]').hidden && document.querySelector('[data-runtime-subview-panel="processes"]').hidden, 'Runtime starts on local Verifiers subview');
     check(document.getElementById('runtimeWriterDiagnostics').textContent.includes('写入交接中')&&document.getElementById('runtimeWriterDiagnostics').textContent.includes('ADM PID 1234'),'Runtime exposes previous-generation handoff operations');
+    check(document.getElementById('runtimeWriterSummary').textContent==='写入交接中','Writer disclosure summarizes pending handoff');
+    check(document.getElementById('runtimeScopeLabel').textContent.includes('Environment A')||document.getElementById('runtimeScopeLabel').textContent.includes('当前环境'),'Runtime explicitly labels selected scope');
+    check(document.getElementById('runtimeWriterOwnerInput').type==='password','Writer credential is masked');
     const verifierAgentButton=document.querySelector('#verifierList button[data-action="toggle-verifier-agent"][data-id="verifier-a"]');
     check(verifierAgentButton && verifierAgentButton.textContent.includes('允许 AI 运行'), 'Verifier starts with Agent host execution disabled');
     const verifierAgentCalls=window.__fakeADM.calls.filter(c=>c.name==='SetVerifierAgentHostExecution').length;
@@ -1196,7 +1207,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.querySelector('#processList button[data-action="process-logs"][data-id="proc-a"]').click();
     await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='GetProcessLogs').length>processLogCalls, 'explicit Process logs call');
     await waitFor(() => document.getElementById('runtimeOutput').textContent.includes('PROCESS_A_LOG'), 'Process logs render bounded output');
-    check(document.getElementById('runtimeOutputMeta').textContent.includes('current-owner observation') && document.getElementById('runtimeOutputMeta').textContent.includes('processes proc-a') && document.getElementById('runtimeOutputMeta').textContent.includes('stdout truncated'), 'Process output meta identifies resource and truncation');
+    check(document.getElementById('runtimeOutputMeta').textContent.includes('当前 Gateway 的有限日志') && document.getElementById('runtimeOutputMeta').textContent.includes('processes proc-a') && document.getElementById('runtimeOutputMeta').textContent.includes('stdout truncated'), 'Process output meta identifies resource and truncation');
     const runtimeCallsBeforeRunTab=window.__fakeADM.calls.length;
     document.querySelector('#runtimeSubviewTabs [data-runtime-subview="runs"]').click(); await sleep();
     check(window.__fakeADM.calls.length===runtimeCallsBeforeRunTab && document.getElementById('runtimeOutput').textContent==='尚无输出', 'Runtime tab change clears output without backend reads');

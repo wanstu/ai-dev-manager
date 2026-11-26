@@ -74,6 +74,8 @@ let execAuthorizationStatus = null;
 let strongPermissionControlStatus = null;
 let runtimeRunsByID = new Map();
 let runtimeSubview = 'verifiers';
+let runtimeLastRefreshAt=0;
+let runtimeRefreshGeneration=0;
 let runtimeGlobalView = false;
 let environmentDetailSubview = 'summary';
 const environmentContextRoutes = new Set(['environments', 'runtime', 'mcp', 'skills', 'memory', 'diagnostics']);
@@ -862,7 +864,45 @@ function initializeManagementNavigation() {
 function updateManagementContextVisibility(route = currentManagementRoute()) {
   if (elements.managementContextPanel) elements.managementContextPanel.hidden = !environmentContextRoutes.has(route);
 }
+let overviewRuntimeGeneration=0;
+function resetOverviewRuntime(message='点击刷新读取当前连接的进程记录。'){
+  overviewRuntimeGeneration++;
+  setMetric(document.getElementById('overviewRunningCount'),'—');
+  setMetric(document.getElementById('overviewUnconfirmedCount'),'—');
+  document.getElementById('overviewOperationScope').textContent='当前连接的全部环境 · 尚未读取';
+  document.getElementById('overviewRuntimeDetail').textContent=message;
+  document.getElementById('overviewRuntimeRefresh').disabled=!currentSnapshot;
+}
+async function refreshOverviewRuntime(){
+  if(!currentSnapshot)return;
+  const generation=++overviewRuntimeGeneration,connection=connectionGeneration;
+  const button=document.getElementById('overviewRuntimeRefresh');
+  const valid=()=>generation===overviewRuntimeGeneration&&connection===connectionGeneration&&!!currentSnapshot;
+  button.disabled=true;
+  setMetric(document.getElementById('overviewRunningCount'),'…');
+  setMetric(document.getElementById('overviewUnconfirmedCount'),'…');
+  document.getElementById('overviewRuntimeDetail').textContent='正在读取进程记录…';
+  try{
+    const items=safeArray(await desktopAdapter().ListProcesses(''));
+    if(!valid())return;
+    setMetric(document.getElementById('overviewRunningCount'),items.filter(p=>p.state==='running'&&!p.history_only).length);
+    setMetric(document.getElementById('overviewUnconfirmedCount'),items.filter(p=>p.state==='owner_unavailable').length);
+    document.getElementById('overviewOperationScope').textContent='当前连接的全部环境 · '+new Date().toLocaleTimeString();
+    document.getElementById('overviewRuntimeDetail').textContent='另有 '+items.filter(p=>p.state==='other_gateway').length+' 条其他 Gateway 持有的记录；'+items.filter(p=>p.state==='exited').length+' 条已退出记录。';
+  }catch(error){
+    if(!valid())return;
+    setMetric(document.getElementById('overviewRunningCount'),'—');
+    setMetric(document.getElementById('overviewUnconfirmedCount'),'—');
+    document.getElementById('overviewOperationScope').textContent='当前连接的全部环境 · 读取失败';
+    document.getElementById('overviewRuntimeDetail').textContent='运行概况不可用：'+errorText(error);
+  }finally{if(valid())button.disabled=false;}
+}
+document.getElementById('overviewRuntimeRefresh').addEventListener('click',refreshOverviewRuntime);
 function renderDashboardState(state, error = '') {
+  const loaded=state==='success'&&!!currentSnapshot;
+  setMetric(document.getElementById('overviewWriterCount'),loaded?safeArray(currentSnapshot.environments).filter(e=>e.writer&&Date.parse(e.writer.expires_at)>Date.now()).length:'—');
+  resetOverviewRuntime(loaded?'点击刷新读取全部环境的进程记录。':'管理数据未就绪。');
+  document.getElementById('overviewRuntimeRefresh').disabled=!loaded;
   if (!window.ADMDashboard?.renderDashboard) return;
   window.ADMDashboard.renderDashboard({
     state: elements.dashboardDataState,
@@ -2043,6 +2083,7 @@ function runtimeItem(titleText, idText, state, detailText, actions = []) {
 function runtimeContainer(kind) { return ({verifiers: elements.verifierList, processes: elements.processList, runs: elements.runList})[kind]; }
 function runtimeCountElement(kind) { return ({verifiers: elements.runtimeVerifierCount, processes: elements.runtimeProcessCount, runs: elements.runtimeRunCount})[kind]; }
 function resetRuntimeCollections(state = 'unloaded', error = '') {
+  runtimeLastRefreshAt=0; runtimeRefreshGeneration++;
   runtimeLists = {verifiers: [], processes: [], runs: []};
   runtimeListStates = {verifiers: state, processes: state, runs: state};
   runtimeListErrors = {verifiers: error, processes: error, runs: error};
@@ -2059,7 +2100,7 @@ function syncRuntimeSubviewUI() {
 }
 function clearRuntimeOutput(reason = '尚未选择资源') {
   runtimeOutputBinding = null;
-  elements.runtimeOutputMeta.textContent = `有界 current-owner observation · ${reason}`;
+  elements.runtimeOutputMeta.textContent = `当前 Gateway 的有限日志 · ${reason}`;
   elements.runtimeOutput.textContent = '尚无输出';
 }
 function runtimeOutputBindingIsCurrent(binding = runtimeOutputBinding) {
@@ -2078,7 +2119,7 @@ function showRuntimeOutput(kind, id, title, stdout = '', stderr = '', meta = '',
   const scope = captureEnvironmentScope();
   runtimeOutputBinding = window.ADMRuntimeView?.makeOutputBinding(scope, kind, id, runtimeSubviewGeneration) || {...scope, kind, id, viewGeneration: runtimeSubviewGeneration};
   const environment = currentEnvironment(); const observedAt = new Date().toLocaleTimeString();
-  elements.runtimeOutputMeta.textContent = `有界 current-owner observation · ${environment?.name || scope.environmentID || 'Environment'} · ${kind} ${id} · observed ${observedAt}${truncation ? ` · ${truncation}` : ''}`;
+  elements.runtimeOutputMeta.textContent = `当前 Gateway 的有限日志 · ${environment?.name || scope.environmentID || '全部环境'} · ${kind} ${id} · observed ${observedAt}${truncation ? ` · ${truncation}` : ''}`;
   const sections = [title]; if (meta) sections.push(meta); if (stdout) sections.push(`STDOUT\n${stdout}`); if (stderr) sections.push(`STDERR\n${stderr}`);
   elements.runtimeOutput.textContent = sections.filter(Boolean).join('\n\n') || '尚无输出';
   return true;
@@ -2099,7 +2140,7 @@ function renderRuntimeListState(kind, emptyText, renderItems) {
   const filtered = items.filter(item => {
     const haystack = [item.name, item.id, item.verifier_id, item.executable, item.cwd, item.kind, item.pid, item.environment_id, ...safeArray(item.args)].filter(Boolean).join(' ');
     const state = kind === 'verifiers' ? (item.enabled === false ? 'disabled' : 'configured') : String(item.state || 'unknown');
-    const stateMatch = stateFilter === 'all' || (stateFilter === 'running' && state === 'running') || (stateFilter === 'not-running' && state !== 'running') || (stateFilter === 'disabled' && state === 'disabled');
+    const stateMatch = stateFilter === 'all' || stateFilter===state || (stateFilter === 'not-running' && state !== 'running');
     return queryMatches(haystack) && stateMatch;
   });
   if (runtimeSubview === kind) {
@@ -2216,6 +2257,9 @@ function renderRuntime() {
   syncRuntimeSubviewUI();
   const environment = currentEnvironment(), writerOwner = runtimeWriterOwner(), pending = Boolean(runtimePendingActionKey);
   const activeWriter = Boolean(environment?.writer), writerAuthorized = activeWriter && Boolean(writerOwner);
+  document.getElementById('runtimeScopeLabel').textContent=environment?'当前环境 · '+environment.name:'当前连接 · 全部环境的进程';
+  document.getElementById('runtimeWriterSummary').textContent=!environment?'尚未选择环境':runtimeWriterDiagnostics?.handoff_pending?'写入交接中':activeWriter?'锁已占用':'无活动锁';
+  document.getElementById('runtimeRefreshTime').textContent=Object.values(runtimeListStates).includes('loading')?'正在刷新…':runtimeLastRefreshAt?'最近读取 '+new Date(runtimeLastRefreshAt).toLocaleTimeString()+(Object.values(runtimeListStates).includes('error')?' · 部分不可用':''):'尚未读取运行状态';
   const writerActionDisabledReason = runtimeWriterActionDisabledReason(environment, writerOwner, pending);
   const writerSources = safeArray(runtimeWriterDiagnostics?.heartbeat_sources);
   elements.runtimeHint.textContent = !environment
@@ -2235,7 +2279,7 @@ function renderRuntime() {
   elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存 Writer authority；下方诊断仍只展示安全指纹和占用来源，不回显原始 owner。' : activeWriter ? '检测到 active Writer。下方显示当前锁及关联任务，任务不会自动续期；原始 owner 凭证保持隐藏。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
   renderRuntimeWriterDiagnostics(environment);
 
-  renderRuntimeListState('verifiers', '没有配置 verifier', (verifiers, container) => {
+  renderRuntimeListState('verifiers', '当前环境没有配置验证器', (verifiers, container) => {
     for (const verifier of verifiers) {
       const run = createActionButton('运行', 'run-verifier', verifier.verifier_id);
       run.disabled = pending || !writerAuthorized || verifier.enabled === false;
@@ -2284,7 +2328,7 @@ function renderRuntime() {
     }
   });
   runtimeRunsByID = new Map(safeArray(runtimeLists.runs).map((run) => [run.id, run]));
-  renderRuntimeListState('runs', '当前 Gateway owner 没有 generic run', (runs, container) => {
+  renderRuntimeListState('runs', '当前 Gateway 没有执行任务', (runs, container) => {
     for (const run of runs) {
       const output = createActionButton('输出', 'run-output', run.id); output.disabled = pending;
       const actions = [disabledRuntimeAction(output, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看输出。' : '')];
@@ -2307,19 +2351,21 @@ async function refreshRuntimeContext(showMessage = false, scope = captureEnviron
     resetRuntimeCollections('unloaded');
     if (!currentSnapshot) { renderRuntime(); return {stale:false, errors:[]}; }
     runtimeListStates.processes = 'loading'; renderRuntime();
+    const generation=++runtimeRefreshGeneration;
     try {
       const processes = await desktopAdapter().ListProcesses('');
-      if (!environmentScopeIsCurrent(scope)) return {stale:true, errors:[]};
-      runtimeLists.processes = safeArray(processes); runtimeListStates.processes = 'success'; renderRuntime();
+      if (!environmentScopeIsCurrent(scope)||generation!==runtimeRefreshGeneration) return {stale:true, errors:[]};
+      runtimeLastRefreshAt=Date.now(); runtimeLists.processes = safeArray(processes); runtimeListStates.processes = 'success'; renderRuntime();
       return {stale:false, errors:[]};
     } catch (error) {
-      if (!environmentScopeIsCurrent(scope)) return {stale:true, errors:[]};
+      if (!environmentScopeIsCurrent(scope)||generation!==runtimeRefreshGeneration) return {stale:true, errors:[]};
       runtimeListStates.processes = 'error'; runtimeListErrors.processes = errorText(error); renderRuntime();
       return {stale:false, errors:[errorText(error)]};
     }
   }
   if (environment.environment_id !== scope.environmentID || !environmentScopeIsCurrent(scope)) return {stale: true, errors: []};
   if (runtimeGlobalView) { runtimeGlobalView = false; runtimeSubview = 'verifiers'; runtimeSubviewGeneration++; clearRuntimeOutput(); }
+  const generation=++runtimeRefreshGeneration;
   runtimeListStates = {verifiers: 'loading', processes: 'loading', runs: 'loading'}; runtimeListErrors = {verifiers: '', processes: '', runs: ''}; renderRuntime();
   if (showMessage) setStatus('正在刷新 Runtime 状态…', 'loading');
   const results = await Promise.allSettled([
@@ -2328,7 +2374,8 @@ async function refreshRuntimeContext(showMessage = false, scope = captureEnviron
     desktopAdapter().ListRuns(scope.environmentID),
     desktopAdapter().GetRuntimeWriterDiagnostics(scope.environmentID),
   ]);
-  if (!environmentScopeIsCurrent(scope)) return {stale: true, errors: []};
+  if (!environmentScopeIsCurrent(scope)||generation!==runtimeRefreshGeneration) return {stale: true, errors: []};
+  runtimeLastRefreshAt=Date.now();
   const descriptors = [
     ['verifiers', 'Verifiers', results[0]], ['processes', 'Processes', results[1]], ['runs', 'Runs', results[2]],
   ];

@@ -159,7 +159,7 @@
         <strong id="dashboardLastSuccess">尚无成功快照</strong>
         <span id="dashboardDataDetail">选择并连接 ADM 后读取管理数据。</span>
       </div>
-      <section class="overview-data-source" aria-label="当前数据来源">
+      <details class="overview-data-source" aria-label="当前数据来源"><summary class="overview-source-summary">当前数据来源 <span>查看连接及状态文件</span></summary>
         <div class="overview-data-source-heading">
           <div><p class="eyebrow">DATA SOURCE</p><h3>当前数据来源</h3></div>
           <span id="dataSourceState" class="state-badge" data-state="unloaded">未读取</span>
@@ -171,7 +171,8 @@
           <div><span>运行用户</span><strong id="dataSourceUser">—</strong></div>
           <div><span>Gateway</span><strong id="dataSourceGateway">—</strong></div>
         </div>
-      </section>
+      </details>
+      <div class="overview-section-heading"><h3>资源概况</h3><span>选择卡片进入管理</span></div>
       <div class="metrics" aria-label="ADM 状态统计">
         <a class="metric metric-link" href="#/workspaces" data-route-link="workspaces"><span>工作区</span><strong id="workspaceCount">—</strong></a>
         <a class="metric metric-link" href="#/environments" data-route-link="environments"><span>环境</span><strong id="environmentCount">—</strong></a>
@@ -180,9 +181,22 @@
         <a class="metric metric-link" href="#/skills" data-route-link="skills"><span>技能</span><strong id="skillCount">—</strong></a>
         <a class="metric metric-link" href="#/memory" data-route-link="memory"><span>全局记忆</span><strong id="memoryCount">—</strong></a>
       </div>
+      <section class="overview-operations" aria-label="开发运行概况">
+        <div class="overview-section-heading"><div><h3>开发运行概况</h3><span id="overviewOperationScope">当前连接的全部环境 · 尚未读取</span></div><button id="overviewRuntimeRefresh" type="button" class="secondary-button small-button">刷新运行概况</button></div>
+        <div class="overview-operation-grid">
+          <a class="overview-operation" href="#/environments" data-route-link="environments"><span>持有写入锁的环境</span><strong id="overviewWriterCount">—</strong><small>Writer 只代表写入权限</small></a>
+          <a class="overview-operation" href="#/runtime" data-route-link="runtime"><span>本 Gateway 管理的运行进程</span><strong id="overviewRunningCount">—</strong><small>独立于 Writer 生命周期</small></a>
+          <a class="overview-operation" href="#/runtime" data-route-link="runtime"><span>待确认的历史进程</span><strong id="overviewUnconfirmedCount">—</strong><small>不自动认领或终止旧 PID</small></a>
+        </div>
+        <p id="overviewRuntimeDetail" class="subpanel-note" role="status">点击刷新读取当前 Gateway 的进程记录；不会启动任何任务。</p>
+      </section>
+      <section class="overview-shortcuts" aria-label="常用管理入口"><div class="overview-section-heading"><h3>常用操作</h3><span>进入管理页面后选择具体资源</span></div><div class="overview-shortcut-grid">
+        <a href="#/workspaces" data-route-link="workspaces"><strong>登记与发现项目</strong><small>工作区与开发目录</small><span aria-hidden="true">›</span></a>
+        <a href="#/runtime" data-route-link="runtime"><strong>管理运行进程</strong><small>启动、日志、停止及任务</small><span aria-hidden="true">›</span></a>
+        <a href="#/diagnostics" data-route-link="diagnostics"><strong>检查环境问题</strong><small>能力状态与诊断建议</small><span aria-hidden="true">›</span></a>
+        <a href="#/gateway" data-route-link="gateway"><strong>连接与服务</strong><small>连接配置及访问策略</small><span aria-hidden="true">›</span></a>
+      </div></section>
     </section>
-
-
 
     <div class="route-page-stack">
       <article id="mcpManager" class="panel core-manager management-page" data-management-page="mcp" hidden>
@@ -508,12 +522,13 @@
         <div><p class="eyebrow">OWNER-LOCAL RUNTIME</p><h2 data-page-heading>进程与任务</h2><p id="runtimeHint">选择 Management Environment 后可查看当前 Gateway owner 的运行状态。</p></div>
         <button id="runtimeRefreshButton" type="button" class="secondary-button small-button">刷新 Runtime</button>
       </div>
-      <details class="runtime-lock-section" open><summary><strong>写入权限 · Writer 锁</strong><span>会话与管理员管理，不影响常驻进程</span></summary><div class="runtime-writer-toolbar">
-        <label class="filter-field"><span>会话凭证（高级选项）</span><input id="runtimeWriterOwnerInput" type="text" autocomplete="off" spellcheck="false" placeholder="留空时可为无 Writer 的 Environment 自动生成"></label>
+      <details class="runtime-lock-section" open><summary><strong>写入权限 · Writer 锁</strong><span id="runtimeWriterSummary">尚未选择环境</span><span>与常驻进程独立</span></summary><div class="runtime-writer-toolbar">
+        <details class="writer-credential-disclosure"><summary>会话凭证（高级）</summary><label class="filter-field"><span>Writer owner</span><input id="runtimeWriterOwnerInput" type="password" autocomplete="off" spellcheck="false" placeholder="无锁时留空可自动生成"></label></details>
         <div class="gateway-actions"><button id="runtimeWriterAcquireButton" type="button" class="secondary-button small-button">获取 / 续期</button><button id="runtimeWriterTakeoverButton" type="button" class="secondary-button small-button">管理员接管</button><button id="runtimeWriterReleaseButton" type="button" class="secondary-button small-button">释放锁</button><button id="runtimeWriterForceReleaseButton" type="button" class="danger-button small-button">强制释放</button></div>
         <p id="runtimeWriterHint" class="subpanel-note">服务端不会返回 Writer owner。若 Writer 已被其他会话持有，必须由人类提供正确 owner 才能续租或执行受保护操作。</p>
         <div id="runtimeWriterDiagnostics" class="runtime-writer-diagnostics empty">选择 Environment 后显示 Writer 占用来源。</div>
       </div></details>
+      <div class="runtime-scope-summary"><span id="runtimeScopeLabel">当前连接 · 所有环境</span><span id="runtimeRefreshTime">尚未读取运行状态</span></div>
       <div id="runtimeSubviewTabs" class="runtime-subview-tabs" role="tablist" aria-label="Runtime subviews">
         <button type="button" role="tab" aria-selected="true" data-runtime-subview="verifiers">验证器 <span id="runtimeVerifierCount">0</span></button>
         <button type="button" role="tab" aria-selected="false" data-runtime-subview="processes">常驻进程 <span id="runtimeProcessCount">0</span></button>
@@ -521,7 +536,7 @@
       </div>
       <div class="list-toolbar enhanced-filter-toolbar">
         <label class="filter-field"><span>搜索运行项</span><input id="runtimeFilter" type="search" placeholder="名称 / ID / executable / cwd"></label>
-        <label class="filter-field compact-filter"><span>状态</span><select id="runtimeStateFilter"><option value="all">全部</option><option value="running">运行中</option><option value="not-running">非运行中</option><option value="disabled">已禁用</option></select></label>
+        <label class="filter-field compact-filter"><span>状态</span><select id="runtimeStateFilter"><option value="all">全部</option><option value="running">运行中</option><option value="not-running">非运行中</option><option value="exited">已退出</option><option value="other_gateway">其他 Gateway 管理</option><option value="owner_unavailable">管理者失联</option><option value="disabled">已禁用</option></select></label>
         <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="runtime">重置</button>
         <span class="visible-count">当前视图 <strong id="runtimeVisibleCount">0</strong> / <strong id="runtimeListTotalCount">0</strong></span>
       </div>

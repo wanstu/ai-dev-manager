@@ -26,12 +26,12 @@ Desktop 与 Web 共用同一套功能、页面结构、设计令牌及状态语�
 
 ## Memory 行为契约
 
-- 当前 Memory 是持久化 KV 存储，不是自动总结型/向量检索型记忆。
+- 当前 Memory 是具有结构化元数据、历史版本、有效性和整理能力的持久化存储；具体契约以 memory-agent-management.md 为准。
 - 全局记忆跨 Workspace / Environment 共享；Agent 可显式读取，写入和删除仅 Admin 可执行。
 - Environment-private Memory 只属于一个明确的 Environment；Agent 的读取/写入/删除请求必须带该 Environment ID。
 - Desktop 进入 Memory 页面时自动加载 Global Memory 供管理员查看；Environment-private Memory 必须显式加载。切换连接或 Environment 时清空对应的已显示值，防止串用。
-- Agent 通过 adm_memory 的 global_list/global_read 与 environment_list/environment_read 显式召回。Gateway instructions 要求在用户任务确实依赖历史决策时才读取，并禁止读取其他 Environment 的私有记忆。
-- 不自动注入全部记忆、不自动总结、不自动保存或删除。environment_context_bundle 只暴露 private-memory 数量，不暴露内容；普通 snapshot / inspect 也不包含记忆值。
+- Agent 通过 adm_memory 的 recall/search/read 等操作显式召回；允许在任务中维护本环境记忆，并通过已验证的 Worktree 来源关系交接持久项目知识。
+- 不自动注入全部记忆，ADM 服务不自行调用模型总结、保存或删除；Agent 可以按任务主动维护。environment_context_bundle 只暴露 private-memory 数量，不暴露内容；普通 snapshot / inspect 也不包含记忆值。
 - UI 支持搜索、长文本/多行内容、编辑（保持 key 不变）、删除确认；值为空字符串仍然合法。
 
 ## 分期
@@ -41,3 +41,9 @@ Desktop 与 Web 共用同一套功能、页面结构、设计令牌及状态语�
 4. 跨平台验收：Desktop/Web 共用页面，Windows/Linux、窄窗口、明暗/渐变主题、键盘、滚动和弹窗；Linux DEB 构建、安装、升级和卸载。
 
 不以 CSS 修改等同于全页面验收，不以单个截图代替功能回归。
+
+## 深度重构第一轮：概览、进程与任务
+
+- 概览将数据来源折叠为可展开详情，资源统计与运行概况分开，新增常用管理入口。运行概况通过显式刷新 ListProcesses('') 获取全连接范围记录，区分当前 Gateway 管理的运行进程、其他 Gateway 记录、失联记录及已退出历史；状态失败显示不可用而非 0。持有 Writer 的环境数从最新成功快照及其到期时间计算。新快照使旧运行概况失效，切换连接时拒绝旧请求返回。无后台轮询或启动任务。
+- 运行页增加明确的当前范围和读取时间，Writer 折叠标题提示活动锁/交接状态，凭证输入移入高级选项并默认掩码；保留全部锁操作。状态筛选支持已退出、其他 Gateway 与失联，资源数据分组显示。刷新增加代次检查以防较旧的同范围响应覆盖新结果。
+- 验收：JavaScript 语法检查；浏览器模拟适配器 1120×760、820×560、125% 缩放各 313 项通过。此次修改限于共用前端，未完成实际 Wails/Web 视觉验收，工作区、环境、MCP/Skill、连接、权限、诊断、设置、关于等后续逐页重构。
