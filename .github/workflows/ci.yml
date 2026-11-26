@@ -412,9 +412,12 @@ jobs:
           test "$(dpkg-deb -f "$deb" Architecture)" = amd64
           (cd dist && sha256sum -c "$(basename "$deb").sha256")
           sudo dpkg -i "$deb"
-          test -x /usr/bin/adm
-          test -x /usr/bin/adm-desktop
-          test "$(/usr/bin/adm version)" = "$build_version"
+          dpkg -L adm
+          test -x /usr/bin/adm || { echo 'CLI executable missing'; exit 1; }
+          test -x /usr/bin/adm-desktop || { echo 'Desktop executable missing'; exit 1; }
+          installed_version="$(/usr/bin/adm version)"
+          echo "Installed CLI version: $installed_version; expected $build_version"
+          test "$installed_version" = "$build_version"
           dpkg -s adm | grep -Fx 'Status: install ok installed'
           # v1.4.27 Desktop DEB was published under the old adm-* asset name.
           # Test a real upgrade on the disposable runner, not the user's host.

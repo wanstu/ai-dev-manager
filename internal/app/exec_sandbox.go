@@ -48,9 +48,6 @@ func (s *Service) PrepareSandboxExecution(
 	if err != nil {
 		return PreparedSandboxExecution{}, err
 	}
-	if !s.SandboxExecutionAvailable() {
-		return PreparedSandboxExecution{}, fmt.Errorf("strong sandbox execution is unavailable on %s", s.SandboxExecutionSupport().Platform)
-	}
 	rt, env, err := s.Runtime(environmentID)
 	if err != nil {
 		return PreparedSandboxExecution{}, err
@@ -62,6 +59,9 @@ func (s *Service) PrepareSandboxExecution(
 			s.recordExecDenial(environmentID, executable, surface, err.Error())
 		}
 		return PreparedSandboxExecution{}, err
+	}
+	if !s.SandboxExecutionAvailable() {
+		return PreparedSandboxExecution{}, fmt.Errorf("strong sandbox execution is unavailable on %s", s.SandboxExecutionSupport().Platform)
 	}
 	if s.SandboxExecutionSupport().Platform == "windows" {
 		if err := s.EnsureEnvironmentSandboxAccess(ctx, env); err != nil {

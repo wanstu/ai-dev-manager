@@ -98,6 +98,7 @@ type runtimeOwner struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
+	backgroundLoops           sync.WaitGroup
 	mu                        sync.Mutex
 	closed                    bool
 	sessions                  map[runtimeOwnerKey]ownedMCPSession
@@ -141,8 +142,9 @@ func newRuntimeOwner(service *app.Service) *runtimeOwner {
 		}
 		return session, nil
 	}
-	go owner.monitor()
-	go owner.restoreAutoIndexWatches()
+	owner.backgroundLoops.Add(2)
+	go func() { defer owner.backgroundLoops.Done(); owner.monitor() }()
+	go func() { defer owner.backgroundLoops.Done(); owner.restoreAutoIndexWatches() }()
 	return owner
 }
 
@@ -525,6 +527,7 @@ func (o *runtimeOwner) Close() error {
 	if ownerCancel != nil {
 		ownerCancel()
 	}
+	o.backgroundLoops.Wait()
 	if err := o.closeDevProcesses(processes); err != nil {
 		errs = append(errs, err)
 	}

@@ -11,13 +11,13 @@ import (
 //	-ldflags "-X ai-dev-manager-v2/internal/version.Version=vX.Y.Z"
 //
 // Ordinary source builds remain explicitly identified as development builds.
-var Version = "dev"
+var Version = ""
 
 // Current returns the product version embedded into this binary. When a binary
 // was installed as a versioned Go module without linker injection, the module
 // version is used as a fallback. Local source builds report "dev".
 func Current() string {
-	if value := strings.TrimSpace(Version); value != "" && value != "dev" {
+	if value := strings.TrimSpace(Version); value != "" {
 		return value
 	}
 	if info, ok := debug.ReadBuildInfo(); ok {
