@@ -30,19 +30,32 @@ type Client struct {
 	beforeCall func(context.Context) error
 }
 
+type ProcessResources struct {
+	SampledAt    time.Time `json:"sampled_at"`
+	CPUTimeMS    uint64    `json:"cpu_time_ms"`
+	CPUPercent   *float64  `json:"cpu_percent,omitempty"`
+	MemoryBytes  uint64    `json:"memory_bytes"`
+	ProcessCount int       `json:"process_count"`
+	Scope        string    `json:"scope"`
+	Complete     bool      `json:"complete"`
+}
 type ProcessStatus struct {
-	Executable     string     `json:"executable"`
-	Cwd            string     `json:"cwd,omitempty"`
-	GatewayPID     int        `json:"gateway_pid"`
-	ID             string     `json:"id"`
-	EnvironmentID  string     `json:"environment_id"`
-	State          string     `json:"state"`
-	PID            int        `json:"pid,omitempty"`
-	StartedAt      time.Time  `json:"started_at"`
-	ExitedAt       *time.Time `json:"exited_at,omitempty"`
-	ExitCode       *int       `json:"exit_code,omitempty"`
-	ListeningPorts []int      `json:"listening_ports,omitempty"`
-	ErrorKind      string     `json:"error_kind,omitempty"`
+	Resources      *ProcessResources `json:"resources,omitempty"`
+	ResourceError  string            `json:"resource_error,omitempty"`
+	UptimeSeconds  int64             `json:"uptime_seconds"`
+	ExitReason     string            `json:"exit_reason,omitempty"`
+	Executable     string            `json:"executable"`
+	Cwd            string            `json:"cwd,omitempty"`
+	GatewayPID     int               `json:"gateway_pid"`
+	ID             string            `json:"id"`
+	EnvironmentID  string            `json:"environment_id"`
+	State          string            `json:"state"`
+	PID            int               `json:"pid,omitempty"`
+	StartedAt      time.Time         `json:"started_at"`
+	ExitedAt       *time.Time        `json:"exited_at,omitempty"`
+	ExitCode       *int              `json:"exit_code,omitempty"`
+	ListeningPorts []int             `json:"listening_ports,omitempty"`
+	ErrorKind      string            `json:"error_kind,omitempty"`
 }
 
 type ProcessLogs struct {

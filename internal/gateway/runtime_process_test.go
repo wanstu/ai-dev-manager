@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"ai-dev-manager-v2/internal/app"
+	runtimepkg "ai-dev-manager-v2/internal/runtime"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -414,4 +416,142 @@ func TestAdminManagesLongProcessWithoutWriterLease(t *testing.T) {
 	if err != nil || env.Writer != nil {
 		t.Fatalf("process operation changed Writer: %+v %v", env.Writer, err)
 	}
+}
+
+func TestManagedProcessResourceSample(t *testing.T) {
+	if goruntime.GOOS != "windows" && goruntime.GOOS != "linux" {
+		t.Skip("resource sampling platform")
+	}
+	service, id, root := devProcessTestService(t)
+	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")
+	file := filepath.Join(root, "metrics.port")
+	t.Setenv("ADM_TEST_DEV_PROCESS_PORT_FILE", file)
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	started, err := owner.StartDevProcess(id, devProcessTestWriter, os.Args[0], []string{"-test.run=^TestDevProcessHelper$"}, "", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := waitDevProcessPortFile(t, file)
+	time.Sleep(1100 * time.Millisecond)
+	status, err := owner.DevProcessStatus(id, started.ID)
+	if err != nil || status.Resources == nil || status.Resources.ProcessCount < 1 || status.Resources.MemoryBytes == 0 || status.Resources.CPUPercent == nil || status.UptimeSeconds < 1 {
+		t.Fatalf("resource sample %+v / %+v / %v", status, status.Resources, err)
+	}
+	if _, err := owner.StopDevProcessAdmin(id, started.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitPortReleased(t, port)
+	status, err = owner.DevProcessStatus(id, started.ID)
+	if err != nil || status.Resources != nil || status.ExitReason != "stopped" {
+		t.Fatalf("stopped %+v %v", status, err)
+	}
+}
+
+func TestManagedProcessJobReclaimsChildOnParentExit(t *testing.T) {
+	if goruntime.GOOS != "windows" {
+		t.Skip("Windows job containment")
+	}
+	service, id, root := devProcessTestService(t)
+	portFile := filepath.Join(root, "child.port")
+	exitFile := filepath.Join(root, "parent-exit")
+	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")
+	t.Setenv("ADM_TEST_DEV_PROCESS_PORT_FILE", portFile)
+	t.Setenv("ADM_TEST_MANAGED_PARENT", "1")
+	t.Setenv("ADM_TEST_MANAGED_PARENT_EXIT", exitFile)
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	started, err := owner.StartDevProcess(id, devProcessTestWriter, os.Args[0], []string{"-test.run=^TestManagedProcessParentHelper$"}, "", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := waitDevProcessPortFile(t, portFile)
+	time.Sleep(1100 * time.Millisecond)
+	status, err := owner.DevProcessStatus(id, started.ID)
+	if err != nil || status.Resources == nil || status.Resources.ProcessCount < 2 {
+		t.Fatalf("missing job child %+v %v", status.Resources, err)
+	}
+	if err := os.WriteFile(exitFile, []byte("exit"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	waitPortReleased(t, port)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status, err = owner.DevProcessStatus(id, started.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status.State == devProcessExited {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("parent exit did not complete Process")
+}
+
+func TestManagedProcessParentHelper(t *testing.T) {
+	if os.Getenv("ADM_TEST_MANAGED_PARENT") != "1" {
+		return
+	}
+	child := exec.Command(os.Args[0], "-test.run=^TestDevProcessHelper$")
+	child.Stdout = os.Stdout
+	child.Stderr = os.Stderr
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// The child belongs to the same Windows Job. Exit without waiting only in
+	// this controlled test, to verify job close handles inherited pipes.
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(os.Getenv("ADM_TEST_MANAGED_PARENT_EXIT")); err == nil {
+			os.Exit(0)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	_ = child.Process.Kill()
+	_ = child.Wait()
+	t.Fatal("parent exit not requested")
+}
+
+func TestManagedProcessJobReclaimsAfterOwnerCrash(t *testing.T) {
+	if goruntime.GOOS != "windows" {
+		t.Skip("Windows job containment")
+	}
+	portFile := filepath.Join(t.TempDir(), "crash.port")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestManagedProcessCrashOwnerHelper$")
+	cmd.Env = append(os.Environ(), "ADM_TEST_CRASH_OWNER=1", "ADM_TEST_DEV_PROCESS_HELPER=1", "ADM_TEST_DEV_PROCESS_PORT_FILE="+portFile)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if cmd.ProcessState == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	}()
+	port := waitDevProcessPortFile(t, portFile)
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	_ = cmd.Wait()
+	waitPortReleased(t, port)
+}
+
+func TestManagedProcessCrashOwnerHelper(t *testing.T) {
+	if os.Getenv("ADM_TEST_CRASH_OWNER") != "1" {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	child := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestDevProcessHelper$")
+	managed, err := runtimepkg.StartManagedProcess(child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer managed.Close()
+	// The outer test terminates this disposable process without normal cleanup.
+	// A bounded timeout ensures even a failed test does not leave it running.
+	time.Sleep(12 * time.Second)
+	cancel()
+	_ = child.Wait()
 }

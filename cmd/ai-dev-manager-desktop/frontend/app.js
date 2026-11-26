@@ -2263,7 +2263,19 @@ function renderRuntime() {
       const ports = safeArray(process.listening_ports);
       const env = safeArray(currentSnapshot?.environments).find(e => e.environment_id === process.environment_id);
       const detail = [env?.name || process.environment_id, `PID ${process.pid || '—'}`, ports.length ? `端口 ${ports.join(', ')}` : '', process.cwd ? `目录 ${process.cwd}` : '', process.started_at ? `启动 ${writerDiagnosticTime(process.started_at)}` : '', process.exit_code != null ? `退出码 ${process.exit_code}` : '', process.error_kind].filter(Boolean).join(' · ');
-      container.append(runtimeItem(process.executable || process.id, process.id, process.state, detail, actions));
+      const item=runtimeItem(process.executable || process.id, process.id, process.state, detail, actions);
+      const metrics=document.createElement('div');metrics.className='process-resource-metrics';
+      const elapsed=Number(process.uptime_seconds);
+      const uptime=Number.isFinite(elapsed)?(elapsed>=3600?Math.floor(elapsed/3600)+' 小时 '+Math.floor(elapsed%3600/60)+' 分钟':elapsed>=60?Math.floor(elapsed/60)+' 分钟 '+elapsed%60+' 秒':elapsed+' 秒'):'—';
+      const resource=process.resources;
+      const facts=[['运行时间',uptime]];
+      if(process.state==='running'){
+        facts.push(['CPU',resource?.cpu_percent!=null?Number(resource.cpu_percent).toFixed(1)+'%':'待采样'],['内存',resource?.memory_bytes!=null?(Number(resource.memory_bytes)/1048576).toFixed(1)+' MiB':'—'],['进程数',resource?.process_count??'—']);
+        metrics.title=resource?'统计范围：'+(resource.scope==='job'?'Windows Job 进程树':'Linux 进程组')+'；CPU 100% 表示占用一个逻辑核心；RSS/工作集之和可能重复计算共享内存。'+(resource.complete===false?' 部分数据不可用。':''):(process.resource_error||'资源统计暂不可用');
+      }else if(process.exit_reason)facts.push(['退出原因',({stopped:'主动停止',completed:'正常退出',failed:'异常退出'})[process.exit_reason]||process.exit_reason]);
+      for(const [name,value] of facts){const cell=document.createElement('span');const label=document.createElement('small');label.textContent=name;const amount=document.createElement('strong');amount.textContent=String(value);cell.append(label,amount);metrics.append(cell);}
+      if(resource?.complete===false||process.resource_error){const note=document.createElement('small');note.textContent=resource?'部分资源统计不可用':'资源统计不可用';metrics.append(note);}
+      item.append(metrics);container.append(item);
     }
   });
   runtimeRunsByID = new Map(safeArray(runtimeLists.runs).map((run) => [run.id, run]));

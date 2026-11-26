@@ -28,18 +28,22 @@ const (
 )
 
 type devProcessStatus struct {
-	Executable     string          `json:"executable"`
-	Cwd            string          `json:"cwd,omitempty"`
-	GatewayPID     int             `json:"gateway_pid"`
-	ID             string          `json:"id"`
-	EnvironmentID  string          `json:"environment_id"`
-	State          devProcessState `json:"state"`
-	PID            int             `json:"pid,omitempty"`
-	StartedAt      time.Time       `json:"started_at"`
-	ExitedAt       *time.Time      `json:"exited_at,omitempty"`
-	ExitCode       *int            `json:"exit_code,omitempty"`
-	ListeningPorts []int           `json:"listening_ports,omitempty"`
-	ErrorKind      string          `json:"error_kind,omitempty"`
+	Resources      *runtimepkg.ProcessResources `json:"resources,omitempty"`
+	ResourceError  string                       `json:"resource_error,omitempty"`
+	UptimeSeconds  int64                        `json:"uptime_seconds"`
+	ExitReason     string                       `json:"exit_reason,omitempty"`
+	Executable     string                       `json:"executable"`
+	Cwd            string                       `json:"cwd,omitempty"`
+	GatewayPID     int                          `json:"gateway_pid"`
+	ID             string                       `json:"id"`
+	EnvironmentID  string                       `json:"environment_id"`
+	State          devProcessState              `json:"state"`
+	PID            int                          `json:"pid,omitempty"`
+	StartedAt      time.Time                    `json:"started_at"`
+	ExitedAt       *time.Time                   `json:"exited_at,omitempty"`
+	ExitCode       *int                         `json:"exit_code,omitempty"`
+	ListeningPorts []int                        `json:"listening_ports,omitempty"`
+	ErrorKind      string                       `json:"error_kind,omitempty"`
 }
 
 type devProcessLogs struct {
@@ -51,15 +55,22 @@ type devProcessLogs struct {
 }
 
 type ownedDevProcess struct {
-	id            string
-	environmentID string
-	executable    string
-	cwd           string
-	cmd           *exec.Cmd
-	cancel        context.CancelFunc
-	done          chan struct{}
-	stdout        *tailLogBuffer
-	stderr        *tailLogBuffer
+	managed           runtimepkg.ManagedProcess
+	sampleMu          sync.Mutex
+	sample            *runtimepkg.ProcessResources
+	sampleError       string
+	lastSampleAttempt time.Time
+	stopRequested     bool
+	exitReason        string
+	id                string
+	environmentID     string
+	executable        string
+	cwd               string
+	cmd               *exec.Cmd
+	cancel            context.CancelFunc
+	done              chan struct{}
+	stdout            *tailLogBuffer
+	stderr            *tailLogBuffer
 
 	mu        sync.Mutex
 	state     devProcessState
@@ -115,7 +126,8 @@ func (o *runtimeOwner) StartDevProcessAdmin(environmentID, executable string, ar
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	o.service.Log("info", "process.start", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "process"})
-	if err := cmd.Start(); err != nil {
+	managed, err := runtimepkg.StartManagedProcess(cmd)
+	if err != nil {
 		cancel()
 		return devProcessStatus{}, err
 	}
@@ -124,7 +136,8 @@ func (o *runtimeOwner) StartDevProcessAdmin(environmentID, executable string, ar
 		id:            processID,
 		environmentID: environmentID,
 		executable:    executable,
-		cwd:           cwd,
+		cwd:           cmd.Dir,
+		managed:       managed,
 		cmd:           cmd,
 		cancel:        cancel,
 		done:          make(chan struct{}),
@@ -136,6 +149,7 @@ func (o *runtimeOwner) StartDevProcessAdmin(environmentID, executable string, ar
 	if err := o.installDevProcess(process); err != nil {
 		cancel()
 		_ = cmd.Wait()
+		managed.Close()
 		return devProcessStatus{}, err
 	}
 	go o.waitDevProcess(process)
@@ -202,6 +216,11 @@ func (o *runtimeOwner) StopDevProcessAdmin(environmentID, processID string) (dev
 	if err != nil {
 		return devProcessStatus{}, err
 	}
+	process.mu.Lock()
+	if process.state == devProcessRunning {
+		process.stopRequested = true
+	}
+	process.mu.Unlock()
 	process.cancel()
 	if err := waitOwnedProcess(process, devProcessStopTimeout); err != nil {
 		return devProcessStatus{}, err
@@ -245,12 +264,19 @@ func (o *runtimeOwner) devProcessStatus(process *ownedDevProcess) devProcessStat
 		ExitedAt:      process.exitedAt,
 		ExitCode:      process.exitCode,
 		ErrorKind:     process.errorKind,
+		ExitReason:    process.exitReason,
 	}
 	if process.cmd != nil && process.cmd.Process != nil {
 		status.PID = process.cmd.Process.Pid
 	}
+	end := time.Now()
+	if status.ExitedAt != nil {
+		end = *status.ExitedAt
+	}
+	status.UptimeSeconds = max(0, int64(end.Sub(status.StartedAt).Seconds()))
 	process.mu.Unlock()
 	if status.State == devProcessRunning && status.PID > 0 {
+		status.Resources, status.ResourceError = process.sampleResources()
 		ports, err := runtimepkg.ListeningTCPPorts(status.PID)
 		if err == nil {
 			status.ListeningPorts = ports
@@ -261,6 +287,7 @@ func (o *runtimeOwner) devProcessStatus(process *ownedDevProcess) devProcessStat
 
 func (o *runtimeOwner) waitDevProcess(process *ownedDevProcess) {
 	err := process.cmd.Wait()
+	process.managed.Close()
 	now := time.Now().UTC()
 	exitCode := 0
 	kind := ""
@@ -270,11 +297,24 @@ func (o *runtimeOwner) waitDevProcess(process *ownedDevProcess) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			exitCode = -1
+			if process.cmd.ProcessState != nil {
+				exitCode = process.cmd.ProcessState.ExitCode()
+			}
 			kind = "process_wait_failed"
+			if errors.Is(err, exec.ErrWaitDelay) {
+				kind = "process_output_wait_timeout"
+			}
 		}
 	}
 	process.mu.Lock()
 	process.state = devProcessExited
+	if process.stopRequested {
+		process.exitReason = "stopped"
+	} else if err != nil {
+		process.exitReason = "failed"
+	} else {
+		process.exitReason = "completed"
+	}
 	process.exitedAt = &now
 	process.exitCode = &exitCode
 	if process.errorKind == "" {
@@ -386,3 +426,33 @@ func (b *tailLogBuffer) Snapshot() (string, bool) {
 }
 
 var _ io.Writer = (*tailLogBuffer)(nil)
+
+func (p *ownedDevProcess) sampleResources() (*runtimepkg.ProcessResources, string) {
+	p.sampleMu.Lock()
+	defer p.sampleMu.Unlock()
+	if time.Since(p.lastSampleAttempt) < time.Second {
+		return p.sample, p.sampleError
+	}
+	p.lastSampleAttempt = time.Now()
+	if p.managed == nil {
+		return nil, "resource observation unavailable"
+	}
+	next, err := p.managed.Sample()
+	if err != nil {
+		p.sample = nil
+		p.sampleError = err.Error()
+		return nil, p.sampleError
+	}
+	// CPU is percentage of one logical core, not the entire host. Windows
+	// job CPU is cumulative; Linux live-member totals can reset on child exit.
+	if p.sample != nil && p.sample.Complete && next.Complete && next.CPUTimeMS >= p.sample.CPUTimeMS && p.sample.Scope == next.Scope && next.CPUBasis == p.sample.CPUBasis {
+		elapsed := next.SampledAt.Sub(p.sample.SampledAt).Seconds()
+		if elapsed > 0 {
+			cpu := float64(next.CPUTimeMS-p.sample.CPUTimeMS) / 1000 / elapsed * 100
+			next.CPUPercent = &cpu
+		}
+	}
+	p.sample = &next
+	p.sampleError = ""
+	return p.sample, ""
+}
