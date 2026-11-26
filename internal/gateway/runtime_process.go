@@ -154,6 +154,9 @@ func (o *runtimeOwner) StartDevProcessAdmin(environmentID, executable string, ar
 		return devProcessStatus{}, err
 	}
 	record.PID = cmd.Process.Pid
+	if workload, ok := managed.(interface{ WorkloadPID() int }); ok {
+		record.PID = workload.WorkloadPID()
+	}
 	if err := history.Update(record); err != nil {
 		cancel()
 		_ = cmd.Wait()
@@ -322,6 +325,9 @@ func (o *runtimeOwner) devProcessStatus(process *ownedDevProcess) devProcessStat
 	}
 	if process.cmd != nil && process.cmd.Process != nil {
 		status.PID = process.cmd.Process.Pid
+		if workload, ok := process.managed.(interface{ WorkloadPID() int }); ok {
+			status.PID = workload.WorkloadPID()
+		}
 	}
 	end := time.Now()
 	if status.ExitedAt != nil {

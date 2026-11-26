@@ -16,6 +16,7 @@ import (
 type linuxManagedProcess struct {
 	pid   int
 	start uint64
+	stop  func()
 }
 type linuxProcessStat struct {
 	group                     int
@@ -54,16 +55,14 @@ func parseLinuxProcessStat(raw string) (linuxProcessStat, error) {
 	return linuxProcessStat{group: group, state: f[0], start: start, cpuTicks: user + kernel, rssPages: uint64(rss)}, nil
 }
 func startManagedProcess(cmd *exec.Cmd) (ManagedProcess, error) {
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	m := &linuxManagedProcess{pid: cmd.Process.Pid}
-	if stat, err := readLinuxProcessStat(m.pid); err == nil && stat.group == m.pid {
-		m.start = stat.start
-	}
-	return m, nil
+	return startSupervisedLinuxProcess(cmd)
 }
-func (m *linuxManagedProcess) Close() {}
+func (m *linuxManagedProcess) Close() {
+	if m.stop != nil {
+		m.stop()
+	}
+}
+func (m *linuxManagedProcess) WorkloadPID() int { return m.pid }
 func (m *linuxManagedProcess) Sample() (ProcessResources, error) {
 	root, err := readLinuxProcessStat(m.pid)
 	if err != nil || m.start == 0 || root.start != m.start || root.group != m.pid {
