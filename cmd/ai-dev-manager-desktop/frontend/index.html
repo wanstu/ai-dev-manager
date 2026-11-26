@@ -47,8 +47,8 @@
         <p>仅影响当前页面，不切换 Git 分支。</p>
       </div>
       <div class="management-context-controls">
-        <label class="context-select"><span>工作区</span><select id="managementWorkspace"><option value="">未选择 Workspace</option></select></label>
-        <label class="context-select"><span>开发环境</span><select id="managementEnvironment"><option value="">未选择 Environment</option></select></label>
+        <label class="context-select"><span>工作区</span><select id="managementWorkspace"><option value="">未选择工作区</option></select></label>
+        <label class="context-select"><span>开发环境</span><select id="managementEnvironment"><option value="">未选择开发环境</option></select></label>
         <div class="context-actions">
           <button id="createEnvironmentButton" type="button" class="secondary-button" data-dialog-open="environmentDialog">新建 Environment</button>
           <button id="editEnvironmentButton" type="button" class="secondary-button" disabled>编辑名称</button>
@@ -59,14 +59,15 @@
 
     <section class="gateway-panel panel management-page" data-management-page="gateway" hidden>
       <div class="panel-heading"><div><p class="eyebrow">ADM CONNECTION</p><h2 data-page-heading>连接与服务</h2><p>管理 ADM 服务连接、运行状态、访问控制和诊断。</p></div></div>
-      <div class="system-control-grid">
-        <section class="subpanel">
-          <div class="subpanel-heading"><h3>连接配置</h3><span>唯一的 active profile 选择仍在顶部 header</span></div>
+      <nav class="page-section-nav" aria-label="本页快速定位"><button type="button" class="secondary-button small-button" data-section-target="gatewayConnectionSection">连接</button><button type="button" class="secondary-button small-button" data-section-target="gatewayEndpointsSection">端点</button><button type="button" class="secondary-button small-button" data-section-target="gatewayDiagnosisSection">诊断</button><button type="button" class="secondary-button small-button" data-section-target="gatewayLifecycleSection">启停服务</button><button type="button" class="secondary-button small-button" data-section-target="gatewayRemoteSection">访问控制</button></nav>
+        <div class="system-control-grid">
+        <section id="gatewayConnectionSection" class="subpanel">
+          <div class="subpanel-heading"><h3>连接配置</h3><span>在顶部切换管理连接</span></div>
           <div class="connection-toolbar"><button id="addConnection" class="secondary-button" type="button">添加连接</button><button id="editConnection" class="secondary-button" type="button">编辑</button><button id="deleteConnection" class="secondary-button" type="button">删除</button></div>
           <label class="gateway-profile-field"><span>Base URL</span><input id="gatewayBaseURL" type="url" readonly spellcheck="false"></label>
         </section>
-        <section class="subpanel">
-          <div class="subpanel-heading"><h3>运行端点</h3><span>只显示当前连接返回的 endpoint facts</span></div>
+        <section id="gatewayEndpointsSection" class="subpanel">
+          <div class="subpanel-heading"><h3>运行端点</h3><span>当前连接提供的服务地址</span></div>
           <div class="gateway-info compact-gateway-info">
             <div class="gateway-meta endpoint-stack">
               <span><strong>Health</strong> <code id="gatewayHealthURL">http://127.0.0.1:43137/healthz</code></span>
@@ -77,7 +78,7 @@
             </div>
           </div>
         </section>
-        <section class="subpanel gateway-diagnostics-panel">
+        <section id="gatewayDiagnosisSection" class="subpanel gateway-diagnostics-panel">
           <div class="subpanel-heading"><div><h3>Gateway 诊断</h3><span>Admin MCP · 不包含 Key 原文</span></div><div class="gateway-actions"><span id="gatewayDiagnosticsReadiness" class="resource-badge" data-state="unconfigured">未读取</span><button id="gatewayDiagnosticsCopyButton" type="button" class="secondary-button small-button" disabled>复制诊断报告</button></div></div>
           <div class="gateway-info compact-gateway-info">
             <div class="gateway-meta endpoint-stack">
@@ -94,7 +95,7 @@
             </div>
           </div>
         </section>
-        <section class="subpanel">
+        <section id="gatewayLifecycleSection" class="subpanel">
           <div class="subpanel-heading"><h3>本地服务生命周期</h3><span>仅限本机连接</span></div>
           <div class="subpanel-body">
           <div class="gateway-actions">
@@ -105,7 +106,7 @@
           <p class="subpanel-note">启动服务仅适用于本机连接；强制停止可用于已识别的本机或远端 ADM Gateway，包括管理协议不兼容的旧版本。非 ADM 端点不会被停止。</p>
           </div>
         </section>
-        <section class="subpanel remote-access-panel">
+        <section id="gatewayRemoteSection" class="subpanel remote-access-panel">
           <div class="subpanel-heading"><h3>远程访问</h3><span>0.0.0.0 监听 · 独立白名单 · 双 Key</span></div>
           <div class="subpanel-body">
             <div class="remote-access-intro">
@@ -204,6 +205,7 @@
           <div><p class="eyebrow">CORE CAPABILITY</p><h2 data-page-heading>MCP 工具</h2><p>管理 AI 可使用的工具、连接配置、健康状态和环境授权。</p></div>
           <span id="mcpBadge" class="badge">0</span>
         </div>
+        <nav class="page-section-nav" aria-label="本页快速定位"><button type="button" class="secondary-button small-button" data-section-target="mcpFilter">工具筛选</button><button type="button" class="secondary-button small-button" data-section-target="mcpBulkToolbar">批量授权</button><button type="button" class="secondary-button small-button" data-section-target="mcpMaintenanceSection">默认与维护</button><button type="button" class="secondary-button small-button" data-section-target="mcpSecretsSection">密钥库</button></nav>
         <div class="summary-strip">
           <span>全局 <strong id="mcpTotalCount">0</strong></span>
           <span>默认启用 <strong id="mcpDefaultCount">0</strong></span>
@@ -234,7 +236,7 @@
 
         <div class="status-legend"><span><strong>配置</strong>：静态可激活性，不联网。</span><span><strong>全局探测</strong>：检查 MCP 连接，与 Environment 启用状态无关；刷新页面不会自动探测。</span></div>
         <div id="mcpList" class="resource-list filtered-resource-list empty">暂无 MCP 定义</div>
-        <section class="batch-settings-panel" aria-label="MCP 默认规则与维护">
+        <section id="mcpMaintenanceSection" class="batch-settings-panel" aria-label="MCP 默认规则与维护">
           <div class="batch-settings-heading"><strong>默认规则与维护</strong><span>以下默认设置只针对上方已勾选的 MCP，不会直接修改现有环境。</span></div>
           <div class="skill-bulk-actions">
             <span class="batch-action-label">新建环境默认启用</span>
@@ -245,7 +247,7 @@
             <button id="mcpClearMissingButton" type="button" class="secondary-button small-button" disabled>清理无效引用</button>
           </div>
         </section>
-        <section class="subpanel mcp-secrets-panel" aria-label="MCP 加密密钥库">
+        <section id="mcpSecretsSection" class="subpanel mcp-secrets-panel" aria-label="MCP 加密密钥库">
           <div class="subpanel-heading"><div><h3>加密密钥库</h3><span>MCP 使用密钥名称引用凭据，明文不会写进 MCP 配置文件。</span></div><button id="mcpSecretsRefresh" type="button" class="secondary-button small-button">查看密钥</button></div>
           <form id="mcpSecretForm" class="manager-form mcp-secret-form" autocomplete="off">
             <label><span>密钥名称</span><input id="mcpSecretName" type="text" placeholder="例如 github-token" required pattern="[A-Za-z][A-Za-z0-9_.-]{0,79}" maxlength="80"></label>
@@ -268,7 +270,7 @@
           <span>需处理 <strong id="skillIssueCount">0</strong></span>
         </div>
         <div class="editor-toolbar primary-page-actions"><button type="button" data-dialog-open="skillSourceDialog">添加技能来源</button></div>
-        <div id="skillSubviewTabs" class="runtime-subview-tabs" role="tablist" aria-label="Skill management views">
+        <p class="page-workflow-note">技能库用于启停与分配；技能来源用于扫描与刷新。两个视图保持独立。</p><div id="skillSubviewTabs" class="runtime-subview-tabs" role="tablist" aria-label="Skill management views">
           <button type="button" class="secondary-button small-button" data-skill-subview="skills" role="tab" aria-selected="true">Skills <span id="skillSubviewSkillCount">0</span></button>
           <button type="button" class="secondary-button small-button" data-skill-subview="sources" role="tab" aria-selected="false">Sources <span id="skillSubviewSourceCount">0</span></button>
         </div>
@@ -328,18 +330,20 @@
       <article class="panel management-page" data-management-page="workspaces" hidden>
         <div class="panel-heading"><div><h2 data-page-heading>工作区</h2><p>添加项目目录，发现项目并创建开发环境。</p></div><span id="workspaceBadge" class="badge">0</span></div>
         <div class="editor-toolbar primary-page-actions"><button type="button" data-dialog-open="workspaceDialog">添加工作区</button></div>
+        <div class="project-summary-actions" aria-label="工作区概况"><button type="button" data-quick-filter="workspaceEnvironmentFilter" data-filter-value="all"><span>全部工作区</span><strong id="workspaceSummaryTotal">—</strong></button><button type="button" data-quick-filter="workspaceEnvironmentFilter" data-filter-value="with"><span>已有环境</span><strong id="workspaceSummaryUsed">—</strong></button><button type="button" data-quick-filter="workspaceEnvironmentFilter" data-filter-value="empty"><span>尚无环境</span><strong id="workspaceSummaryEmpty">—</strong></button></div>
         <div class="list-toolbar project-list-toolbar">
           <label class="filter-field"><span>搜索</span><input id="workspaceFilter" type="search" placeholder="名称 / ID / 完整路径"></label>
           <label class="filter-field compact-filter"><span>Environment</span><select id="workspaceEnvironmentFilter"><option value="all">全部</option><option value="with">有 Environment</option><option value="empty">无 Environment</option></select></label>
-          <label class="filter-field compact-filter"><span>排序</span><select id="workspaceSort"><option value="name">名称 A–Z</option><option value="count-desc">Environment 最多</option><option value="count-asc">Environment 最少</option></select></label>
+          <label class="filter-field compact-filter"><span>排序</span><select id="workspaceSort"><option value="name">名称 A–Z</option><option value="count-desc">环境最多</option><option value="count-asc">环境最少</option></select></label>
           <button type="button" class="secondary-button small-button filter-reset-button" data-clear-filters="workspaces">重置</button>
           <span class="visible-count">显示 <strong id="workspaceVisibleCount">0</strong> / <strong id="workspaceListTotalCount">0</strong></span>
         </div>
-        <div id="workspaceList" class="list filtered-project-list empty">暂无 Workspace</div>
+        <div id="workspaceList" class="list filtered-project-list empty">暂无工作区</div>
       </article>
       <article class="panel management-page" data-management-page="environments" hidden>
         <div class="panel-heading"><div><h2 data-page-heading>开发环境</h2><p>管理项目的开发范围、临时环境、Worktree 和写入权限。</p></div><span id="environmentBadge" class="badge">0</span></div>
         <div class="editor-toolbar primary-page-actions environment-page-actions"><button type="button" data-dialog-open="environmentDialog">创建开发环境</button><button id="environmentWorkspaceRecommendationsButton" type="button" class="secondary-button">检查推荐归属</button><details class="maintenance-disclosure"><summary>高级维护</summary><div class="maintenance-menu"><button id="cleanupExpiredTemporaryEnvironmentsButton" type="button" class="danger-button">清理过期临时 Environment</button><button id="forceCleanupExpiredTemporaryEnvironmentsButton" type="button" class="danger-button">强制清理过期临时 Environment</button><button id="migrateManagedWorktreesButton" type="button" class="secondary-button">迁移持久化 Worktree</button><button id="cleanupStaleWorktreesButton" type="button" class="secondary-button">清理闲置 Worktree</button></div></details></div>
+        <div class="project-summary-actions" aria-label="环境概况"><button type="button" data-quick-filter="environmentRetentionFilter" data-filter-value="all"><span>全部环境</span><strong id="environmentSummaryTotal">—</strong></button><button type="button" data-quick-filter="environmentRetentionFilter" data-filter-value="temporary"><span>临时环境</span><strong id="environmentSummaryTemporary">—</strong></button><button type="button" data-quick-filter="environmentRetentionFilter" data-filter-value="expired"><span>已过期</span><strong id="environmentSummaryExpired">—</strong></button><button type="button" data-quick-filter="environmentWriterFilter" data-filter-value="active"><span>持有写入锁</span><strong id="environmentSummaryWriter">—</strong></button></div>
         <div class="list-toolbar project-list-toolbar">
           <label class="filter-field"><span>搜索</span><input id="environmentFilter" type="search" placeholder="名称 / ID / Root / Workspace"></label>
           <label class="filter-field compact-filter"><span>Workspace</span><select id="environmentWorkspaceFilter"><option value="">全部 Workspace</option></select></label>
@@ -351,11 +355,11 @@
           <span class="visible-count">显示 <strong id="environmentVisibleCount">0</strong> / <strong id="environmentListTotalCount">0</strong></span>
           <p id="environmentFilterHint" class="project-filter-hint" hidden></p>
         </div>
-        <div id="environmentList" class="list filtered-project-list empty">暂无 Environment</div>
+        <div id="environmentList" class="list filtered-project-list empty">暂无开发环境</div>
       </article>
       <article id="environmentDiagnosticsPage" class="panel management-page" data-management-page="diagnostics" hidden>
         <div class="panel-heading"><div><p class="eyebrow">ENVIRONMENT DIAGNOSTICS</p><h2 data-page-heading>环境诊断</h2><p>查看当前环境的已有诊断结果、权限和能力状态。刷新不会执行测试或扫描。</p></div><button id="diagnosticsRefreshButton" type="button" class="secondary-button small-button">刷新诊断</button></div>
-        <div id="diagnosticsPageHint" class="status-legend">请选择上方 Management Environment 后查看诊断。</div>
+        <div class="page-workflow-note">先选择开发环境，再阅读诊断摘要。检查、修复及探测操作保持显式执行。</div><div id="diagnosticsPageHint" class="status-legend">请选择上方 Management Environment 后查看诊断。</div>
         <div id="diagnosticsPageContent" class="detail-content diagnostics-content empty">请选择 Management Environment 后查看诊断。</div>
       </article>
     </div>
@@ -412,6 +416,7 @@
     <div class="route-page-stack">
             <article class="panel management-page" data-management-page="exec-allowlist" hidden>
         <div class="panel-heading"><div><p class="eyebrow">RUNTIME AUTHORITY</p><h2 data-page-heading>执行许可</h2><p>Allowlist 控制 Strict 模式可执行项；命令黑名单始终优先，即使开启 Full Authorization 也不能执行。</p></div><span id="execBadge" class="badge">0</span></div>
+        <nav class="page-section-nav" aria-label="本页快速定位"><button type="button" class="secondary-button small-button" data-section-target="execStrongSection">强权限</button><button type="button" class="secondary-button small-button" data-section-target="execModeSection">授权模式</button><button type="button" class="secondary-button small-button" data-section-target="execAllowedSection">允许列表</button><button type="button" class="secondary-button small-button" data-section-target="execUsageSection">执行统计</button><button type="button" class="secondary-button small-button" data-section-target="execBlacklistSection">黑名单</button><button type="button" class="secondary-button small-button" data-section-target="execDenialSection">授权记录</button></nav>
         <div class="summary-strip">
           <span>模式 <strong id="execAuthorizationModeLabel">Strict</strong></span>
           <span>已允许 <strong id="execAllowedCount">0</strong></span>
@@ -420,7 +425,7 @@
           <span>授权观察次数 <strong id="execBlockedCount">0</strong></span>
         </div>
         <div class="system-control-grid single-column-grid exec-authority-grid">
-          <section class="subpanel permission-control-panel">
+          <section id="execStrongSection" class="subpanel permission-control-panel">
             <div class="subpanel-heading">
               <div>
                 <div class="permission-heading-with-help">
@@ -444,7 +449,7 @@
               <p id="strongPermissionControlHint" class="subpanel-note">建议保持开启。关闭后开发操作更自由，但 Agent 对宿主机的执行能力也会更大。</p>
             </div>
           </section>
-          <section class="subpanel">
+          <section id="execModeSection" class="subpanel">
             <div class="subpanel-heading"><div><h3>执行授权模式</h3><span>默认 Strict</span></div></div>
             <div class="subpanel-body">
               <label class="gateway-profile-field"><span>执行模式</span><select id="execAuthorizationMode"><option value="strict">Strict · 仅显式 allowlist</option><option value="full">Full · 允许未列入 allowlist，但继续审计</option></select></label>
@@ -452,7 +457,7 @@
               <p class="subpanel-note">Strict 模式会阻止 PowerShell / pwsh / cmd / bash / sh 等通用命令解释器作为 allowlist 绕过入口。Full 模式显式放开未列入 allowlist 的 executable，但命令黑名单始终优先并保持拒绝。</p>
             </div>
           </section>
-          <section class="subpanel">
+          <section id="execAllowedSection" class="subpanel">
             <div class="subpanel-heading"><div><h3>允许执行的命令</h3><span>允许 executable 只是宿主机执行前提；Agent 不直接获得 exec / process / run，Verifier 还需单独允许 AI 运行。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execDialog">允许 executable</button></div>
             <div class="list-toolbar enhanced-filter-toolbar">
               <label class="filter-field"><span>Executable 搜索</span><input id="execListFilter" type="search" placeholder="筛选 Allowed / Blacklist 中的名称"></label>
@@ -460,7 +465,7 @@
             </div>
             <div id="execList" class="managed-list empty">暂无 allowed executable</div>
           </section>
-          <section class="subpanel">
+          <section id="execUsageSection" class="subpanel">
             <div class="subpanel-heading"><div><h3>执行统计</h3><span>统计 Agent/Runtime 实际启动的业务 executable；不记录 args、命令正文或输出，ADM 内部维护进程不混入。</span></div></div>
             <div id="execUsageSurfaceSummary" class="subpanel-note">暂无 surface 统计</div>
             <div class="list-toolbar exec-usage-toolbar">
@@ -471,11 +476,11 @@
             </div>
             <div id="execUsageList" class="managed-list empty">暂无执行记录</div>
           </section>
-          <section class="subpanel">
+          <section id="execBlacklistSection" class="subpanel">
             <div class="subpanel-heading"><div><h3>禁止执行的命令</h3><span>优先于 allowlist 与 Full Authorization；加入时会自动从 allowlist 移除。</span></div><button type="button" class="secondary-button small-button" data-dialog-open="execBlacklistDialog">加入黑名单</button></div>
             <div id="execBlacklistList" class="managed-list empty">暂无黑名单 executable</div>
           </section>
-          <section class="subpanel">
+          <section id="execDenialSection" class="subpanel">
             <div class="subpanel-heading"><div><h3>授权记录</h3><span>包含 Strict 拒绝和 Full 模式旁路；不记录 args、stdout/stderr 或命令内容。</span></div><button id="execClearAllBlockedButton" type="button" class="secondary-button small-button" disabled>清理全部</button></div>
             <div id="execBlockedList" class="managed-list empty">暂无执行授权观察</div>
           </section>
@@ -486,7 +491,7 @@
         <section class="memory-guidance" aria-label="记忆使用规则">
           <div class="memory-guidance-intro">
             <span class="memory-guidance-icon" aria-hidden="true">◎</span>
-            <div><strong>显式记忆模式</strong><p>ADM 将记忆作为持久化键值内容保存。Agent 需要通过 Memory 工具显式读取；不会自动注入所有会话，也不会自动总结或保存。</p></div>
+            <div><strong>显式记忆模式</strong><p>ADM 将记忆作为持久化键值内容保存。Agent 需要通过 Memory 工具显式读取；不会自动注入所有会话，也服务端不会自行总结；Agent 可主动维护记忆。</p></div>
             <span class="memory-mode-label">作用域隔离</span>
           </div>
           <div class="memory-guidance-grid">
@@ -550,8 +555,9 @@
 
     <section class="panel settings-page management-page" data-management-page="settings" hidden>
       <div class="panel-heading"><div><p class="eyebrow">DESKTOP SETTINGS</p><h2 data-page-heading>设置</h2><p>配置工作树、主机环境、日志、安全沙盒及外观。</p></div></div>
-      <div class="settings-content system-control-grid single-column-grid">
-        <section class="subpanel">
+      <nav class="page-section-nav" aria-label="本页快速定位"><button type="button" class="secondary-button small-button" data-section-target="settingsWorktreeSection">Worktree</button><button type="button" class="secondary-button small-button" data-section-target="settingsConfigSection">配置路径</button><button type="button" class="secondary-button small-button" data-section-target="settingsHostSection">主机环境</button><button type="button" class="secondary-button small-button" data-section-target="settingsLoggingSection">日志</button><button type="button" class="secondary-button small-button" data-section-target="sandboxHostPreparationPanel">强沙盒</button><button type="button" class="secondary-button small-button" data-section-target="settingsAppearanceSection">外观与启动</button></nav>
+        <div class="settings-content system-control-grid single-column-grid">
+        <section id="settingsWorktreeSection" class="subpanel">
           <div class="subpanel-heading"><h3>Git Worktree</h3><span>Core / Gateway shared configuration</span></div>
           <div class="subpanel-body">
             <form id="worktreeSettingsForm" class="manager-form">
@@ -562,7 +568,7 @@
             <p id="worktreeSettingsHint" class="subpanel-note">配置目录会自动登记为受保护的 system Workspace；存在 managed worktree 时不会移动根目录。</p>
           </div>
         </section>
-        <section class="subpanel">
+        <section id="settingsConfigSection" class="subpanel">
           <div class="subpanel-heading"><h3>ADM 配置</h3><span>用户级配置 + 应用目录覆盖</span></div>
           <div class="subpanel-body">
             <div class="config-source-grid">
@@ -573,7 +579,7 @@
             <p class="subpanel-note"><strong>优先级：</strong>显式进程环境变量 &gt; 应用目录 <code>.env</code> &gt; <code>~/.config/adm/.env</code>。Remote access 页面设置的服务端 Admin/Agent Key 只保存哈希，不会写入这些 .env 文件。</p>
           </div>
         </section>
-        <section class="subpanel">
+        <section id="settingsHostSection" class="subpanel">
           <div class="subpanel-heading"><h3>主机环境</h3><span>不显示环境变量值</span></div>
           <div class="subpanel-body">
             <div id="hostEnvironmentSummary" class="subpanel-note">尚未加载环境变量快照状态。</div>
@@ -581,7 +587,7 @@
             <p class="subpanel-note">Windows 会重新读取机器/用户环境变量源；Linux/macOS 当前刷新运行进程可见的环境快照。刷新会丢弃现有 MCP session；后续 MCP 激活、Run、Process、Verifier 使用新快照，已经运行的 OS 进程不会被修改。</p>
           </div>
         </section>
-        <section class="subpanel">
+        <section id="settingsLoggingSection" class="subpanel">
           <div class="subpanel-heading"><h3>运行日志</h3><span>持久化 · 分级 · 自动轮转</span></div>
           <div class="subpanel-body">
             <div id="loggingStatusSummary" class="detail-content"><div class="detail-row"><strong>Status</strong><span>连接后读取日志策略。</span></div></div>
@@ -599,7 +605,7 @@
             <p class="subpanel-note">首次启用只需要一次 Windows 管理员确认。完成后，强沙盒在本次使用和电脑重启后都会自动保持可用；不会因此给 Agent 开放管理员权限。</p>
           </div>
         </section>
-        <section class="subpanel">
+        <section id="settingsAppearanceSection" class="subpanel">
           <div class="subpanel-heading"><h3>外观与启动</h3><span>主题与 Desktop 外壳行为</span></div>
           <div class="subpanel-body desktop-preferences-grid">
             <div class="desktop-theme-controls">
@@ -666,8 +672,9 @@
     </section>
     <section class="panel management-page" data-management-page="about" hidden>
       <div class="panel-heading"><div><p class="eyebrow">ABOUT</p><h2 data-page-heading>关于 AI Dev Manager</h2><p>查看版本、运行平台、更新和产品信息。</p></div></div>
-      <div class="system-control-grid single-column-grid">
-        <section class="subpanel">
+      <nav class="page-section-nav" aria-label="本页快速定位"><button type="button" class="secondary-button small-button" data-section-target="aboutAppSection">版本</button><button type="button" class="secondary-button small-button" data-section-target="desktopUpdatePanel">更新</button><button type="button" class="secondary-button small-button" data-section-target="aboutBoundarySection">产品边界</button></nav>
+        <div class="system-control-grid single-column-grid">
+        <section id="aboutAppSection" class="subpanel">
           <div class="subpanel-heading"><h3>应用信息</h3><span>Desktop binary</span></div>
           <div id="aboutInfo" class="detail-content">
             <div class="detail-row"><strong>Product</strong><span>AI Dev Manager</span></div>
@@ -694,7 +701,7 @@
             <p class="subpanel-note">安装版支持自动安装并重启；Portable 版仅下载校验，需要自行运行安装包。所有更新来自 ADM 的 GitHub Release，下载后必须通过 SHA256 校验。</p>
           </div>
         </section>
-        <section class="subpanel">
+        <section id="aboutBoundarySection" class="subpanel">
           <div class="subpanel-heading"><h3>产品边界</h3><span>Control plane</span></div>
           <p class="subpanel-note">ADM 管理 Workspace、Environment、执行权限、MCP、Skill、Memory、Git/worktree、Verifier 与 Runtime 生命周期；不替代 Planner / Executor / Reviewer。</p>
         </section>
@@ -751,14 +758,14 @@
               <button id="capabilityWorkspaceSelectAllButton" type="button" class="secondary-button small-button">全选 Workspace</button>
               <button id="capabilityWorkspaceClearButton" type="button" class="secondary-button small-button">清空 Workspace</button>
             </div>
-            <div id="capabilityAssignmentWorkspaceList" class="selection-list bulk-environment-list empty">暂无 Workspace</div>
+            <div id="capabilityAssignmentWorkspaceList" class="selection-list bulk-environment-list empty">暂无工作区</div>
           </section>
           <section class="bulk-target-group"><div class="bulk-target-header"><strong>Environment · 环境单独启停</strong><span>只修改显式选择；Workspace 继承仍然有效</span></div>
             <div class="skill-bulk-actions">
               <button id="capabilityAssignmentSelectAllButton" type="button" class="secondary-button small-button">全选 Environment</button>
               <button id="capabilityAssignmentClearButton" type="button" class="secondary-button small-button">清空 Environment</button>
             </div>
-            <div id="capabilityAssignmentEnvironmentList" class="selection-list bulk-environment-list empty">暂无 Environment</div>
+            <div id="capabilityAssignmentEnvironmentList" class="selection-list bulk-environment-list empty">暂无开发环境</div>
           </section>
           <div class="form-actions bulk-assignment-actions">
             <button id="capabilityAssignmentEnableButton" type="button" disabled>在所选目标开启</button>

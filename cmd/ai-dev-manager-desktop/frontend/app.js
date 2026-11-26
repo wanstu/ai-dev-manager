@@ -2474,6 +2474,10 @@ function renderEnvironmentWorkspaceFilter(workspaces) {
   elements.environmentFilterHint.textContent = exists ? '' : `Workspace 筛选 ${current} 已失效。请选择“全部 Workspace”或其他 Workspace 重置筛选。`;
 }
 function renderWorkspaces(workspaces) {
+  const used=new Set(safeArray(currentSnapshot?.environments).map(e=>e.workspace_id));
+  setMetric(document.getElementById('workspaceSummaryTotal'),workspaces.length);
+  setMetric(document.getElementById('workspaceSummaryUsed'),workspaces.filter(w=>used.has(w.workspace_id)).length);
+  setMetric(document.getElementById('workspaceSummaryEmpty'),workspaces.filter(w=>!used.has(w.workspace_id)).length);
   const model = window.ADMProjectPages?.workspaceListModel(workspaces, safeArray(currentSnapshot?.environments), {query: elements.workspaceFilter.value, occupancy: filterValue('workspaceEnvironmentFilter'), sort: filterValue('workspaceSort', 'name')}) || {items: workspaces, total: workspaces.length, visible: workspaces.length, environmentCounts: {}};
   elements.workspaceBadge.textContent = String(model.total); renderWorkspaceOptions(workspaces); renderEnvironmentWorkspaceFilter(workspaces); setMetric(elements.workspaceVisibleCount, model.visible); setMetric(elements.workspaceListTotalCount, model.total);
   if (!model.total) return emptyMessage(elements.workspaceList, '暂无已登记 Workspace。添加现有目录即可；Git 不是前置条件。');
@@ -2483,7 +2487,7 @@ function renderWorkspaces(workspaces) {
     const item = document.createElement('article'); item.className = 'list-item managed-item'; const content = document.createElement('div'); content.className = 'item-content';
     const title = document.createElement('strong'); title.textContent = workspace.name || workspace.workspace_id; const id = document.createElement('code'); id.textContent = workspace.workspace_id || ''; const path = document.createElement('span'); path.className = 'project-path'; path.textContent = workspace.path || '';
     const system = workspace.system_kind ? ` · System ${workspace.system_kind}` : ''; const meta = document.createElement('small'); meta.textContent = `Environments ${safeNumber(model.environmentCounts[workspace.workspace_id])} · MCP 继承 ${safeArray(workspace.enabled_mcp_ids).length} · Skill 继承 ${safeArray(workspace.enabled_skill_ids).length}${system}`; content.append(title, id, path, meta);
-    const actions = document.createElement('div'); actions.className = 'item-actions'; actions.append(createActionButton('Discover projects', 'discover-workspace', workspace.workspace_id), createActionButton('查看 Environments', 'filter-environments-by-workspace', workspace.workspace_id), createActionButton('改名', 'rename-workspace', workspace.workspace_id)); if (!workspace.system_kind) actions.append(createActionButton('删除记录', 'remove-workspace', workspace.workspace_id, 'danger')); item.append(content, actions); elements.workspaceList.append(item);
+    const actions = document.createElement('div'); actions.className = 'item-actions'; actions.append(createActionButton('发现项目', 'discover-workspace', workspace.workspace_id), createActionButton('查看开发环境', 'filter-environments-by-workspace', workspace.workspace_id), createActionButton('改名', 'rename-workspace', workspace.workspace_id)); if (!workspace.system_kind) actions.append(createActionButton('删除记录', 'remove-workspace', workspace.workspace_id, 'danger')); item.append(content, actions); elements.workspaceList.append(item);
   }
 }
 function environmentRetentionView(environment) {
@@ -2671,6 +2675,10 @@ async function applyEnvironmentWorkspaceRecommendations() {
 }
 
 function renderEnvironments(environments) {
+  setMetric(document.getElementById('environmentSummaryTotal'),environments.length);
+  setMetric(document.getElementById('environmentSummaryTemporary'),environments.filter(e=>e.retention?.persistence==='temporary').length);
+  setMetric(document.getElementById('environmentSummaryExpired'),environments.filter(e=>e.retention?.persistence==='temporary'&&Date.parse(e.retention?.expires_at)<=Date.now()).length);
+  setMetric(document.getElementById('environmentSummaryWriter'),environments.filter(e=>e.writer&&Date.parse(e.writer.expires_at)>Date.now()).length);
   const workspaces = safeArray(currentSnapshot?.workspaces); const workspaceID = elements.environmentWorkspaceFilter.value;
   const kindInfoLoaded = Array.isArray(currentSnapshot?.managed_worktree_environment_ids);
   const kindControl = document.getElementById('environmentKindFilter');
@@ -2690,10 +2698,10 @@ function renderEnvironments(environments) {
     const meta = document.createElement('small'); meta.textContent = `Workspace ${workspaceName}${environment.workspace_id ? ` (${environment.workspace_id})` : ''} · ${environment.state || 'unknown'} · MCP ${safeArray(environment.enabled_mcp_ids).length} · Skills ${safeArray(environment.enabled_skill_ids).length} · Private Memory ${safeNumber(environment.private_memory_count)} · ${environment.writer ? `Writer active${environment.writer.expires_at ? ` until ${new Date(environment.writer.expires_at).toLocaleTimeString()}` : ''}` : 'No writer'}`; content.append(titleLine, id, root, meta); renderTemporaryLifecycleNote(content, environment);
     const actions = document.createElement('div'); actions.className = 'item-actions'; actions.append(createActionButton('详情', 'inspect-environment', environment.environment_id), createActionButton('诊断', 'diagnose-environment', environment.environment_id));
     if (retentionView.persistence === 'temporary') {
-      actions.append(createActionButton('刷新生命周期', 'refresh-temporary-environment', environment.environment_id), createActionButton('Promote durable', 'promote-temporary-environment', environment.environment_id), createActionButton('清理预览', 'preview-temporary-environment-cleanup', environment.environment_id));
+      actions.append(createActionButton('刷新生命周期', 'refresh-temporary-environment', environment.environment_id), createActionButton('转为持久环境', 'promote-temporary-environment', environment.environment_id), createActionButton('清理预览', 'preview-temporary-environment-cleanup', environment.environment_id));
       const lifecycle = temporaryLifecycleStatus(environment); if (temporaryCleanupPreviewIDs.has(environment.environment_id) && lifecycle?.cleanup_eligible) actions.append(createActionButton('确认清理', 'execute-temporary-environment-cleanup', environment.environment_id, 'danger'));
     }
-    actions.append(createActionButton('调整 Workspace', 'workspace-environment', environment.environment_id), createActionButton('改名', 'rename-environment', environment.environment_id), createActionButton('删除记录', 'remove-environment', environment.environment_id, 'danger')); item.append(content, actions); elements.environmentList.append(item);
+    actions.append(createActionButton('调整归属', 'workspace-environment', environment.environment_id), createActionButton('改名', 'rename-environment', environment.environment_id), createActionButton('删除记录', 'remove-environment', environment.environment_id, 'danger')); item.append(content, actions); elements.environmentList.append(item);
   }
 }
 function updateEnvironmentContextMarkers() {
@@ -3536,6 +3544,7 @@ function renderSnapshotBase(snapshot) {
   if (selectedEnvironmentID && !environments.some((env) => env.environment_id === selectedEnvironmentID)) closeEnvironmentDetail();
 }
 function renderManagementUnavailable(message) {
+  for(const id of ['workspaceSummaryTotal','workspaceSummaryUsed','workspaceSummaryEmpty','environmentSummaryTotal','environmentSummaryTemporary','environmentSummaryExpired','environmentSummaryWriter'])setMetric(document.getElementById(id),'—');
   for (const element of [elements.workspaceBadge, elements.workspaceVisibleCount, elements.workspaceListTotalCount, elements.environmentBadge, elements.environmentVisibleCount, elements.environmentListTotalCount, elements.execBadge, elements.mcpBadge, elements.skillBadge, elements.mcpTotalCount, elements.mcpDefaultCount, elements.mcpEnvironmentCount, elements.mcpIssueCount, elements.mcpVisibleCount, elements.mcpListTotalCount, elements.skillSourceCount, elements.skillTotalCount, elements.skillEnvironmentCount, elements.skillIssueCount, elements.skillVisibleCount, elements.skillListTotalCount]) setMetric(element, '—');
   renderWorkspaceOptions([]); renderEnvironmentWorkspaceFilter([]);
   elements.managementWorkspace.replaceChildren(new Option('管理数据未加载', '')); elements.managementWorkspace.value = ''; elements.managementWorkspace.disabled = true; elements.managementEnvironment.replaceChildren(new Option('管理数据未加载', '')); elements.managementEnvironment.value = ''; elements.managementEnvironment.disabled = true; elements.editEnvironmentButton.disabled = true;
@@ -5267,3 +5276,27 @@ elements.gatewayStartButton.addEventListener('click', () => runGatewayAction('�
 elements.gatewayStopButton.addEventListener('click', () => runGatewayAction('强制停止 ADM', (input) => desktopAdapter().StopLocalADM(input)));
 elements.refreshButton.addEventListener('click', () => refreshConnectedADM(false).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));
 window.addEventListener('DOMContentLoaded', () => { window.runtime?.EventsOn?.('desktop:preferences-changed', () => loadDesktopPreferences(false)); initializeManagementNavigation(); initializeConnectionProfiles(); syncMCPTransportForm(); clearManagementData(); loadDesktopPreferences(false); loadSandboxHostPreparation(false); loadAboutInfo(); });
+
+document.addEventListener('click',event=>{
+  const quick=event.target.closest('[data-quick-filter]');
+  if(quick){
+    if(!currentSnapshot)return;
+    const filter=document.getElementById(quick.dataset.quickFilter);
+    if(!filter||filter.disabled)return;
+    // Summary buttons represent the entire connection, not a combination
+    // with a previously selected incompatible filter.
+    const page=quick.closest('[data-management-page]');
+    const clear=page?.querySelector('[data-clear-filters]');
+    if(clear)clear.click();
+    filter.value=quick.dataset.filterValue;
+    filter.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  const jump=event.target.closest('[data-section-target]');
+  if(jump){
+    const target=document.getElementById(jump.dataset.sectionTarget);
+    if(!target||!jump.closest('[data-management-page]')?.contains(target)||target.hidden)return;
+    target.scrollIntoView({block:'start',behavior:'auto'});
+    if(target.matches('input,select,button'))target.focus({preventScroll:true});
+    else{target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
+  }
+});
