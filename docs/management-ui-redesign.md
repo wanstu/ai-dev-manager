@@ -24,6 +24,16 @@ Desktop 与 Web 共用同一套功能、页面结构、设计令牌及状态语�
 
 附属界面：环境详情（目录、索引、代码智能、MCP/Skill 选择、生命周期）、MCP 编辑与导入、Skill 来源、批量分配、工作区发现、目录选择、归属调整与推荐、Worktree 清理、执行许可/黑名单、全局/环境记忆编辑、连接编辑、重命名、确认弹窗及 Web 登录。所有继续保留 ID、作用域及危险操作确认。
 
+## Memory 行为契约
+
+- 当前 Memory 是持久化 KV 存储，不是自动总结型/向量检索型记忆。
+- 全局记忆跨 Workspace / Environment 共享；Agent 可显式读取，写入和删除仅 Admin 可执行。
+- Environment-private Memory 只属于一个明确的 Environment；Agent 的读取/写入/删除请求必须带该 Environment ID。
+- Desktop 进入 Memory 页面时自动加载 Global Memory 供管理员查看；Environment-private Memory 必须显式加载。切换连接或 Environment 时清空对应的已显示值，防止串用。
+- Agent 通过 adm_memory 的 global_list/global_read 与 environment_list/environment_read 显式召回。Gateway instructions 要求在用户任务确实依赖历史决策时才读取，并禁止读取其他 Environment 的私有记忆。
+- 不自动注入全部记忆、不自动总结、不自动保存或删除。environment_context_bundle 只暴露 private-memory 数量，不暴露内容；普通 snapshot / inspect 也不包含记忆值。
+- UI 支持搜索、长文本/多行内容、编辑（保持 key 不变）、删除确认；值为空字符串仍然合法。
+
 ## 分期
 1. 公共视觉与导航：统一主题令牌、字体、表单、按钮、空状态、状态标签、响应式布局、紧凑的管理范围、统一弹窗；不改现有权限。
 2. 进程页：独立进程管理，跨环境列表、日志、无锁管理员停止；新增回归测试。

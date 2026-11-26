@@ -69,6 +69,7 @@ const fakeBridge = String.raw`<script>
     allowed_executables: [], mcps: [], skills: [], global_memory_count: 0,
   };
   const skillSourcesA = [{skill_source_id:'source-a', root:'C:\\fixtures\\skills', support_roots:[], last_refresh_status:'ok'}];
+  const globalMemory = [{key:'sentinel', value:'visible-after-explicit-load'}];
   const environmentMemory = {'env-a':[{key:'private-sentinel', value:'env-a-private-visible'}], 'env-b':[{key:'private-sentinel', value:'env-b-private-visible'}]};
   const state = {failSkillSources:false, failVerifiers:false, failProcesses:false, failWorkspaceAdd:true, failEnvironmentCreate:true, hideProcess:false, delayProcessLogs:false, delayEnvironmentAInspection:false, delayMCPProbe:false, delayDiscovery:false, failDiscovery:false, delayTreeDigest:false, failBulkSkillAssignment:false, workspaceRecommendationApplied:false, verifierAgentAllowed:false, sandboxBrokerReady:false, strongPermissionEnabled:true, autoConfirmInApp:true};
   const record = (name, args) => calls.push({name, args});
@@ -159,9 +160,12 @@ const fakeBridge = String.raw`<script>
     async GetProcessLogs(id,processID){ record('GetProcessLogs',[id,processID]); if(state.delayProcessLogs && id==='env-a') await new Promise(resolve=>setTimeout(resolve,180)); return {stdout:id==='env-b'?'PROCESS_B_LOG':'PROCESS_A_LOG', stderr:'', stdout_truncated:id==='env-a', stderr_truncated:false}; },
     async ListRuns(id){ record('ListRuns',[id]); return [{id:id==='env-b'?'run-b':'run-a', state:'succeeded', executable:'go', args:['test'], stdout:id==='env-b'?'RUN_B_OUTPUT':'RUN_A_OUTPUT', stderr:'', exit_code:0, stdout_truncated:false, stderr_truncated:false}]; },
     async GetRuntimeWriterDiagnostics(id){ record('GetRuntimeWriterDiagnostics',[id]); return {environment_id:id, attribution:id==='env-a'?'lease_observation':'none', owner_fingerprint:id==='env-a'?'writer-a':'', last_seen_at:'2026-09-12T04:00:00Z', expires_at:'2026-09-12T04:05:00Z', heartbeat_interval_seconds:30, heartbeat_sources:[], gateway_owner:{pid:0}}; },
-    async ListGlobalMemory(){ record('ListGlobalMemory',[]); return [{key:'sentinel', value:'visible-after-explicit-load'}]; },
+    async ListGlobalMemory(){ record('ListGlobalMemory',[]); return structuredClone(globalMemory); },
+    async WriteGlobalMemory(key,value){ record('WriteGlobalMemory',[key,value]); const existing=globalMemory.find(entry=>entry.key===key); if(existing) existing.value=value; else globalMemory.push({key,value}); return null; },
+    async DeleteGlobalMemory(key){ record('DeleteGlobalMemory',[key]); const index=globalMemory.findIndex(entry=>entry.key===key); if(index>=0) globalMemory.splice(index,1); return null; },
     async ListEnvironmentMemory(id){ record('ListEnvironmentMemory',[id]); return structuredClone(environmentMemory[id] || []); },
     async WriteEnvironmentMemory(id,key,value){ record('WriteEnvironmentMemory',[id,key,value]); environmentMemory[id] = (environmentMemory[id] || []).filter(entry=>entry.key!==key); environmentMemory[id].push({key,value}); return null; },
+    async DeleteEnvironmentMemory(id,key){ record('DeleteEnvironmentMemory',[id,key]); environmentMemory[id]=(environmentMemory[id]||[]).filter(entry=>entry.key!==key); return null; },
     async GetDesktopPreferences(){ record('GetDesktopPreferences',[]); return {launch_at_login_supported:false, launch_at_login:false}; },
     async GetSandboxHostPreparationStatus(){
       record('GetSandboxHostPreparationStatus',[]);
@@ -536,6 +540,33 @@ window.addEventListener('DOMContentLoaded', async () => {
     await clickRoute('memory');
     await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='ListGlobalMemory').length>memoryCallsBefore, 'Memory route lazy-loads Global Memory for the management view');
     check(document.getElementById('globalMemoryList').textContent.includes('visible-after-explicit-load'), 'Memory route lazy-load renders value');
+    check(document.getElementById('globalMemoryCount').textContent==='1 条', 'global Memory count reflects loaded entries');
+    check(!window.__fakeADM.calls.some(c=>['WriteGlobalMemory','WriteEnvironmentMemory','DeleteGlobalMemory','DeleteEnvironmentMemory'].includes(c.name)), 'opening Memory view reads data only and never auto-writes or deletes');
+    check(document.body.textContent.includes('不会自动注入所有会话') && document.body.textContent.includes('不会自动总结或保存'), 'Memory page clearly explains explicit recall and no auto-save');
+    const globalMemoryFilter=document.getElementById('globalMemoryFilter');
+    globalMemoryFilter.value='sentinel'; globalMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
+    check(document.getElementById('globalMemoryList').textContent.includes('sentinel') && document.getElementById('globalMemoryCount').textContent==='1 / 1 条', 'global Memory filter searches keys and values locally');
+    globalMemoryFilter.value='missing-entry'; globalMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
+    check(document.getElementById('globalMemoryList').textContent.includes('没有匹配的记忆条目'), 'global Memory filter shows a scoped empty result');
+    globalMemoryFilter.value=''; globalMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
+    document.getElementById('addGlobalMemoryButton').click();
+    await waitFor(() => document.getElementById('globalMemoryDialog').open, 'new global Memory dialog opens');
+    check(!document.getElementById('globalMemoryKey').readOnly, 'new global Memory key is editable');
+    document.getElementById('globalMemoryKey').value='project.notes';
+    document.getElementById('globalMemoryValue').value='line one\nline two';
+    document.getElementById('globalMemorySubmit').click();
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='WriteGlobalMemory'&&c.args[0]==='project.notes'), 'global Memory write is persisted through adapter');
+    await waitFor(() => document.getElementById('globalMemoryList').textContent.includes('line two'), 'global Memory supports multiline values');
+    document.querySelector('#globalMemoryList button[data-action="edit-global-memory"][data-id="project.notes"]').click();
+    await waitFor(() => document.getElementById('globalMemoryDialog').open, 'existing global Memory edit dialog opens');
+    check(document.getElementById('globalMemoryKey').readOnly && document.getElementById('globalMemoryKey').value==='project.notes', 'editing a Memory entry preserves its immutable key');
+    document.getElementById('globalMemoryValue').value='revised\nvalue';
+    document.getElementById('globalMemorySubmit').click();
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='WriteGlobalMemory'&&c.args[0]==='project.notes'&&c.args[1]==='revised\nvalue'), 'editing updates the existing global Memory key');
+    await waitFor(() => document.getElementById('globalMemoryList').textContent.includes('revised') && !document.getElementById('globalMemoryList').textContent.includes('line one'), 'updated global Memory value is rendered');
+    document.querySelector('#globalMemoryList button[data-action="delete-global-memory"][data-id="project.notes"]').click();
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='DeleteGlobalMemory'&&c.args[0]==='project.notes'), 'global Memory deletion requires and records explicit confirmation');
+    await waitFor(() => !document.getElementById('globalMemoryList').textContent.includes('project.notes'), 'deleted global Memory entry disappears');
 
     await clickRoute('workspaces');
     check(document.getElementById('workspaceVisibleCount').textContent==='2' && document.getElementById('workspaceListTotalCount').textContent==='2', 'Workspace visible/total counts use loaded snapshot');
@@ -734,7 +765,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('loadEnvironmentMemory').click();
     await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='ListEnvironmentMemory' && c.args[0]==='env-a').length>detailMemoryBefore, 'explicit Environment-private Memory read');
     check(document.getElementById('environmentMemoryList').textContent.includes('env-a-private-visible'), 'Environment-private Memory renders only after explicit load');
+    check(document.getElementById('environmentMemoryCount').textContent==='1 条', 'private Memory count reflects only selected Environment entries');
+    document.getElementById('writeEnvironmentMemoryButton').click();
+    await waitFor(() => document.getElementById('environmentMemoryDialog').open, 'new Environment-private Memory dialog opens');
+    document.getElementById('environmentMemoryKey').value='project.decision';
+    document.getElementById('environmentMemoryValue').value='decision one\ndecision two';
+    document.getElementById('environmentMemorySubmit').click();
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='WriteEnvironmentMemory'&&c.args[0]==='env-a'&&c.args[1]==='project.decision'), 'private Memory write uses exact current Environment ID');
+    await waitFor(() => document.getElementById('environmentMemoryList').textContent.includes('decision two'), 'private Memory supports multiline values');
+    const envMemoryFilter=document.getElementById('environmentMemoryFilter');
+    envMemoryFilter.value='project.decision'; envMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
+    check(document.getElementById('environmentMemoryList').textContent.includes('project.decision') && document.getElementById('environmentMemoryCount').textContent==='1 / 2 条', 'private Memory filter remains local to selected Environment');
+    envMemoryFilter.value=''; envMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
     await clickRoute('environments');
+    detailButton=document.querySelector('#environmentList button[data-action="inspect-environment"][data-id="env-a"]');
     detailButton.click(); await waitFor(() => !document.getElementById('environmentDetailPanel').hidden, 'Environment detail can reopen after Memory load');
     document.getElementById('closeEnvironmentDetail').click(); await sleep();
     await clickRoute('memory');
@@ -1108,7 +1152,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.__fakeADM.state.delayProcessLogs=false;
 
     check(window.__fakeADM.calls.filter(c=>c.name==='ProbeMCPHealth').length===5, 'only the five explicit MCP probes were executed');
-    const forbiddenAutoCalls=['RefreshSkillSource','RunVerifier','StopProcess','CancelRun','WriteGlobalMemory','WriteEnvironmentMemory'];
+    const forbiddenAutoCalls=['RefreshSkillSource','RunVerifier','StopProcess','CancelRun'];
     check(!window.__fakeADM.calls.some(c=>forbiddenAutoCalls.includes(c.name)), 'navigation/refresh makes no implicit mutation call');
 
     check(!document.getElementById('startManagedProcessButton').disabled, 'Admin may start managed process without Writer');
@@ -1257,12 +1301,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.querySelector('#environmentList [data-environment-id="env-created-drift"]')?.textContent.includes('Workspace B'), 'new Environment remains on explicitly selected broad Workspace until confirmation');
     document.querySelector('#environmentWorkspaceDialog [data-dialog-close]').click(); await sleep();
 
-    window.__fakeADM.snapshotA.environments.push({environment_id:'env-existing-workspace-drift', workspace_id:'ws-b', name:'Existing Workspace Drift', root:'C:\\fixtures\\plain-non-git-workspace-b\\newscope\\service', state:'ready', writer:null, enabled_mcp_ids:[], explicit_mcp_ids:[], inherited_mcp_ids:[], enabled_skill_ids:[], explicit_skill_ids:[], inherited_skill_ids:[], private_memory_count:0, retention:{persistence:'durable', creator_surface:'fixture', created_at:'2026-09-16T00:00:00Z'}});
+    window.__fakeADM.snapshotA.environments.push({environment_id:'env-existing-workspace-drift', workspace_id:'ws-b', name:'Existing Workspace Drift', root:'C:\\fixtures\\plain-non-git-workspace-b\newscope\\service', state:'ready', writer:null, enabled_mcp_ids:[], explicit_mcp_ids:[], inherited_mcp_ids:[], enabled_skill_ids:[], explicit_skill_ids:[], inherited_skill_ids:[], private_memory_count:0, retention:{persistence:'durable', creator_surface:'fixture', created_at:'2026-09-16T00:00:00Z'}});
     window.__fakeADM.state.failWorkspaceAdd=false;
     const addWorkspaceBefore=window.__fakeADM.calls.filter(c=>c.name==='AddWorkspace').length;
     const workspaceSetBeforeAdd=window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentWorkspace').length;
     document.querySelector('[data-dialog-open="workspaceDialog"]').click(); await waitFor(() => document.getElementById('workspaceDialog').open, 'add Workspace dialog opens for existing Environment drift acceptance');
-    document.getElementById('workspacePath').value='C:\\fixtures\\plain-non-git-workspace-b\\newscope'; document.getElementById('workspaceName').value='Added Workspace'; document.getElementById('workspaceForm').requestSubmit();
+    document.getElementById('workspacePath').value='C:\\fixtures\\plain-non-git-workspace-b\newscope'; document.getElementById('workspaceName').value='Added Workspace'; document.getElementById('workspaceForm').requestSubmit();
     await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='AddWorkspace').length===addWorkspaceBefore+1 && document.getElementById('environmentWorkspaceRecommendationsDialog').open, 'adding more-specific Workspace opens recommendation preview for existing Environment');
     check(document.getElementById('environmentWorkspaceRecommendationsList').textContent.includes('Existing Workspace Drift') && document.getElementById('environmentWorkspaceRecommendationsList').textContent.includes('Added Workspace'), 'Workspace-add preview is filtered to drift caused by the newly registered Workspace');
     check(document.getElementById('environmentWorkspaceRecommendationsResult').textContent.includes('刚添加的 Workspace') && window.__fakeADM.calls.filter(c=>c.name==='SetEnvironmentWorkspace').length===workspaceSetBeforeAdd, 'Workspace-add recommendation is advisory and never silently rebinds existing Environment');

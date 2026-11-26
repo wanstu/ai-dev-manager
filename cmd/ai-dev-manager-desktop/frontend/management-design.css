@@ -145,3 +145,42 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .management-page[data-management-page="mcp"] .summary-strip,
   .management-page[data-management-page="skills"] .summary-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
+
+/* Memory: make scope and explicit-read semantics visible before editing values. */
+.memory-guidance { margin: 14px 16px 0; padding: 14px 16px; border: 1px solid var(--adm-border); border-radius: 10px; background: var(--adm-muted); }
+.memory-guidance-intro { display:grid; grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:10px; }
+.memory-guidance-icon { display:grid; place-items:center; width:32px; height:32px; border:1px solid var(--adm-border); border-radius:9px; background:var(--adm-surface); color:var(--adm-accent); font-size:22px; }
+.memory-guidance-intro strong, .memory-guidance-grid strong { font-size:13px; font-weight:680; }
+.memory-guidance-intro p, .memory-guidance-grid p { margin:3px 0 0; color:var(--adm-secondary); font-size:11px; line-height:1.55; }
+.memory-mode-label { white-space:nowrap; padding:4px 8px; border:1px solid var(--adm-border); border-radius:6px; color:var(--adm-accent); font-size:11px; font-weight:650; }
+.memory-guidance-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--adm-border); }
+.memory-guidance-grid > div { min-width:0; padding:9px 11px; border:1px solid var(--adm-border); border-radius:8px; background:var(--adm-surface); }
+.memory-heading-actions { display:flex; align-items:center; gap:7px; }
+.memory-count { color:var(--adm-secondary); font-size:11px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.memory-controls { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--adm-border); background:var(--adm-muted); }
+.memory-controls input { flex:1 1 auto; min-width:0; max-width:340px; min-height:32px; padding:6px 10px; font-size:12px; }
+.memory-controls button { flex:0 0 auto; }
+.memory-row { grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:12px; }
+.memory-row-actions { display:flex; flex-wrap:wrap; gap:5px; }
+.memory-value code { color:var(--adm-ink); font-size:12px; font-weight:650; }
+.memory-value pre { color:var(--adm-secondary); font-size:12px; line-height:1.6; max-height:180px; }
+.memory-editor-dialog { width:min(560px,calc(100vw - 28px)); }
+.memory-editor-dialog .memory-form { display:grid; grid-template-columns:1fr; gap:13px; padding:16px 18px 18px; background:var(--adm-surface); }
+.memory-editor-dialog .memory-form label { display:grid; gap:6px; color:var(--adm-ink); font-size:12px; font-weight:650; }
+.memory-editor-dialog .memory-form input, .memory-editor-dialog .memory-form textarea { width:100%; box-sizing:border-box; padding:9px 11px; border:1px solid var(--adm-border); border-radius:8px; background:var(--adm-surface); color:var(--adm-ink); font:inherit; font-size:13px; }
+.memory-editor-dialog .memory-form textarea { min-height:170px; resize:vertical; line-height:1.6; white-space:pre-wrap; }
+.memory-editor-dialog .memory-form input[readonly] { background:var(--adm-muted); color:var(--adm-secondary); cursor:not-allowed; }
+.memory-editor-dialog .memory-form small { color:var(--adm-secondary); font-size:11px; font-weight:400; line-height:1.5; }
+.memory-editor-dialog .memory-form .form-actions { display:flex; justify-content:flex-end; gap:8px; }
+@media(max-width:760px) {
+  .memory-guidance { margin:10px 12px 0; padding:12px; }
+  .memory-guidance-intro { grid-template-columns:30px minmax(0,1fr); }
+  .memory-guidance-icon { width:28px; height:28px; }
+  .memory-mode-label { grid-column:2; justify-self:start; }
+  .memory-guidance-grid { grid-template-columns:1fr; }
+  .memory-heading-actions { flex-wrap:wrap; justify-content:flex-start; }
+  .memory-controls { flex-wrap:wrap; }
+  .memory-controls input { flex-basis:100%; max-width:none; }
+  .memory-row { grid-template-columns:minmax(0,1fr); }
+  .memory-row-actions { justify-content:flex-start; }
+}
