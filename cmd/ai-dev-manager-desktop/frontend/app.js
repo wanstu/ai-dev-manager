@@ -4836,6 +4836,8 @@ for(const kind of ['global','environment']){
   const valueInput=kind==='global'?elements.globalMemoryValue:elements.environmentMemoryValue;
   document.getElementById(kind+'MemoryCategoryFilter').addEventListener('change',()=>renderMemory(kind==='global'?elements.globalMemoryList:elements.environmentMemoryList,kind==='global'?globalMemoryEntries:environmentMemoryEntries,kind));
   document.getElementById(kind+'MemoryValidityFilter').addEventListener('change',()=>renderMemory(kind==='global'?elements.globalMemoryList:elements.environmentMemoryList,kind==='global'?globalMemoryEntries:environmentMemoryEntries,kind));
+  document.getElementById(kind+'MemorySimilar').addEventListener('click',()=>openMemoryTools(kind,'similar'));
+  if(kind==='environment')document.getElementById('environmentMemoryHandoff').addEventListener('click',()=>openMemoryTools(kind,'handoff'));
   for(const mode of ['trash','duplicates']){
     document.getElementById(kind+'Memory'+(mode==='trash'?'Trash':'Duplicates')).addEventListener('click',()=>openMemoryTools(kind,mode));
   }
@@ -4871,7 +4873,7 @@ async function openMemoryTools(kind,mode,key=''){
  const dialog=document.getElementById('memoryToolsDialog'),body=document.getElementById('memoryToolsBody');
  const generation=++memoryToolGeneration;
  const valid=()=>generation===memoryToolGeneration&&dialog.open&&memoryScopeValid(kind,token);
- document.getElementById('memoryToolsTitle').textContent=({history:'历史版本',trash:'回收站',duplicates:'重复记忆'})[mode];
+ document.getElementById('memoryToolsTitle').textContent=({history:'历史版本',trash:'回收站',duplicates:'重复记忆',similar:'近似重复记忆',handoff:'交接项目记忆'})[mode];
  document.getElementById('memoryToolsScope').textContent=(kind==='global'?'全局记忆':(currentEnvironment()?.name||id))+(key?' · '+key:'');
  body.textContent='正在读取…';
  if(!dialog.open)openEditorDialog('memoryToolsDialog');
@@ -4914,6 +4916,68 @@ async function openMemoryTools(kind,mode,key=''){
     if(item.restorable_revision!=null)button('恢复',async()=>{if(await confirmInApp('恢复此记忆？')&&valid())await mutate('恢复记忆',()=>desktopAdapter().RestoreMemory(id,item.key,item.restorable_revision,item.revision));},line);
     button('永久删除',async()=>{if(await confirmInApp('永久删除此记忆及全部历史？无法恢复。',{confirmText:'永久删除'})&&valid())await mutate('永久删除记忆',()=>desktopAdapter().PurgeMemory(id,item.key,item.revision));},line);
    }
+  }else if(mode==='similar'){
+   const result=await desktopAdapter().FindSimilarMemory(id,0.75,30);
+   if(!valid())return;body.replaceChildren();
+   append('p','扫描 '+result.scanned_entries+' / '+result.total_entries+' 条，发现 '+result.total_pairs_in_scan+' 对候选'+(result.truncated?'（结果有截断）':'')+'。词项相似不代表语义相同；需人工核对并编辑合并正文。');
+   for(const pair of safeArray(result.pairs)){
+    const line=append('div','');line.className='memory-version-row';
+    append('span',pair.first_key+' ↔ '+pair.second_key+' · '+Math.round(pair.score*100)+'%',line);
+    button('比较并整理',async()=>{
+     const entries=kind==='global'?await desktopAdapter().ListGlobalMemory():await desktopAdapter().ListEnvironmentMemory(id);
+     if(!valid())return;
+     const a=entries.find(e=>e.key===pair.first_key),b=entries.find(e=>e.key===pair.second_key);
+     if(!a||!b)throw new Error('记忆已变化，请重新查重。');
+     // Invalidate any prior editor in this dialog; its snapshot may be stale.
+     body.querySelector('.memory-similar-editor')?.remove();
+     const editor=append('section','');editor.className='memory-similar-editor';
+     const compare=append('div','',editor);compare.className='memory-compare';
+     for(const e of [a,b]){
+      const panel=append('section','',compare);append('strong',e.key,panel);append('small',memoryValidityLabels[memoryValidity(e)]||'有效',panel);append('pre',e.value,panel);
+     }
+     const label=append('label','保留条目',editor);const select=append('select','',label);
+     for(const e of [a,b]){const opt=append('option',e.key,select);opt.value=e.key;}
+     const valueLabel=append('label','合并后的正文（请保留两条中仍有价值的信息）',editor);
+     const merged=append('textarea','',valueLabel);merged.rows=8;merged.value=a.value+'\n\n'+b.value;
+     button('预演并确认合并',async()=>{
+      if(!editor.isConnected)return;
+      const keep=select.value===a.key?a:b,discard=keep===a?b:a;
+      if(!merged.value.trim())throw new Error('合并内容不能为空。');
+      const changes=[{key:keep.key,expected_value:keep.value,expected_revision:keep.revision||0,value:merged.value},{key:discard.key,expected_value:discard.value,expected_revision:discard.revision||0,value:null}];
+      await desktopAdapter().OrganizeMemory(id,changes,true);
+      if(!valid()||!editor.isConnected||!await confirmInApp('保留“'+keep.key+'”及其元数据，将“'+discard.key+'”移入回收站？请确认合并正文已核实。')||!valid()||!editor.isConnected)return;
+      await mutate('整理近似重复记忆',()=>desktopAdapter().OrganizeMemory(id,changes,false));
+     },editor);
+    },line);
+   }
+  }else if(mode==='handoff'){
+   if(kind!=='environment')throw new Error('只能交接环境私有记忆。');
+   const project=await desktopAdapter().GetMemoryProjectScope(id);
+   if(!valid())return;body.replaceChildren();
+   const target=project.project_environment_id;
+   if(!target||target===id){append('p','当前已经是持久项目环境，无需交接。');return;}
+   const targetName=safeArray(currentSnapshot?.environments).find(e=>e.environment_id===target)?.name;
+   append('p','目标：'+(targetName?targetName+' · ':'')+target);
+   append('p','只复制手动选择的有效记忆；原记忆保留，不覆盖目标已有或已删除的键。');
+   const entries=safeArray(await desktopAdapter().ListEnvironmentMemory(id));
+   if(!valid())return;
+   const selections=[];
+   for(const e of entries){
+    const line=append('div','');line.className='memory-version-row';
+    const label=append('label','',line);const check=append('input','',label);check.type='checkbox';check.disabled=memoryValidity(e)!=='active';
+    append('span',e.key+' · '+(memoryValidityLabels[memoryValidity(e)]||'有效'),label);
+    const name=append('input','',line);name.value=e.key;name.placeholder='目标键';name.disabled=check.disabled;name.setAttribute('aria-label','目标键 '+e.key);
+    const details=append('details','',line);append('summary','查看正文',details);append('pre',e.value,details);
+    selections.push({e,check,name});
+   }
+   if(!entries.length)append('p','没有可交接的记忆。');
+   button('预演并确认交接',async()=>{
+    const items=selections.filter(x=>x.check.checked&&!x.check.disabled).map(x=>({key:x.e.key,target_key:x.name.value.trim()||x.e.key,expected_revision:x.e.revision||0,expected_value:x.e.value}));
+    if(!items.length)throw new Error('请选择需要交接的有效记忆。');
+    const preview=await desktopAdapter().HandoffMemory(id,target,items,true);
+    if(!valid()||!await confirmInApp('复制 '+safeArray(preview.copied).length+' 条记忆至持久项目 '+(targetName||target)+'？原记忆不会删除。')||!valid())return;
+    await mutate('交接项目记忆',()=>desktopAdapter().HandoffMemory(id,target,items,false));
+   });
   }else{
    const result=await desktopAdapter().FindMemoryDuplicates(id);if(!valid())return;body.replaceChildren();
    append('p','发现 '+result.total_groups+' 组完全重复的正文'+(result.omitted?'（另有 '+result.omitted+' 组未显示）':'')+'。合并时保留选中条目的元数据；其余条目进入回收站。');

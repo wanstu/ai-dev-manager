@@ -203,3 +203,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .memory-duplicate-group {display:flex;flex-wrap:wrap;gap:8px;align-items:center;border:1px solid var(--adm-border);border-radius:8px;padding:10px;}
 .memory-duplicate-group select {flex:1;min-width:100px;max-width:100%;}
 @media(max-width:600px){.memory-compare,.memory-meta-form{grid-template-columns:1fr;}}
+
+.memory-similar-editor {display:grid;gap:10px;border:1px solid var(--adm-border);padding:12px;border-radius:8px;}
+.memory-similar-editor label {display:grid;gap:5px;}
+.memory-tools-body details {flex:1 1 100%;min-width:0;}
+.memory-tools-body details pre {white-space:pre-wrap;overflow-wrap:anywhere;max-height:24vh;overflow:auto;}

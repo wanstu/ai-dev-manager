@@ -817,3 +817,14 @@ func (c *Client) MemoryOrganize(id string, changes []memory.Change, dryRun bool)
 	args := map[string]any{"changes": changes, "dry_run": dryRun}
 	return callAdmin[memory.OrganizeResult](c, context.Background(), memoryTool(id, "organize", args), args)
 }
+
+func (c *Client) MemorySimilar(id string, threshold float64, limit int) (memory.SimilarResult, error) {
+	args := map[string]any{"threshold": threshold, "limit": limit}
+	return callAdmin[memory.SimilarResult](c, context.Background(), memoryTool(id, "similar", args), args)
+}
+func (c *Client) MemoryProjectScope(id string) (memory.ProjectScope, error) {
+	return callAdmin[memory.ProjectScope](c, context.Background(), "memory_environment_project_scope", map[string]any{"environment_id": id})
+}
+func (c *Client) MemoryHandoff(id, target string, items []memory.HandoffItem, dryRun bool) (memory.HandoffResult, error) {
+	return callAdmin[memory.HandoffResult](c, context.Background(), "memory_environment_handoff", map[string]any{"environment_id": id, "target_environment_id": target, "items": items, "dry_run": dryRun})
+}

@@ -163,6 +163,9 @@ const fakeBridge = String.raw`<script>
     async GetMemoryHistory(id,key,revision){record('GetMemoryHistory',[id,key,revision]);const items=id?(environmentMemory[id]||[]):globalMemory;const e=items.find(x=>x.key===key);if(!e)throw new Error('not found');const versions=e.history||[];const current={revision:e.revision||0,value:e.value,metadata:e.metadata};return {current_revision:current.revision,versions:[current,...versions],selected:revision==null?undefined:[current,...versions].find(x=>x.revision===revision)};},
     async OrganizeMemory(id,changes,dryRun){record('OrganizeMemory',[id,changes,dryRun]);const items=id?(environmentMemory[id] ||= []):globalMemory;for(const c of changes){const e=items.find(x=>x.key===c.key);if((e?.value??null)!==c.expected_value||(c.expected_revision!=null&&(e?.revision||0)!==c.expected_revision))throw new Error('conflict');}if(!dryRun)for(const c of changes){let e=items.find(x=>x.key===c.key);if(c.value===null){if(e)items.splice(items.indexOf(e),1);continue;}if(e){(e.history ||= []).unshift({revision:e.revision||0,value:e.value,metadata:e.metadata});e.value=c.value;e.metadata=c.metadata||e.metadata;e.revision=(e.revision||0)+1;}else items.push({key:c.key,value:c.value,metadata:c.metadata,revision:1});}return {created:1,updated:0,deleted:0};},
     async ListMemoryTrash(id){record('ListMemoryTrash',[id]);return [];},
+    async FindSimilarMemory(id,threshold,limit){record('FindSimilarMemory',[id,threshold,limit]);const items=id?(environmentMemory[id]||[]):globalMemory;return {scanned_entries:items.length,total_entries:items.length,total_pairs_in_scan:items.length>=2?1:0,pairs:items.length>=2?[{first_key:items[0].key,second_key:items[1].key,score:0.83}]:[],truncated:false};},
+    async GetMemoryProjectScope(id){record('GetMemoryProjectScope',[id]);return {environment_id:id,project_environment_id:id==='env-a'?'env-b':id,source_chain:id==='env-a'?['env-a','env-b']:[id]};},
+    async HandoffMemory(id,target,items,dryRun){record('HandoffMemory',[id,target,items,dryRun]);for(const item of items){const e=(environmentMemory[id]||[]).find(x=>x.key===item.key);if(!e||e.value!==item.expected_value||(e.revision||0)!==item.expected_revision)throw new Error('source conflict');if((environmentMemory[target]||[]).some(x=>x.key===item.target_key))throw new Error('target conflict');}if(!dryRun){for(const item of items){const e=environmentMemory[id].find(x=>x.key===item.key);(environmentMemory[target] ||= []).push({...e,key:item.target_key,revision:1});}}return {copied:items.map(x=>x.target_key),dry_run:dryRun};},
     async FindMemoryDuplicates(id){record('FindMemoryDuplicates',[id]);return {groups:[],total_groups:0,omitted:0};},
     async ListGlobalMemory(){ record('ListGlobalMemory',[]); return structuredClone(globalMemory); },
     async WriteGlobalMemory(key,value){ record('WriteGlobalMemory',[key,value]); const existing=globalMemory.find(entry=>entry.key===key); if(existing) existing.value=value; else globalMemory.push({key,value}); return null; },
@@ -803,10 +806,40 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('environmentMemorySubmit').click();
     await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]==='env-a'&&c.args[1][0].key==='project.decision'), 'private Memory write uses exact current Environment ID');
     await waitFor(() => document.getElementById('environmentMemoryList').textContent.includes('decision two'), 'private Memory supports multiline values');
+    document.getElementById('environmentMemorySimilar').click();
+    await waitFor(()=>document.getElementById('memoryToolsBody').textContent.includes('83%'),'near duplicate candidates render score');
+    document.querySelector('#memoryToolsBody .memory-version-row button').click();
+    await waitFor(()=>document.querySelector('#memoryToolsBody .memory-similar-editor textarea'),'near duplicate comparison editor renders');
+    check(document.querySelector('#memoryToolsBody .memory-similar-editor textarea').value.includes('env-a-private-visible')&&document.querySelector('#memoryToolsBody .memory-similar-editor textarea').value.includes('decision two'),'near duplicate editor initially preserves both values');
+    document.querySelector('#memoryToolsDialog [data-dialog-close]').click();
+    document.getElementById('environmentMemoryHandoff').click();
+    await waitFor(()=>document.querySelectorAll('#memoryToolsBody input[type=checkbox]').length===2,'handoff lists source entries');
+    check(document.getElementById('memoryToolsBody').textContent.includes('env-b'),'handoff shows verified target');
+    const handoffRows=[...document.querySelectorAll('#memoryToolsBody .memory-version-row')];
+    const handoffRow=handoffRows.find(row=>row.textContent.includes('project.decision'));
+    handoffRow.querySelector('input[type=checkbox]').checked=true;
+    handoffRow.querySelector('input:not([type=checkbox])').value='handoff.decision';
+    [...document.querySelectorAll('#memoryToolsBody button')].find(b=>b.textContent==='预演并确认交接').click();
+    await waitFor(()=>window.__fakeADM.calls.some(c=>c.name==='HandoffMemory'&&c.args[0]==='env-a'&&c.args[1]==='env-b'&&c.args[2][0].target_key==='handoff.decision'&&c.args[3]===true),'handoff dry run uses scoped source and target');
+    await waitFor(()=>window.__fakeADM.calls.some(c=>c.name==='HandoffMemory'&&c.args[3]===false),'confirmed handoff commits');
+    await waitFor(()=>!document.getElementById('memoryToolsDialog').open,'handoff dialog closes on success');
+    check(document.getElementById('environmentMemoryList').textContent.includes('decision two'),'handoff preserves source memory');
     const envMemoryFilter=document.getElementById('environmentMemoryFilter');
     envMemoryFilter.value='project.decision'; envMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
     check(document.getElementById('environmentMemoryList').textContent.includes('project.decision') && document.getElementById('environmentMemoryCount').textContent==='1 / 2 条', 'private Memory filter remains local to selected Environment');
     envMemoryFilter.value=''; envMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
+    document.getElementById('environmentMemorySimilar').click();
+    await waitFor(()=>document.getElementById('memoryToolsBody').textContent.includes('83%'),'near duplicate reopen');
+    document.querySelector('#memoryToolsBody .memory-version-row button').click();
+    await waitFor(()=>document.querySelector('#memoryToolsBody .memory-similar-editor textarea'),'near duplicate merge form');
+    const mergeEditor=document.querySelector('#memoryToolsBody .memory-similar-editor');
+    mergeEditor.querySelector('select').value='private-sentinel';
+    mergeEditor.querySelector('textarea').value='env-a-private-visible and decision two, reviewed';
+    mergeEditor.querySelector('button').click();
+    await waitFor(()=>window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]==='env-a'&&c.args[1].length===2&&c.args[2]===true),'near duplicate merge preview');
+    await waitFor(()=>window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]==='env-a'&&c.args[1].length===2&&c.args[2]===false),'near duplicate merge commit');
+    await waitFor(()=>!document.getElementById('memoryToolsDialog').open&&document.getElementById('environmentMemoryList').textContent.includes('reviewed'),'merge refreshes scoped memory list');
+    check(!document.getElementById('environmentMemoryList').textContent.includes('project.decision'),'merged source key leaves active list');
     await clickRoute('environments');
     detailButton=document.querySelector('#environmentList button[data-action="inspect-environment"][data-id="env-a"]');
     detailButton.click(); await waitFor(() => !document.getElementById('environmentDetailPanel').hidden, 'Environment detail can reopen after Memory load');

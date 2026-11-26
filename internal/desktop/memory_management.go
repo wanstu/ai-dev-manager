@@ -6,6 +6,9 @@ import (
 )
 
 type memoryManagementBackend interface {
+	MemorySimilar(string, float64, int) (memory.SimilarResult, error)
+	MemoryProjectScope(string) (memory.ProjectScope, error)
+	MemoryHandoff(string, string, []memory.HandoffItem, bool) (memory.HandoffResult, error)
 	MemoryHistory(string, string, *int64) (memory.HistoryResult, error)
 	MemoryRestore(string, string, int64, int64) (memory.Entry, error)
 	MemoryTrash(string) ([]memory.TrashEntry, error)
@@ -65,4 +68,26 @@ func (a *Adapter) OrganizeMemory(id string, changes []memory.Change, dryRun bool
 		return memory.OrganizeResult{}, err
 	}
 	return b.MemoryOrganize(id, changes, dryRun)
+}
+
+func (a *Adapter) FindSimilarMemory(id string, threshold float64, limit int) (memory.SimilarResult, error) {
+	b, err := a.memoryBackend()
+	if err != nil {
+		return memory.SimilarResult{}, err
+	}
+	return b.MemorySimilar(id, threshold, limit)
+}
+func (a *Adapter) GetMemoryProjectScope(id string) (memory.ProjectScope, error) {
+	b, err := a.memoryBackend()
+	if err != nil {
+		return memory.ProjectScope{}, err
+	}
+	return b.MemoryProjectScope(id)
+}
+func (a *Adapter) HandoffMemory(id, target string, items []memory.HandoffItem, dryRun bool) (memory.HandoffResult, error) {
+	b, err := a.memoryBackend()
+	if err != nil {
+		return memory.HandoffResult{}, err
+	}
+	return b.MemoryHandoff(id, target, items, dryRun)
 }

@@ -509,3 +509,13 @@ func (s *Service) MemoryOrganize(id string, changes []memory.Change, dryRun bool
 	}
 	return s.app.Memory.EnvironmentOrganize(id, changes, dryRun)
 }
+
+func (s *Service) MemorySimilar(id string, threshold float64, limit int) (memory.SimilarResult, error) {
+	return s.app.Memory.Similar(id, id == "", threshold, limit)
+}
+func (s *Service) MemoryProjectScope(id string) (memory.ProjectScope, error) {
+	return s.app.Memory.ProjectScope(id)
+}
+func (s *Service) MemoryHandoff(id, target string, items []memory.HandoffItem, dryRun bool) (memory.HandoffResult, error) {
+	return s.app.Memory.Handoff(id, target, items, dryRun)
+}

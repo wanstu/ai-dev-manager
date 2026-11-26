@@ -849,6 +849,39 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return nil, h.management.MemoryPurge(s1, s2, expected)
+	case "FindSimilarMemory":
+		var threshold float64
+		var limit int
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &threshold); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &limit); err != nil {
+			return nil, err
+		}
+		return h.management.MemorySimilar(s1, threshold, limit)
+	case "GetMemoryProjectScope":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryProjectScope(s1)
+	case "HandoffMemory":
+		var items []memory.HandoffItem
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &items); err != nil {
+			return nil, err
+		}
+		if err := arg(3, &b1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryHandoff(s1, s2, items, b1)
 	case "FindMemoryDuplicates":
 		if err := arg(0, &s1); err != nil {
 			return nil, err
