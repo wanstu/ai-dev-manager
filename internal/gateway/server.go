@@ -2309,7 +2309,8 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
 			}
 			if surface == serverSurfaceAdmin && strings.TrimSpace(in.EnvironmentID) == "" {
-				return toolResult(owner.listDevProcesses(""), nil)
+				value, err := owner.listDevProcesses("")
+				return toolResult(value, err)
 			}
 			value, err := owner.ListDevProcesses(in.EnvironmentID)
 			return toolResult(value, err)

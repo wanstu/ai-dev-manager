@@ -164,8 +164,8 @@ func TestDevProcessLifecycleAcrossRealGatewayRestart(t *testing.T) {
 	defer restartedClient.Close()
 	listed := callGatewayTool(t, ctx, restartedClient, "process_list", map[string]any{"environment_id": environment.ID})
 	listedText := toolText(t, listed)
-	if listed.IsError || strings.Contains(listedText, firstProcessID) || strings.Contains(listedText, secondProcessID) || strings.Contains(listedText, "proc_") {
-		t.Fatalf("restart resurrected observed process state: %s", listedText)
+	if listed.IsError || !strings.Contains(listedText, firstProcessID) || !strings.Contains(listedText, secondProcessID) || strings.Contains(listedText, `"state":"running"`) || !strings.Contains(listedText, `"history_only":true`) {
+		t.Fatalf("restart lost history or resurrected live state: %s", listedText)
 	}
 	oldStatus, err := restartedClient.CallTool(ctx, &mcp.CallToolParams{Name: "process_status", Arguments: map[string]any{
 		"environment_id": environment.ID,
@@ -174,8 +174,12 @@ func TestDevProcessLifecycleAcrossRealGatewayRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("old process status transport error: %v", err)
 	}
-	if !oldStatus.IsError {
-		t.Fatalf("old process identity unexpectedly survived restart: %s", toolText(t, oldStatus))
+	if oldStatus.IsError || !strings.Contains(toolText(t, oldStatus), `"state":"exited"`) || !strings.Contains(toolText(t, oldStatus), `"history_only":true`) {
+		t.Fatalf("old process lifecycle history missing: %s", toolText(t, oldStatus))
+	}
+	oldStop := callGatewayTool(t, ctx, restartedClient, "process_stop", map[string]any{"environment_id": environment.ID, "writer_owner": devProcessTestWriter, "process_id": secondProcessID})
+	if !oldStop.IsError {
+		t.Fatal("historical PID accepted for stop")
 	}
 	_ = restartedClient.Close()
 	stopGateway(secondGateway)

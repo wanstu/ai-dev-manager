@@ -40,6 +40,8 @@ type ProcessResources struct {
 	Complete     bool      `json:"complete"`
 }
 type ProcessStatus struct {
+	HistoryOnly    bool              `json:"history_only,omitempty"`
+	HistoryNote    string            `json:"history_note,omitempty"`
 	Resources      *ProcessResources `json:"resources,omitempty"`
 	ResourceError  string            `json:"resource_error,omitempty"`
 	UptimeSeconds  int64             `json:"uptime_seconds"`

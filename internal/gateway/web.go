@@ -1017,7 +1017,7 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, errors.New("Gateway runtime owner is unavailable")
 		}
 		if s1 == "" {
-			return h.owner.listDevProcesses(""), nil
+			return h.owner.listDevProcesses("")
 		}
 		return h.owner.ListDevProcesses(s1)
 	case "GetProcessLogs":

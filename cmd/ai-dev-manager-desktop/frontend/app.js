@@ -2033,7 +2033,7 @@ function runtimeItem(titleText, idText, state, detailText, actions = []) {
   const item = document.createElement('article'); item.className = 'runtime-item';
   const head = document.createElement('div'); head.className = 'runtime-item-head';
   const title = document.createElement('strong'); title.textContent = titleText || idText || 'runtime item';
-  head.append(title, stateBadge(({running:'运行中',exited:'已退出',succeeded:'成功',failed:'失败',canceled:'已取消',disabled:'已停用',configured:'已配置'})[state] || state || '未知', state || 'unknown'));
+  head.append(title, stateBadge(({running:'运行中',exited:'已退出',other_gateway:'其他 Gateway 管理',owner_unavailable:'管理者失联',succeeded:'成功',failed:'失败',canceled:'已取消',disabled:'已停用',configured:'已配置'})[state] || state || '未知', state || 'unknown'));
   const id = document.createElement('code'); id.textContent = idText || '';
   const detail = document.createElement('small'); detail.textContent = detailText || '';
   item.append(head, id, detail);
@@ -2254,7 +2254,7 @@ function renderRuntime() {
   renderRuntimeListState('processes', '没有 ADM 管理的常驻进程', (processes, container) => {
     for (const process of processes) {
       const logs = createActionButton('日志', 'process-logs', process.id); logs.disabled = pending;
-      const actions = [disabledRuntimeAction(logs, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看日志。' : '')];
+      const actions = process.history_only ? [] : [disabledRuntimeAction(logs, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看日志。' : '')];
       if (process.state === 'running') {
         const stop = createActionButton('停止', 'stop-process', process.id, 'danger');
         stop.disabled = pending;
@@ -2268,13 +2268,18 @@ function renderRuntime() {
       const elapsed=Number(process.uptime_seconds);
       const uptime=Number.isFinite(elapsed)?(elapsed>=3600?Math.floor(elapsed/3600)+' 小时 '+Math.floor(elapsed%3600/60)+' 分钟':elapsed>=60?Math.floor(elapsed/60)+' 分钟 '+elapsed%60+' 秒':elapsed+' 秒'):'—';
       const resource=process.resources;
-      const facts=[['运行时间',uptime]];
+      const facts=[['运行时间',process.history_only&&process.state!=='exited'?'未确认':uptime]];
       if(process.state==='running'){
         facts.push(['CPU',resource?.cpu_percent!=null?Number(resource.cpu_percent).toFixed(1)+'%':'待采样'],['内存',resource?.memory_bytes!=null?(Number(resource.memory_bytes)/1048576).toFixed(1)+' MiB':'—'],['进程数',resource?.process_count??'—']);
         metrics.title=resource?'统计范围：'+(resource.scope==='job'?'Windows Job 进程树':'Linux 进程组')+'；CPU 100% 表示占用一个逻辑核心；RSS/工作集之和可能重复计算共享内存。'+(resource.complete===false?' 部分数据不可用。':''):(process.resource_error||'资源统计暂不可用');
       }else if(process.exit_reason)facts.push(['退出原因',({stopped:'主动停止',completed:'正常退出',failed:'异常退出'})[process.exit_reason]||process.exit_reason]);
       for(const [name,value] of facts){const cell=document.createElement('span');const label=document.createElement('small');label.textContent=name;const amount=document.createElement('strong');amount.textContent=String(value);cell.append(label,amount);metrics.append(cell);}
       if(resource?.complete===false||process.resource_error){const note=document.createElement('small');note.textContent=resource?'部分资源统计不可用':'资源统计不可用';metrics.append(note);}
+      if(process.history_only){
+        const note=document.createElement('small');
+        note.textContent=({exited:'历史记录 · 日志未持久化',other_gateway:'其他 Gateway 持有记录 · 当前无法操作',owner_unavailable:'原管理者已失联 · 实际进程状态未确认'})[process.state]||'历史记录';
+        metrics.append(note);
+      }
       item.append(metrics);container.append(item);
     }
   });
