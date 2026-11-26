@@ -2793,16 +2793,27 @@ func RunHTTP(ctx context.Context, service *app.Service, listen string) error {
 		Handler:           newHTTPHandlerWithShutdown(service, owner, cancelRun),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	shutdownDone := make(chan error, 1)
 	go func() {
 		<-runCtx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = httpServer.Shutdown(shutdownCtx)
+		err := httpServer.Shutdown(shutdownCtx)
+		if err != nil {
+			_ = httpServer.Close()
+		}
+		shutdownDone <- err
 	}()
-	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+	serveErr := httpServer.ListenAndServe()
+	cancelRun()
+	// Shutdown closes the listener before draining active HTTP requests.
+	// Do not exit the process while the owner-bound 202 response (or any
+	// other admitted request) is still being written to the client.
+	shutdownErr := <-shutdownDone
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		return serveErr
 	}
-	return nil
+	return shutdownErr
 }
 
 func toolResult(value any, err error) (*mcp.CallToolResult, any, error) {
