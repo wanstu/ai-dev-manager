@@ -94,19 +94,28 @@ type WriterHeartbeatSource struct {
 	ObservedAt     time.Time `json:"observed_at,omitempty"`
 }
 
+type PendingWriterOperation struct {
+	EnvironmentID string    `json:"environment_id"`
+	Kind          string    `json:"kind"`
+	HostPID       int       `json:"host_pid"`
+	StartedAt     time.Time `json:"started_at"`
+}
 type WriterDiagnostics struct {
-	EnvironmentID            string                  `json:"environment_id"`
-	Active                   bool                    `json:"active"`
-	OwnerFingerprint         string                  `json:"owner_fingerprint,omitempty"`
-	LastRenewalAction        string                  `json:"last_renewal_action,omitempty"`
-	AcquiredAt               *time.Time              `json:"acquired_at,omitempty"`
-	LastSeenAt               *time.Time              `json:"last_seen_at,omitempty"`
-	ExpiresAt                *time.Time              `json:"expires_at,omitempty"`
-	HeartbeatIntervalSeconds int64                   `json:"heartbeat_interval_seconds,omitempty"`
-	Attribution              string                  `json:"attribution"`
-	GatewayOwner             RuntimeOwnerInfo        `json:"gateway_owner"`
-	HeartbeatSources         []WriterHeartbeatSource `json:"heartbeat_sources"`
-	Note                     string                  `json:"note,omitempty"`
+	PendingOperations        []PendingWriterOperation `json:"pending_operations"`
+	HandoffPending           bool                     `json:"handoff_pending"`
+	HandoffCheckError        string                   `json:"handoff_check_error,omitempty"`
+	EnvironmentID            string                   `json:"environment_id"`
+	Active                   bool                     `json:"active"`
+	OwnerFingerprint         string                   `json:"owner_fingerprint,omitempty"`
+	LastRenewalAction        string                   `json:"last_renewal_action,omitempty"`
+	AcquiredAt               *time.Time               `json:"acquired_at,omitempty"`
+	LastSeenAt               *time.Time               `json:"last_seen_at,omitempty"`
+	ExpiresAt                *time.Time               `json:"expires_at,omitempty"`
+	HeartbeatIntervalSeconds int64                    `json:"heartbeat_interval_seconds,omitempty"`
+	Attribution              string                   `json:"attribution"`
+	GatewayOwner             RuntimeOwnerInfo         `json:"gateway_owner"`
+	HeartbeatSources         []WriterHeartbeatSource  `json:"heartbeat_sources"`
+	Note                     string                   `json:"note,omitempty"`
 }
 
 func New(endpoint string) *Client {

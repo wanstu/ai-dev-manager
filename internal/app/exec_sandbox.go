@@ -177,6 +177,12 @@ func (s *Service) ExecSandbox(
 		return nil, err
 	}
 
+	_, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, prepared.WriterLease, "exec_sandbox")
+	if err != nil {
+		return nil, err
+	}
+	defer guard.Close()
+
 	commandCtx, cancel := context.WithCancel(execCtx)
 	heartbeatDone := make(chan error, 1)
 	go func() {

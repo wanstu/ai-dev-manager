@@ -359,3 +359,52 @@ func TestWriterReplacementCancelsOldRunEvenWithSameOwner(t *testing.T) {
 		t.Fatalf("replacement lease changed: %+v %v", current.Writer, err)
 	}
 }
+
+func TestWriterHandoffBlocksNewMutationsUntilPriorOperationFinishes(t *testing.T) {
+	service, id, root := agentRunTestService(t)
+	// An explicit held guard makes the race deterministic independently of
+	// how rapidly the old worker responds to cancellation.
+	old, guard, err := service.Environments.BeginWriterOperation(id, agentRunTestWriter, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	replacement, err := service.Environments.TakeoverWriter(id, "admin-replacement")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement.Writer.ID == old.Writer.ID {
+		t.Fatal("takeover did not replace lease")
+	}
+	other := app.New(service.Store.Path())
+	if _, err := other.Write(id, "admin-replacement", "handoff.txt", "new", true); err == nil || !strings.Contains(err.Error(), "writer_handoff_pending") {
+		t.Fatalf("new write before drain: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "handoff.txt")); !os.IsNotExist(err) {
+		t.Fatalf("blocked write touched file: %v", err)
+	}
+	owner := newRuntimeOwner(other)
+	defer owner.Close()
+	diagnostics, err := owner.WriterDiagnostics(id)
+	if err != nil || !diagnostics.HandoffPending || len(diagnostics.PendingOperations) != 1 || diagnostics.PendingOperations[0].HostPID != os.Getpid() {
+		t.Fatalf("missing live handoff diagnostics: %+v %v", diagnostics, err)
+	}
+	if _, err := owner.StartAgentRun(id, "admin-replacement", os.Args[0], []string{"-test.run=^TestAgentRunCommandHelper$"}, "", 5000, 4096); err == nil || !strings.Contains(err.Error(), "writer_handoff_pending") {
+		t.Fatalf("new run before drain: %v", err)
+	}
+	guard.Close()
+	diagnostics, err = owner.WriterDiagnostics(id)
+	if err != nil || diagnostics.HandoffPending {
+		t.Fatalf("stale handoff diagnostics: %+v %v", diagnostics, err)
+	}
+	if _, err := other.Write(id, "admin-replacement", "handoff.txt", "new", true); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "handoff.txt"))
+	if err != nil || string(data) != "new" {
+		t.Fatalf("new write %q %v", data, err)
+	}
+	if _, _, err := other.Environments.BeginWriterOperation(id, agentRunTestWriter, old.Writer); err == nil {
+		t.Fatal("old lease authorized")
+	}
+}

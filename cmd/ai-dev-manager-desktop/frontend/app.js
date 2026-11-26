@@ -2130,13 +2130,27 @@ function renderRuntimeWriterDiagnostics(environment) {
   const container = elements.runtimeWriterDiagnostics;
   if (!container) return;
   if (!environment) return emptyMessage(container, '选择 Environment 后显示 Writer 占用来源。');
-  if (!environment.writer) return emptyMessage(container, '当前没有 active Writer；没有锁占用。');
   if (runtimeWriterDiagnosticsError) return emptyMessage(container, 'Writer 占用诊断读取失败：' + runtimeWriterDiagnosticsError);
   const diagnostics = runtimeWriterDiagnostics;
   if (!diagnostics || diagnostics.environment_id !== environment.environment_id) return emptyMessage(container, '正在读取 Writer 占用来源…');
 
   container.replaceChildren();
   container.classList.remove('empty');
+  const pending=safeArray(diagnostics.pending_operations);
+  if(diagnostics.handoff_pending||pending.length||diagnostics.handoff_check_error){
+    const warning=document.createElement('div');warning.className='warning-text';
+    warning.textContent=diagnostics.handoff_check_error?'写入交接状态检查失败：'+diagnostics.handoff_check_error:'写入交接中：旧 Writer 的任务尚未退出，新 Writer 暂不能执行重叠目录的写入任务。常驻进程不受此限制。';
+    container.append(warning);
+    for(const op of pending){
+      const row=document.createElement('div');row.className='runtime-writer-source';
+      const title=document.createElement('strong');title.textContent=op.kind+' · '+op.environment_id;
+      const info=document.createElement('small');info.textContent='ADM PID '+(op.host_pid||'—')+' · 开始 '+writerDiagnosticTime(op.started_at);
+      row.append(title,info);container.append(row);
+    }
+  }
+  if(!environment.writer){
+    const message=document.createElement('div');message.textContent='当前没有 active Writer；没有锁占用。';container.append(message);return;
+  }
   const summary = document.createElement('div');
   summary.className = 'runtime-writer-summary';
   const sources = safeArray(diagnostics.heartbeat_sources);

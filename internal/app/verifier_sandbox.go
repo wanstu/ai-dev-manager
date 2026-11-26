@@ -121,6 +121,12 @@ func (s *Service) RunVerifierSandboxed(ctx context.Context, environmentID, owner
 		return verifier.Result{}, err
 	}
 
+	_, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, prepared.WriterLease, "verifier_sandbox")
+	if err != nil {
+		return verifier.Result{}, err
+	}
+	defer guard.Close()
+
 	commandCtx, cancel := context.WithCancel(ctx)
 	heartbeatDone := make(chan error, 1)
 	go func() {

@@ -111,11 +111,19 @@ func (o *runtimeOwner) StartVerifierRun(environmentID, writerOwner, verifierID s
 		cancel()
 		return verifierRunStatus{}, err
 	}
-	if err := o.installVerifierRun(run); err != nil {
+	_, guard, err := o.service.Environments.BeginWriterOperation(environmentID, writerOwner, run.prepared.WriterLease, "verifier_run")
+	if err != nil {
 		cancel()
+		o.clearWriterObservation(run.environmentID, o.writerObservation("verifier", run.id, 0, "", "", "", "", ""))
 		return verifierRunStatus{}, err
 	}
-	go o.executeVerifierRun(run, cmd)
+	if err := o.installVerifierRun(run); err != nil {
+		guard.Close()
+		cancel()
+		o.clearWriterObservation(run.environmentID, o.writerObservation("verifier", run.id, 0, "", "", "", "", ""))
+		return verifierRunStatus{}, err
+	}
+	go func() { defer guard.Close(); o.executeVerifierRun(run, cmd) }()
 	go o.heartbeatVerifierRun(run)
 	return o.verifierRunStatus(run), nil
 }
@@ -151,11 +159,19 @@ func (o *runtimeOwner) StartVerifierRunSandboxed(environmentID, writerOwner, ver
 		cancel()
 		return verifierRunStatus{}, err
 	}
-	if err := o.installVerifierRun(run); err != nil {
+	_, guard, err := o.service.Environments.BeginWriterOperation(environmentID, writerOwner, run.prepared.WriterLease, "verifier_run")
+	if err != nil {
 		cancel()
+		o.clearWriterObservation(run.environmentID, o.writerObservation("verifier", run.id, 0, "", "", "", "", ""))
 		return verifierRunStatus{}, err
 	}
-	go o.executeSandboxVerifierRun(run, maxOutputBytes)
+	if err := o.installVerifierRun(run); err != nil {
+		guard.Close()
+		cancel()
+		o.clearWriterObservation(run.environmentID, o.writerObservation("verifier", run.id, 0, "", "", "", "", ""))
+		return verifierRunStatus{}, err
+	}
+	go func() { defer guard.Close(); o.executeSandboxVerifierRun(run, maxOutputBytes) }()
 	go o.heartbeatVerifierRun(run)
 	return o.verifierRunStatus(run), nil
 }
@@ -211,17 +227,15 @@ func (o *runtimeOwner) CancelVerifierRun(environmentID, writerOwner, runID strin
 
 func (o *runtimeOwner) executeSandboxVerifierRun(run *ownedVerifierRun, maxOutputBytes int) {
 	commandStarted := time.Now()
-	if _, err := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease); err != nil {
-		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", err.Error())
+	var commandResult runtimepkg.CommandResult
+	_, execErr := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease)
+	if execErr != nil {
+		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", execErr.Error())
+	} else {
+		commandResult, execErr = o.service.RunPreparedVerifierSandbox(
+			run.ctx, run.prepared, run.id, maxOutputBytes, run.stdout, run.stderr,
+		)
 	}
-	commandResult, execErr := o.service.RunPreparedVerifierSandbox(
-		run.ctx,
-		run.prepared,
-		run.id,
-		maxOutputBytes,
-		run.stdout,
-		run.stderr,
-	)
 	if _, authorityErr := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease); authorityErr != nil {
 		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", authorityErr.Error())
 	}

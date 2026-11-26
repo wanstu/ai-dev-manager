@@ -133,11 +133,19 @@ func (o *runtimeOwner) StartAgentRun(environmentID, writerOwner, executable stri
 		cancel()
 		return agentRunStatus{}, err
 	}
-	if err := o.installAgentRun(run); err != nil {
+	_, guard, err := o.service.Environments.BeginWriterOperation(environmentID, writerOwner, run.writerLease, "run")
+	if err != nil {
 		cancel()
+		o.clearWriterObservation(run.environmentID, o.writerObservation("run", run.id, 0, "", "", "", "", ""))
 		return agentRunStatus{}, err
 	}
-	go o.executeAgentRun(run, cmd)
+	if err := o.installAgentRun(run); err != nil {
+		guard.Close()
+		cancel()
+		o.clearWriterObservation(run.environmentID, o.writerObservation("run", run.id, 0, "", "", "", "", ""))
+		return agentRunStatus{}, err
+	}
+	go func() { defer guard.Close(); o.executeAgentRun(run, cmd) }()
 	go o.heartbeatAgentRun(run)
 	return o.agentRunStatus(run), nil
 }
@@ -190,11 +198,19 @@ func (o *runtimeOwner) StartAgentRunSandboxed(environmentID, writerOwner, execut
 		cancel()
 		return agentRunStatus{}, err
 	}
-	if err := o.installAgentRun(run); err != nil {
+	_, guard, err := o.service.Environments.BeginWriterOperation(environmentID, writerOwner, run.writerLease, "run")
+	if err != nil {
 		cancel()
+		o.clearWriterObservation(run.environmentID, o.writerObservation("run", run.id, 0, "", "", "", "", ""))
 		return agentRunStatus{}, err
 	}
-	go o.executeSandboxAgentRun(run, prepared)
+	if err := o.installAgentRun(run); err != nil {
+		guard.Close()
+		cancel()
+		o.clearWriterObservation(run.environmentID, o.writerObservation("run", run.id, 0, "", "", "", "", ""))
+		return agentRunStatus{}, err
+	}
+	go func() { defer guard.Close(); o.executeSandboxAgentRun(run, prepared) }()
 	go o.heartbeatAgentRun(run)
 	return o.agentRunStatus(run), nil
 }

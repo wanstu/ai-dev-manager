@@ -72,18 +72,21 @@ type writerHeartbeatSource struct {
 }
 
 type writerDiagnostics struct {
-	EnvironmentID            string                  `json:"environment_id"`
-	Active                   bool                    `json:"active"`
-	OwnerFingerprint         string                  `json:"owner_fingerprint,omitempty"`
-	LastRenewalAction        string                  `json:"last_renewal_action,omitempty"`
-	AcquiredAt               *time.Time              `json:"acquired_at,omitempty"`
-	LastSeenAt               *time.Time              `json:"last_seen_at,omitempty"`
-	ExpiresAt                *time.Time              `json:"expires_at,omitempty"`
-	HeartbeatIntervalSeconds int64                   `json:"heartbeat_interval_seconds,omitempty"`
-	Attribution              string                  `json:"attribution"`
-	GatewayOwner             runtimeOwnerInfo        `json:"gateway_owner"`
-	HeartbeatSources         []writerHeartbeatSource `json:"heartbeat_sources"`
-	Note                     string                  `json:"note,omitempty"`
+	PendingOperations        []environmentpkg.PendingWriterOperation `json:"pending_operations"`
+	HandoffPending           bool                                    `json:"handoff_pending"`
+	HandoffCheckError        string                                  `json:"handoff_check_error,omitempty"`
+	EnvironmentID            string                                  `json:"environment_id"`
+	Active                   bool                                    `json:"active"`
+	OwnerFingerprint         string                                  `json:"owner_fingerprint,omitempty"`
+	LastRenewalAction        string                                  `json:"last_renewal_action,omitempty"`
+	AcquiredAt               *time.Time                              `json:"acquired_at,omitempty"`
+	LastSeenAt               *time.Time                              `json:"last_seen_at,omitempty"`
+	ExpiresAt                *time.Time                              `json:"expires_at,omitempty"`
+	HeartbeatIntervalSeconds int64                                   `json:"heartbeat_interval_seconds,omitempty"`
+	Attribution              string                                  `json:"attribution"`
+	GatewayOwner             runtimeOwnerInfo                        `json:"gateway_owner"`
+	HeartbeatSources         []writerHeartbeatSource                 `json:"heartbeat_sources"`
+	Note                     string                                  `json:"note,omitempty"`
 }
 
 type runtimeOwner struct {
@@ -247,6 +250,13 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 		Attribution:      "none",
 		GatewayOwner:     o.Info(),
 		HeartbeatSources: []writerHeartbeatSource{},
+	}
+	pending, pendingErr := o.service.Environments.PendingWriterOperations(environment)
+	if pendingErr != nil {
+		diagnostics.HandoffCheckError = pendingErr.Error()
+	} else {
+		diagnostics.PendingOperations = pending
+		diagnostics.HandoffPending = len(pending) > 0
 	}
 	if environment.Writer == nil {
 		diagnostics.Note = "No active Writer lease."

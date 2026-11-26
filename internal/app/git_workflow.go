@@ -116,10 +116,11 @@ func withGitWriter(
 	environmentID, owner string,
 	run func(context.Context, *runtime.Runtime) (any, error),
 ) (any, error) {
-	authority, err := s.Environments.RequireWriter(environmentID, owner)
+	authority, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, nil, "git")
 	if err != nil {
 		return nil, err
 	}
+	defer guard.Close()
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return nil, err
