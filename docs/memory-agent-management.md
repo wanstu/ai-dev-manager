@@ -57,3 +57,14 @@
 ## 当前边界
 
 本阶段不接入额外模型、向量数据库、后台自动总结或无选择的上下文注入。MCP Gateway 指令要求 Agent 在任务开始时召回相关内容并在重要节点维护记忆，但客户端是否遵循指令取决于实际 Agent。管理端继续使用既有 KV 格式及编辑入口，与新增 MCP 操作共用同一数据源。
+
+## 结构化记忆和版本
+
+- Entry 新增 revision、metadata、updated_at。历史 KV 在首次修改前 revision=0，更新时间未知，不伪造历史。现有写入接口保留；新记录从 revision=1 开始，相同内容和元数据的重复写入不新增版本。
+- organize 的 change 可指定 metadata（category、tags、importance）及 expected_revision。更新元数据必须提供 value 和 expected_revision；类别为 convention、decision、progress、issue、environment、preference、other 或空，重要度 0（未设）～5，标签去重规范化。搜索匹配类别及标签。
+- 新增 global_history/environment_history：key 必填，revision 可选；默认只列版本摘要，指定 revision 才读取完整历史正文。
+- 新增 global_restore/environment_restore：key、revision、expected_revision 必填。恢复历史正文与元数据，内容有变化则创建新版本；拒绝过时 revision。每个 key 保留当前版本和最近 20 个历史版本。
+- 删除当前条目后，旧版本仍可通过 key 查阅和恢复；环境移除时同步移除对应历史。当前不是永久清除接口，管理员永久清除及按已删除条目浏览仍需实现。请勿存储秘密。
+- 新增 global_duplicates/environment_duplicates：报告作用域内正文完全相同的非空条目，最多 100 组、64 KiB 输出；不自动合并。近似重复、语义召回仍待实现。
+- 全局恢复仅管理员，环境恢复由 Agent 显式指定环境执行。所有操作不借用 Writer。
+- 管理页面当前显示分类、标签、重要度、版本及更新时间，搜索包含分类编码与标签；历史恢复和元数据编辑 UI 尚待接入，Agent MCP 已支持。

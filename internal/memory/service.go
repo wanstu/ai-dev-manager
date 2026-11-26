@@ -4,129 +4,106 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/store"
 )
 
 type Entry struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	Key       string                `json:"key"`
+	Value     string                `json:"value"`
+	Revision  int64                 `json:"revision,omitempty"`
+	Metadata  *model.MemoryMetadata `json:"metadata,omitempty"`
+	UpdatedAt *time.Time            `json:"updated_at,omitempty"`
 }
 
 type Service struct{ store *store.Store }
 
 func New(s *store.Store) *Service { return &Service{store: s} }
 
-func (s *Service) GlobalList() ([]Entry, error) {
-	state, err := s.store.Load()
-	if err != nil {
-		return nil, err
-	}
-	return entries(state.GlobalMemory), nil
-}
-
-func (s *Service) GlobalRead(key string) (Entry, error) {
-	state, err := s.store.Load()
-	if err != nil {
-		return Entry{}, err
-	}
-	key = strings.TrimSpace(key)
-	value, ok := state.GlobalMemory[key]
-	if !ok {
-		return Entry{}, fmt.Errorf("global memory key %q not found", key)
-	}
-	return Entry{Key: key, Value: value}, nil
-}
-
-func (s *Service) GlobalWrite(key, value string) error {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return fmt.Errorf("memory key is required")
-	}
-	return s.store.Update(func(state *model.State) error {
-		if state.GlobalMemory == nil {
-			state.GlobalMemory = map[string]string{}
+func scope(state *model.State, id string, global bool, create bool) (*map[string]string, map[string]model.MemoryRecord, error) {
+	if global {
+		if create && state.GlobalMemoryRecords == nil {
+			state.GlobalMemoryRecords = map[string]model.MemoryRecord{}
 		}
-		state.GlobalMemory[key] = value
-		return nil
-	})
-}
-
-func (s *Service) GlobalDelete(key string) error {
-	return s.store.Update(func(state *model.State) error {
-		delete(state.GlobalMemory, strings.TrimSpace(key))
-		return nil
-	})
-}
-
-func (s *Service) EnvironmentList(environmentID string) ([]Entry, error) {
-	state, err := s.store.Load()
-	if err != nil {
-		return nil, err
+		return &state.GlobalMemory, state.GlobalMemoryRecords, nil
 	}
-	for _, env := range state.Environments {
-		if env.ID == environmentID {
-			return entries(env.PrivateMemory), nil
-		}
-	}
-	return nil, fmt.Errorf("environment %q not found", environmentID)
-}
-
-func (s *Service) EnvironmentRead(environmentID, key string) (Entry, error) {
-	state, err := s.store.Load()
-	if err != nil {
-		return Entry{}, err
-	}
-	key = strings.TrimSpace(key)
-	for _, env := range state.Environments {
-		if env.ID == environmentID {
-			value, ok := env.PrivateMemory[key]
-			if !ok {
-				return Entry{}, fmt.Errorf("environment memory key %q not found", key)
-			}
-			return Entry{Key: key, Value: value}, nil
-		}
-	}
-	return Entry{}, fmt.Errorf("environment %q not found", environmentID)
-}
-
-func (s *Service) EnvironmentWrite(environmentID, key, value string) error {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return fmt.Errorf("memory key is required")
-	}
-	return s.store.Update(func(state *model.State) error {
-		for i := range state.Environments {
-			if state.Environments[i].ID == environmentID {
-				if state.Environments[i].PrivateMemory == nil {
-					state.Environments[i].PrivateMemory = map[string]string{}
+	for i := range state.Environments {
+		if state.Environments[i].ID == id {
+			if create {
+				if state.EnvironmentMemoryRecords == nil {
+					state.EnvironmentMemoryRecords = map[string]map[string]model.MemoryRecord{}
 				}
-				state.Environments[i].PrivateMemory[key] = value
-				return nil
+				if state.EnvironmentMemoryRecords[id] == nil {
+					state.EnvironmentMemoryRecords[id] = map[string]model.MemoryRecord{}
+				}
 			}
+			return &state.Environments[i].PrivateMemory, state.EnvironmentMemoryRecords[id], nil
 		}
-		return fmt.Errorf("environment %q not found", environmentID)
-	})
+	}
+	return nil, nil, fmt.Errorf("environment %q not found", id)
 }
-
-func (s *Service) EnvironmentDelete(environmentID, key string) error {
-	return s.store.Update(func(state *model.State) error {
-		for i := range state.Environments {
-			if state.Environments[i].ID == environmentID {
-				delete(state.Environments[i].PrivateMemory, strings.TrimSpace(key))
-				return nil
-			}
-		}
-		return fmt.Errorf("environment %q not found", environmentID)
-	})
+func entry(key, value string, record model.MemoryRecord) Entry {
+	e := Entry{Key: key, Value: value, Revision: record.Revision, UpdatedAt: record.UpdatedAt}
+	if record.Revision > 0 {
+		e.Metadata = &record.Metadata
+	}
+	return e
 }
-
-func entries(values map[string]string) []Entry {
-	out := make([]Entry, 0, len(values))
-	for key, value := range values {
-		out = append(out, Entry{Key: key, Value: value})
+func (s *Service) list(id string, global bool) ([]Entry, error) {
+	state, err := s.store.Load()
+	if err != nil {
+		return nil, err
+	}
+	values, records, err := scope(&state, id, global, false)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Entry, 0, len(*values))
+	for k, v := range *values {
+		out = append(out, entry(k, v, records[k]))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	return out
+	return out, nil
 }
+func (s *Service) read(id string, global bool, key string) (Entry, error) {
+	state, err := s.store.Load()
+	if err != nil {
+		return Entry{}, err
+	}
+	values, records, err := scope(&state, id, global, false)
+	if err != nil {
+		return Entry{}, err
+	}
+	key = strings.TrimSpace(key)
+	v, ok := (*values)[key]
+	if !ok {
+		return Entry{}, fmt.Errorf("memory key %q not found", key)
+	}
+	return entry(key, v, records[key]), nil
+}
+func (s *Service) mutate(id string, global bool, key string, value *string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return fmt.Errorf("memory key is required")
+	}
+	return s.store.Update(func(state *model.State) error {
+		values, records, err := scope(state, id, global, true)
+		if err != nil {
+			return err
+		}
+		applyVersion(values, records, key, value, nil)
+		return nil
+	})
+}
+func (s *Service) GlobalList() ([]Entry, error)                  { return s.list("", true) }
+func (s *Service) GlobalRead(key string) (Entry, error)          { return s.read("", true, key) }
+func (s *Service) GlobalWrite(key, value string) error           { return s.mutate("", true, key, &value) }
+func (s *Service) GlobalDelete(key string) error                 { return s.mutate("", true, key, nil) }
+func (s *Service) EnvironmentList(id string) ([]Entry, error)    { return s.list(id, false) }
+func (s *Service) EnvironmentRead(id, key string) (Entry, error) { return s.read(id, false, key) }
+func (s *Service) EnvironmentWrite(id, key, value string) error {
+	return s.mutate(id, false, key, &value)
+}
+func (s *Service) EnvironmentDelete(id, key string) error { return s.mutate(id, false, key, nil) }

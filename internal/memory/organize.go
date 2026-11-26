@@ -59,6 +59,9 @@ func search(items []Entry, query string, limit, maxBytes int) (SearchResult, err
 	matches := make([]ranked, 0)
 	for _, item := range items {
 		key, value := strings.ToLower(item.Key), strings.ToLower(item.Value)
+		if item.Metadata != nil {
+			key += " " + item.Metadata.Category + " " + strings.Join(item.Metadata.Tags, " ")
+		}
 		score, matched := 0, true
 		for _, term := range terms {
 			if strings.Contains(key, term) {
@@ -102,9 +105,11 @@ func search(items []Entry, query string, limit, maxBytes int) (SearchResult, err
 // Change is a compare-and-set operation. Null/absent expected_value means the
 // key must not exist. Null/absent value means delete; an empty string is valid.
 type Change struct {
-	Key           string  `json:"key"`
-	ExpectedValue *string `json:"expected_value"`
-	Value         *string `json:"value"`
+	Key              string                `json:"key"`
+	ExpectedValue    *string               `json:"expected_value"`
+	Value            *string               `json:"value"`
+	Metadata         *model.MemoryMetadata `json:"metadata,omitempty"`
+	ExpectedRevision *int64                `json:"expected_revision,omitempty"`
 }
 type OrganizeResult struct {
 	Created int  `json:"created"`
@@ -140,26 +145,29 @@ func (s *Service) organize(id string, global bool, changes []Change, dryRun bool
 		}
 		seen[key] = true
 		normalized[i].Key = key
+		if c.Metadata != nil {
+			if c.Value == nil || c.ExpectedRevision == nil {
+				return OrganizeResult{}, fmt.Errorf("metadata changes require value and expected_revision")
+			}
+			m, err := normalizeMetadata(*c.Metadata)
+			if err != nil {
+				return OrganizeResult{}, err
+			}
+			normalized[i].Metadata = &m
+		}
 	}
 	var out OrganizeResult
 	apply := func(state *model.State) error {
-		var target *map[string]string
-		if global {
-			target = &state.GlobalMemory
-		} else {
-			for i := range state.Environments {
-				if state.Environments[i].ID == id {
-					target = &state.Environments[i].PrivateMemory
-					break
-				}
-			}
-		}
-		if target == nil {
-			return fmt.Errorf("environment %q not found", id)
+		target, records, err := scope(state, id, global, true)
+		if err != nil {
+			return err
 		}
 		// Validate every precondition before touching any entry.
 		for _, c := range normalized {
 			old, exists := (*target)[c.Key]
+			if c.ExpectedRevision != nil && records[c.Key].Revision != *c.ExpectedRevision {
+				return fmt.Errorf("memory revision conflict for key %q", c.Key)
+			}
 			if (c.ExpectedValue == nil && exists) || (c.ExpectedValue != nil && (!exists || old != *c.ExpectedValue)) {
 				return fmt.Errorf("memory conflict for key %q; reread before organizing", c.Key)
 			}
@@ -170,7 +178,7 @@ func (s *Service) organize(id string, global bool, changes []Change, dryRun bool
 		}
 		for _, c := range normalized {
 			if c.Value == nil {
-				delete(*target, c.Key)
+				applyVersion(target, records, c.Key, nil, nil)
 				out.Deleted++
 			} else {
 				if c.ExpectedValue == nil {
@@ -178,7 +186,7 @@ func (s *Service) organize(id string, global bool, changes []Change, dryRun bool
 				} else {
 					out.Updated++
 				}
-				(*target)[c.Key] = *c.Value
+				applyVersion(target, records, c.Key, c.Value, c.Metadata)
 			}
 		}
 		return nil

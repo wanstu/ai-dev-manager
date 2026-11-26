@@ -81,6 +81,16 @@ func (s *Store) saveLocked(state model.State) error {
 		state.GlobalMemory = map[string]string{}
 	}
 	normalizeRetentionState(&state)
+	// Private history must follow the owning Environment's lifetime.
+	active := make(map[string]bool, len(state.Environments))
+	for _, env := range state.Environments {
+		active[env.ID] = true
+	}
+	for id := range state.EnvironmentMemoryRecords {
+		if !active[id] {
+			delete(state.EnvironmentMemoryRecords, id)
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}

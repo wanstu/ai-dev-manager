@@ -3886,7 +3886,7 @@ function renderMemory(container, entries, scope) {
   const filterElement = scope === 'global' ? elements.globalMemoryFilter : elements.environmentMemoryFilter;
   const countElement = scope === 'global' ? elements.globalMemoryCount : elements.environmentMemoryCount;
   const filter = String(filterElement.value || '').trim().toLocaleLowerCase();
-  const visible = filter ? all.filter(entry => (String(entry.key || '') + '\n' + String(entry.value || '')).toLocaleLowerCase().includes(filter)) : all;
+  const visible = filter ? all.filter(entry => (String(entry.key || '') + '\n' + String(entry.value || '') + '\n' + String(entry.metadata?.category || '') + '\n' + safeArray(entry.metadata?.tags).join(' ')).toLocaleLowerCase().includes(filter)) : all;
   countElement.textContent = filter ? visible.length + ' / ' + all.length + ' 条' : all.length + ' 条';
   if (!all.length) return emptyMessage(container, '还没有记忆条目');
   if (!visible.length) return emptyMessage(container, '没有匹配的记忆条目');
@@ -3901,7 +3901,17 @@ function renderMemory(container, entries, scope) {
     key.textContent = entry.key || '';
     const value = document.createElement('pre');
     value.textContent = entry.value || '';
-    content.append(key, value);
+    content.append(key);
+    if (entry.revision || entry.metadata) {
+      const meta = document.createElement('div');
+      meta.className = 'memory-entry-metadata';
+      const categories = {convention:'开发规范',decision:'架构决策',progress:'开发进度',issue:'问题经验',environment:'环境知识',preference:'用户偏好',other:'其他'};
+      const category = categories[entry.metadata?.category] || '未分类';
+      const tokens = [category, entry.metadata?.importance ? '重要度 '+entry.metadata.importance+'/5' : '', '版本 '+(entry.revision || 0), ...safeArray(entry.metadata?.tags), entry.updated_at ? new Date(entry.updated_at).toLocaleString() : ''].filter(Boolean);
+      for (const token of tokens) {const chip=document.createElement('span');chip.textContent=token;meta.append(chip);}
+      content.append(meta);
+    }
+    content.append(value);
     const edit = createActionButton('编辑内容', 'edit-' + scope + '-memory', entry.key);
     edit.addEventListener('click', () => {
       const isGlobal = scope === 'global';

@@ -410,6 +410,26 @@ type EnvironmentMemoryOrganizeInput struct {
 	Changes       []memory.Change `json:"changes"`
 	DryRun        bool            `json:"dry_run,omitempty"`
 }
+type MemoryHistoryInput struct {
+	Key      string `json:"key"`
+	Revision *int64 `json:"revision,omitempty"`
+}
+type EnvironmentMemoryHistoryInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Key           string `json:"key"`
+	Revision      *int64 `json:"revision,omitempty"`
+}
+type MemoryRestoreInput struct {
+	Key              string `json:"key"`
+	Revision         int64  `json:"revision"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+type EnvironmentMemoryRestoreInput struct {
+	EnvironmentID    string `json:"environment_id"`
+	Key              string `json:"key"`
+	Revision         int64  `json:"revision"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
 type MemoryKeyInput struct {
 	Key string `json:"key"`
 }
@@ -801,7 +821,7 @@ func isV144AdminOnlyTool(name string) bool {
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
 		"resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote",
-		"memory_global_write", "memory_global_delete", "memory_global_organize",
+		"memory_global_write", "memory_global_delete", "memory_global_organize", "memory_global_restore",
 		"strong_permission_control_set":
 		return true
 	default:
@@ -1842,6 +1862,30 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(content, err)
 		})
 
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_history", Description: "List retained revisions of a shared memory key; specify revision to read its full historical value."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryHistoryInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.History("", true, in.Key, in.Revision)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_history", Description: "List retained revisions (including deleted memories) for a key in one explicit Environment; revision selects full historical value."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryHistoryInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.History(in.EnvironmentID, false, in.Key, in.Revision)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_restore", Description: "Admin-only: restore an earlier memory revision as a new revision; expected_revision guards against concurrent changes."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryRestoreInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Restore("", true, in.Key, in.Revision, in.ExpectedRevision)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_restore", Description: "Restore an earlier value and metadata as a new revision in one explicit Environment; expected_revision guards against concurrent changes."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryRestoreInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Restore(in.EnvironmentID, false, in.Key, in.Revision, in.ExpectedRevision)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_duplicates", Description: "Identify exact duplicate nonempty shared memory content; read-only, never merges automatically."}, func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Duplicates("", true)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_duplicates", Description: "Identify exact duplicate nonempty memory content within one explicit Environment; read-only."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Duplicates(in.EnvironmentID, false)
+		return toolResult(result, err)
+	})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_search", Description: "Search shared durable memories by key and content. Case-insensitive keyword matching, bounded output; use read for a complete entry."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in MemorySearchInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Memory.GlobalSearch(in.Query, in.Limit, in.MaxOutputBytes)

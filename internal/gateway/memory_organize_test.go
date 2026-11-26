@@ -58,3 +58,40 @@ func TestAgentMemoryOrganizeSurface(t *testing.T) {
 		t.Fatal(toolText(t, result))
 	}
 }
+
+func TestAgentMemoryHistoryRestoreAndDuplicateTools(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(t.TempDir(), "history-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "history-test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	agent := connectInMemory(t, ctx, newCompactAgentServer(service, nil))
+	defer agent.Close()
+	call := func(action string, args map[string]any) string {
+		t.Helper()
+		r := callGatewayTool(t, ctx, agent, "adm_memory", map[string]any{"action": action, "arguments": args})
+		if r.IsError {
+			t.Fatal(toolText(t, r))
+		}
+		return toolText(t, r)
+	}
+	call("environment_write", map[string]any{"environment_id": env.ID, "key": "a", "value": "old"})
+	call("environment_write", map[string]any{"environment_id": env.ID, "key": "a", "value": "new"})
+	if h := call("environment_history", map[string]any{"environment_id": env.ID, "key": "a", "revision": 1}); !strings.Contains(h, "old") {
+		t.Fatal(h)
+	}
+	call("environment_restore", map[string]any{"environment_id": env.ID, "key": "a", "revision": 1, "expected_revision": 2})
+	call("environment_write", map[string]any{"environment_id": env.ID, "key": "b", "value": "old"})
+	if d := call("environment_duplicates", map[string]any{"environment_id": env.ID}); !strings.Contains(d, "total_groups") {
+		t.Fatal(d)
+	}
+	denied := callGatewayTool(t, ctx, agent, "adm_memory", map[string]any{"action": "global_restore", "arguments": map[string]any{"key": "a", "revision": 1, "expected_revision": 2}})
+	if !denied.IsError || !strings.Contains(toolText(t, denied), "Admin surface") {
+		t.Fatal(toolText(t, denied))
+	}
+}

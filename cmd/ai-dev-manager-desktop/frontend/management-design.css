@@ -184,3 +184,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .memory-row { grid-template-columns:minmax(0,1fr); }
   .memory-row-actions { justify-content:flex-start; }
 }
+
+.memory-entry-metadata {display:flex;flex-wrap:wrap;gap:5px;margin:7px 0;color:var(--adm-secondary);font-size:11px;}
+.memory-entry-metadata span {border:1px solid var(--adm-border);border-radius:5px;padding:2px 6px;overflow-wrap:anywhere;}

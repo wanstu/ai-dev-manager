@@ -190,22 +190,24 @@ type ExecUsage struct {
 }
 
 type State struct {
-	Version                         int                   `json:"version"`
-	Workspaces                      []Workspace           `json:"workspaces"`
-	Environments                    []Environment         `json:"environments"`
-	ManagedWorktrees                []ManagedWorktree     `json:"managed_worktrees,omitempty"`
-	WorktreeSettings                WorktreeSettings      `json:"worktree_settings"`
-	GatewayAccess                   GatewayAccessSettings `json:"gateway_access"`
-	WebAccess                       WebAccessSettings     `json:"web_access,omitempty"`
-	AllowedExecutables              []string              `json:"allowed_executables,omitempty"`
-	BlockedExecutables              []string              `json:"blocked_executables,omitempty"`
-	ExecFullAuthorization           bool                  `json:"exec_full_authorization,omitempty"`
-	StrongPermissionControlDisabled bool                  `json:"strong_permission_control_disabled,omitempty"`
-	AutoIndexEnvironmentIDs         []string              `json:"auto_index_environment_ids,omitempty"`
-	ExecDenials                     []ExecDenial          `json:"exec_denials,omitempty"`
-	ExecUsages                      []ExecUsage           `json:"exec_usages,omitempty"`
-	MCPs                            []MCPDefinition       `json:"mcps,omitempty"`
-	SkillSources                    []SkillSource         `json:"skill_sources,omitempty"`
-	Skills                          []CatalogEntry        `json:"skills,omitempty"`
-	GlobalMemory                    map[string]string     `json:"global_memory,omitempty"`
+	Version                         int                                `json:"version"`
+	Workspaces                      []Workspace                        `json:"workspaces"`
+	Environments                    []Environment                      `json:"environments"`
+	ManagedWorktrees                []ManagedWorktree                  `json:"managed_worktrees,omitempty"`
+	WorktreeSettings                WorktreeSettings                   `json:"worktree_settings"`
+	GatewayAccess                   GatewayAccessSettings              `json:"gateway_access"`
+	WebAccess                       WebAccessSettings                  `json:"web_access,omitempty"`
+	AllowedExecutables              []string                           `json:"allowed_executables,omitempty"`
+	BlockedExecutables              []string                           `json:"blocked_executables,omitempty"`
+	ExecFullAuthorization           bool                               `json:"exec_full_authorization,omitempty"`
+	StrongPermissionControlDisabled bool                               `json:"strong_permission_control_disabled,omitempty"`
+	AutoIndexEnvironmentIDs         []string                           `json:"auto_index_environment_ids,omitempty"`
+	ExecDenials                     []ExecDenial                       `json:"exec_denials,omitempty"`
+	ExecUsages                      []ExecUsage                        `json:"exec_usages,omitempty"`
+	MCPs                            []MCPDefinition                    `json:"mcps,omitempty"`
+	SkillSources                    []SkillSource                      `json:"skill_sources,omitempty"`
+	Skills                          []CatalogEntry                     `json:"skills,omitempty"`
+	GlobalMemory                    map[string]string                  `json:"global_memory,omitempty"`
+	GlobalMemoryRecords             map[string]MemoryRecord            `json:"global_memory_records,omitempty"`
+	EnvironmentMemoryRecords        map[string]map[string]MemoryRecord `json:"environment_memory_records,omitempty"`
 }
