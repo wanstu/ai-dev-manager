@@ -210,3 +210,57 @@ func (s *Service) Duplicates(id string, global bool) (DuplicateResult, error) {
 	}
 	return out, nil
 }
+
+type TrashEntry struct {
+	Key                string     `json:"key"`
+	Revision           int64      `json:"revision"`
+	UpdatedAt          *time.Time `json:"updated_at,omitempty"`
+	RestorableRevision *int64     `json:"restorable_revision,omitempty"`
+}
+
+func (s *Service) Trash(id string, global bool) ([]TrashEntry, error) {
+	state, err := s.store.Load()
+	if err != nil {
+		return nil, err
+	}
+	values, records, err := scope(&state, id, global, false)
+	if err != nil {
+		return nil, err
+	}
+	out := []TrashEntry{}
+	for k, r := range records {
+		if _, exists := (*values)[k]; exists {
+			continue
+		}
+		item := TrashEntry{Key: k, Revision: r.Revision, UpdatedAt: r.UpdatedAt}
+		for i := len(r.History) - 1; i >= 0; i-- {
+			if r.History[i].Value != nil {
+				v := r.History[i].Revision
+				item.RestorableRevision = &v
+				break
+			}
+		}
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out, nil
+}
+
+// Purge removes a deleted record and its retained history. Active keys cannot be purged.
+func (s *Service) Purge(id string, global bool, key string, expected int64) error {
+	return s.store.Update(func(state *model.State) error {
+		values, records, err := scope(state, id, global, false)
+		if err != nil {
+			return err
+		}
+		if _, exists := (*values)[key]; exists {
+			return fmt.Errorf("active memory must be deleted before purge")
+		}
+		r, exists := records[key]
+		if !exists || r.Revision != expected {
+			return fmt.Errorf("memory revision conflict; reload trash")
+		}
+		delete(records, key)
+		return nil
+	})
+}

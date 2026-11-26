@@ -782,3 +782,38 @@ func (c *Client) EnvironmentMemoryDelete(environmentID, key string) error {
 func (c *Client) MCPProbe(ctx context.Context, mcpID string) (app.MCPHealthStatus, error) {
 	return callAdmin[app.MCPHealthStatus](c, ctx, "mcp_probe", map[string]any{"id": mcpID})
 }
+
+func memoryTool(id, action string, args map[string]any) string {
+	if id == "" {
+		return "memory_global_" + action
+	}
+	args["environment_id"] = id
+	return "memory_environment_" + action
+}
+func (c *Client) MemoryHistory(id, key string, revision *int64) (memory.HistoryResult, error) {
+	args := map[string]any{"key": key}
+	if revision != nil {
+		args["revision"] = *revision
+	}
+	return callAdmin[memory.HistoryResult](c, context.Background(), memoryTool(id, "history", args), args)
+}
+func (c *Client) MemoryRestore(id, key string, revision, expected int64) (memory.Entry, error) {
+	args := map[string]any{"key": key, "revision": revision, "expected_revision": expected}
+	return callAdmin[memory.Entry](c, context.Background(), memoryTool(id, "restore", args), args)
+}
+func (c *Client) MemoryTrash(id string) ([]memory.TrashEntry, error) {
+	args := map[string]any{}
+	return callAdmin[[]memory.TrashEntry](c, context.Background(), memoryTool(id, "trash", args), args)
+}
+func (c *Client) MemoryPurge(id, key string, expected int64) error {
+	args := map[string]any{"key": key, "expected_revision": expected}
+	return callAdminNoResult(c, context.Background(), memoryTool(id, "purge", args), args)
+}
+func (c *Client) MemoryDuplicates(id string) (memory.DuplicateResult, error) {
+	args := map[string]any{}
+	return callAdmin[memory.DuplicateResult](c, context.Background(), memoryTool(id, "duplicates", args), args)
+}
+func (c *Client) MemoryOrganize(id string, changes []memory.Change, dryRun bool) (memory.OrganizeResult, error) {
+	args := map[string]any{"changes": changes, "dry_run": dryRun}
+	return callAdmin[memory.OrganizeResult](c, context.Background(), memoryTool(id, "organize", args), args)
+}

@@ -3860,6 +3860,11 @@ function closeEnvironmentDetail() {
 }
 function refreshSelectedEnvironmentDetail() { if (!selectedEnvironmentID) return false; const token = detailGeneration, id = selectedEnvironmentID, inspection = managementInspection; if (token !== detailGeneration || id !== selectedEnvironmentID || inspection?.environment?.environment_id !== id) return false; return renderEnvironmentDetailFromInspection(inspection, token); }
 
+const memoryEditorState = new Map();
+function memoryScopeToken(kind) {return kind==='global'?currentGlobalMemoryScope():currentEnvironmentMemoryScope();}
+function memoryScopeValid(kind,token) {return kind==='global'?globalMemoryScopeIsCurrent(token):environmentMemoryScopeIsCurrent(token);}
+function memoryScopeID(kind,token) {return kind==='global'?'':token.environmentID;}
+function memoryReload(kind,token) {return kind==='global'?loadGlobalMemory({scope:token}):loadEnvironmentMemory({scope:token});}
 function prepareMemoryEditor(scope, entry = null) {
   const isGlobal = scope === 'global';
   const form = isGlobal ? elements.globalMemoryForm : elements.environmentMemoryForm;
@@ -3868,6 +3873,10 @@ function prepareMemoryEditor(scope, entry = null) {
   const title = isGlobal ? elements.globalMemoryDialogTitle : elements.environmentMemoryDialogTitle;
   const submit = isGlobal ? elements.globalMemorySubmit : elements.environmentMemorySubmit;
   form.reset();
+  memoryEditorState.set(scope,{entry,token:memoryScopeToken(scope)});
+  document.getElementById(scope+'MemoryCategory').value=entry?.metadata?.category||'';
+  document.getElementById(scope+'MemoryImportance').value=String(entry?.metadata?.importance||0);
+  document.getElementById(scope+'MemoryTags').value=safeArray(entry?.metadata?.tags).join(', ');
   form.dataset.editingKey = entry ? String(entry.key || '') : '';
   keyInput.readOnly = Boolean(entry);
   if (entry) keyInput.setAttribute('aria-readonly', 'true');
@@ -3886,8 +3895,10 @@ function renderMemory(container, entries, scope) {
   const filterElement = scope === 'global' ? elements.globalMemoryFilter : elements.environmentMemoryFilter;
   const countElement = scope === 'global' ? elements.globalMemoryCount : elements.environmentMemoryCount;
   const filter = String(filterElement.value || '').trim().toLocaleLowerCase();
-  const visible = filter ? all.filter(entry => (String(entry.key || '') + '\n' + String(entry.value || '') + '\n' + String(entry.metadata?.category || '') + '\n' + safeArray(entry.metadata?.tags).join(' ')).toLocaleLowerCase().includes(filter)) : all;
-  countElement.textContent = filter ? visible.length + ' / ' + all.length + ' 条' : all.length + ' 条';
+  const categoryFilter = document.getElementById(scope+'MemoryCategoryFilter').value;
+  const categorized = categoryFilter==='all'?all:all.filter(entry=>(entry.metadata?.category||'')===categoryFilter);
+  const visible = filter ? categorized.filter(entry => (String(entry.key || '') + '\n' + String(entry.value || '') + '\n' + String(entry.metadata?.category || '') + '\n' + safeArray(entry.metadata?.tags).join(' ')).toLocaleLowerCase().includes(filter)) : categorized;
+  countElement.textContent = (filter||categoryFilter!=='all') ? visible.length + ' / ' + all.length + ' 条' : all.length + ' 条';
   if (!all.length) return emptyMessage(container, '还没有记忆条目');
   if (!visible.length) return emptyMessage(container, '没有匹配的记忆条目');
   container.replaceChildren();
@@ -3920,7 +3931,9 @@ function renderMemory(container, entries, scope) {
     });
     const actions = document.createElement('div');
     actions.className = 'memory-row-actions';
-    actions.append(edit, createActionButton('删除', 'delete-' + scope + '-memory', entry.key, 'danger'));
+    const history = createActionButton('历史版本','history-'+scope+'-memory',entry.key);
+    history.addEventListener('click',()=>openMemoryTools(scope,'history',entry.key));
+    actions.append(edit, history, createActionButton('删除', 'delete-' + scope + '-memory', entry.key, 'danger'));
     row.append(content, actions);
     container.append(row);
   }
@@ -3936,6 +3949,7 @@ function resetEnvironmentMemoryScope(message = '') {
   loadedEnvironmentMemoryID = '';
   environmentMemoryEntries = [];
   elements.environmentMemoryFilter.value = '';
+  document.getElementById('environmentMemoryCategoryFilter').value='all';
   elements.environmentMemoryCount.textContent = '未加载';
   emptyMessage(elements.environmentMemoryList, message || (managementEnvironmentID ? '尚未加载当前环境记忆' : '请选择管理环境后加载私有记忆'));
   renderEnvironmentMemoryScope();
@@ -4787,33 +4801,111 @@ document.getElementById('globalMemoryDialog').addEventListener('close', () => pr
 document.getElementById('environmentMemoryDialog').addEventListener('close', () => prepareMemoryEditor('environment'));
 elements.globalMemoryFilter.addEventListener('input', () => renderMemory(elements.globalMemoryList, globalMemoryEntries, 'global'));
 elements.environmentMemoryFilter.addEventListener('input', () => renderMemory(elements.environmentMemoryList, environmentMemoryEntries, 'environment'));
-elements.globalMemoryForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const editingKey = elements.globalMemoryForm.dataset.editingKey || '';
-  const key = editingKey || elements.globalMemoryKey.value.trim();
-  const value = elements.globalMemoryValue.value;
-  if (!key) return;
-  const scope = currentGlobalMemoryScope();
-  await runMutation(editingKey ? '更新全局记忆' : '新增全局记忆', () => desktopAdapter().WriteGlobalMemory(key, value), async () => {
-    prepareMemoryEditor('global');
-    closeFormDialog(elements.globalMemoryForm);
-    if (globalMemoryLoaded && globalMemoryScopeIsCurrent(scope)) await loadGlobalMemory({scope});
+for(const kind of ['global','environment']){
+  const form=kind==='global'?elements.globalMemoryForm:elements.environmentMemoryForm;
+  const keyInput=kind==='global'?elements.globalMemoryKey:elements.environmentMemoryKey;
+  const valueInput=kind==='global'?elements.globalMemoryValue:elements.environmentMemoryValue;
+  document.getElementById(kind+'MemoryCategoryFilter').addEventListener('change',()=>renderMemory(kind==='global'?elements.globalMemoryList:elements.environmentMemoryList,kind==='global'?globalMemoryEntries:environmentMemoryEntries,kind));
+  for(const mode of ['trash','duplicates']){
+    document.getElementById(kind+'Memory'+(mode==='trash'?'Trash':'Duplicates')).addEventListener('click',()=>openMemoryTools(kind,mode));
+  }
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const saved=memoryEditorState.get(kind);
+    if(!saved||!memoryScopeValid(kind,saved.token)||(kind==='environment'&&!saved.token.environmentID))return setStatus('管理范围已变化，请重新打开编辑窗口。','error');
+    const key=saved.entry?.key||keyInput.value.trim();
+    if(!key)return;
+    const metadata={category:document.getElementById(kind+'MemoryCategory').value,importance:Number(document.getElementById(kind+'MemoryImportance').value),tags:document.getElementById(kind+'MemoryTags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean)};
+    const change={key,expected_value:saved.entry?saved.entry.value:null,expected_revision:saved.entry?(saved.entry.revision||0):null,value:valueInput.value,metadata};
+    // A new key may be a deleted key with retained history. Read the history to
+    // obtain its tombstone revision; otherwise use zero. Do not overwrite active data.
+    const id=memoryScopeID(kind,saved.token);
+    if(!saved.entry){
+      try{
+        const h=await desktopAdapter().GetMemoryHistory(id,key,null);
+        change.expected_revision=h.current_revision;
+      }catch(_){change.expected_revision=0;}
+    }
+    if(!memoryScopeValid(kind,saved.token))return setStatus('管理范围已变化，请重新打开编辑窗口。','error');
+    await runMutation(saved.entry?'更新记忆':'新增记忆',()=>desktopAdapter().OrganizeMemory(id,[change],false),async()=>{
+      if(!memoryScopeValid(kind,saved.token))return;
+      closeFormDialog(form);prepareMemoryEditor(kind);await memoryReload(kind,saved.token);
+    });
   });
-});
-elements.environmentMemoryForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const scope = currentEnvironmentMemoryScope();
-  if (!scope.environmentID) return setStatus('请先选择管理环境。', 'error');
-  const editingKey = elements.environmentMemoryForm.dataset.editingKey || '';
-  const key = editingKey || elements.environmentMemoryKey.value.trim();
-  const value = elements.environmentMemoryValue.value;
-  if (!key) return;
-  await runMutation(editingKey ? '更新环境私有记忆' : '新增环境私有记忆', () => desktopAdapter().WriteEnvironmentMemory(scope.environmentID, key, value), async () => {
-    prepareMemoryEditor('environment');
-    closeFormDialog(elements.environmentMemoryForm);
-    if (environmentMemoryLoaded && environmentMemoryScopeIsCurrent(scope)) await loadEnvironmentMemory({scope});
-  });
-});
+}
+
+let memoryToolGeneration=0;
+async function openMemoryTools(kind,mode,key=''){
+ const token=memoryScopeToken(kind),id=memoryScopeID(kind,token);
+ if(kind==='environment'&&!id)return setStatus('请先选择开发环境。','error');
+ const dialog=document.getElementById('memoryToolsDialog'),body=document.getElementById('memoryToolsBody');
+ const generation=++memoryToolGeneration;
+ const valid=()=>generation===memoryToolGeneration&&dialog.open&&memoryScopeValid(kind,token);
+ document.getElementById('memoryToolsTitle').textContent=({history:'历史版本',trash:'回收站',duplicates:'重复记忆'})[mode];
+ document.getElementById('memoryToolsScope').textContent=(kind==='global'?'全局记忆':(currentEnvironment()?.name||id))+(key?' · '+key:'');
+ body.textContent='正在读取…';
+ if(!dialog.open)openEditorDialog('memoryToolsDialog');
+ const append=(tag,text,parent=body)=>{const el=document.createElement(tag);el.textContent=text;parent.append(el);return el;};
+ const button=(label,fn,parent=body)=>{const el=append('button',label,parent);el.type='button';el.className='secondary-button small-button';el.addEventListener('click',async()=>{if(!valid())return;el.disabled=true;try{await fn();}catch(err){if(valid())setStatus(errorText(err),'error');}finally{el.disabled=false;}});return el;};
+ const mutate=async(label,fn)=>{
+   if(!valid())return;
+   await runMutation(label,fn,async()=>{if(memoryScopeValid(kind,token))await memoryReload(kind,token);if(valid())dialog.close();});
+ };
+ try{
+  if(mode==='history'){
+   const h=await desktopAdapter().GetMemoryHistory(id,key,null);
+   if(!valid())return;body.replaceChildren();
+   const current=await desktopAdapter().GetMemoryHistory(id,key,h.current_revision);
+   if(!valid())return;
+   if(current.current_revision!==h.current_revision)throw new Error('记忆已更新，请重新打开历史。');
+   const versions=append('div','');versions.className='memory-versions';
+   const comparison=append('div','');comparison.className='memory-compare';
+   for(const v of safeArray(h.versions)){
+    const line=append('div','',versions);line.className='memory-version-row';
+    append('span','v'+v.revision+(v.revision===h.current_revision?' · 当前':'')+(v.deleted?' · 已删除':'')+(v.updated_at?' · '+new Date(v.updated_at).toLocaleString():''),line);
+    button('查看',async()=>{
+      const selected=await desktopAdapter().GetMemoryHistory(id,key,v.revision);
+      if(!valid())return;if(selected.current_revision!==h.current_revision)throw new Error('记忆已更新，请重新打开历史。');
+      comparison.replaceChildren();
+      for(const [title,item] of [['当前版本',current.selected],['所选版本 v'+v.revision,selected.selected]]){
+        const panel=append('section','',comparison);append('strong',title,panel);append('pre',item?.value??'（已删除）',panel);
+      }
+      if(!v.deleted&&v.revision!==h.current_revision)button('恢复此版本',async()=>{
+        if(await confirmInApp('将此历史版本恢复为当前内容？现有版本会保留。')&&valid())await mutate('恢复记忆',()=>desktopAdapter().RestoreMemory(id,key,v.revision,h.current_revision));
+      },comparison);
+    },line);
+   }
+  }else if(mode==='trash'){
+   const items=safeArray(await desktopAdapter().ListMemoryTrash(id));if(!valid())return;body.replaceChildren();
+   if(!items.length)append('p','回收站为空');
+   for(const item of items){
+    const line=append('div','');line.className='memory-version-row';append('span',item.key,line);
+    button('历史',()=>openMemoryTools(kind,'history',item.key),line);
+    if(item.restorable_revision!=null)button('恢复',async()=>{if(await confirmInApp('恢复此记忆？')&&valid())await mutate('恢复记忆',()=>desktopAdapter().RestoreMemory(id,item.key,item.restorable_revision,item.revision));},line);
+    button('永久删除',async()=>{if(await confirmInApp('永久删除此记忆及全部历史？无法恢复。',{confirmText:'永久删除'})&&valid())await mutate('永久删除记忆',()=>desktopAdapter().PurgeMemory(id,item.key,item.revision));},line);
+   }
+  }else{
+   const result=await desktopAdapter().FindMemoryDuplicates(id);if(!valid())return;body.replaceChildren();
+   append('p','发现 '+result.total_groups+' 组完全重复的正文'+(result.omitted?'（另有 '+result.omitted+' 组未显示）':'')+'。合并时保留选中条目的元数据；其余条目进入回收站。');
+   for(const group of safeArray(result.groups)){
+    const section=append('section','');section.className='memory-duplicate-group';
+    const select=append('select','',section);select.setAttribute('aria-label','选择保留的记忆');
+    for(const k of group.keys){const opt=append('option',k,select);opt.value=k;}
+    button('保留所选并合并',async()=>{
+     const keys=group.keys;const entries=kind==='global'?await desktopAdapter().ListGlobalMemory():await desktopAdapter().ListEnvironmentMemory(id);
+     if(!valid())return;
+     const matching=keys.map(k=>entries.find(e=>e.key===k));
+     if(matching.some(e=>!e)||matching.some(e=>e.value!==matching[0].value))throw new Error('记忆已变化，请重新查重。');
+     const keep=matching.find(e=>e.key===select.value);
+     const changes=matching.map(e=>({key:e.key,expected_value:e.value,expected_revision:e.revision||0,value:e.key===keep.key?e.value:null}));
+     await desktopAdapter().OrganizeMemory(id,changes,true);
+     if(!valid()||!await confirmInApp('保留“'+keep.key+'”，将其余 '+(changes.length-1)+' 条移入回收站？')||!valid())return;
+     await mutate('合并重复记忆',()=>desktopAdapter().OrganizeMemory(id,changes,false));
+    },section);
+   }
+  }
+ }catch(err){if(valid())body.textContent=errorText(err);}
+}
 
 elements.workspaceList.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-action]'); if (!button) return;
@@ -4887,22 +4979,20 @@ async function handleSelectionChange(event, kind) {
   await runMutation(`更新 Environment ${kind.toUpperCase()} 选择`, () => kind === 'mcp' ? desktopAdapter().SetEnvironmentMCP(environmentID, itemID, enabled) : desktopAdapter().SetEnvironmentSkill(environmentID, itemID, enabled));
 }
 elements.environmentMCPSelections.addEventListener('change', (event) => handleSelectionChange(event, 'mcp')); elements.environmentSkillSelections.addEventListener('change', (event) => handleSelectionChange(event, 'skill'));
-elements.globalMemoryList.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-action="delete-global-memory"]'); if (!button) return;
-  const key = button.dataset.id;
-  if (!await confirmInApp('确定删除全局记忆“' + key + '”？此操作不可撤销。', {title:'删除全局记忆', confirmText:'删除'})) return;
-  const scope = currentGlobalMemoryScope();
-  await runMutation('删除全局记忆', () => desktopAdapter().DeleteGlobalMemory(key), async () => { if (globalMemoryScopeIsCurrent(scope)) await loadGlobalMemory({scope}); });
-});
-elements.environmentMemoryList.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-action="delete-environment-memory"]'); if (!button) return;
-  const scope = currentEnvironmentMemoryScope(); if (!scope.environmentID) return setStatus('请先选择管理环境。', 'error');
-  const key = button.dataset.id;
-  if (!await confirmInApp('确定删除当前环境的私有记忆“' + key + '”？此操作不可撤销。', {title:'删除环境私有记忆', confirmText:'删除'})) return;
-  await runMutation('删除环境私有记忆', () => desktopAdapter().DeleteEnvironmentMemory(scope.environmentID, key), async () => {
-    if (environmentMemoryScopeIsCurrent(scope)) await loadEnvironmentMemory({scope});
+for(const kind of ['global','environment']){
+  const container=kind==='global'?elements.globalMemoryList:elements.environmentMemoryList;
+  container.addEventListener('click',async event=>{
+    const button=event.target.closest('button[data-action="delete-'+kind+'-memory"]');
+    if(!button)return;
+    const token=memoryScopeToken(kind),id=memoryScopeID(kind,token);
+    if(kind==='environment'&&!id)return setStatus('请先选择管理环境。','error');
+    const entry=(kind==='global'?globalMemoryEntries:environmentMemoryEntries).find(e=>e.key===button.dataset.id);
+    if(!entry)return setStatus('记忆已变化，请重新加载。','error');
+    if(!await confirmInApp('确定将记忆“'+entry.key+'”移入回收站？可以从回收站恢复。',{title:'删除记忆',confirmText:'删除'}))return;
+    if(!memoryScopeValid(kind,token))return setStatus('管理范围已变化，请重新选择。','error');
+    await runMutation('删除记忆',()=>desktopAdapter().OrganizeMemory(id,[{key:entry.key,expected_value:entry.value,expected_revision:entry.revision||0,value:null}],false),async()=>{if(memoryScopeValid(kind,token))await memoryReload(kind,token);});
   });
-});
+}
 elements.environmentDetailSubviewTabs.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-environment-detail-subview]'); if (!button) return;
   environmentDetailSubview = button.dataset.environmentDetailSubview || 'summary'; syncEnvironmentDetailSubviewUI();

@@ -21,6 +21,7 @@ import (
 	"ai-dev-manager-v2/internal/catalog"
 	"ai-dev-manager-v2/internal/codeintel"
 	"ai-dev-manager-v2/internal/management"
+	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
 
 	kitui "github.com/wanstu/wails-desktop-kit/ui"
@@ -804,6 +805,67 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.management.EnvironmentSkillList(s1)
+	case "GetMemoryHistory":
+		var revision *int64
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &revision); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryHistory(s1, s2, revision)
+	case "RestoreMemory":
+		var revision, expected int64
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &revision); err != nil {
+			return nil, err
+		}
+		if err := arg(3, &expected); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryRestore(s1, s2, revision, expected)
+	case "ListMemoryTrash":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryTrash(s1)
+	case "PurgeMemory":
+		var expected int64
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &expected); err != nil {
+			return nil, err
+		}
+		return nil, h.management.MemoryPurge(s1, s2, expected)
+	case "FindMemoryDuplicates":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryDuplicates(s1)
+	case "OrganizeMemory":
+		var changes []memory.Change
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &changes); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &b1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryOrganize(s1, changes, b1)
 	case "ListGlobalMemory":
 		return h.management.GlobalMemoryList()
 	case "WriteGlobalMemory":

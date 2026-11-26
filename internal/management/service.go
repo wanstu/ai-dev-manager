@@ -487,3 +487,25 @@ func nonNilCatalog(values []model.CatalogEntry) []model.CatalogEntry {
 func (s *Service) MCPProbe(ctx context.Context, mcpID string) (app.MCPHealthStatus, error) {
 	return s.app.MCPProbe(ctx, mcpID)
 }
+
+func (s *Service) MemoryHistory(id, key string, revision *int64) (memory.HistoryResult, error) {
+	return s.app.Memory.History(id, id == "", key, revision)
+}
+func (s *Service) MemoryRestore(id, key string, revision, expected int64) (memory.Entry, error) {
+	return s.app.Memory.Restore(id, id == "", key, revision, expected)
+}
+func (s *Service) MemoryTrash(id string) ([]memory.TrashEntry, error) {
+	return s.app.Memory.Trash(id, id == "")
+}
+func (s *Service) MemoryPurge(id, key string, expected int64) error {
+	return s.app.Memory.Purge(id, id == "", key, expected)
+}
+func (s *Service) MemoryDuplicates(id string) (memory.DuplicateResult, error) {
+	return s.app.Memory.Duplicates(id, id == "")
+}
+func (s *Service) MemoryOrganize(id string, changes []memory.Change, dryRun bool) (memory.OrganizeResult, error) {
+	if id == "" {
+		return s.app.Memory.GlobalOrganize(changes, dryRun)
+	}
+	return s.app.Memory.EnvironmentOrganize(id, changes, dryRun)
+}

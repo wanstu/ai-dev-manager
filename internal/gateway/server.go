@@ -410,6 +410,15 @@ type EnvironmentMemoryOrganizeInput struct {
 	Changes       []memory.Change `json:"changes"`
 	DryRun        bool            `json:"dry_run,omitempty"`
 }
+type MemoryPurgeInput struct {
+	Key              string `json:"key"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+type EnvironmentMemoryPurgeInput struct {
+	EnvironmentID    string `json:"environment_id"`
+	Key              string `json:"key"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
 type MemoryHistoryInput struct {
 	Key      string `json:"key"`
 	Revision *int64 `json:"revision,omitempty"`
@@ -821,7 +830,7 @@ func isV144AdminOnlyTool(name string) bool {
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
 		"resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote",
-		"memory_global_write", "memory_global_delete", "memory_global_organize", "memory_global_restore",
+		"memory_global_write", "memory_global_delete", "memory_global_organize", "memory_global_restore", "memory_global_purge", "memory_environment_purge",
 		"strong_permission_control_set":
 		return true
 	default:
@@ -1862,6 +1871,22 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(content, err)
 		})
 
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_trash", Description: "List deleted shared memory keys and recoverable revisions."}, func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Trash("", true)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_trash", Description: "List deleted memory keys and recoverable revisions in the explicit Environment."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Trash(in.EnvironmentID, false)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_purge", Description: "Admin-only permanent removal of a deleted memory and retained history; expected_revision required."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryPurgeInput) (*mcp.CallToolResult, any, error) {
+		err := service.Memory.Purge("", true, in.Key, in.ExpectedRevision)
+		return toolResult(map[string]any{"purged": in.Key}, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_purge", Description: "Admin-only permanent removal of a deleted Environment memory and retained history; expected_revision required."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryPurgeInput) (*mcp.CallToolResult, any, error) {
+		err := service.Memory.Purge(in.EnvironmentID, false, in.Key, in.ExpectedRevision)
+		return toolResult(map[string]any{"purged": in.Key}, err)
+	})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_history", Description: "List retained revisions of a shared memory key; specify revision to read its full historical value."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryHistoryInput) (*mcp.CallToolResult, any, error) {
 		result, err := service.Memory.History("", true, in.Key, in.Revision)
 		return toolResult(result, err)

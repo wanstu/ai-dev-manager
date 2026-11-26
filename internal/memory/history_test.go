@@ -95,3 +95,44 @@ func TestMemoryHistoryMetadataRestoreAndScope(t *testing.T) {
 		t.Fatalf("removed environment retained history: %v", err)
 	}
 }
+
+func TestMemoryTrashPurgeAndRestore(t *testing.T) {
+	st := store.New(filepath.Join(t.TempDir(), "state.json"))
+	s := New(st)
+	if err := s.GlobalWrite("recover", "first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Purge("", true, "recover", 1); err == nil {
+		t.Fatal("active purge accepted")
+	}
+	if err := s.GlobalDelete("recover"); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.Trash("", true)
+	if err != nil || len(list) != 1 || list[0].Revision != 2 || list[0].RestorableRevision == nil || *list[0].RestorableRevision != 1 {
+		t.Fatalf("trash %+v %v", list, err)
+	}
+	if err := s.Purge("", true, "recover", 1); err == nil {
+		t.Fatal("stale purge accepted")
+	}
+	if _, err := s.Restore("", true, "recover", 1, 2); err != nil {
+		t.Fatal(err)
+	}
+	list, err = s.Trash("", true)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("restored trash %+v %v", list, err)
+	}
+	if err := s.GlobalDelete("recover"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Purge("", true, "recover", 4); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.History("", true, "recover", nil); err == nil {
+		t.Fatal("purged history remains")
+	}
+	list, err = s.Trash("", true)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("purged trash %+v %v", list, err)
+	}
+}

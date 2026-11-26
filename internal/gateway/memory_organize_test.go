@@ -95,3 +95,42 @@ func TestAgentMemoryHistoryRestoreAndDuplicateTools(t *testing.T) {
 		t.Fatal(toolText(t, denied))
 	}
 }
+
+func TestAgentMemoryTrashAndPurgePermissions(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(t.TempDir(), "trash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "trash", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Memory.EnvironmentWrite(env.ID, "note", "content"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Memory.EnvironmentDelete(env.ID, "note"); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	agent := connectInMemory(t, ctx, newCompactAgentServer(service, nil))
+	defer agent.Close()
+	args := map[string]any{"environment_id": env.ID, "key": "note", "expected_revision": 2}
+	r := callGatewayTool(t, ctx, agent, "adm_memory", map[string]any{"action": "environment_trash", "arguments": map[string]any{"environment_id": env.ID}})
+	if r.IsError || !strings.Contains(toolText(t, r), "note") {
+		t.Fatal(toolText(t, r))
+	}
+	r = callGatewayTool(t, ctx, agent, "adm_memory", map[string]any{"action": "environment_purge", "arguments": args})
+	if !r.IsError || !strings.Contains(toolText(t, r), "Admin surface") {
+		t.Fatal(toolText(t, r))
+	}
+	admin := connectInMemory(t, ctx, NewAdmin(service))
+	defer admin.Close()
+	r = callGatewayTool(t, ctx, admin, "memory_environment_purge", args)
+	if r.IsError {
+		t.Fatal(toolText(t, r))
+	}
+	if _, err := service.Memory.History(env.ID, false, "note", nil); err == nil {
+		t.Fatal("history retained after purge")
+	}
+}

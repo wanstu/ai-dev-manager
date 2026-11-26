@@ -160,6 +160,10 @@ const fakeBridge = String.raw`<script>
     async GetProcessLogs(id,processID){ record('GetProcessLogs',[id,processID]); if(state.delayProcessLogs && id==='env-a') await new Promise(resolve=>setTimeout(resolve,180)); return {stdout:id==='env-b'?'PROCESS_B_LOG':'PROCESS_A_LOG', stderr:'', stdout_truncated:id==='env-a', stderr_truncated:false}; },
     async ListRuns(id){ record('ListRuns',[id]); return [{id:id==='env-b'?'run-b':'run-a', state:'succeeded', executable:'go', args:['test'], stdout:id==='env-b'?'RUN_B_OUTPUT':'RUN_A_OUTPUT', stderr:'', exit_code:0, stdout_truncated:false, stderr_truncated:false}]; },
     async GetRuntimeWriterDiagnostics(id){ record('GetRuntimeWriterDiagnostics',[id]); return {environment_id:id, attribution:id==='env-a'?'lease_observation':'none', owner_fingerprint:id==='env-a'?'writer-a':'', last_seen_at:'2026-09-12T04:00:00Z', expires_at:'2026-09-12T04:05:00Z', heartbeat_interval_seconds:30, heartbeat_sources:[], gateway_owner:{pid:0}}; },
+    async GetMemoryHistory(id,key,revision){record('GetMemoryHistory',[id,key,revision]);const items=id?(environmentMemory[id]||[]):globalMemory;const e=items.find(x=>x.key===key);if(!e)throw new Error('not found');const versions=e.history||[];const current={revision:e.revision||0,value:e.value,metadata:e.metadata};return {current_revision:current.revision,versions:[current,...versions],selected:revision==null?undefined:[current,...versions].find(x=>x.revision===revision)};},
+    async OrganizeMemory(id,changes,dryRun){record('OrganizeMemory',[id,changes,dryRun]);const items=id?(environmentMemory[id] ||= []):globalMemory;for(const c of changes){const e=items.find(x=>x.key===c.key);if((e?.value??null)!==c.expected_value||(c.expected_revision!=null&&(e?.revision||0)!==c.expected_revision))throw new Error('conflict');}if(!dryRun)for(const c of changes){let e=items.find(x=>x.key===c.key);if(c.value===null){if(e)items.splice(items.indexOf(e),1);continue;}if(e){(e.history ||= []).unshift({revision:e.revision||0,value:e.value,metadata:e.metadata});e.value=c.value;e.metadata=c.metadata||e.metadata;e.revision=(e.revision||0)+1;}else items.push({key:c.key,value:c.value,metadata:c.metadata,revision:1});}return {created:1,updated:0,deleted:0};},
+    async ListMemoryTrash(id){record('ListMemoryTrash',[id]);return [];},
+    async FindMemoryDuplicates(id){record('FindMemoryDuplicates',[id]);return {groups:[],total_groups:0,omitted:0};},
     async ListGlobalMemory(){ record('ListGlobalMemory',[]); return structuredClone(globalMemory); },
     async WriteGlobalMemory(key,value){ record('WriteGlobalMemory',[key,value]); const existing=globalMemory.find(entry=>entry.key===key); if(existing) existing.value=value; else globalMemory.push({key,value}); return null; },
     async DeleteGlobalMemory(key){ record('DeleteGlobalMemory',[key]); const index=globalMemory.findIndex(entry=>entry.key===key); if(index>=0) globalMemory.splice(index,1); return null; },
@@ -541,7 +545,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='ListGlobalMemory').length>memoryCallsBefore, 'Memory route lazy-loads Global Memory for the management view');
     check(document.getElementById('globalMemoryList').textContent.includes('visible-after-explicit-load'), 'Memory route lazy-load renders value');
     check(document.getElementById('globalMemoryCount').textContent==='1 条', 'global Memory count reflects loaded entries');
-    check(!window.__fakeADM.calls.some(c=>['WriteGlobalMemory','WriteEnvironmentMemory','DeleteGlobalMemory','DeleteEnvironmentMemory'].includes(c.name)), 'opening Memory view reads data only and never auto-writes or deletes');
+    check(!window.__fakeADM.calls.some(c=>['WriteGlobalMemory','WriteEnvironmentMemory','DeleteGlobalMemory','DeleteEnvironmentMemory','OrganizeMemory'].includes(c.name)), 'opening Memory view reads data only and never auto-writes or deletes');
     check(document.body.textContent.includes('不会自动注入所有会话') && document.body.textContent.includes('不会自动总结或保存'), 'Memory page clearly explains explicit recall and no auto-save');
     const globalMemoryFilter=document.getElementById('globalMemoryFilter');
     globalMemoryFilter.value='sentinel'; globalMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
@@ -554,18 +558,37 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(!document.getElementById('globalMemoryKey').readOnly, 'new global Memory key is editable');
     document.getElementById('globalMemoryKey').value='project.notes';
     document.getElementById('globalMemoryValue').value='line one\nline two';
+    document.getElementById('globalMemoryCategory').value='decision';
+    document.getElementById('globalMemoryImportance').value='4';
+    document.getElementById('globalMemoryTags').value='build, test';
     document.getElementById('globalMemorySubmit').click();
-    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='WriteGlobalMemory'&&c.args[0]==='project.notes'), 'global Memory write is persisted through adapter');
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]===''&&c.args[1][0].key==='project.notes'), 'global Memory write is persisted through adapter');
     await waitFor(() => document.getElementById('globalMemoryList').textContent.includes('line two'), 'global Memory supports multiline values');
     document.querySelector('#globalMemoryList button[data-action="edit-global-memory"][data-id="project.notes"]').click();
     await waitFor(() => document.getElementById('globalMemoryDialog').open, 'existing global Memory edit dialog opens');
     check(document.getElementById('globalMemoryKey').readOnly && document.getElementById('globalMemoryKey').value==='project.notes', 'editing a Memory entry preserves its immutable key');
     document.getElementById('globalMemoryValue').value='revised\nvalue';
     document.getElementById('globalMemorySubmit').click();
-    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='WriteGlobalMemory'&&c.args[0]==='project.notes'&&c.args[1]==='revised\nvalue'), 'editing updates the existing global Memory key');
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]===''&&c.args[1][0].key==='project.notes'&&c.args[1][0].value==='revised\nvalue'), 'editing updates the existing global Memory key');
     await waitFor(() => document.getElementById('globalMemoryList').textContent.includes('revised') && !document.getElementById('globalMemoryList').textContent.includes('line one'), 'updated global Memory value is rendered');
+    check(document.getElementById('globalMemoryList').textContent.includes('架构决策')&&document.getElementById('globalMemoryList').textContent.includes('重要度 4/5'), 'Memory metadata survives edit and reload');
+    const memoryCategory=document.getElementById('globalMemoryCategoryFilter');
+    memoryCategory.value='decision'; memoryCategory.dispatchEvent(new Event('change',{bubbles:true})); await sleep();
+    check(document.getElementById('globalMemoryList').textContent.includes('project.notes')&&!document.getElementById('globalMemoryList').textContent.includes('sentinel'), 'Memory category filters entries');
+    memoryCategory.value='all'; memoryCategory.dispatchEvent(new Event('change',{bubbles:true})); await sleep();
+    document.querySelector('#globalMemoryList button[data-action="history-global-memory"][data-id="project.notes"]').click();
+    await waitFor(()=>document.querySelectorAll('#memoryToolsBody .memory-version-row').length===2,'Memory history lists current and previous revisions');
+    document.querySelectorAll('#memoryToolsBody .memory-version-row button')[1].click();
+    await waitFor(()=>document.getElementById('memoryToolsBody').textContent.includes('line one')&&document.getElementById('memoryToolsBody').textContent.includes('revised'),'Memory compares previous and current values');
+    document.querySelector('#memoryToolsDialog [data-dialog-close]').click();
+    document.getElementById('globalMemoryTrash').click();
+    await waitFor(()=>document.getElementById('memoryToolsBody').textContent.includes('回收站为空'),'Memory trash empty state');
+    document.querySelector('#memoryToolsDialog [data-dialog-close]').click();
+    document.getElementById('globalMemoryDuplicates').click();
+    await waitFor(()=>document.getElementById('memoryToolsBody').textContent.includes('发现 0 组'),'Memory duplicate inspection empty state');
+    document.querySelector('#memoryToolsDialog [data-dialog-close]').click();
     document.querySelector('#globalMemoryList button[data-action="delete-global-memory"][data-id="project.notes"]').click();
-    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='DeleteGlobalMemory'&&c.args[0]==='project.notes'), 'global Memory deletion requires and records explicit confirmation');
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]===''&&c.args[1][0].key==='project.notes'&&c.args[1][0].value===null), 'global Memory deletion requires and records explicit confirmation');
     await waitFor(() => !document.getElementById('globalMemoryList').textContent.includes('project.notes'), 'deleted global Memory entry disappears');
 
     await clickRoute('workspaces');
@@ -771,7 +794,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('environmentMemoryKey').value='project.decision';
     document.getElementById('environmentMemoryValue').value='decision one\ndecision two';
     document.getElementById('environmentMemorySubmit').click();
-    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='WriteEnvironmentMemory'&&c.args[0]==='env-a'&&c.args[1]==='project.decision'), 'private Memory write uses exact current Environment ID');
+    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]==='env-a'&&c.args[1][0].key==='project.decision'), 'private Memory write uses exact current Environment ID');
     await waitFor(() => document.getElementById('environmentMemoryList').textContent.includes('decision two'), 'private Memory supports multiline values');
     const envMemoryFilter=document.getElementById('environmentMemoryFilter');
     envMemoryFilter.value='project.decision'; envMemoryFilter.dispatchEvent(new Event('input',{bubbles:true})); await sleep();
