@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"ai-dev-manager-v2/internal/model"
 )
@@ -140,6 +141,9 @@ func (s *Service) Handoff(id, target string, items []HandoffItem, dryRun bool) (
 			}
 			if _, ok := dr[dk]; ok {
 				return fmt.Errorf("destination memory %q has retained history; choose another key or restore explicitly", dk)
+			}
+			if validity(sr[k].Metadata, time.Now().UTC()) != "active" {
+				return fmt.Errorf("source memory %q is not currently active; review before handoff", k)
 			}
 			pending = append(pending, copied{dk, value, sr[k].Metadata})
 		}

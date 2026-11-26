@@ -57,7 +57,7 @@ func overlap(a, b map[string]bool) int {
 	}
 	return n
 }
-func (s *Service) Recall(id string, global bool, query string, limit, maxBytes int) (SearchResult, error) {
+func (s *Service) Recall(id string, global bool, query string, limit, maxBytes int, includeInactive ...bool) (SearchResult, error) {
 	if len(query) > 4096 || len(tokens(query)) == 0 {
 		return SearchResult{}, fmt.Errorf("nonempty bounded recall query required")
 	}
@@ -81,6 +81,9 @@ func (s *Service) Recall(id string, global bool, query string, limit, maxBytes i
 	}
 	candidates := []ranked{}
 	for _, e := range items {
+		if !recallable(e.Validity) && !(len(includeInactive) > 0 && includeInactive[0]) {
+			continue
+		}
 		key := e.Key
 		importance := 0
 		if e.Metadata != nil {
@@ -99,6 +102,11 @@ func (s *Service) Recall(id string, global bool, query string, limit, maxBytes i
 			}
 		}
 		score := float64(covered)*4 + float64(keyHits)*2 + float64(valueHits) + float64(importance)*0.1
+		if e.Validity == "review_due" {
+			score *= .75
+		} else if !recallable(e.Validity) {
+			score *= .25
+		}
 		candidates = append(candidates, ranked{e, score})
 	}
 	sort.Slice(candidates, func(i, j int) bool {

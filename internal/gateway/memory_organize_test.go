@@ -173,3 +173,40 @@ func TestAgentMemoryRecallAndProjectScopeTools(t *testing.T) {
 		t.Fatal("same-environment handoff accepted")
 	}
 }
+
+func TestAgentMemoryValidityTools(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(t.TempDir(), "validity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "validity", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	agent := connectInMemory(t, ctx, newCompactAgentServer(service, nil))
+	defer agent.Close()
+	call := func(action string, args map[string]any) string {
+		t.Helper()
+		result := callGatewayTool(t, ctx, agent, "adm_memory", map[string]any{"action": action, "arguments": args})
+		if result.IsError {
+			t.Fatal(toolText(t, result))
+		}
+		return toolText(t, result)
+	}
+	call("environment_organize", map[string]any{"environment_id": env.ID, "changes": []map[string]any{{"key": "old-policy", "expected_revision": 0, "expected_value": nil, "value": "writer policy", "metadata": map[string]any{"status": "obsolete", "review_note": "superseded"}}}})
+	call("environment_write", map[string]any{"environment_id": env.ID, "key": "new-policy", "value": "writer policy"})
+	r := call("environment_recall", map[string]any{"environment_id": env.ID, "query": "writer policy"})
+	if strings.Contains(r, "old-policy") || !strings.Contains(r, "new-policy") {
+		t.Fatal(r)
+	}
+	r = call("environment_recall", map[string]any{"environment_id": env.ID, "query": "writer policy", "include_inactive": true})
+	if !strings.Contains(r, "old-policy") {
+		t.Fatal(r)
+	}
+	r = call("environment_review", map[string]any{"environment_id": env.ID, "status": "obsolete"})
+	if !strings.Contains(r, "old-policy") || strings.Contains(r, "new-policy") {
+		t.Fatal(r)
+	}
+}

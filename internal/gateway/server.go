@@ -390,6 +390,15 @@ type EnvironmentVerifierAgentHostExecutionInput struct {
 	Allowed       bool   `json:"allowed"`
 }
 
+type MemoryReviewInput struct {
+	Status string `json:"status,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+}
+type EnvironmentMemoryReviewInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Status        string `json:"status,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
+}
 type MemorySimilarInput struct {
 	Threshold float64 `json:"threshold,omitempty"`
 	Limit     int     `json:"limit,omitempty"`
@@ -406,15 +415,17 @@ type MemoryHandoffInput struct {
 	DryRun              bool                 `json:"dry_run"`
 }
 type MemorySearchInput struct {
-	Query          string `json:"query,omitempty"`
-	Limit          int    `json:"limit,omitempty"`
-	MaxOutputBytes int    `json:"max_output_bytes,omitempty"`
+	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"include obsolete archived and expired memories in ranked recall"`
+	Query           string `json:"query,omitempty"`
+	Limit           int    `json:"limit,omitempty"`
+	MaxOutputBytes  int    `json:"max_output_bytes,omitempty"`
 }
 type EnvironmentMemorySearchInput struct {
-	EnvironmentID  string `json:"environment_id"`
-	Query          string `json:"query,omitempty"`
-	Limit          int    `json:"limit,omitempty"`
-	MaxOutputBytes int    `json:"max_output_bytes,omitempty"`
+	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"include obsolete archived and expired memories in ranked recall"`
+	EnvironmentID   string `json:"environment_id"`
+	Query           string `json:"query,omitempty"`
+	Limit           int    `json:"limit,omitempty"`
+	MaxOutputBytes  int    `json:"max_output_bytes,omitempty"`
 }
 type MemoryOrganizeInput struct {
 	Changes []memory.Change `json:"changes"`
@@ -1926,12 +1937,20 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 		result, err := service.Memory.Duplicates(in.EnvironmentID, false)
 		return toolResult(result, err)
 	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_review", Description: "List shared memory requiring review, expired, archived or obsolete; optional status filter, no full values."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryReviewInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.ReviewQueue("", true, in.Status, in.Limit)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_review", Description: "List memory requiring review in explicit Environment; use organize with revision and full metadata to update validity."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryReviewInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.ReviewQueue(in.EnvironmentID, false, in.Status, in.Limit)
+		return toolResult(result, err)
+	})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_recall", Description: "Rank shared memories by lexical relevance, partial keyword coverage, Chinese character/bigram matching and importance; not semantic embeddings."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemorySearchInput) (*mcp.CallToolResult, any, error) {
-		result, err := service.Memory.Recall("", true, in.Query, in.Limit, in.MaxOutputBytes)
+		result, err := service.Memory.Recall("", true, in.Query, in.Limit, in.MaxOutputBytes, in.IncludeInactive)
 		return toolResult(result, err)
 	})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_recall", Description: "Rank relevant memories in one explicit Environment by lexical relevance and importance; no automatic cross-environment reads."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemorySearchInput) (*mcp.CallToolResult, any, error) {
-		result, err := service.Memory.Recall(in.EnvironmentID, false, in.Query, in.Limit, in.MaxOutputBytes)
+		result, err := service.Memory.Recall(in.EnvironmentID, false, in.Query, in.Limit, in.MaxOutputBytes, in.IncludeInactive)
 		return toolResult(result, err)
 	})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_similar", Description: "Find bounded near-duplicate lexical candidates in shared memory; never merges automatically."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemorySimilarInput) (*mcp.CallToolResult, any, error) {

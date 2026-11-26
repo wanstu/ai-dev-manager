@@ -4,9 +4,13 @@ import "time"
 
 // MemoryMetadata is descriptive data, not an authorization mechanism.
 type MemoryMetadata struct {
-	Category   string   `json:"category,omitempty"`
-	Tags       []string `json:"tags,omitempty"`
-	Importance int      `json:"importance,omitempty"`
+	Status      string     `json:"status,omitempty"`
+	ValidUntil  *time.Time `json:"valid_until,omitempty"`
+	ReviewAfter *time.Time `json:"review_after,omitempty"`
+	ReviewNote  string     `json:"review_note,omitempty"`
+	Category    string     `json:"category,omitempty"`
+	Tags        []string   `json:"tags,omitempty"`
+	Importance  int        `json:"importance,omitempty"`
 }
 type MemoryVersion struct {
 	Revision  int64          `json:"revision"`

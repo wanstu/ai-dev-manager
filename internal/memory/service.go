@@ -11,6 +11,7 @@ import (
 )
 
 type Entry struct {
+	Validity  string                `json:"validity"`
 	Key       string                `json:"key"`
 	Value     string                `json:"value"`
 	Revision  int64                 `json:"revision,omitempty"`
@@ -45,7 +46,7 @@ func scope(state *model.State, id string, global bool, create bool) (*map[string
 	return nil, nil, fmt.Errorf("environment %q not found", id)
 }
 func entry(key, value string, record model.MemoryRecord) Entry {
-	e := Entry{Key: key, Value: value, Revision: record.Revision, UpdatedAt: record.UpdatedAt}
+	e := Entry{Key: key, Value: value, Revision: record.Revision, UpdatedAt: record.UpdatedAt, Validity: validity(record.Metadata, time.Now().UTC())}
 	if record.Revision > 0 {
 		e.Metadata = &record.Metadata
 	}

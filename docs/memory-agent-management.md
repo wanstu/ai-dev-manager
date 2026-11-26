@@ -84,3 +84,13 @@
 - global_recall/environment_recall：与 search 使用相同 query/limit/max_output_bytes 参数，支持部分关键词覆盖，英文单词、中文字符和二元组，键名/标签/类别加权，重要度小幅加权。仅返回匹配项并限制序列化输出。不调用模型或向量服务，不宣称理解同义词或语义。
 - global_similar/environment_similar：threshold 默认 0.75，范围 0.5～1；limit 默认 30，最多 100。按词项集合 Jaccard 相似度识别非完全相同正文的候选；每次扫描按键排序的前 200 条，每条最多 8192 字符，返回扫描规模及截断状态。仅供人工或 Agent 复核，不自动合并。
 - 本阶段仅接通 Agent MCP，近似查重和项目交接的管理端专用交互、记忆有效期及语义向量检索待实现。跨 Gateway 状态事务仍依赖既有 Store 边界。
+
+## 记忆有效性与复核
+
+- metadata.status 支持 active（空值等价）、obsolete（已废弃）、archived（已归档）。metadata.valid_until、review_after 为可选 RFC3339 时间，review_note 为复核依据或状态变化说明（最多 4096 字节）。更新沿用 organize 的 expected_value/expected_revision 和版本历史。
+- 读取返回计算后的 validity：显式废弃/归档优先，其次已到有效截止时间为 expired，其次已到复核时间为 review_due，否则 active。旧记录没有日期和状态时仍视为 active，不伪造时间。
+- ranked recall 默认排除 expired、obsolete、archived；review_due 保留但降权，Agent 应复核后才依赖。include_inactive=true 可显式检索失效历史并降权。普通精确 search、list、read、历史及查重仍可查看失效内容，以便整理；不会后台删除、改写或自动复核。
+- global_review/environment_review 返回待维护条目摘要，不返回完整正文。默认列出所有非 active 状态，可按 status 精确筛选，limit 默认 50、最多 100，结果限制 64 KiB。
+- Worktree handoff 仅接受当前 active 的源记忆；先核实并更新状态，再交接。原有显式作用域及管理员权限限制不变。
+- Desktop/Web 已接入有效性筛选、状态编辑、有效截止时间、下次复核时间及复核说明。日期按本地时间编辑并以 UTC 时间存储；未修改已有时间时保留原精度。历史恢复会恢复当时元数据，失效日期仍按当前时间计算。
+- 仍需接入近似重复识别、项目交接的专用 UI；未实现向量语义召回、跨 Gateway 状态文件并发安全。

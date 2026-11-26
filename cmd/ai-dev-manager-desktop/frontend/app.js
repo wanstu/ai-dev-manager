@@ -3861,6 +3861,27 @@ function closeEnvironmentDetail() {
 function refreshSelectedEnvironmentDetail() { if (!selectedEnvironmentID) return false; const token = detailGeneration, id = selectedEnvironmentID, inspection = managementInspection; if (token !== detailGeneration || id !== selectedEnvironmentID || inspection?.environment?.environment_id !== id) return false; return renderEnvironmentDetailFromInspection(inspection, token); }
 
 const memoryEditorState = new Map();
+const memoryValidityLabels={active:'有效',review_due:'待复核',expired:'已过期',obsolete:'已废弃',archived:'已归档'};
+function memoryValidity(entry){
+ const m=entry.metadata||{};
+ if(m.status==='obsolete'||m.status==='archived')return m.status;
+ if(m.valid_until&&Date.parse(m.valid_until)<=Date.now())return 'expired';
+ if(m.review_after&&Date.parse(m.review_after)<=Date.now())return 'review_due';
+ return entry.validity||'active';
+}
+function memoryLocalDateTime(value){
+ if(!value)return '';
+ const date=new Date(value);
+ if(!Number.isFinite(date.getTime()))return '';
+ const shifted=new Date(date.getTime()-date.getTimezoneOffset()*60000);
+ return shifted.toISOString().slice(0,16);
+}
+function memoryDateValue(id,original){
+ const value=document.getElementById(id).value;
+ if(!value)return null;
+ if(original&&value===memoryLocalDateTime(original))return original;
+ return new Date(value).toISOString();
+}
 function memoryScopeToken(kind) {return kind==='global'?currentGlobalMemoryScope():currentEnvironmentMemoryScope();}
 function memoryScopeValid(kind,token) {return kind==='global'?globalMemoryScopeIsCurrent(token):environmentMemoryScopeIsCurrent(token);}
 function memoryScopeID(kind,token) {return kind==='global'?'':token.environmentID;}
@@ -3877,6 +3898,10 @@ function prepareMemoryEditor(scope, entry = null) {
   document.getElementById(scope+'MemoryCategory').value=entry?.metadata?.category||'';
   document.getElementById(scope+'MemoryImportance').value=String(entry?.metadata?.importance||0);
   document.getElementById(scope+'MemoryTags').value=safeArray(entry?.metadata?.tags).join(', ');
+  document.getElementById(scope+'MemoryStatus').value=entry?.metadata?.status||'active';
+  document.getElementById(scope+'MemoryValidUntil').value=memoryLocalDateTime(entry?.metadata?.valid_until);
+  document.getElementById(scope+'MemoryReviewAfter').value=memoryLocalDateTime(entry?.metadata?.review_after);
+  document.getElementById(scope+'MemoryReviewNote').value=entry?.metadata?.review_note||'';
   form.dataset.editingKey = entry ? String(entry.key || '') : '';
   keyInput.readOnly = Boolean(entry);
   if (entry) keyInput.setAttribute('aria-readonly', 'true');
@@ -3896,9 +3921,10 @@ function renderMemory(container, entries, scope) {
   const countElement = scope === 'global' ? elements.globalMemoryCount : elements.environmentMemoryCount;
   const filter = String(filterElement.value || '').trim().toLocaleLowerCase();
   const categoryFilter = document.getElementById(scope+'MemoryCategoryFilter').value;
-  const categorized = categoryFilter==='all'?all:all.filter(entry=>(entry.metadata?.category||'')===categoryFilter);
+  const validityFilter=document.getElementById(scope+'MemoryValidityFilter').value;
+  const categorized=all.filter(entry=>(categoryFilter==='all'||(entry.metadata?.category||'')===categoryFilter)&&(validityFilter==='all'||memoryValidity(entry)===validityFilter));
   const visible = filter ? categorized.filter(entry => (String(entry.key || '') + '\n' + String(entry.value || '') + '\n' + String(entry.metadata?.category || '') + '\n' + safeArray(entry.metadata?.tags).join(' ')).toLocaleLowerCase().includes(filter)) : categorized;
-  countElement.textContent = (filter||categoryFilter!=='all') ? visible.length + ' / ' + all.length + ' 条' : all.length + ' 条';
+  countElement.textContent = (filter||categoryFilter!=='all'||validityFilter!=='all') ? visible.length + ' / ' + all.length + ' 条' : all.length + ' 条';
   if (!all.length) return emptyMessage(container, '还没有记忆条目');
   if (!visible.length) return emptyMessage(container, '没有匹配的记忆条目');
   container.replaceChildren();
@@ -3918,9 +3944,11 @@ function renderMemory(container, entries, scope) {
       meta.className = 'memory-entry-metadata';
       const categories = {convention:'开发规范',decision:'架构决策',progress:'开发进度',issue:'问题经验',environment:'环境知识',preference:'用户偏好',other:'其他'};
       const category = categories[entry.metadata?.category] || '未分类';
-      const tokens = [category, entry.metadata?.importance ? '重要度 '+entry.metadata.importance+'/5' : '', '版本 '+(entry.revision || 0), ...safeArray(entry.metadata?.tags), entry.updated_at ? new Date(entry.updated_at).toLocaleString() : ''].filter(Boolean);
+      const tokens = [category, memoryValidityLabels[memoryValidity(entry)]||'有效', entry.metadata?.importance ? '重要度 '+entry.metadata.importance+'/5' : '', '版本 '+(entry.revision || 0), ...safeArray(entry.metadata?.tags), entry.updated_at ? new Date(entry.updated_at).toLocaleString() : ''].filter(Boolean);
       for (const token of tokens) {const chip=document.createElement('span');chip.textContent=token;meta.append(chip);}
       content.append(meta);
+      if(entry.metadata?.review_note){const note=document.createElement('small');note.textContent='复核：'+entry.metadata.review_note;content.append(note);}
+      if(entry.metadata?.valid_until||entry.metadata?.review_after){const dates=document.createElement('small');dates.textContent=[entry.metadata.valid_until?'有效截止 '+new Date(entry.metadata.valid_until).toLocaleString():'',entry.metadata.review_after?'下次复核 '+new Date(entry.metadata.review_after).toLocaleString():''].filter(Boolean).join(' · ');content.append(dates);}
     }
     content.append(value);
     const edit = createActionButton('编辑内容', 'edit-' + scope + '-memory', entry.key);
@@ -3950,6 +3978,7 @@ function resetEnvironmentMemoryScope(message = '') {
   environmentMemoryEntries = [];
   elements.environmentMemoryFilter.value = '';
   document.getElementById('environmentMemoryCategoryFilter').value='all';
+  document.getElementById('environmentMemoryValidityFilter').value='all';
   elements.environmentMemoryCount.textContent = '未加载';
   emptyMessage(elements.environmentMemoryList, message || (managementEnvironmentID ? '尚未加载当前环境记忆' : '请选择管理环境后加载私有记忆'));
   renderEnvironmentMemoryScope();
@@ -4806,6 +4835,7 @@ for(const kind of ['global','environment']){
   const keyInput=kind==='global'?elements.globalMemoryKey:elements.environmentMemoryKey;
   const valueInput=kind==='global'?elements.globalMemoryValue:elements.environmentMemoryValue;
   document.getElementById(kind+'MemoryCategoryFilter').addEventListener('change',()=>renderMemory(kind==='global'?elements.globalMemoryList:elements.environmentMemoryList,kind==='global'?globalMemoryEntries:environmentMemoryEntries,kind));
+  document.getElementById(kind+'MemoryValidityFilter').addEventListener('change',()=>renderMemory(kind==='global'?elements.globalMemoryList:elements.environmentMemoryList,kind==='global'?globalMemoryEntries:environmentMemoryEntries,kind));
   for(const mode of ['trash','duplicates']){
     document.getElementById(kind+'Memory'+(mode==='trash'?'Trash':'Duplicates')).addEventListener('click',()=>openMemoryTools(kind,mode));
   }
@@ -4815,7 +4845,7 @@ for(const kind of ['global','environment']){
     if(!saved||!memoryScopeValid(kind,saved.token)||(kind==='environment'&&!saved.token.environmentID))return setStatus('管理范围已变化，请重新打开编辑窗口。','error');
     const key=saved.entry?.key||keyInput.value.trim();
     if(!key)return;
-    const metadata={category:document.getElementById(kind+'MemoryCategory').value,importance:Number(document.getElementById(kind+'MemoryImportance').value),tags:document.getElementById(kind+'MemoryTags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean)};
+    const metadata={...saved.entry?.metadata,category:document.getElementById(kind+'MemoryCategory').value,importance:Number(document.getElementById(kind+'MemoryImportance').value),tags:document.getElementById(kind+'MemoryTags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),status:document.getElementById(kind+'MemoryStatus').value,valid_until:memoryDateValue(kind+'MemoryValidUntil',saved.entry?.metadata?.valid_until),review_after:memoryDateValue(kind+'MemoryReviewAfter',saved.entry?.metadata?.review_after),review_note:document.getElementById(kind+'MemoryReviewNote').value};
     const change={key,expected_value:saved.entry?saved.entry.value:null,expected_revision:saved.entry?(saved.entry.revision||0):null,value:valueInput.value,metadata};
     // A new key may be a deleted key with retained history. Read the history to
     // obtain its tombstone revision; otherwise use zero. Do not overwrite active data.

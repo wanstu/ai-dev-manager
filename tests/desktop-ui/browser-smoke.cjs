@@ -561,6 +561,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('globalMemoryCategory').value='decision';
     document.getElementById('globalMemoryImportance').value='4';
     document.getElementById('globalMemoryTags').value='build, test';
+    document.getElementById('globalMemoryStatus').value='obsolete';
+    document.getElementById('globalMemoryReviewNote').value='superseded by new policy';
     document.getElementById('globalMemorySubmit').click();
     await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]===''&&c.args[1][0].key==='project.notes'), 'global Memory write is persisted through adapter');
     await waitFor(() => document.getElementById('globalMemoryList').textContent.includes('line two'), 'global Memory supports multiline values');
@@ -572,6 +574,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='OrganizeMemory'&&c.args[0]===''&&c.args[1][0].key==='project.notes'&&c.args[1][0].value==='revised\nvalue'), 'editing updates the existing global Memory key');
     await waitFor(() => document.getElementById('globalMemoryList').textContent.includes('revised') && !document.getElementById('globalMemoryList').textContent.includes('line one'), 'updated global Memory value is rendered');
     check(document.getElementById('globalMemoryList').textContent.includes('架构决策')&&document.getElementById('globalMemoryList').textContent.includes('重要度 4/5'), 'Memory metadata survives edit and reload');
+    check(document.getElementById('globalMemoryList').textContent.includes('已废弃')&&document.getElementById('globalMemoryList').textContent.includes('superseded by new policy'), 'Memory validity and review note survive edit');
+    const validityFilter=document.getElementById('globalMemoryValidityFilter');
+    validityFilter.value='obsolete';validityFilter.dispatchEvent(new Event('change',{bubbles:true}));await sleep();
+    check(document.getElementById('globalMemoryList').textContent.includes('project.notes')&&!document.getElementById('globalMemoryList').textContent.includes('sentinel'),'Memory validity filter is scoped');
+    validityFilter.value='all';validityFilter.dispatchEvent(new Event('change',{bubbles:true}));await sleep();
     const memoryCategory=document.getElementById('globalMemoryCategoryFilter');
     memoryCategory.value='decision'; memoryCategory.dispatchEvent(new Event('change',{bubbles:true})); await sleep();
     check(document.getElementById('globalMemoryList').textContent.includes('project.notes')&&!document.getElementById('globalMemoryList').textContent.includes('sentinel'), 'Memory category filters entries');

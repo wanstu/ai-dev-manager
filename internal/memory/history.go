@@ -14,6 +14,27 @@ import (
 const historyLimit = 20
 
 func normalizeMetadata(m model.MemoryMetadata) (model.MemoryMetadata, error) {
+	m.Status = strings.ToLower(strings.TrimSpace(m.Status))
+	if m.Status == "active" {
+		m.Status = ""
+	}
+	switch m.Status {
+	case "", "obsolete", "archived":
+	default:
+		return m, fmt.Errorf("unknown memory status")
+	}
+	m.ReviewNote = strings.TrimSpace(m.ReviewNote)
+	if len(m.ReviewNote) > 4096 {
+		return m, fmt.Errorf("memory review note too long")
+	}
+	if m.ValidUntil != nil {
+		t := m.ValidUntil.UTC()
+		m.ValidUntil = &t
+	}
+	if m.ReviewAfter != nil {
+		t := m.ReviewAfter.UTC()
+		m.ReviewAfter = &t
+	}
 	m.Category = strings.ToLower(strings.TrimSpace(m.Category))
 	switch m.Category {
 	case "", "convention", "decision", "progress", "issue", "environment", "preference", "other":
