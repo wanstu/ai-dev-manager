@@ -15,6 +15,7 @@ import (
 	"ai-dev-manager-v2/internal/codeintel"
 	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/management"
+	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/projectanalysis"
 	productversion "ai-dev-manager-v2/internal/version"
@@ -389,6 +390,26 @@ type EnvironmentVerifierAgentHostExecutionInput struct {
 	Allowed       bool   `json:"allowed"`
 }
 
+type MemorySearchInput struct {
+	Query          string `json:"query,omitempty"`
+	Limit          int    `json:"limit,omitempty"`
+	MaxOutputBytes int    `json:"max_output_bytes,omitempty"`
+}
+type EnvironmentMemorySearchInput struct {
+	EnvironmentID  string `json:"environment_id"`
+	Query          string `json:"query,omitempty"`
+	Limit          int    `json:"limit,omitempty"`
+	MaxOutputBytes int    `json:"max_output_bytes,omitempty"`
+}
+type MemoryOrganizeInput struct {
+	Changes []memory.Change `json:"changes"`
+	DryRun  bool            `json:"dry_run,omitempty"`
+}
+type EnvironmentMemoryOrganizeInput struct {
+	EnvironmentID string          `json:"environment_id"`
+	Changes       []memory.Change `json:"changes"`
+	DryRun        bool            `json:"dry_run,omitempty"`
+}
 type MemoryKeyInput struct {
 	Key string `json:"key"`
 }
@@ -780,7 +801,7 @@ func isV144AdminOnlyTool(name string) bool {
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
 		"resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote",
-		"memory_global_write", "memory_global_delete",
+		"memory_global_write", "memory_global_delete", "memory_global_organize",
 		"strong_permission_control_set":
 		return true
 	default:
@@ -1821,6 +1842,26 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(content, err)
 		})
 
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_search", Description: "Search shared durable memories by key and content. Case-insensitive keyword matching, bounded output; use read for a complete entry."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in MemorySearchInput) (*mcp.CallToolResult, any, error) {
+			items, err := service.Memory.GlobalSearch(in.Query, in.Limit, in.MaxOutputBytes)
+			return toolResult(items, err)
+		})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_organize", Description: "Admin-only atomic create/update/delete/merge/rename of shared memory. Each change supplies key, expected_value (null means absent), value (null means delete). Dry-run first; all changes fail on any conflict."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in MemoryOrganizeInput) (*mcp.CallToolResult, any, error) {
+			result, err := service.Memory.GlobalOrganize(in.Changes, in.DryRun)
+			return toolResult(result, err)
+		})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_search", Description: "Search durable memories for the explicit Environment only. Case-insensitive keyword matching, bounded output; use read for complete entries."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemorySearchInput) (*mcp.CallToolResult, any, error) {
+			items, err := service.Memory.EnvironmentSearch(in.EnvironmentID, in.Query, in.Limit, in.MaxOutputBytes)
+			return toolResult(items, err)
+		})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_organize", Description: "Atomically create/update/delete/merge/rename memory in the explicit Environment. Each change supplies key, expected_value (null means absent), value (null means delete). Dry-run first; no writer lease; all changes fail on any conflict."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryOrganizeInput) (*mcp.CallToolResult, any, error) {
+			result, err := service.Memory.EnvironmentOrganize(in.EnvironmentID, in.Changes, in.DryRun)
+			return toolResult(result, err)
+		})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_list", Description: "List global durable memory entries."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Memory.GlobalList()
