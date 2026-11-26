@@ -390,6 +390,21 @@ type EnvironmentVerifierAgentHostExecutionInput struct {
 	Allowed       bool   `json:"allowed"`
 }
 
+type MemorySimilarInput struct {
+	Threshold float64 `json:"threshold,omitempty"`
+	Limit     int     `json:"limit,omitempty"`
+}
+type EnvironmentMemorySimilarInput struct {
+	EnvironmentID string  `json:"environment_id"`
+	Threshold     float64 `json:"threshold,omitempty"`
+	Limit         int     `json:"limit,omitempty"`
+}
+type MemoryHandoffInput struct {
+	EnvironmentID       string               `json:"environment_id"`
+	TargetEnvironmentID string               `json:"target_environment_id"`
+	Items               []memory.HandoffItem `json:"items"`
+	DryRun              bool                 `json:"dry_run"`
+}
 type MemorySearchInput struct {
 	Query          string `json:"query,omitempty"`
 	Limit          int    `json:"limit,omitempty"`
@@ -1909,6 +1924,30 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 	})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_duplicates", Description: "Identify exact duplicate nonempty memory content within one explicit Environment; read-only."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 		result, err := service.Memory.Duplicates(in.EnvironmentID, false)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_recall", Description: "Rank shared memories by lexical relevance, partial keyword coverage, Chinese character/bigram matching and importance; not semantic embeddings."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemorySearchInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Recall("", true, in.Query, in.Limit, in.MaxOutputBytes)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_recall", Description: "Rank relevant memories in one explicit Environment by lexical relevance and importance; no automatic cross-environment reads."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemorySearchInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Recall(in.EnvironmentID, false, in.Query, in.Limit, in.MaxOutputBytes)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_similar", Description: "Find bounded near-duplicate lexical candidates in shared memory; never merges automatically."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemorySimilarInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Similar("", true, in.Threshold, in.Limit)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_similar", Description: "Find bounded near-duplicate lexical candidates in one explicit Environment; verify content before merging."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemorySimilarInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Similar(in.EnvironmentID, false, in.Threshold, in.Limit)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_project_scope", Description: "Resolve the verified durable source Environment from ADM-managed Worktree ancestry. Returns IDs only; explicitly read project memory afterwards."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.ProjectScope(in.EnvironmentID)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_handoff", Description: "Copy selected verified durable knowledge from a temporary Worktree to its explicit verified durable source. Dry-run first, then submit same items with dry_run=false. Refuses existing destination keys and stale source values; does not delete source."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryHandoffInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Handoff(in.EnvironmentID, in.TargetEnvironmentID, in.Items, in.DryRun)
 		return toolResult(result, err)
 	})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_search", Description: "Search shared durable memories by key and content. Case-insensitive keyword matching, bounded output; use read for a complete entry."},

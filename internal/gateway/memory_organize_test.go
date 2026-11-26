@@ -134,3 +134,42 @@ func TestAgentMemoryTrashAndPurgePermissions(t *testing.T) {
 		t.Fatal("history retained after purge")
 	}
 }
+
+func TestAgentMemoryRecallAndProjectScopeTools(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	ws, err := service.Workspaces.Add(t.TempDir(), "recall")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := service.Environments.Create(ws.ID, "recall", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Memory.EnvironmentWrite(env.ID, "writer", "process writer lease lifetime independent management"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Memory.EnvironmentWrite(env.ID, "writer-other", "process writer lease lifetime independent admin management"); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	agent := connectInMemory(t, ctx, newCompactAgentServer(service, nil))
+	defer agent.Close()
+	for _, tc := range []struct {
+		action string
+		args   map[string]any
+		want   string
+	}{
+		{"environment_recall", map[string]any{"environment_id": env.ID, "query": "writer lifetime unrelated"}, "writer"},
+		{"environment_similar", map[string]any{"environment_id": env.ID}, "writer-other"},
+		{"environment_project_scope", map[string]any{"environment_id": env.ID}, env.ID},
+	} {
+		result := callGatewayTool(t, ctx, agent, "adm_memory", map[string]any{"action": tc.action, "arguments": tc.args})
+		if result.IsError || !strings.Contains(toolText(t, result), tc.want) {
+			t.Fatalf("%s: %s", tc.action, toolText(t, result))
+		}
+	}
+	result := callGatewayTool(t, ctx, agent, "adm_memory", map[string]any{"action": "environment_handoff", "arguments": map[string]any{"environment_id": env.ID, "target_environment_id": env.ID, "items": []map[string]any{{"key": "writer", "expected_revision": 1, "expected_value": "process writer lease lifetime independent management"}}, "dry_run": true}})
+	if !result.IsError {
+		t.Fatal("same-environment handoff accepted")
+	}
+}

@@ -75,3 +75,12 @@
 - UI 新增、编辑和删除使用 organize 的原值及版本校验，避免直接覆盖 Agent 并发更新；编辑和确认时验证连接与环境作用域。
 - 新增 global_trash/environment_trash，列出已删除条目及可恢复版本；global_purge/environment_purge 仅管理员可用，要求 expected_revision 且仅允许已删除记录。永久删除移除该 Key 在当前状态文件中的历史，不承诺擦除备份。
 - 已有状态存储跨 Gateway 的互斥和并发安全仍需单独整改。关键词搜索与完全重复识别不等同于语义检索。
+
+## 项目记忆继承与相关性召回
+
+- environment_project_scope 根据 ADM 记录的 ManagedWorktree.SourceEnvironmentID 逐级解析持久项目环境，返回显式 ID 及来源链；不凭仓库名称、remote 或路径猜测关系。拒绝缺失来源、循环和无持久源的临时环境。
+- Agent 在获授权的项目任务中显式读取当前环境和已验证的持久源环境。Worktree 私有记忆仍独立，不自动复制、注入或合并。
+- environment_handoff 参数：environment_id、target_environment_id、items（key、expected_revision、expected_value，可选 target_key）、dry_run。目标必须是已验证的持久源且与当前环境不同。逐项核实原值与版本，拒绝已存在或有删除历史的目标键；整个批次原子提交，不删除源。先 dry_run=true，确认后 false。已有目标记忆须显式读取再 organize。此机制依赖 Agent 在清理前调用，未交接的临时记忆仍随环境清理消失。
+- global_recall/environment_recall：与 search 使用相同 query/limit/max_output_bytes 参数，支持部分关键词覆盖，英文单词、中文字符和二元组，键名/标签/类别加权，重要度小幅加权。仅返回匹配项并限制序列化输出。不调用模型或向量服务，不宣称理解同义词或语义。
+- global_similar/environment_similar：threshold 默认 0.75，范围 0.5～1；limit 默认 30，最多 100。按词项集合 Jaccard 相似度识别非完全相同正文的候选；每次扫描按键排序的前 200 条，每条最多 8192 字符，返回扫描规模及截断状态。仅供人工或 Agent 复核，不自动合并。
+- 本阶段仅接通 Agent MCP，近似查重和项目交接的管理端专用交互、记忆有效期及语义向量检索待实现。跨 Gateway 状态事务仍依赖既有 Store 边界。
