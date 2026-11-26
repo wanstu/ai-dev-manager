@@ -14,9 +14,13 @@ func TestCurrentUsesLinkerVersion(t *testing.T) {
 func TestCurrentDevelopmentFallback(t *testing.T) {
 	before := Version
 	t.Cleanup(func() { Version = before })
-	Version = "dev"
+	Version = ""
 	got := Current()
 	if got == "" {
 		t.Fatal("Current() must never be empty")
+	}
+	Version = "dev"
+	if got := Current(); got != "dev" {
+		t.Fatalf("explicit development build version = %q, want dev", got)
 	}
 }

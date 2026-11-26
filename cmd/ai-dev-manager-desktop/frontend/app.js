@@ -23,7 +23,7 @@ const elements = {
   workspaceBadge: document.getElementById('workspaceBadge'), environmentBadge: document.getElementById('environmentBadge'), execBadge: document.getElementById('execBadge'),
   mcpBadge: document.getElementById('mcpBadge'), skillBadge: document.getElementById('skillBadge'),
   managementContextPanel: document.getElementById('managementContextPanel'), managementWorkspace: document.getElementById('managementWorkspace'), managementEnvironment: document.getElementById('managementEnvironment'), managementEnvironmentHint: document.getElementById('managementEnvironmentHint'), createEnvironmentButton: document.getElementById('createEnvironmentButton'), editEnvironmentButton: document.getElementById('editEnvironmentButton'),
-  runtimeRefreshButton: document.getElementById('runtimeRefreshButton'), runtimeHint: document.getElementById('runtimeHint'), runtimeWriterOwnerInput: document.getElementById('runtimeWriterOwnerInput'), runtimeWriterAcquireButton: document.getElementById('runtimeWriterAcquireButton'), runtimeWriterReleaseButton: document.getElementById('runtimeWriterReleaseButton'), runtimeWriterHint: document.getElementById('runtimeWriterHint'), runtimeWriterDiagnostics: document.getElementById('runtimeWriterDiagnostics'), runtimeSubviewTabs: document.getElementById('runtimeSubviewTabs'), runtimeVerifierCount: document.getElementById('runtimeVerifierCount'), runtimeProcessCount: document.getElementById('runtimeProcessCount'), runtimeRunCount: document.getElementById('runtimeRunCount'), verifierList: document.getElementById('verifierList'), processList: document.getElementById('processList'), runList: document.getElementById('runList'), runtimeOutputMeta: document.getElementById('runtimeOutputMeta'), runtimeOutput: document.getElementById('runtimeOutput'),
+  runtimeRefreshButton: document.getElementById('runtimeRefreshButton'), runtimeHint: document.getElementById('runtimeHint'), runtimeWriterOwnerInput: document.getElementById('runtimeWriterOwnerInput'), runtimeWriterAcquireButton: document.getElementById('runtimeWriterAcquireButton'), runtimeWriterTakeoverButton: document.getElementById('runtimeWriterTakeoverButton'), runtimeWriterReleaseButton: document.getElementById('runtimeWriterReleaseButton'), runtimeWriterHint: document.getElementById('runtimeWriterHint'), runtimeWriterDiagnostics: document.getElementById('runtimeWriterDiagnostics'), runtimeSubviewTabs: document.getElementById('runtimeSubviewTabs'), runtimeVerifierCount: document.getElementById('runtimeVerifierCount'), runtimeProcessCount: document.getElementById('runtimeProcessCount'), runtimeRunCount: document.getElementById('runtimeRunCount'), verifierList: document.getElementById('verifierList'), processList: document.getElementById('processList'), runList: document.getElementById('runList'), runtimeOutputMeta: document.getElementById('runtimeOutputMeta'), runtimeOutput: document.getElementById('runtimeOutput'),
   mcpTotalCount: document.getElementById('mcpTotalCount'), mcpDefaultCount: document.getElementById('mcpDefaultCount'), mcpEnvironmentCount: document.getElementById('mcpEnvironmentCount'), mcpIssueCount: document.getElementById('mcpIssueCount'),
   mcpForm: document.getElementById('mcpForm'), mcpName: document.getElementById('mcpName'), mcpTransport: document.getElementById('mcpTransport'), mcpEndpointField: document.getElementById('mcpEndpointField'), mcpEndpoint: document.getElementById('mcpEndpoint'),
   mcpExecutableField: document.getElementById('mcpExecutableField'), mcpExecutable: document.getElementById('mcpExecutable'), mcpArgsField: document.getElementById('mcpArgsField'), mcpArgs: document.getElementById('mcpArgs'),
@@ -50,9 +50,9 @@ const elements = {
   environmentMCPSelections: document.getElementById('environmentMCPSelections'), environmentSkillSelections: document.getElementById('environmentSkillSelections'), closeEnvironmentDetail: document.getElementById('closeEnvironmentDetail'),
   diagnosticsRefreshButton: document.getElementById('diagnosticsRefreshButton'), diagnosticsPageHint: document.getElementById('diagnosticsPageHint'), diagnosticsPageContent: document.getElementById('diagnosticsPageContent'),
   aboutVersion: document.getElementById('aboutVersion'), aboutRuntime: document.getElementById('aboutRuntime'),
-  loadEnvironmentMemory: document.getElementById('loadEnvironmentMemory'), writeEnvironmentMemoryButton: document.getElementById('writeEnvironmentMemoryButton'), environmentMemoryScopeHint: document.getElementById('environmentMemoryScopeHint'), environmentMemoryForm: document.getElementById('environmentMemoryForm'), environmentMemoryKey: document.getElementById('environmentMemoryKey'), environmentMemoryValue: document.getElementById('environmentMemoryValue'), environmentMemoryList: document.getElementById('environmentMemoryList'),
+  loadEnvironmentMemory: document.getElementById('loadEnvironmentMemory'), writeEnvironmentMemoryButton: document.getElementById('writeEnvironmentMemoryButton'), environmentMemoryScopeHint: document.getElementById('environmentMemoryScopeHint'), environmentMemoryForm: document.getElementById('environmentMemoryForm'), environmentMemoryDialogTitle: document.getElementById('environmentMemoryDialogTitle'), environmentMemoryKey: document.getElementById('environmentMemoryKey'), environmentMemoryValue: document.getElementById('environmentMemoryValue'), environmentMemorySubmit: document.getElementById('environmentMemorySubmit'), environmentMemoryList: document.getElementById('environmentMemoryList'), environmentMemoryFilter: document.getElementById('environmentMemoryFilter'), environmentMemoryCount: document.getElementById('environmentMemoryCount'),
   execForm: document.getElementById('execForm'), execExecutable: document.getElementById('execExecutable'), execList: document.getElementById('execList'), execAllowedCount: document.getElementById('execAllowedCount'), execUsageCount: document.getElementById('execUsageCount'), execUsageSurfaceSummary: document.getElementById('execUsageSurfaceSummary'), execUsageFilter: document.getElementById('execUsageFilter'), execUsageSurfaceFilter: document.getElementById('execUsageSurfaceFilter'), execUsageTimeFilter: document.getElementById('execUsageTimeFilter'), execUsageVisibleCount: document.getElementById('execUsageVisibleCount'), execUsageTotalCount: document.getElementById('execUsageTotalCount'), execUsageList: document.getElementById('execUsageList'), execBlacklistForm: document.getElementById('execBlacklistForm'), execBlacklistExecutable: document.getElementById('execBlacklistExecutable'), execBlacklistList: document.getElementById('execBlacklistList'), execBlacklistCount: document.getElementById('execBlacklistCount'), execBlockedCount: document.getElementById('execBlockedCount'), execBlockedList: document.getElementById('execBlockedList'), execClearAllBlockedButton: document.getElementById('execClearAllBlockedButton'), execAuthorizationMode: document.getElementById('execAuthorizationMode'), execAuthorizationSave: document.getElementById('execAuthorizationSave'), execAuthorizationModeLabel: document.getElementById('execAuthorizationModeLabel'), strongPermissionControl: document.getElementById('strongPermissionControl'), strongPermissionControlModeLabel: document.getElementById('strongPermissionControlModeLabel'), strongPermissionControlHint: document.getElementById('strongPermissionControlHint'),
-  loadGlobalMemory: document.getElementById('loadGlobalMemory'), globalMemoryForm: document.getElementById('globalMemoryForm'), globalMemoryKey: document.getElementById('globalMemoryKey'), globalMemoryValue: document.getElementById('globalMemoryValue'), globalMemoryList: document.getElementById('globalMemoryList'),
+  loadGlobalMemory: document.getElementById('loadGlobalMemory'), addGlobalMemoryButton: document.getElementById('addGlobalMemoryButton'), globalMemoryForm: document.getElementById('globalMemoryForm'), globalMemoryDialogTitle: document.getElementById('globalMemoryDialogTitle'), globalMemoryKey: document.getElementById('globalMemoryKey'), globalMemoryValue: document.getElementById('globalMemoryValue'), globalMemorySubmit: document.getElementById('globalMemorySubmit'), globalMemoryList: document.getElementById('globalMemoryList'), globalMemoryFilter: document.getElementById('globalMemoryFilter'), globalMemoryCount: document.getElementById('globalMemoryCount'),
 };
 
 let currentSnapshot = null;
@@ -74,6 +74,9 @@ let execAuthorizationStatus = null;
 let strongPermissionControlStatus = null;
 let runtimeRunsByID = new Map();
 let runtimeSubview = 'verifiers';
+let runtimeLastRefreshAt=0;
+let runtimeRefreshGeneration=0;
+let runtimeGlobalView = false;
 let environmentDetailSubview = 'summary';
 const environmentContextRoutes = new Set(['environments', 'runtime', 'mcp', 'skills', 'memory', 'diagnostics']);
 let runtimeSubviewGeneration = 0;
@@ -93,6 +96,8 @@ let skillSubview = 'skills';
 let mcpBulkBusy = false;
 let globalMemoryLoaded = false;
 let globalMemoryLoading = false;
+let globalMemoryEntries = [];
+let environmentMemoryEntries = [];
 let environmentMemoryLoaded = false;
 let environmentMemoryLoading = false;
 let loadedEnvironmentMemoryID = '';
@@ -849,6 +854,9 @@ function initializeManagementNavigation() {
       updateManagementContextVisibility(route);
       if (route === 'memory') { renderEnvironmentMemoryScope(); maybeAutoLoadGlobalMemory(); }
       if (route === 'diagnostics') renderDiagnosticsPage();
+      if (route === 'runtime' && !managementEnvironmentID && currentSnapshot) {
+        runtimeSubview = 'processes'; runtimeSubviewGeneration++; clearRuntimeOutput(); refreshRuntimeContext(false).catch(error => setStatus(errorText(error), 'error'));
+      }
     },
   });
 }
@@ -856,7 +864,45 @@ function initializeManagementNavigation() {
 function updateManagementContextVisibility(route = currentManagementRoute()) {
   if (elements.managementContextPanel) elements.managementContextPanel.hidden = !environmentContextRoutes.has(route);
 }
+let overviewRuntimeGeneration=0;
+function resetOverviewRuntime(message='点击刷新读取当前连接的进程记录。'){
+  overviewRuntimeGeneration++;
+  setMetric(document.getElementById('overviewRunningCount'),'—');
+  setMetric(document.getElementById('overviewUnconfirmedCount'),'—');
+  document.getElementById('overviewOperationScope').textContent='当前连接的全部环境 · 尚未读取';
+  document.getElementById('overviewRuntimeDetail').textContent=message;
+  document.getElementById('overviewRuntimeRefresh').disabled=!currentSnapshot;
+}
+async function refreshOverviewRuntime(){
+  if(!currentSnapshot)return;
+  const generation=++overviewRuntimeGeneration,connection=connectionGeneration;
+  const button=document.getElementById('overviewRuntimeRefresh');
+  const valid=()=>generation===overviewRuntimeGeneration&&connection===connectionGeneration&&!!currentSnapshot;
+  button.disabled=true;
+  setMetric(document.getElementById('overviewRunningCount'),'…');
+  setMetric(document.getElementById('overviewUnconfirmedCount'),'…');
+  document.getElementById('overviewRuntimeDetail').textContent='正在读取进程记录…';
+  try{
+    const items=safeArray(await desktopAdapter().ListProcesses(''));
+    if(!valid())return;
+    setMetric(document.getElementById('overviewRunningCount'),items.filter(p=>p.state==='running'&&!p.history_only).length);
+    setMetric(document.getElementById('overviewUnconfirmedCount'),items.filter(p=>p.state==='owner_unavailable').length);
+    document.getElementById('overviewOperationScope').textContent='当前连接的全部环境 · '+new Date().toLocaleTimeString();
+    document.getElementById('overviewRuntimeDetail').textContent='另有 '+items.filter(p=>p.state==='other_gateway').length+' 条其他 Gateway 持有的记录；'+items.filter(p=>p.state==='exited').length+' 条已退出记录。';
+  }catch(error){
+    if(!valid())return;
+    setMetric(document.getElementById('overviewRunningCount'),'—');
+    setMetric(document.getElementById('overviewUnconfirmedCount'),'—');
+    document.getElementById('overviewOperationScope').textContent='当前连接的全部环境 · 读取失败';
+    document.getElementById('overviewRuntimeDetail').textContent='运行概况不可用：'+errorText(error);
+  }finally{if(valid())button.disabled=false;}
+}
+document.getElementById('overviewRuntimeRefresh').addEventListener('click',refreshOverviewRuntime);
 function renderDashboardState(state, error = '') {
+  const loaded=state==='success'&&!!currentSnapshot;
+  setMetric(document.getElementById('overviewWriterCount'),loaded?safeArray(currentSnapshot.environments).filter(e=>e.writer&&Date.parse(e.writer.expires_at)>Date.now()).length:'—');
+  resetOverviewRuntime(loaded?'点击刷新读取全部环境的进程记录。':'管理数据未就绪。');
+  document.getElementById('overviewRuntimeRefresh').disabled=!loaded;
   if (!window.ADMDashboard?.renderDashboard) return;
   window.ADMDashboard.renderDashboard({
     state: elements.dashboardDataState,
@@ -2027,7 +2073,7 @@ function runtimeItem(titleText, idText, state, detailText, actions = []) {
   const item = document.createElement('article'); item.className = 'runtime-item';
   const head = document.createElement('div'); head.className = 'runtime-item-head';
   const title = document.createElement('strong'); title.textContent = titleText || idText || 'runtime item';
-  head.append(title, stateBadge(state || 'unknown', state || 'unknown'));
+  head.append(title, stateBadge(({running:'运行中',exited:'已退出',other_gateway:'其他 Gateway 管理',owner_unavailable:'管理者失联',succeeded:'成功',failed:'失败',canceled:'已取消',disabled:'已停用',configured:'已配置'})[state] || state || '未知', state || 'unknown'));
   const id = document.createElement('code'); id.textContent = idText || '';
   const detail = document.createElement('small'); detail.textContent = detailText || '';
   item.append(head, id, detail);
@@ -2037,6 +2083,7 @@ function runtimeItem(titleText, idText, state, detailText, actions = []) {
 function runtimeContainer(kind) { return ({verifiers: elements.verifierList, processes: elements.processList, runs: elements.runList})[kind]; }
 function runtimeCountElement(kind) { return ({verifiers: elements.runtimeVerifierCount, processes: elements.runtimeProcessCount, runs: elements.runtimeRunCount})[kind]; }
 function resetRuntimeCollections(state = 'unloaded', error = '') {
+  runtimeLastRefreshAt=0; runtimeRefreshGeneration++;
   runtimeLists = {verifiers: [], processes: [], runs: []};
   runtimeListStates = {verifiers: state, processes: state, runs: state};
   runtimeListErrors = {verifiers: error, processes: error, runs: error};
@@ -2053,7 +2100,7 @@ function syncRuntimeSubviewUI() {
 }
 function clearRuntimeOutput(reason = '尚未选择资源') {
   runtimeOutputBinding = null;
-  elements.runtimeOutputMeta.textContent = `有界 current-owner observation · ${reason}`;
+  elements.runtimeOutputMeta.textContent = `当前 Gateway 的有限日志 · ${reason}`;
   elements.runtimeOutput.textContent = '尚无输出';
 }
 function runtimeOutputBindingIsCurrent(binding = runtimeOutputBinding) {
@@ -2072,7 +2119,7 @@ function showRuntimeOutput(kind, id, title, stdout = '', stderr = '', meta = '',
   const scope = captureEnvironmentScope();
   runtimeOutputBinding = window.ADMRuntimeView?.makeOutputBinding(scope, kind, id, runtimeSubviewGeneration) || {...scope, kind, id, viewGeneration: runtimeSubviewGeneration};
   const environment = currentEnvironment(); const observedAt = new Date().toLocaleTimeString();
-  elements.runtimeOutputMeta.textContent = `有界 current-owner observation · ${environment?.name || scope.environmentID || 'Environment'} · ${kind} ${id} · observed ${observedAt}${truncation ? ` · ${truncation}` : ''}`;
+  elements.runtimeOutputMeta.textContent = `当前 Gateway 的有限日志 · ${environment?.name || scope.environmentID || '全部环境'} · ${kind} ${id} · observed ${observedAt}${truncation ? ` · ${truncation}` : ''}`;
   const sections = [title]; if (meta) sections.push(meta); if (stdout) sections.push(`STDOUT\n${stdout}`); if (stderr) sections.push(`STDERR\n${stderr}`);
   elements.runtimeOutput.textContent = sections.filter(Boolean).join('\n\n') || '尚无输出';
   return true;
@@ -2080,20 +2127,20 @@ function showRuntimeOutput(kind, id, title, stdout = '', stderr = '', meta = '',
 function renderRuntimeListState(kind, emptyText, renderItems) {
   const container = runtimeContainer(kind), count = runtimeCountElement(kind), state = runtimeListStates[kind], items = safeArray(runtimeLists[kind]);
   setMetric(count, state === 'success' ? items.length : state === 'loading' ? '…' : '—');
-  if (runtimeSubview === kind && (!currentEnvironment() || state !== 'success')) {
+  if (runtimeSubview === kind && ((!currentEnvironment() && kind !== 'processes') || state !== 'success')) {
     setMetric(document.getElementById('runtimeVisibleCount'), state === 'loading' ? '…' : '—');
     setMetric(document.getElementById('runtimeListTotalCount'), state === 'loading' ? '…' : '—');
   }
-  if (!currentEnvironment()) return emptyMessage(container, '请选择 Environment');
+  if (!currentEnvironment() && kind !== 'processes') return emptyMessage(container, '请先选择一个开发环境');
   if (state === 'loading') return emptyMessage(container, `正在读取 ${kind}…`);
   if (state === 'error') return emptyMessage(container, `${kind} 状态不可用：${runtimeListErrors[kind] || 'unknown error'}`);
   if (state !== 'success') return emptyMessage(container, `${kind} 尚未加载`);
   const queryMatches = searchMatcher(filterValue('runtimeFilter', ''));
   const stateFilter = filterValue('runtimeStateFilter');
   const filtered = items.filter(item => {
-    const haystack = [item.name, item.id, item.verifier_id, item.executable, item.cwd, item.kind, item.pid, ...safeArray(item.args)].filter(Boolean).join(' ');
+    const haystack = [item.name, item.id, item.verifier_id, item.executable, item.cwd, item.kind, item.pid, item.environment_id, ...safeArray(item.args)].filter(Boolean).join(' ');
     const state = kind === 'verifiers' ? (item.enabled === false ? 'disabled' : 'configured') : String(item.state || 'unknown');
-    const stateMatch = stateFilter === 'all' || (stateFilter === 'running' && state === 'running') || (stateFilter === 'not-running' && state !== 'running') || (stateFilter === 'disabled' && state === 'disabled');
+    const stateMatch = stateFilter === 'all' || stateFilter===state || (stateFilter === 'not-running' && state !== 'running');
     return queryMatches(haystack) && stateMatch;
   });
   if (runtimeSubview === kind) {
@@ -2124,31 +2171,47 @@ function renderRuntimeWriterDiagnostics(environment) {
   const container = elements.runtimeWriterDiagnostics;
   if (!container) return;
   if (!environment) return emptyMessage(container, '选择 Environment 后显示 Writer 占用来源。');
-  if (!environment.writer) return emptyMessage(container, '当前没有 active Writer；没有锁占用。');
   if (runtimeWriterDiagnosticsError) return emptyMessage(container, 'Writer 占用诊断读取失败：' + runtimeWriterDiagnosticsError);
   const diagnostics = runtimeWriterDiagnostics;
   if (!diagnostics || diagnostics.environment_id !== environment.environment_id) return emptyMessage(container, '正在读取 Writer 占用来源…');
 
   container.replaceChildren();
   container.classList.remove('empty');
+  const pending=safeArray(diagnostics.pending_operations);
+  if(diagnostics.handoff_pending||pending.length||diagnostics.handoff_check_error){
+    const warning=document.createElement('div');warning.className='warning-text';
+    warning.textContent=diagnostics.handoff_check_error?'写入交接状态检查失败：'+diagnostics.handoff_check_error:'写入交接中：旧 Writer 的任务尚未退出，新 Writer 暂不能执行重叠目录的写入任务。常驻进程不受此限制。';
+    container.append(warning);
+    for(const op of pending){
+      const row=document.createElement('div');row.className='runtime-writer-source';
+      const title=document.createElement('strong');title.textContent=op.kind+' · '+op.environment_id;
+      const info=document.createElement('small');info.textContent='ADM PID '+(op.host_pid||'—')+' · 开始 '+writerDiagnosticTime(op.started_at);
+      row.append(title,info);container.append(row);
+    }
+  }
+  if(!environment.writer){
+    const message=document.createElement('div');message.textContent='当前没有 active Writer；没有锁占用。';container.append(message);return;
+  }
   const summary = document.createElement('div');
   summary.className = 'runtime-writer-summary';
   const sources = safeArray(diagnostics.heartbeat_sources);
   const attribution = diagnostics.attribution === 'current_gateway_runtime'
-    ? `已归因到当前 Gateway · ${sources.length} 个续租源`
+    ? `已归因到当前 Gateway · ${sources.length} 个关联任务`
     : diagnostics.attribution === 'lease_observation'
-      ? '最新续租已归因到占锁 Gateway'
+      ? '已识别相关操作'
       : diagnostics.attribution === 'last_known_source'
-        ? '仅有上一次已识别来源；之后发生过未标注续租'
+        ? '仅有历史操作来源'
         : diagnostics.attribution === 'unattributed'
-          ? '没有可用的续租来源快照'
-          : '当前无续租来源';
+          ? '没有可用的关联操作快照'
+          : '当前无关联操作';
   const facts = [
     ['状态', attribution],
     ['Owner 指纹', diagnostics.owner_fingerprint || '—'],
+    ['获取时间', writerDiagnosticTime(diagnostics.acquired_at)],
     ['最近续租', writerDiagnosticTime(diagnostics.last_seen_at)],
     ['租约到期', writerDiagnosticTime(diagnostics.expires_at)],
-    ['自动心跳', diagnostics.heartbeat_interval_seconds ? `约每 ${diagnostics.heartbeat_interval_seconds}s` : '—'],
+    ['最后续期动作', ({acquire:'显式获取/续期',heartbeat:'显式 Heartbeat',admin_takeover:'管理员接管'})[diagnostics.last_renewal_action] || '未知（旧租约）'],
+    ['任务自动续期', '禁止'],
     ['Gateway', diagnostics.gateway_owner?.pid ? `PID ${diagnostics.gateway_owner.pid}` : '—'],
   ];
   for (const [label, value] of facts) {
@@ -2173,12 +2236,12 @@ function renderRuntimeWriterDiagnostics(environment) {
       const observedOnly = source.state === 'observed' || source.state === 'last_observed';
       const timing = observedOnly
         ? `${source.state === 'last_observed' ? '上次识别' : '最后观测'} ${writerDiagnosticTime(source.observed_at)}`
-        : `开始 ${writerDiagnosticTime(source.started_at)} · 最近续租 ${writerDiagnosticTime(source.observed_at)}`;
+        : `开始 ${writerDiagnosticTime(source.started_at)} · 租约最近续期 ${writerDiagnosticTime(diagnostics.last_seen_at)}`;
       const sourceMeaning = source.state === 'observed'
-        ? '该来源与当前 lease 的最新续租时间一致'
+        ? '与当前租约相关的操作记录，不代表自动续期'
         : source.state === 'last_observed'
-          ? '之后发生过未标注来源的续租；这里只能作为历史线索'
-          : '该运行项持有与当前 lease 相同的 Writer owner，因此会自动续租';
+          ? '历史线索，不代表任务仍在运行'
+          : '该运行项关联当前 Writer，只校验权限，不自动续期';
       meta.textContent = [verifier ? `Verifier ${verifier}` : '', timing, sourceMeaning].filter(Boolean).join(' · ');
       item.append(title, code, meta); list.append(item);
     }
@@ -2186,7 +2249,7 @@ function renderRuntimeWriterDiagnostics(environment) {
   } else {
     const warning = document.createElement('div');
     warning.className = 'warning-text';
-    warning.textContent = '当前 active Writer 没有可用的安全来源快照。通常表示它来自尚未升级的旧 Gateway、非 Gateway 直接调用，或历史 lease；升级后的 Gateway 会在每次续租时写入来源。';
+    warning.textContent = '当前没有关联操作快照；锁的有效期仅由会话或管理员显式获取和续期决定。';
     container.append(warning);
   }
 }
@@ -2194,23 +2257,29 @@ function renderRuntime() {
   syncRuntimeSubviewUI();
   const environment = currentEnvironment(), writerOwner = runtimeWriterOwner(), pending = Boolean(runtimePendingActionKey);
   const activeWriter = Boolean(environment?.writer), writerAuthorized = activeWriter && Boolean(writerOwner);
+  document.getElementById('runtimeScopeLabel').textContent=environment?'当前环境 · '+environment.name:'当前连接 · 全部环境的进程';
+  document.getElementById('runtimeWriterSummary').textContent=!environment?'尚未选择环境':runtimeWriterDiagnostics?.handoff_pending?'写入交接中':activeWriter?'锁已占用':'无活动锁';
+  document.getElementById('runtimeRefreshTime').textContent=Object.values(runtimeListStates).includes('loading')?'正在刷新…':runtimeLastRefreshAt?'最近读取 '+new Date(runtimeLastRefreshAt).toLocaleTimeString()+(Object.values(runtimeListStates).includes('error')?' · 部分不可用':''):'尚未读取运行状态';
   const writerActionDisabledReason = runtimeWriterActionDisabledReason(environment, writerOwner, pending);
   const writerSources = safeArray(runtimeWriterDiagnostics?.heartbeat_sources);
   elements.runtimeHint.textContent = !environment
-    ? '选择 Management Environment 后可查看当前 Gateway owner 的运行状态。'
+    ? '未选择环境：查看当前 ADM 管理的全部进程。选择环境后还可查看验证器和执行任务。'
     : activeWriter && writerSources.length
-      ? `当前 Writer 正由 ${writerSourceLabel(writerSources[0])} ${writerSources[0].id || ''}${writerSources.length > 1 ? ` 等 ${writerSources.length} 个运行项` : ''}自动续租；原始 owner 凭证保持隐藏。`
+      ? `当前 Writer 关联 ${writerSourceLabel(writerSources[0])} ${writerSources[0].id || ''}${writerSources.length > 1 ? ` 等 ${writerSources.length} 个运行项` : ''}；运行任务不会自动续期，原始 owner 凭证保持隐藏。`
       : activeWriter
         ? '当前 Environment 有 active Writer；下方会显示租约时间和可归因的续租来源，原始 owner 凭证不会回显。'
         : '当前 Environment 没有 active Writer；可查看 owner-local 状态与日志，也可以显式获取一个 Writer。';
   if (elements.runtimeWriterOwnerInput && runtimeWriterCredential.environmentID === environment?.environment_id && document.activeElement !== elements.runtimeWriterOwnerInput) elements.runtimeWriterOwnerInput.value = runtimeWriterCredential.owner || '';
   elements.runtimeWriterOwnerInput.disabled = !environment || pending;
   elements.runtimeWriterAcquireButton.disabled = !environment || pending;
+  elements.runtimeWriterTakeoverButton.disabled = !activeWriter || pending;
+  document.getElementById('runtimeWriterForceReleaseButton').disabled = !activeWriter || pending;
+  document.getElementById('startManagedProcessButton').disabled = !environment || pending;
   elements.runtimeWriterReleaseButton.disabled = !environment || pending || !writerAuthorized;
-  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存 Writer authority；下方诊断仍只展示安全指纹和占用来源，不回显原始 owner。' : activeWriter ? '检测到 active Writer。下方会说明当前锁是否由本 Gateway 的 Process / Run / Verifier 保活；原始 owner 凭证保持隐藏。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
+  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存 Writer authority；下方诊断仍只展示安全指纹和占用来源，不回显原始 owner。' : activeWriter ? '检测到 active Writer。下方显示当前锁及关联任务，任务不会自动续期；原始 owner 凭证保持隐藏。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
   renderRuntimeWriterDiagnostics(environment);
 
-  renderRuntimeListState('verifiers', '没有配置 verifier', (verifiers, container) => {
+  renderRuntimeListState('verifiers', '当前环境没有配置验证器', (verifiers, container) => {
     for (const verifier of verifiers) {
       const run = createActionButton('运行', 'run-verifier', verifier.verifier_id);
       run.disabled = pending || !writerAuthorized || verifier.enabled === false;
@@ -2226,21 +2295,40 @@ function renderRuntime() {
       ]));
     }
   });
-  renderRuntimeListState('processes', '当前 Gateway owner 没有 process', (processes, container) => {
+  renderRuntimeListState('processes', '没有 ADM 管理的常驻进程', (processes, container) => {
     for (const process of processes) {
       const logs = createActionButton('日志', 'process-logs', process.id); logs.disabled = pending;
-      const actions = [disabledRuntimeAction(logs, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看日志。' : '')];
+      const actions = process.history_only ? [] : [disabledRuntimeAction(logs, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看日志。' : '')];
       if (process.state === 'running') {
         const stop = createActionButton('停止', 'stop-process', process.id, 'danger');
-        stop.disabled = pending || !writerAuthorized;
-        actions.push(disabledRuntimeAction(stop, writerActionDisabledReason));
+        stop.disabled = pending;
+        actions.push(disabledRuntimeAction(stop, pending ? '正在执行其他运行操作' : ''));
       }
-      const ports = safeArray(process.listening_ports); const detail = `PID ${process.pid || '—'}${ports.length ? ` · ports ${ports.join(', ')}` : ''}${process.exit_code !== undefined && process.exit_code !== null ? ` · exit ${process.exit_code}` : ''}${process.error_kind ? ` · ${process.error_kind}` : ''}`;
-      container.append(runtimeItem(process.id, process.id, process.state, detail, actions));
+      const ports = safeArray(process.listening_ports);
+      const env = safeArray(currentSnapshot?.environments).find(e => e.environment_id === process.environment_id);
+      const detail = [env?.name || process.environment_id, `PID ${process.pid || '—'}`, ports.length ? `端口 ${ports.join(', ')}` : '', process.cwd ? `目录 ${process.cwd}` : '', process.started_at ? `启动 ${writerDiagnosticTime(process.started_at)}` : '', process.exit_code != null ? `退出码 ${process.exit_code}` : '', process.error_kind].filter(Boolean).join(' · ');
+      const item=runtimeItem(process.executable || process.id, process.id, process.state, detail, actions);
+      const metrics=document.createElement('div');metrics.className='process-resource-metrics';
+      const elapsed=Number(process.uptime_seconds);
+      const uptime=Number.isFinite(elapsed)?(elapsed>=3600?Math.floor(elapsed/3600)+' 小时 '+Math.floor(elapsed%3600/60)+' 分钟':elapsed>=60?Math.floor(elapsed/60)+' 分钟 '+elapsed%60+' 秒':elapsed+' 秒'):'—';
+      const resource=process.resources;
+      const facts=[['运行时间',process.history_only&&process.state!=='exited'?'未确认':uptime]];
+      if(process.state==='running'){
+        facts.push(['CPU',resource?.cpu_percent!=null?Number(resource.cpu_percent).toFixed(1)+'%':'待采样'],['内存',resource?.memory_bytes!=null?(Number(resource.memory_bytes)/1048576).toFixed(1)+' MiB':'—'],['进程数',resource?.process_count??'—']);
+        metrics.title=resource?'统计范围：'+(resource.scope==='job'?'Windows Job 进程树':'Linux 进程组')+'；CPU 100% 表示占用一个逻辑核心；RSS/工作集之和可能重复计算共享内存。'+(resource.complete===false?' 部分数据不可用。':''):(process.resource_error||'资源统计暂不可用');
+      }else if(process.exit_reason)facts.push(['退出原因',({stopped:'主动停止',completed:'正常退出',failed:'异常退出'})[process.exit_reason]||process.exit_reason]);
+      for(const [name,value] of facts){const cell=document.createElement('span');const label=document.createElement('small');label.textContent=name;const amount=document.createElement('strong');amount.textContent=String(value);cell.append(label,amount);metrics.append(cell);}
+      if(resource?.complete===false||process.resource_error){const note=document.createElement('small');note.textContent=resource?'部分资源统计不可用':'资源统计不可用';metrics.append(note);}
+      if(process.history_only){
+        const note=document.createElement('small');
+        note.textContent=({exited:'历史记录 · 日志未持久化',other_gateway:'其他 Gateway 持有记录 · 当前无法操作',owner_unavailable:'原管理者已失联 · 实际进程状态未确认'})[process.state]||'历史记录';
+        metrics.append(note);
+      }
+      item.append(metrics);container.append(item);
     }
   });
   runtimeRunsByID = new Map(safeArray(runtimeLists.runs).map((run) => [run.id, run]));
-  renderRuntimeListState('runs', '当前 Gateway owner 没有 generic run', (runs, container) => {
+  renderRuntimeListState('runs', '当前 Gateway 没有执行任务', (runs, container) => {
     for (const run of runs) {
       const output = createActionButton('输出', 'run-output', run.id); output.disabled = pending;
       const actions = [disabledRuntimeAction(output, pending ? '当前有 Runtime 操作正在执行，请等待完成后再查看输出。' : '')];
@@ -2258,10 +2346,26 @@ function renderRuntime() {
 async function refreshRuntimeContext(showMessage = false, scope = captureEnvironmentScope()) {
   const environment = currentEnvironment();
   if (!environment || !scope.environmentID) {
-    if (environmentScopeIsCurrent(scope)) { resetRuntimeCollections('unloaded'); renderRuntime(); }
-    return {stale: false, errors: []};
+    runtimeGlobalView = true;
+    if (!environmentScopeIsCurrent(scope)) return {stale:true, errors:[]};
+    resetRuntimeCollections('unloaded');
+    if (!currentSnapshot) { renderRuntime(); return {stale:false, errors:[]}; }
+    runtimeListStates.processes = 'loading'; renderRuntime();
+    const generation=++runtimeRefreshGeneration;
+    try {
+      const processes = await desktopAdapter().ListProcesses('');
+      if (!environmentScopeIsCurrent(scope)||generation!==runtimeRefreshGeneration) return {stale:true, errors:[]};
+      runtimeLastRefreshAt=Date.now(); runtimeLists.processes = safeArray(processes); runtimeListStates.processes = 'success'; renderRuntime();
+      return {stale:false, errors:[]};
+    } catch (error) {
+      if (!environmentScopeIsCurrent(scope)||generation!==runtimeRefreshGeneration) return {stale:true, errors:[]};
+      runtimeListStates.processes = 'error'; runtimeListErrors.processes = errorText(error); renderRuntime();
+      return {stale:false, errors:[errorText(error)]};
+    }
   }
   if (environment.environment_id !== scope.environmentID || !environmentScopeIsCurrent(scope)) return {stale: true, errors: []};
+  if (runtimeGlobalView) { runtimeGlobalView = false; runtimeSubview = 'verifiers'; runtimeSubviewGeneration++; clearRuntimeOutput(); }
+  const generation=++runtimeRefreshGeneration;
   runtimeListStates = {verifiers: 'loading', processes: 'loading', runs: 'loading'}; runtimeListErrors = {verifiers: '', processes: '', runs: ''}; renderRuntime();
   if (showMessage) setStatus('正在刷新 Runtime 状态…', 'loading');
   const results = await Promise.allSettled([
@@ -2270,7 +2374,8 @@ async function refreshRuntimeContext(showMessage = false, scope = captureEnviron
     desktopAdapter().ListRuns(scope.environmentID),
     desktopAdapter().GetRuntimeWriterDiagnostics(scope.environmentID),
   ]);
-  if (!environmentScopeIsCurrent(scope)) return {stale: true, errors: []};
+  if (!environmentScopeIsCurrent(scope)||generation!==runtimeRefreshGeneration) return {stale: true, errors: []};
+  runtimeLastRefreshAt=Date.now();
   const descriptors = [
     ['verifiers', 'Verifiers', results[0]], ['processes', 'Processes', results[1]], ['runs', 'Runs', results[2]],
   ];
@@ -2369,6 +2474,10 @@ function renderEnvironmentWorkspaceFilter(workspaces) {
   elements.environmentFilterHint.textContent = exists ? '' : `Workspace 筛选 ${current} 已失效。请选择“全部 Workspace”或其他 Workspace 重置筛选。`;
 }
 function renderWorkspaces(workspaces) {
+  const used=new Set(safeArray(currentSnapshot?.environments).map(e=>e.workspace_id));
+  setMetric(document.getElementById('workspaceSummaryTotal'),workspaces.length);
+  setMetric(document.getElementById('workspaceSummaryUsed'),workspaces.filter(w=>used.has(w.workspace_id)).length);
+  setMetric(document.getElementById('workspaceSummaryEmpty'),workspaces.filter(w=>!used.has(w.workspace_id)).length);
   const model = window.ADMProjectPages?.workspaceListModel(workspaces, safeArray(currentSnapshot?.environments), {query: elements.workspaceFilter.value, occupancy: filterValue('workspaceEnvironmentFilter'), sort: filterValue('workspaceSort', 'name')}) || {items: workspaces, total: workspaces.length, visible: workspaces.length, environmentCounts: {}};
   elements.workspaceBadge.textContent = String(model.total); renderWorkspaceOptions(workspaces); renderEnvironmentWorkspaceFilter(workspaces); setMetric(elements.workspaceVisibleCount, model.visible); setMetric(elements.workspaceListTotalCount, model.total);
   if (!model.total) return emptyMessage(elements.workspaceList, '暂无已登记 Workspace。添加现有目录即可；Git 不是前置条件。');
@@ -2378,7 +2487,7 @@ function renderWorkspaces(workspaces) {
     const item = document.createElement('article'); item.className = 'list-item managed-item'; const content = document.createElement('div'); content.className = 'item-content';
     const title = document.createElement('strong'); title.textContent = workspace.name || workspace.workspace_id; const id = document.createElement('code'); id.textContent = workspace.workspace_id || ''; const path = document.createElement('span'); path.className = 'project-path'; path.textContent = workspace.path || '';
     const system = workspace.system_kind ? ` · System ${workspace.system_kind}` : ''; const meta = document.createElement('small'); meta.textContent = `Environments ${safeNumber(model.environmentCounts[workspace.workspace_id])} · MCP 继承 ${safeArray(workspace.enabled_mcp_ids).length} · Skill 继承 ${safeArray(workspace.enabled_skill_ids).length}${system}`; content.append(title, id, path, meta);
-    const actions = document.createElement('div'); actions.className = 'item-actions'; actions.append(createActionButton('Discover projects', 'discover-workspace', workspace.workspace_id), createActionButton('查看 Environments', 'filter-environments-by-workspace', workspace.workspace_id), createActionButton('改名', 'rename-workspace', workspace.workspace_id)); if (!workspace.system_kind) actions.append(createActionButton('删除记录', 'remove-workspace', workspace.workspace_id, 'danger')); item.append(content, actions); elements.workspaceList.append(item);
+    const actions = document.createElement('div'); actions.className = 'item-actions'; actions.append(createActionButton('发现项目', 'discover-workspace', workspace.workspace_id), createActionButton('查看开发环境', 'filter-environments-by-workspace', workspace.workspace_id), createActionButton('改名', 'rename-workspace', workspace.workspace_id)); if (!workspace.system_kind) actions.append(createActionButton('删除记录', 'remove-workspace', workspace.workspace_id, 'danger')); item.append(content, actions); elements.workspaceList.append(item);
   }
 }
 function environmentRetentionView(environment) {
@@ -2566,6 +2675,10 @@ async function applyEnvironmentWorkspaceRecommendations() {
 }
 
 function renderEnvironments(environments) {
+  setMetric(document.getElementById('environmentSummaryTotal'),environments.length);
+  setMetric(document.getElementById('environmentSummaryTemporary'),environments.filter(e=>e.retention?.persistence==='temporary').length);
+  setMetric(document.getElementById('environmentSummaryExpired'),environments.filter(e=>e.retention?.persistence==='temporary'&&Date.parse(e.retention?.expires_at)<=Date.now()).length);
+  setMetric(document.getElementById('environmentSummaryWriter'),environments.filter(e=>e.writer&&Date.parse(e.writer.expires_at)>Date.now()).length);
   const workspaces = safeArray(currentSnapshot?.workspaces); const workspaceID = elements.environmentWorkspaceFilter.value;
   const kindInfoLoaded = Array.isArray(currentSnapshot?.managed_worktree_environment_ids);
   const kindControl = document.getElementById('environmentKindFilter');
@@ -2585,10 +2698,10 @@ function renderEnvironments(environments) {
     const meta = document.createElement('small'); meta.textContent = `Workspace ${workspaceName}${environment.workspace_id ? ` (${environment.workspace_id})` : ''} · ${environment.state || 'unknown'} · MCP ${safeArray(environment.enabled_mcp_ids).length} · Skills ${safeArray(environment.enabled_skill_ids).length} · Private Memory ${safeNumber(environment.private_memory_count)} · ${environment.writer ? `Writer active${environment.writer.expires_at ? ` until ${new Date(environment.writer.expires_at).toLocaleTimeString()}` : ''}` : 'No writer'}`; content.append(titleLine, id, root, meta); renderTemporaryLifecycleNote(content, environment);
     const actions = document.createElement('div'); actions.className = 'item-actions'; actions.append(createActionButton('详情', 'inspect-environment', environment.environment_id), createActionButton('诊断', 'diagnose-environment', environment.environment_id));
     if (retentionView.persistence === 'temporary') {
-      actions.append(createActionButton('刷新生命周期', 'refresh-temporary-environment', environment.environment_id), createActionButton('Promote durable', 'promote-temporary-environment', environment.environment_id), createActionButton('清理预览', 'preview-temporary-environment-cleanup', environment.environment_id));
+      actions.append(createActionButton('刷新生命周期', 'refresh-temporary-environment', environment.environment_id), createActionButton('转为持久环境', 'promote-temporary-environment', environment.environment_id), createActionButton('清理预览', 'preview-temporary-environment-cleanup', environment.environment_id));
       const lifecycle = temporaryLifecycleStatus(environment); if (temporaryCleanupPreviewIDs.has(environment.environment_id) && lifecycle?.cleanup_eligible) actions.append(createActionButton('确认清理', 'execute-temporary-environment-cleanup', environment.environment_id, 'danger'));
     }
-    actions.append(createActionButton('调整 Workspace', 'workspace-environment', environment.environment_id), createActionButton('改名', 'rename-environment', environment.environment_id), createActionButton('删除记录', 'remove-environment', environment.environment_id, 'danger')); item.append(content, actions); elements.environmentList.append(item);
+    actions.append(createActionButton('调整归属', 'workspace-environment', environment.environment_id), createActionButton('改名', 'rename-environment', environment.environment_id), createActionButton('删除记录', 'remove-environment', environment.environment_id, 'danger')); item.append(content, actions); elements.environmentList.append(item);
   }
 }
 function updateEnvironmentContextMarkers() {
@@ -3431,6 +3544,7 @@ function renderSnapshotBase(snapshot) {
   if (selectedEnvironmentID && !environments.some((env) => env.environment_id === selectedEnvironmentID)) closeEnvironmentDetail();
 }
 function renderManagementUnavailable(message) {
+  for(const id of ['workspaceSummaryTotal','workspaceSummaryUsed','workspaceSummaryEmpty','environmentSummaryTotal','environmentSummaryTemporary','environmentSummaryExpired','environmentSummaryWriter'])setMetric(document.getElementById(id),'—');
   for (const element of [elements.workspaceBadge, elements.workspaceVisibleCount, elements.workspaceListTotalCount, elements.environmentBadge, elements.environmentVisibleCount, elements.environmentListTotalCount, elements.execBadge, elements.mcpBadge, elements.skillBadge, elements.mcpTotalCount, elements.mcpDefaultCount, elements.mcpEnvironmentCount, elements.mcpIssueCount, elements.mcpVisibleCount, elements.mcpListTotalCount, elements.skillSourceCount, elements.skillTotalCount, elements.skillEnvironmentCount, elements.skillIssueCount, elements.skillVisibleCount, elements.skillListTotalCount]) setMetric(element, '—');
   renderWorkspaceOptions([]); renderEnvironmentWorkspaceFilter([]);
   elements.managementWorkspace.replaceChildren(new Option('管理数据未加载', '')); elements.managementWorkspace.value = ''; elements.managementWorkspace.disabled = true; elements.managementEnvironment.replaceChildren(new Option('管理数据未加载', '')); elements.managementEnvironment.value = ''; elements.managementEnvironment.disabled = true; elements.editEnvironmentButton.disabled = true;
@@ -3456,12 +3570,12 @@ function clearManagementData(message = 'ADM 未连接。连接 Admin MCP 后加�
   managementInspection = null; managementCapabilityFacts = new Map(); skillAvailabilityByID = new Map(); environmentSkillAvailabilityByID = new Map(); mcpHealthByKey = new Map(); temporaryLifecycleByEnvironmentID = new Map(); temporaryCleanupPreviewIDs = new Set(); mcpProbeRequests.clear();
   runtimeSubview = 'verifiers'; runtimeSubviewGeneration++; runtimePendingActionKey = ''; clearRuntimeWriterCredential(); resetRuntimeCollections('unloaded'); clearRuntimeOutput('管理上下文已清除'); syncRuntimeSubviewUI();
   renderDashboardState('unloaded', message); renderManagementUnavailable(message);
-  globalMemoryLoaded = false; globalMemoryLoading = false; resetEnvironmentMemoryScope(message); if (!elements.environmentDetailPanel.hidden) closeEnvironmentDetail();
+  globalMemoryLoaded = false; globalMemoryLoading = false; globalMemoryEntries = []; elements.globalMemoryFilter.value = ''; elements.globalMemoryCount.textContent = '未加载'; emptyMessage(elements.globalMemoryList, message); resetEnvironmentMemoryScope(message); if (!elements.environmentDetailPanel.hidden) closeEnvironmentDetail();
 }
 async function refreshManagementContext(scope = captureEnvironmentScope()) {
   if (!environmentScopeIsCurrent(scope)) return {stale: true, errors: []};
   managementInspection = null; managementCapabilityFacts = new Map(); environmentSkillAvailabilityByID = new Map(); managementContextError = ''; managementSkillAvailabilityError = ''; updateManagementHint();
-  if (!scope.environmentID) { renderMCPManager(safeArray(currentSnapshot?.mcps)); renderSkillManager(safeArray(currentSnapshot?.skills)); resetEnvironmentMemoryScope(); resetRuntimeCollections('unloaded'); renderRuntime(); renderDiagnosticsPage(); return {stale: false, errors: [], inspection: null}; }
+  if (!scope.environmentID) { renderMCPManager(safeArray(currentSnapshot?.mcps)); renderSkillManager(safeArray(currentSnapshot?.skills)); resetEnvironmentMemoryScope(); resetRuntimeCollections('unloaded'); renderRuntime(); renderDiagnosticsPage(); if (currentManagementRoute() === 'runtime') { runtimeSubview = 'processes'; await refreshRuntimeContext(false, scope); } return {stale: false, errors: [], inspection: null}; }
   const [inspectionResult, availabilityResult] = await Promise.allSettled([
     desktopAdapter().InspectEnvironment(scope.environmentID),
     desktopAdapter().ListEnvironmentSkills(scope.environmentID),
@@ -3743,7 +3857,7 @@ async function forceReleaseEnvironmentWriter(environmentID) {
   }
   if (!await confirmInApp(
     '确定强制释放这个 Environment 的 Writer 锁？\n\n' +
-    '这会立即取消当前持锁会话的写入权限。正在运行的进程或任务不会被自动停止，但后续写入会失去该 Writer 授权。\n\n' +
+    '这会立即取消当前持锁会话的写入权限。常驻 Process 将继续运行；依赖 Writer 的 Run、Verifier 或命令会在检测到授权失效后取消。\n\n' +
     '仅在确认锁已失效、持锁会话异常退出或需要管理员恢复时使用。'
   )) return;
 
@@ -3833,9 +3947,111 @@ function closeEnvironmentDetail() {
 }
 function refreshSelectedEnvironmentDetail() { if (!selectedEnvironmentID) return false; const token = detailGeneration, id = selectedEnvironmentID, inspection = managementInspection; if (token !== detailGeneration || id !== selectedEnvironmentID || inspection?.environment?.environment_id !== id) return false; return renderEnvironmentDetailFromInspection(inspection, token); }
 
+const memoryEditorState = new Map();
+const memoryValidityLabels={active:'有效',review_due:'待复核',expired:'已过期',obsolete:'已废弃',archived:'已归档'};
+function memoryValidity(entry){
+ const m=entry.metadata||{};
+ if(m.status==='obsolete'||m.status==='archived')return m.status;
+ if(m.valid_until&&Date.parse(m.valid_until)<=Date.now())return 'expired';
+ if(m.review_after&&Date.parse(m.review_after)<=Date.now())return 'review_due';
+ return entry.validity||'active';
+}
+function memoryLocalDateTime(value){
+ if(!value)return '';
+ const date=new Date(value);
+ if(!Number.isFinite(date.getTime()))return '';
+ const shifted=new Date(date.getTime()-date.getTimezoneOffset()*60000);
+ return shifted.toISOString().slice(0,16);
+}
+function memoryDateValue(id,original){
+ const value=document.getElementById(id).value;
+ if(!value)return null;
+ if(original&&value===memoryLocalDateTime(original))return original;
+ return new Date(value).toISOString();
+}
+function memoryScopeToken(kind) {return kind==='global'?currentGlobalMemoryScope():currentEnvironmentMemoryScope();}
+function memoryScopeValid(kind,token) {return kind==='global'?globalMemoryScopeIsCurrent(token):environmentMemoryScopeIsCurrent(token);}
+function memoryScopeID(kind,token) {return kind==='global'?'':token.environmentID;}
+function memoryReload(kind,token) {return kind==='global'?loadGlobalMemory({scope:token}):loadEnvironmentMemory({scope:token});}
+function prepareMemoryEditor(scope, entry = null) {
+  const isGlobal = scope === 'global';
+  const form = isGlobal ? elements.globalMemoryForm : elements.environmentMemoryForm;
+  const keyInput = isGlobal ? elements.globalMemoryKey : elements.environmentMemoryKey;
+  const valueInput = isGlobal ? elements.globalMemoryValue : elements.environmentMemoryValue;
+  const title = isGlobal ? elements.globalMemoryDialogTitle : elements.environmentMemoryDialogTitle;
+  const submit = isGlobal ? elements.globalMemorySubmit : elements.environmentMemorySubmit;
+  form.reset();
+  memoryEditorState.set(scope,{entry,token:memoryScopeToken(scope)});
+  document.getElementById(scope+'MemoryCategory').value=entry?.metadata?.category||'';
+  document.getElementById(scope+'MemoryImportance').value=String(entry?.metadata?.importance||0);
+  document.getElementById(scope+'MemoryTags').value=safeArray(entry?.metadata?.tags).join(', ');
+  document.getElementById(scope+'MemoryStatus').value=entry?.metadata?.status||'active';
+  document.getElementById(scope+'MemoryValidUntil').value=memoryLocalDateTime(entry?.metadata?.valid_until);
+  document.getElementById(scope+'MemoryReviewAfter').value=memoryLocalDateTime(entry?.metadata?.review_after);
+  document.getElementById(scope+'MemoryReviewNote').value=entry?.metadata?.review_note||'';
+  form.dataset.editingKey = entry ? String(entry.key || '') : '';
+  keyInput.readOnly = Boolean(entry);
+  if (entry) keyInput.setAttribute('aria-readonly', 'true');
+  else keyInput.removeAttribute('aria-readonly');
+  if (entry) {
+    keyInput.value = String(entry.key || '');
+    valueInput.value = String(entry.value ?? '');
+  }
+  title.textContent = entry ? (isGlobal ? '编辑全局记忆' : '编辑环境记忆') : (isGlobal ? '新增全局记忆' : '新增环境记忆');
+  submit.textContent = entry ? '保存修改' : '保存记忆';
+}
 function renderMemory(container, entries, scope) {
-  if (!entries.length) return emptyMessage(container, '没有 Memory 条目'); container.replaceChildren(); container.classList.remove('empty');
-  for (const entry of entries) { const row = document.createElement('div'); row.className = 'memory-row'; const content = document.createElement('div'); content.className = 'memory-value'; const key = document.createElement('code'); key.textContent = entry.key || ''; const value = document.createElement('pre'); value.textContent = entry.value || ''; content.append(key, value); const edit = createActionButton('编辑', 'edit-' + scope + '-memory', entry.key); edit.addEventListener('click', () => { const isGlobal = scope === 'global'; (isGlobal ? elements.globalMemoryKey : elements.environmentMemoryKey).value = entry.key || ''; (isGlobal ? elements.globalMemoryValue : elements.environmentMemoryValue).value = entry.value || ''; openEditorDialog(isGlobal ? 'globalMemoryDialog' : 'environmentMemoryDialog'); }); row.append(content, edit, createActionButton('删除', 'delete-' + scope + '-memory', entry.key, 'danger')); container.append(row); }
+  const all = safeArray(entries);
+  if (scope === 'global') globalMemoryEntries = all;
+  else environmentMemoryEntries = all;
+  const filterElement = scope === 'global' ? elements.globalMemoryFilter : elements.environmentMemoryFilter;
+  const countElement = scope === 'global' ? elements.globalMemoryCount : elements.environmentMemoryCount;
+  const filter = String(filterElement.value || '').trim().toLocaleLowerCase();
+  const categoryFilter = document.getElementById(scope+'MemoryCategoryFilter').value;
+  const validityFilter=document.getElementById(scope+'MemoryValidityFilter').value;
+  const categorized=all.filter(entry=>(categoryFilter==='all'||(entry.metadata?.category||'')===categoryFilter)&&(validityFilter==='all'||memoryValidity(entry)===validityFilter));
+  const visible = filter ? categorized.filter(entry => (String(entry.key || '') + '\n' + String(entry.value || '') + '\n' + String(entry.metadata?.category || '') + '\n' + safeArray(entry.metadata?.tags).join(' ')).toLocaleLowerCase().includes(filter)) : categorized;
+  countElement.textContent = (filter||categoryFilter!=='all'||validityFilter!=='all') ? visible.length + ' / ' + all.length + ' 条' : all.length + ' 条';
+  if (!all.length) return emptyMessage(container, '还没有记忆条目');
+  if (!visible.length) return emptyMessage(container, '没有匹配的记忆条目');
+  container.replaceChildren();
+  container.classList.remove('empty');
+  for (const entry of visible) {
+    const row = document.createElement('div');
+    row.className = 'memory-row';
+    const content = document.createElement('div');
+    content.className = 'memory-value';
+    const key = document.createElement('code');
+    key.textContent = entry.key || '';
+    const value = document.createElement('pre');
+    value.textContent = entry.value || '';
+    content.append(key);
+    if (entry.revision || entry.metadata) {
+      const meta = document.createElement('div');
+      meta.className = 'memory-entry-metadata';
+      const categories = {convention:'开发规范',decision:'架构决策',progress:'开发进度',issue:'问题经验',environment:'环境知识',preference:'用户偏好',other:'其他'};
+      const category = categories[entry.metadata?.category] || '未分类';
+      const tokens = [category, memoryValidityLabels[memoryValidity(entry)]||'有效', entry.metadata?.importance ? '重要度 '+entry.metadata.importance+'/5' : '', '版本 '+(entry.revision || 0), ...safeArray(entry.metadata?.tags), entry.updated_at ? new Date(entry.updated_at).toLocaleString() : ''].filter(Boolean);
+      for (const token of tokens) {const chip=document.createElement('span');chip.textContent=token;meta.append(chip);}
+      content.append(meta);
+      if(entry.metadata?.review_note){const note=document.createElement('small');note.textContent='复核：'+entry.metadata.review_note;content.append(note);}
+      if(entry.metadata?.valid_until||entry.metadata?.review_after){const dates=document.createElement('small');dates.textContent=[entry.metadata.valid_until?'有效截止 '+new Date(entry.metadata.valid_until).toLocaleString():'',entry.metadata.review_after?'下次复核 '+new Date(entry.metadata.review_after).toLocaleString():''].filter(Boolean).join(' · ');content.append(dates);}
+    }
+    content.append(value);
+    const edit = createActionButton('编辑内容', 'edit-' + scope + '-memory', entry.key);
+    edit.addEventListener('click', () => {
+      const isGlobal = scope === 'global';
+      prepareMemoryEditor(scope, entry);
+      openEditorDialog(isGlobal ? 'globalMemoryDialog' : 'environmentMemoryDialog');
+    });
+    const actions = document.createElement('div');
+    actions.className = 'memory-row-actions';
+    const history = createActionButton('历史版本','history-'+scope+'-memory',entry.key);
+    history.addEventListener('click',()=>openMemoryTools(scope,'history',entry.key));
+    actions.append(edit, history, createActionButton('删除', 'delete-' + scope + '-memory', entry.key, 'danger'));
+    row.append(content, actions);
+    container.append(row);
+  }
 }
 function currentManagementRoute() { return managementNavigation?.current?.() || window.ADMNavigation?.normalizeRoute?.(window.location.hash) || 'overview'; }
 function currentGlobalMemoryScope() { return {connectionGeneration}; }
@@ -3846,7 +4062,12 @@ function resetEnvironmentMemoryScope(message = '') {
   environmentMemoryLoaded = false;
   environmentMemoryLoading = false;
   loadedEnvironmentMemoryID = '';
-  emptyMessage(elements.environmentMemoryList, message || (managementEnvironmentID ? '尚未加载当前 Environment Memory' : '请选择 Management Environment 后加载 private Memory'));
+  environmentMemoryEntries = [];
+  elements.environmentMemoryFilter.value = '';
+  document.getElementById('environmentMemoryCategoryFilter').value='all';
+  document.getElementById('environmentMemoryValidityFilter').value='all';
+  elements.environmentMemoryCount.textContent = '未加载';
+  emptyMessage(elements.environmentMemoryList, message || (managementEnvironmentID ? '尚未加载当前环境记忆' : '请选择管理环境后加载私有记忆'));
   renderEnvironmentMemoryScope();
 }
 function renderEnvironmentMemoryScope() {
@@ -3855,9 +4076,9 @@ function renderEnvironmentMemoryScope() {
   elements.loadEnvironmentMemory.disabled = !enabled;
   elements.writeEnvironmentMemoryButton.disabled = !Boolean(environment && currentSnapshot);
   elements.environmentMemoryScopeHint.textContent = environment
-    ? '当前 Environment：' + (environment.name || environment.environment_id) + ' · ' + environment.environment_id + '。private Memory 必须显式加载。'
-    : '请选择 Management Environment 后显式加载。';
-  if (!environment) emptyMessage(elements.environmentMemoryList, '请选择 Management Environment 后加载 private Memory');
+    ? '当前环境：' + (environment.name || environment.environment_id) + ' · ' + environment.environment_id + '。私有记忆仅在显式加载后显示。'
+    : '请选择管理环境后显式加载。';
+  if (!environment) emptyMessage(elements.environmentMemoryList, '请选择管理环境后加载私有记忆');
 }
 function maybeAutoLoadGlobalMemory() {
   if (currentManagementRoute() !== 'memory' || globalMemoryLoaded || globalMemoryLoading || !currentSnapshot) return false;
@@ -4345,6 +4566,47 @@ elements.runtimeWriterAcquireButton.addEventListener('click', async () => {
     runtimeWriterCredential = {environmentID, owner};
   });
 });
+elements.runtimeWriterTakeoverButton.addEventListener('click', async () => {
+  const environment = currentEnvironment(); if (!environment?.writer) return;
+  if (!await confirmInApp('确定以管理员身份接管当前 Writer 锁？原会话的租约立即失效；常驻 Process 不停止，依赖旧租约的任务将在检测到授权失效后取消。')) return;
+  const environmentID = environment.environment_id;
+  const owner = generatedDesktopWriterOwner();
+  await runMutation('管理员接管 Writer', async () => {
+    await desktopAdapter().TakeoverRuntimeWriter(environmentID, owner);
+    runtimeWriterCredential = {environmentID, owner};
+    elements.runtimeWriterOwnerInput.value = owner;
+  });
+});
+document.getElementById('runtimeWriterForceReleaseButton').addEventListener('click', async () => {
+  const scope = captureEnvironmentScope();
+  if (!currentEnvironment()?.writer) return;
+  if (!await confirmInApp('强制释放当前 Writer 锁？常驻进程将继续运行；原租约授权的执行任务将被取消。')) return;
+  if (!environmentScopeIsCurrent(scope)) return;
+  await runMutation('强制释放 Writer', async () => {
+    await desktopAdapter().ForceReleaseRuntimeWriter(scope.environmentID);
+    clearRuntimeWriterCredential();
+  });
+});
+document.getElementById('managedProcessForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const scope = captureEnvironmentScope();
+  if (!scope.environmentID || runtimePendingActionKey) return;
+  const form = event.currentTarget;
+  const executable = document.getElementById('managedProcessExecutable').value.trim();
+  const cwd = document.getElementById('managedProcessCwd').value.trim();
+  let args;
+  try {
+    args = JSON.parse(document.getElementById('managedProcessArgs').value.trim() || '[]');
+    if (!Array.isArray(args) || args.some(arg => typeof arg !== 'string')) throw new Error('参数必须是 JSON 字符串数组。');
+  } catch(error) { setStatus('参数格式错误：' + errorText(error), 'error'); return; }
+  if (!executable) return setStatus('请输入可执行文件。', 'error');
+  const submit = document.getElementById('managedProcessSubmit');
+  submit.disabled = true;
+  try {
+    const result = await runRuntimeAction('启动常驻进程', 'start-process', scope, () => desktopAdapter().StartProcess(scope.environmentID, executable, args, cwd));
+    if (result && environmentScopeIsCurrent(scope)) { form.reset(); closeFormDialog(form); }
+  } finally { submit.disabled = false; }
+});
 elements.runtimeWriterReleaseButton.addEventListener('click', async () => {
   const environment = currentEnvironment(), owner = runtimeWriterOwner();
   if (!environment || !owner) return setStatus('当前 Desktop 会话没有可释放的 Writer Owner。', 'error');
@@ -4395,7 +4657,9 @@ elements.verifierList.addEventListener('click', async (event) => {
 });
 elements.processList.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-action]'); if (!button) return;
-  const scope = captureEnvironmentScope(), environmentID = scope.environmentID, processID = button.dataset.id, viewGeneration = runtimeSubviewGeneration;
+  const scope = captureEnvironmentScope(), processID = button.dataset.id, viewGeneration = runtimeSubviewGeneration;
+  const process = safeArray(runtimeLists.processes).find(p => p.id === processID);
+  const environmentID = process?.environment_id || scope.environmentID;
   if (!environmentID) return;
   if (button.dataset.action === 'process-logs') {
     if (runtimePendingActionKey) return; const actionKey = `process-logs:${processID}`; runtimePendingActionKey = actionKey; renderRuntime(); setStatus('正在读取 process 日志…', 'loading');
@@ -4409,8 +4673,9 @@ elements.processList.addEventListener('click', async (event) => {
     return;
   }
   if (button.dataset.action === 'stop-process') {
-    const owner = runtimeWriterOwner(); if (!owner || !currentEnvironment()?.writer) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能停止 process。', 'error');
-    await runRuntimeAction('停止 process', `stop-process:${processID}`, scope, () => desktopAdapter().StopProcess(environmentID, owner, processID));
+    if (!await confirmInApp('确定停止此 ADM 管理的进程？不会释放或续期任何 Writer 锁。')) return;
+    if (!environmentScopeIsCurrent(scope)) return;
+    await runRuntimeAction('停止进程', `stop-process:${processID}`, scope, () => desktopAdapter().StopProcess(environmentID, '', processID));
   }
 });
 elements.runList.addEventListener('click', async (event) => {
@@ -4646,22 +4911,182 @@ elements.environmentWorkspaceForm.addEventListener('submit', async (event) => {
 });
 elements.execForm.addEventListener('submit', async (event) => { event.preventDefault(); const executable = elements.execExecutable.value.trim(); if (executable) await runMutation('更新 exec allowlist', async () => { await desktopAdapter().AllowExecutable(executable); elements.execForm.reset(); closeFormDialog(elements.execForm); }); });
 elements.execBlacklistForm.addEventListener('submit', async (event) => { event.preventDefault(); const executable = elements.execBlacklistExecutable.value.trim(); if (executable) await runMutation('更新命令黑名单', async () => { await desktopAdapter().BlockExecutable(executable); elements.execBlacklistForm.reset(); closeFormDialog(elements.execBlacklistForm); }); });
-elements.globalMemoryForm.addEventListener('submit', async (event) => {
-  event.preventDefault(); const key = elements.globalMemoryKey.value.trim(), value = elements.globalMemoryValue.value; if (!key) return;
-  const scope = currentGlobalMemoryScope();
-  await runMutation('写入 Global Memory', () => desktopAdapter().WriteGlobalMemory(key, value), async () => {
-    elements.globalMemoryForm.reset(); closeFormDialog(elements.globalMemoryForm);
-    if (globalMemoryLoaded && globalMemoryScopeIsCurrent(scope)) await loadGlobalMemory({scope});
+elements.addGlobalMemoryButton.addEventListener('click', () => prepareMemoryEditor('global'));
+elements.writeEnvironmentMemoryButton.addEventListener('click', () => prepareMemoryEditor('environment'));
+document.getElementById('globalMemoryDialog').addEventListener('close', () => prepareMemoryEditor('global'));
+document.getElementById('environmentMemoryDialog').addEventListener('close', () => prepareMemoryEditor('environment'));
+elements.globalMemoryFilter.addEventListener('input', () => renderMemory(elements.globalMemoryList, globalMemoryEntries, 'global'));
+elements.environmentMemoryFilter.addEventListener('input', () => renderMemory(elements.environmentMemoryList, environmentMemoryEntries, 'environment'));
+for(const kind of ['global','environment']){
+  const form=kind==='global'?elements.globalMemoryForm:elements.environmentMemoryForm;
+  const keyInput=kind==='global'?elements.globalMemoryKey:elements.environmentMemoryKey;
+  const valueInput=kind==='global'?elements.globalMemoryValue:elements.environmentMemoryValue;
+  document.getElementById(kind+'MemoryCategoryFilter').addEventListener('change',()=>renderMemory(kind==='global'?elements.globalMemoryList:elements.environmentMemoryList,kind==='global'?globalMemoryEntries:environmentMemoryEntries,kind));
+  document.getElementById(kind+'MemoryValidityFilter').addEventListener('change',()=>renderMemory(kind==='global'?elements.globalMemoryList:elements.environmentMemoryList,kind==='global'?globalMemoryEntries:environmentMemoryEntries,kind));
+  document.getElementById(kind+'MemorySimilar').addEventListener('click',()=>openMemoryTools(kind,'similar'));
+  if(kind==='environment')document.getElementById('environmentMemoryHandoff').addEventListener('click',()=>openMemoryTools(kind,'handoff'));
+  for(const mode of ['trash','duplicates']){
+    document.getElementById(kind+'Memory'+(mode==='trash'?'Trash':'Duplicates')).addEventListener('click',()=>openMemoryTools(kind,mode));
+  }
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const saved=memoryEditorState.get(kind);
+    if(!saved||!memoryScopeValid(kind,saved.token)||(kind==='environment'&&!saved.token.environmentID))return setStatus('管理范围已变化，请重新打开编辑窗口。','error');
+    const key=saved.entry?.key||keyInput.value.trim();
+    if(!key)return;
+    const metadata={...saved.entry?.metadata,category:document.getElementById(kind+'MemoryCategory').value,importance:Number(document.getElementById(kind+'MemoryImportance').value),tags:document.getElementById(kind+'MemoryTags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),status:document.getElementById(kind+'MemoryStatus').value,valid_until:memoryDateValue(kind+'MemoryValidUntil',saved.entry?.metadata?.valid_until),review_after:memoryDateValue(kind+'MemoryReviewAfter',saved.entry?.metadata?.review_after),review_note:document.getElementById(kind+'MemoryReviewNote').value};
+    const change={key,expected_value:saved.entry?saved.entry.value:null,expected_revision:saved.entry?(saved.entry.revision||0):null,value:valueInput.value,metadata};
+    // A new key may be a deleted key with retained history. Read the history to
+    // obtain its tombstone revision; otherwise use zero. Do not overwrite active data.
+    const id=memoryScopeID(kind,saved.token);
+    if(!saved.entry){
+      try{
+        const h=await desktopAdapter().GetMemoryHistory(id,key,null);
+        change.expected_revision=h.current_revision;
+      }catch(_){change.expected_revision=0;}
+    }
+    if(!memoryScopeValid(kind,saved.token))return setStatus('管理范围已变化，请重新打开编辑窗口。','error');
+    await runMutation(saved.entry?'更新记忆':'新增记忆',()=>desktopAdapter().OrganizeMemory(id,[change],false),async()=>{
+      if(!memoryScopeValid(kind,saved.token))return;
+      closeFormDialog(form);prepareMemoryEditor(kind);await memoryReload(kind,saved.token);
+    });
   });
-});
-elements.environmentMemoryForm.addEventListener('submit', async (event) => {
-  event.preventDefault(); const scope = currentEnvironmentMemoryScope(); if (!scope.environmentID) return setStatus('请先选择 Management Environment。', 'error');
-  const key = elements.environmentMemoryKey.value.trim(), value = elements.environmentMemoryValue.value; if (!key) return;
-  await runMutation('写入 Environment-private Memory', () => desktopAdapter().WriteEnvironmentMemory(scope.environmentID, key, value), async () => {
-    elements.environmentMemoryForm.reset(); closeFormDialog(elements.environmentMemoryForm);
-    if (environmentMemoryLoaded && environmentMemoryScopeIsCurrent(scope)) await loadEnvironmentMemory({scope});
-  });
-});
+}
+
+let memoryToolGeneration=0;
+async function openMemoryTools(kind,mode,key=''){
+ const token=memoryScopeToken(kind),id=memoryScopeID(kind,token);
+ if(kind==='environment'&&!id)return setStatus('请先选择开发环境。','error');
+ const dialog=document.getElementById('memoryToolsDialog'),body=document.getElementById('memoryToolsBody');
+ const generation=++memoryToolGeneration;
+ const valid=()=>generation===memoryToolGeneration&&dialog.open&&memoryScopeValid(kind,token);
+ document.getElementById('memoryToolsTitle').textContent=({history:'历史版本',trash:'回收站',duplicates:'重复记忆',similar:'近似重复记忆',handoff:'交接项目记忆'})[mode];
+ document.getElementById('memoryToolsScope').textContent=(kind==='global'?'全局记忆':(currentEnvironment()?.name||id))+(key?' · '+key:'');
+ body.textContent='正在读取…';
+ if(!dialog.open)openEditorDialog('memoryToolsDialog');
+ const append=(tag,text,parent=body)=>{const el=document.createElement(tag);el.textContent=text;parent.append(el);return el;};
+ const button=(label,fn,parent=body)=>{const el=append('button',label,parent);el.type='button';el.className='secondary-button small-button';el.addEventListener('click',async()=>{if(!valid())return;el.disabled=true;try{await fn();}catch(err){if(valid())setStatus(errorText(err),'error');}finally{el.disabled=false;}});return el;};
+ const mutate=async(label,fn)=>{
+   if(!valid())return;
+   await runMutation(label,fn,async()=>{if(memoryScopeValid(kind,token))await memoryReload(kind,token);if(valid())dialog.close();});
+ };
+ try{
+  if(mode==='history'){
+   const h=await desktopAdapter().GetMemoryHistory(id,key,null);
+   if(!valid())return;body.replaceChildren();
+   const current=await desktopAdapter().GetMemoryHistory(id,key,h.current_revision);
+   if(!valid())return;
+   if(current.current_revision!==h.current_revision)throw new Error('记忆已更新，请重新打开历史。');
+   const versions=append('div','');versions.className='memory-versions';
+   const comparison=append('div','');comparison.className='memory-compare';
+   for(const v of safeArray(h.versions)){
+    const line=append('div','',versions);line.className='memory-version-row';
+    append('span','v'+v.revision+(v.revision===h.current_revision?' · 当前':'')+(v.deleted?' · 已删除':'')+(v.updated_at?' · '+new Date(v.updated_at).toLocaleString():''),line);
+    button('查看',async()=>{
+      const selected=await desktopAdapter().GetMemoryHistory(id,key,v.revision);
+      if(!valid())return;if(selected.current_revision!==h.current_revision)throw new Error('记忆已更新，请重新打开历史。');
+      comparison.replaceChildren();
+      for(const [title,item] of [['当前版本',current.selected],['所选版本 v'+v.revision,selected.selected]]){
+        const panel=append('section','',comparison);append('strong',title,panel);append('pre',item?.value??'（已删除）',panel);
+      }
+      if(!v.deleted&&v.revision!==h.current_revision)button('恢复此版本',async()=>{
+        if(await confirmInApp('将此历史版本恢复为当前内容？现有版本会保留。')&&valid())await mutate('恢复记忆',()=>desktopAdapter().RestoreMemory(id,key,v.revision,h.current_revision));
+      },comparison);
+    },line);
+   }
+  }else if(mode==='trash'){
+   const items=safeArray(await desktopAdapter().ListMemoryTrash(id));if(!valid())return;body.replaceChildren();
+   if(!items.length)append('p','回收站为空');
+   for(const item of items){
+    const line=append('div','');line.className='memory-version-row';append('span',item.key,line);
+    button('历史',()=>openMemoryTools(kind,'history',item.key),line);
+    if(item.restorable_revision!=null)button('恢复',async()=>{if(await confirmInApp('恢复此记忆？')&&valid())await mutate('恢复记忆',()=>desktopAdapter().RestoreMemory(id,item.key,item.restorable_revision,item.revision));},line);
+    button('永久删除',async()=>{if(await confirmInApp('永久删除此记忆及全部历史？无法恢复。',{confirmText:'永久删除'})&&valid())await mutate('永久删除记忆',()=>desktopAdapter().PurgeMemory(id,item.key,item.revision));},line);
+   }
+  }else if(mode==='similar'){
+   const result=await desktopAdapter().FindSimilarMemory(id,0.75,30);
+   if(!valid())return;body.replaceChildren();
+   append('p','扫描 '+result.scanned_entries+' / '+result.total_entries+' 条，发现 '+result.total_pairs_in_scan+' 对候选'+(result.truncated?'（结果有截断）':'')+'。词项相似不代表语义相同；需人工核对并编辑合并正文。');
+   for(const pair of safeArray(result.pairs)){
+    const line=append('div','');line.className='memory-version-row';
+    append('span',pair.first_key+' ↔ '+pair.second_key+' · '+Math.round(pair.score*100)+'%',line);
+    button('比较并整理',async()=>{
+     const entries=kind==='global'?await desktopAdapter().ListGlobalMemory():await desktopAdapter().ListEnvironmentMemory(id);
+     if(!valid())return;
+     const a=entries.find(e=>e.key===pair.first_key),b=entries.find(e=>e.key===pair.second_key);
+     if(!a||!b)throw new Error('记忆已变化，请重新查重。');
+     // Invalidate any prior editor in this dialog; its snapshot may be stale.
+     body.querySelector('.memory-similar-editor')?.remove();
+     const editor=append('section','');editor.className='memory-similar-editor';
+     const compare=append('div','',editor);compare.className='memory-compare';
+     for(const e of [a,b]){
+      const panel=append('section','',compare);append('strong',e.key,panel);append('small',memoryValidityLabels[memoryValidity(e)]||'有效',panel);append('pre',e.value,panel);
+     }
+     const label=append('label','保留条目',editor);const select=append('select','',label);
+     for(const e of [a,b]){const opt=append('option',e.key,select);opt.value=e.key;}
+     const valueLabel=append('label','合并后的正文（请保留两条中仍有价值的信息）',editor);
+     const merged=append('textarea','',valueLabel);merged.rows=8;merged.value=a.value+'\n\n'+b.value;
+     button('预演并确认合并',async()=>{
+      if(!editor.isConnected)return;
+      const keep=select.value===a.key?a:b,discard=keep===a?b:a;
+      if(!merged.value.trim())throw new Error('合并内容不能为空。');
+      const changes=[{key:keep.key,expected_value:keep.value,expected_revision:keep.revision||0,value:merged.value},{key:discard.key,expected_value:discard.value,expected_revision:discard.revision||0,value:null}];
+      await desktopAdapter().OrganizeMemory(id,changes,true);
+      if(!valid()||!editor.isConnected||!await confirmInApp('保留“'+keep.key+'”及其元数据，将“'+discard.key+'”移入回收站？请确认合并正文已核实。')||!valid()||!editor.isConnected)return;
+      await mutate('整理近似重复记忆',()=>desktopAdapter().OrganizeMemory(id,changes,false));
+     },editor);
+    },line);
+   }
+  }else if(mode==='handoff'){
+   if(kind!=='environment')throw new Error('只能交接环境私有记忆。');
+   const project=await desktopAdapter().GetMemoryProjectScope(id);
+   if(!valid())return;body.replaceChildren();
+   const target=project.project_environment_id;
+   if(!target||target===id){append('p','当前已经是持久项目环境，无需交接。');return;}
+   const targetName=safeArray(currentSnapshot?.environments).find(e=>e.environment_id===target)?.name;
+   append('p','目标：'+(targetName?targetName+' · ':'')+target);
+   append('p','只复制手动选择的有效记忆；原记忆保留，不覆盖目标已有或已删除的键。');
+   const entries=safeArray(await desktopAdapter().ListEnvironmentMemory(id));
+   if(!valid())return;
+   const selections=[];
+   for(const e of entries){
+    const line=append('div','');line.className='memory-version-row';
+    const label=append('label','',line);const check=append('input','',label);check.type='checkbox';check.disabled=memoryValidity(e)!=='active';
+    append('span',e.key+' · '+(memoryValidityLabels[memoryValidity(e)]||'有效'),label);
+    const name=append('input','',line);name.value=e.key;name.placeholder='目标键';name.disabled=check.disabled;name.setAttribute('aria-label','目标键 '+e.key);
+    const details=append('details','',line);append('summary','查看正文',details);append('pre',e.value,details);
+    selections.push({e,check,name});
+   }
+   if(!entries.length)append('p','没有可交接的记忆。');
+   button('预演并确认交接',async()=>{
+    const items=selections.filter(x=>x.check.checked&&!x.check.disabled).map(x=>({key:x.e.key,target_key:x.name.value.trim()||x.e.key,expected_revision:x.e.revision||0,expected_value:x.e.value}));
+    if(!items.length)throw new Error('请选择需要交接的有效记忆。');
+    const preview=await desktopAdapter().HandoffMemory(id,target,items,true);
+    if(!valid()||!await confirmInApp('复制 '+safeArray(preview.copied).length+' 条记忆至持久项目 '+(targetName||target)+'？原记忆不会删除。')||!valid())return;
+    await mutate('交接项目记忆',()=>desktopAdapter().HandoffMemory(id,target,items,false));
+   });
+  }else{
+   const result=await desktopAdapter().FindMemoryDuplicates(id);if(!valid())return;body.replaceChildren();
+   append('p','发现 '+result.total_groups+' 组完全重复的正文'+(result.omitted?'（另有 '+result.omitted+' 组未显示）':'')+'。合并时保留选中条目的元数据；其余条目进入回收站。');
+   for(const group of safeArray(result.groups)){
+    const section=append('section','');section.className='memory-duplicate-group';
+    const select=append('select','',section);select.setAttribute('aria-label','选择保留的记忆');
+    for(const k of group.keys){const opt=append('option',k,select);opt.value=k;}
+    button('保留所选并合并',async()=>{
+     const keys=group.keys;const entries=kind==='global'?await desktopAdapter().ListGlobalMemory():await desktopAdapter().ListEnvironmentMemory(id);
+     if(!valid())return;
+     const matching=keys.map(k=>entries.find(e=>e.key===k));
+     if(matching.some(e=>!e)||matching.some(e=>e.value!==matching[0].value))throw new Error('记忆已变化，请重新查重。');
+     const keep=matching.find(e=>e.key===select.value);
+     const changes=matching.map(e=>({key:e.key,expected_value:e.value,expected_revision:e.revision||0,value:e.key===keep.key?e.value:null}));
+     await desktopAdapter().OrganizeMemory(id,changes,true);
+     if(!valid()||!await confirmInApp('保留“'+keep.key+'”，将其余 '+(changes.length-1)+' 条移入回收站？')||!valid())return;
+     await mutate('合并重复记忆',()=>desktopAdapter().OrganizeMemory(id,changes,false));
+    },section);
+   }
+  }
+ }catch(err){if(valid())body.textContent=errorText(err);}
+}
 
 elements.workspaceList.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-action]'); if (!button) return;
@@ -4735,18 +5160,20 @@ async function handleSelectionChange(event, kind) {
   await runMutation(`更新 Environment ${kind.toUpperCase()} 选择`, () => kind === 'mcp' ? desktopAdapter().SetEnvironmentMCP(environmentID, itemID, enabled) : desktopAdapter().SetEnvironmentSkill(environmentID, itemID, enabled));
 }
 elements.environmentMCPSelections.addEventListener('change', (event) => handleSelectionChange(event, 'mcp')); elements.environmentSkillSelections.addEventListener('change', (event) => handleSelectionChange(event, 'skill'));
-elements.globalMemoryList.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-action="delete-global-memory"]'); if (!button) return;
-  const scope = currentGlobalMemoryScope();
-  await runMutation('删除 Global Memory', () => desktopAdapter().DeleteGlobalMemory(button.dataset.id), async () => { if (globalMemoryScopeIsCurrent(scope)) await loadGlobalMemory({scope}); });
-});
-elements.environmentMemoryList.addEventListener('click', async (event) => {
-  const button = event.target.closest('button[data-action="delete-environment-memory"]'); if (!button) return;
-  const scope = currentEnvironmentMemoryScope(); if (!scope.environmentID) return setStatus('请先选择 Management Environment。', 'error');
-  await runMutation('删除 Environment-private Memory', () => desktopAdapter().DeleteEnvironmentMemory(scope.environmentID, button.dataset.id), async () => {
-    if (environmentMemoryScopeIsCurrent(scope)) await loadEnvironmentMemory({scope});
+for(const kind of ['global','environment']){
+  const container=kind==='global'?elements.globalMemoryList:elements.environmentMemoryList;
+  container.addEventListener('click',async event=>{
+    const button=event.target.closest('button[data-action="delete-'+kind+'-memory"]');
+    if(!button)return;
+    const token=memoryScopeToken(kind),id=memoryScopeID(kind,token);
+    if(kind==='environment'&&!id)return setStatus('请先选择管理环境。','error');
+    const entry=(kind==='global'?globalMemoryEntries:environmentMemoryEntries).find(e=>e.key===button.dataset.id);
+    if(!entry)return setStatus('记忆已变化，请重新加载。','error');
+    if(!await confirmInApp('确定将记忆“'+entry.key+'”移入回收站？可以从回收站恢复。',{title:'删除记忆',confirmText:'删除'}))return;
+    if(!memoryScopeValid(kind,token))return setStatus('管理范围已变化，请重新选择。','error');
+    await runMutation('删除记忆',()=>desktopAdapter().OrganizeMemory(id,[{key:entry.key,expected_value:entry.value,expected_revision:entry.revision||0,value:null}],false),async()=>{if(memoryScopeValid(kind,token))await memoryReload(kind,token);});
   });
-});
+}
 elements.environmentDetailSubviewTabs.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-environment-detail-subview]'); if (!button) return;
   environmentDetailSubview = button.dataset.environmentDetailSubview || 'summary'; syncEnvironmentDetailSubviewUI();
@@ -4849,3 +5276,27 @@ elements.gatewayStartButton.addEventListener('click', () => runGatewayAction('�
 elements.gatewayStopButton.addEventListener('click', () => runGatewayAction('强制停止 ADM', (input) => desktopAdapter().StopLocalADM(input)));
 elements.refreshButton.addEventListener('click', () => refreshConnectedADM(false).catch((error) => { clearManagementData(); setStatus(`ADM 连接检查失败：${error?.message || String(error)}`, 'error'); }));
 window.addEventListener('DOMContentLoaded', () => { window.runtime?.EventsOn?.('desktop:preferences-changed', () => loadDesktopPreferences(false)); initializeManagementNavigation(); initializeConnectionProfiles(); syncMCPTransportForm(); clearManagementData(); loadDesktopPreferences(false); loadSandboxHostPreparation(false); loadAboutInfo(); });
+
+document.addEventListener('click',event=>{
+  const quick=event.target.closest('[data-quick-filter]');
+  if(quick){
+    if(!currentSnapshot)return;
+    const filter=document.getElementById(quick.dataset.quickFilter);
+    if(!filter||filter.disabled)return;
+    // Summary buttons represent the entire connection, not a combination
+    // with a previously selected incompatible filter.
+    const page=quick.closest('[data-management-page]');
+    const clear=page?.querySelector('[data-clear-filters]');
+    if(clear)clear.click();
+    filter.value=quick.dataset.filterValue;
+    filter.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  const jump=event.target.closest('[data-section-target]');
+  if(jump){
+    const target=document.getElementById(jump.dataset.sectionTarget);
+    if(!target||!jump.closest('[data-management-page]')?.contains(target)||target.hidden)return;
+    target.scrollIntoView({block:'start',behavior:'auto'});
+    if(target.matches('input,select,button'))target.focus({preventScroll:true});
+    else{target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
+  }
+});

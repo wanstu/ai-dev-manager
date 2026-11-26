@@ -112,6 +112,9 @@ func TestGatewayCapabilityReportFullAuthorizationWithoutAllowlist(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := service.SetStrongPermissionControl(false); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.SetExecFullAuthorization(true); err != nil {
 		t.Fatal(err)
 	}
@@ -229,6 +232,10 @@ func gatewayCapabilityReportService(t *testing.T) (*app.Service, string, string,
 		t.Fatal(err)
 	}
 	if err := service.AllowExecutable(executable); err != nil {
+		t.Fatal(err)
+	}
+	// Test the owner's observation independently of platform sandbox support.
+	if _, err := service.SetStrongPermissionControl(false); err != nil {
 		t.Fatal(err)
 	}
 	return service, environment.ID, healthy.ID, broken.ID

@@ -61,6 +61,22 @@ func TestProjectIndexBackgroundJobCanBePolledWithoutSourceWriter(t *testing.T) {
 	if err != nil || refreshed.ID == first.ID {
 		t.Fatalf("completed job cannot restart: %+v %v", refreshed, err)
 	}
+	// Wait for the second background job before TempDir cleanup. Otherwise
+	// the goroutine can still open state/index files after the test returns.
+	deadline = time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		job, err = s.ProjectIndexJobStatus(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job.ID == refreshed.ID && (job.State == "succeeded" || job.State == "failed") {
+			break
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	if job.ID != refreshed.ID || job.State != "succeeded" {
+		t.Fatalf("restarted job did not finish: %+v", job)
+	}
 }
 func TestProjectIndexJobStatusIsIdleBeforeStart(t *testing.T) {
 	s, id, _ := setupIndexEnvironment(t)

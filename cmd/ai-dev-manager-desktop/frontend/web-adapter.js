@@ -18,10 +18,10 @@
     'ClearAllExecDenials','AddMCP','UpdateMCP','RemoveMCP','SetMCPDefault','ProbeMCPHealth',
     'PreviewMCPImport','ApplyMCPImport','AddSkillSource','UpdateSkillSource','RefreshSkillSource',
     'RemoveSkillSource','RemoveSkill','SetSkillDefault','SetWorkspaceMCP','SetWorkspaceSkill',
-    'SetEnvironmentMCP','SetEnvironmentSkill','ListEnvironmentSkills','ListGlobalMemory',
+    'SetEnvironmentMCP','SetEnvironmentSkill','ListEnvironmentSkills','ListGlobalMemory','GetMemoryHistory','RestoreMemory','ListMemoryTrash','PurgeMemory','FindMemoryDuplicates','FindSimilarMemory','GetMemoryProjectScope','HandoffMemory','OrganizeMemory',
     'WriteGlobalMemory','DeleteGlobalMemory','ListEnvironmentMemory','WriteEnvironmentMemory',
-    'DeleteEnvironmentMemory','AcquireRuntimeWriter','ReleaseRuntimeWriter','GetRuntimeWriterDiagnostics','ForceReleaseRuntimeWriter','ListVerifiers',
-    'RunVerifier','ListProcesses','GetProcessLogs','StopProcess','ListRuns','CancelRun',
+    'DeleteEnvironmentMemory','AcquireRuntimeWriter','TakeoverRuntimeWriter','ReleaseRuntimeWriter','GetRuntimeWriterDiagnostics','ForceReleaseRuntimeWriter','ListVerifiers',
+    'RunVerifier','StartProcess','ListProcesses','GetProcessLogs','StopProcess','ListRuns','CancelRun',
     'GetTemporaryEnvironmentStatus','PromoteTemporaryEnvironment','CleanupTemporaryEnvironment',
     'CleanupExpiredTemporaryEnvironments','CleanupStaleManagedWorktrees','MigrateManagedWorktreesToTemporary'
   ];

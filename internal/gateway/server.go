@@ -15,6 +15,7 @@ import (
 	"ai-dev-manager-v2/internal/codeintel"
 	"ai-dev-manager-v2/internal/isolation"
 	"ai-dev-manager-v2/internal/management"
+	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
 	"ai-dev-manager-v2/internal/projectanalysis"
 	productversion "ai-dev-manager-v2/internal/version"
@@ -249,6 +250,7 @@ type StaleManagedWorktreeCleanupInput struct {
 type WriterAcquireInput struct {
 	EnvironmentID string `json:"environment_id"`
 	Owner         string `json:"owner" jsonschema:"stable agent/session owner identifier"`
+	Force         bool   `json:"force,omitempty" jsonschema:"admin-only atomic replacement of the current Writer lease"`
 }
 
 type SecretSetInput struct {
@@ -388,6 +390,81 @@ type EnvironmentVerifierAgentHostExecutionInput struct {
 	Allowed       bool   `json:"allowed"`
 }
 
+type MemoryReviewInput struct {
+	Status string `json:"status,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+}
+type EnvironmentMemoryReviewInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Status        string `json:"status,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
+}
+type MemorySimilarInput struct {
+	Threshold float64 `json:"threshold,omitempty"`
+	Limit     int     `json:"limit,omitempty"`
+}
+type EnvironmentMemorySimilarInput struct {
+	EnvironmentID string  `json:"environment_id"`
+	Threshold     float64 `json:"threshold,omitempty"`
+	Limit         int     `json:"limit,omitempty"`
+}
+type MemoryHandoffInput struct {
+	EnvironmentID       string               `json:"environment_id"`
+	TargetEnvironmentID string               `json:"target_environment_id"`
+	Items               []memory.HandoffItem `json:"items"`
+	DryRun              bool                 `json:"dry_run"`
+}
+type MemorySearchInput struct {
+	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"include obsolete archived and expired memories in ranked recall"`
+	Query           string `json:"query,omitempty"`
+	Limit           int    `json:"limit,omitempty"`
+	MaxOutputBytes  int    `json:"max_output_bytes,omitempty"`
+}
+type EnvironmentMemorySearchInput struct {
+	IncludeInactive bool   `json:"include_inactive,omitempty" jsonschema:"include obsolete archived and expired memories in ranked recall"`
+	EnvironmentID   string `json:"environment_id"`
+	Query           string `json:"query,omitempty"`
+	Limit           int    `json:"limit,omitempty"`
+	MaxOutputBytes  int    `json:"max_output_bytes,omitempty"`
+}
+type MemoryOrganizeInput struct {
+	Changes []memory.Change `json:"changes"`
+	DryRun  bool            `json:"dry_run,omitempty"`
+}
+type EnvironmentMemoryOrganizeInput struct {
+	EnvironmentID string          `json:"environment_id"`
+	Changes       []memory.Change `json:"changes"`
+	DryRun        bool            `json:"dry_run,omitempty"`
+}
+type MemoryPurgeInput struct {
+	Key              string `json:"key"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+type EnvironmentMemoryPurgeInput struct {
+	EnvironmentID    string `json:"environment_id"`
+	Key              string `json:"key"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+type MemoryHistoryInput struct {
+	Key      string `json:"key"`
+	Revision *int64 `json:"revision,omitempty"`
+}
+type EnvironmentMemoryHistoryInput struct {
+	EnvironmentID string `json:"environment_id"`
+	Key           string `json:"key"`
+	Revision      *int64 `json:"revision,omitempty"`
+}
+type MemoryRestoreInput struct {
+	Key              string `json:"key"`
+	Revision         int64  `json:"revision"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
+type EnvironmentMemoryRestoreInput struct {
+	EnvironmentID    string `json:"environment_id"`
+	Key              string `json:"key"`
+	Revision         int64  `json:"revision"`
+	ExpectedRevision int64  `json:"expected_revision"`
+}
 type MemoryKeyInput struct {
 	Key string `json:"key"`
 }
@@ -593,7 +670,7 @@ type ExecInput struct {
 
 type ProcessStartInput struct {
 	EnvironmentID string   `json:"environment_id"`
-	WriterOwner   string   `json:"writer_owner"`
+	WriterOwner   string   `json:"writer_owner,omitempty"`
 	Executable    string   `json:"executable"`
 	Args          []string `json:"args,omitempty"`
 	Cwd           string   `json:"cwd,omitempty"`
@@ -607,7 +684,7 @@ type ProcessInput struct {
 
 type ProcessStopInput struct {
 	EnvironmentID string `json:"environment_id"`
-	WriterOwner   string `json:"writer_owner"`
+	WriterOwner   string `json:"writer_owner,omitempty"`
 	ProcessID     string `json:"process_id"`
 }
 
@@ -779,7 +856,7 @@ func isV144AdminOnlyTool(name string) bool {
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
 		"resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote",
-		"memory_global_write", "memory_global_delete",
+		"memory_global_write", "memory_global_delete", "memory_global_organize", "memory_global_restore", "memory_global_purge", "memory_environment_purge",
 		"strong_permission_control_set":
 		return true
 	default:
@@ -1365,7 +1442,16 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_acquire", Description: "Acquire or renew the single writer lease for an Environment physical root. Use this only immediately before an operation that explicitly requires writer_owner; do not acquire a writer for tree/read/search or other read-only inspection."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
-			env, err := service.Environments.AcquireWriter(in.EnvironmentID, in.Owner)
+			var env model.Environment
+			var err error
+			if in.Force {
+				if surface != serverSurfaceAdmin {
+					return toolResult(nil, fmt.Errorf("force writer acquire is only available on the administrative surface"))
+				}
+				env, err = service.Environments.TakeoverWriter(in.EnvironmentID, in.Owner)
+			} else {
+				env, err = service.Environments.AcquireWriter(in.EnvironmentID, in.Owner)
+			}
 			if err == nil && owner != nil {
 				env, err = service.Environments.ObserveWriter(in.EnvironmentID, in.Owner, owner.writerObservation("lease", "", 0, "", "", "", "", ""))
 			}
@@ -1374,12 +1460,9 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "environment_writer_heartbeat", Description: "Renew an active writer lease without performing a file mutation."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in WriterAcquireInput) (*mcp.CallToolResult, any, error) {
-			var env model.Environment
-			var err error
-			if owner != nil {
+			env, err := service.Environments.HeartbeatWriter(in.EnvironmentID, in.Owner)
+			if err == nil && owner != nil {
 				env, err = service.Environments.ObserveWriter(in.EnvironmentID, in.Owner, owner.writerObservation("heartbeat", "", 0, "", "", "", "", ""))
-			} else {
-				env, err = service.Environments.HeartbeatWriter(in.EnvironmentID, in.Owner)
 			}
 			return toolResult(env, err)
 		})
@@ -1814,6 +1897,98 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(content, err)
 		})
 
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_trash", Description: "List deleted shared memory keys and recoverable revisions."}, func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Trash("", true)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_trash", Description: "List deleted memory keys and recoverable revisions in the explicit Environment."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Trash(in.EnvironmentID, false)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_purge", Description: "Admin-only permanent removal of a deleted memory and retained history; expected_revision required."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryPurgeInput) (*mcp.CallToolResult, any, error) {
+		err := service.Memory.Purge("", true, in.Key, in.ExpectedRevision)
+		return toolResult(map[string]any{"purged": in.Key}, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_purge", Description: "Admin-only permanent removal of a deleted Environment memory and retained history; expected_revision required."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryPurgeInput) (*mcp.CallToolResult, any, error) {
+		err := service.Memory.Purge(in.EnvironmentID, false, in.Key, in.ExpectedRevision)
+		return toolResult(map[string]any{"purged": in.Key}, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_history", Description: "List retained revisions of a shared memory key; specify revision to read its full historical value."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryHistoryInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.History("", true, in.Key, in.Revision)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_history", Description: "List retained revisions (including deleted memories) for a key in one explicit Environment; revision selects full historical value."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryHistoryInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.History(in.EnvironmentID, false, in.Key, in.Revision)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_restore", Description: "Admin-only: restore an earlier memory revision as a new revision; expected_revision guards against concurrent changes."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryRestoreInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Restore("", true, in.Key, in.Revision, in.ExpectedRevision)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_restore", Description: "Restore an earlier value and metadata as a new revision in one explicit Environment; expected_revision guards against concurrent changes."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryRestoreInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Restore(in.EnvironmentID, false, in.Key, in.Revision, in.ExpectedRevision)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_duplicates", Description: "Identify exact duplicate nonempty shared memory content; read-only, never merges automatically."}, func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Duplicates("", true)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_duplicates", Description: "Identify exact duplicate nonempty memory content within one explicit Environment; read-only."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Duplicates(in.EnvironmentID, false)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_review", Description: "List shared memory requiring review, expired, archived or obsolete; optional status filter, no full values."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryReviewInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.ReviewQueue("", true, in.Status, in.Limit)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_review", Description: "List memory requiring review in explicit Environment; use organize with revision and full metadata to update validity."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryReviewInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.ReviewQueue(in.EnvironmentID, false, in.Status, in.Limit)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_recall", Description: "Rank shared memories by lexical relevance, partial keyword coverage, Chinese character/bigram matching and importance; not semantic embeddings."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemorySearchInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Recall("", true, in.Query, in.Limit, in.MaxOutputBytes, in.IncludeInactive)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_recall", Description: "Rank relevant memories in one explicit Environment by lexical relevance and importance; no automatic cross-environment reads."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemorySearchInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Recall(in.EnvironmentID, false, in.Query, in.Limit, in.MaxOutputBytes, in.IncludeInactive)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_similar", Description: "Find bounded near-duplicate lexical candidates in shared memory; never merges automatically."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemorySimilarInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Similar("", true, in.Threshold, in.Limit)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_similar", Description: "Find bounded near-duplicate lexical candidates in one explicit Environment; verify content before merging."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemorySimilarInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Similar(in.EnvironmentID, false, in.Threshold, in.Limit)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_project_scope", Description: "Resolve the verified durable source Environment from ADM-managed Worktree ancestry. Returns IDs only; explicitly read project memory afterwards."}, func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.ProjectScope(in.EnvironmentID)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_handoff", Description: "Copy selected verified durable knowledge from a temporary Worktree to its explicit verified durable source. Dry-run first, then submit same items with dry_run=false. Refuses existing destination keys and stale source values; does not delete source."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryHandoffInput) (*mcp.CallToolResult, any, error) {
+		result, err := service.Memory.Handoff(in.EnvironmentID, in.TargetEnvironmentID, in.Items, in.DryRun)
+		return toolResult(result, err)
+	})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_search", Description: "Search shared durable memories by key and content. Case-insensitive keyword matching, bounded output; use read for a complete entry."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in MemorySearchInput) (*mcp.CallToolResult, any, error) {
+			items, err := service.Memory.GlobalSearch(in.Query, in.Limit, in.MaxOutputBytes)
+			return toolResult(items, err)
+		})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_organize", Description: "Admin-only atomic create/update/delete/merge/rename of shared memory. Each change supplies key, expected_value (null means absent), value (null means delete). Dry-run first; all changes fail on any conflict."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in MemoryOrganizeInput) (*mcp.CallToolResult, any, error) {
+			result, err := service.Memory.GlobalOrganize(in.Changes, in.DryRun)
+			return toolResult(result, err)
+		})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_search", Description: "Search durable memories for the explicit Environment only. Case-insensitive keyword matching, bounded output; use read for complete entries."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemorySearchInput) (*mcp.CallToolResult, any, error) {
+			items, err := service.Memory.EnvironmentSearch(in.EnvironmentID, in.Query, in.Limit, in.MaxOutputBytes)
+			return toolResult(items, err)
+		})
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_environment_organize", Description: "Atomically create/update/delete/merge/rename memory in the explicit Environment. Each change supplies key, expected_value (null means absent), value (null means delete). Dry-run first; no writer lease; all changes fail on any conflict."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentMemoryOrganizeInput) (*mcp.CallToolResult, any, error) {
+			result, err := service.Memory.EnvironmentOrganize(in.EnvironmentID, in.Changes, in.DryRun)
+			return toolResult(result, err)
+		})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_list", Description: "List global durable memory entries."},
 		func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 			items, err := service.Memory.GlobalList()
@@ -2115,19 +2290,27 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_start", Description: "Start one allowlisted long-running development process owned by this Gateway. Requires the current Environment writer_owner for launch only; the running process does not retain or renew the writer lease."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_start", Description: "Start one allowlisted long-running development process owned by this Gateway. Agent requires current writer_owner for launch; Admin may omit it. The process never retains or renews the writer lease."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProcessStartInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			if surface == serverSurfaceAdmin && strings.TrimSpace(in.WriterOwner) == "" {
+				value, err := owner.StartDevProcessAdmin(in.EnvironmentID, in.Executable, in.Args, in.Cwd, in.MaxLogBytes)
+				return toolResult(value, err)
 			}
 			value, err := owner.StartDevProcess(in.EnvironmentID, in.WriterOwner, in.Executable, in.Args, in.Cwd, in.MaxLogBytes)
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_list", Description: "List development processes owned by this Gateway for one Environment."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_list", Description: "List development processes owned by this Gateway for one Environment. Admin may use an empty environment_id to list all managed processes."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in EnvironmentInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			if surface == serverSurfaceAdmin && strings.TrimSpace(in.EnvironmentID) == "" {
+				value, err := owner.listDevProcesses("")
+				return toolResult(value, err)
 			}
 			value, err := owner.ListDevProcesses(in.EnvironmentID)
 			return toolResult(value, err)
@@ -2151,10 +2334,14 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(value, err)
 		})
 
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_stop", Description: "Stop one Gateway-owned development process. Requires the current Environment writer_owner; it does not need to be the writer that launched the process. Arbitrary OS PIDs are not accepted."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "process_stop", Description: "Stop one Gateway-owned development process. Agent requires current writer_owner. Admin may omit it and stop managed processes without any Writer. Arbitrary OS PIDs are not accepted."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in ProcessStopInput) (*mcp.CallToolResult, any, error) {
 			if owner == nil {
 				return toolResult(nil, fmt.Errorf("persistent runtime owner is unavailable"))
+			}
+			if surface == serverSurfaceAdmin && strings.TrimSpace(in.WriterOwner) == "" {
+				value, err := owner.StopDevProcessAdmin(in.EnvironmentID, in.ProcessID)
+				return toolResult(value, err)
 			}
 			value, err := owner.StopDevProcess(in.EnvironmentID, in.WriterOwner, in.ProcessID)
 			return toolResult(value, err)
@@ -2606,16 +2793,27 @@ func RunHTTP(ctx context.Context, service *app.Service, listen string) error {
 		Handler:           newHTTPHandlerWithShutdown(service, owner, cancelRun),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	shutdownDone := make(chan error, 1)
 	go func() {
 		<-runCtx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = httpServer.Shutdown(shutdownCtx)
+		err := httpServer.Shutdown(shutdownCtx)
+		if err != nil {
+			_ = httpServer.Close()
+		}
+		shutdownDone <- err
 	}()
-	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+	serveErr := httpServer.ListenAndServe()
+	cancelRun()
+	// Shutdown closes the listener before draining active HTTP requests.
+	// Do not exit the process while the owner-bound 202 response (or any
+	// other admitted request) is still being written to the client.
+	shutdownErr := <-shutdownDone
+	if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		return serveErr
 	}
-	return nil
+	return shutdownErr
 }
 
 func toolResult(value any, err error) (*mcp.CallToolResult, any, error) {

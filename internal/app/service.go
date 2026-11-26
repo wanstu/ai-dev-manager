@@ -95,7 +95,10 @@ func New(statePath string) *Service {
 }
 
 func defaultWriterHeartbeatInterval(ttl time.Duration) time.Duration {
-	interval := ttl / 3
+	interval := time.Second
+	if ttl/3 < interval {
+		interval = ttl / 3
+	}
 	if interval <= 0 {
 		return time.Second
 	}
@@ -735,15 +738,20 @@ func (s *Service) Search(environmentID, path, query string, maxFiles, maxMatches
 }
 
 func (s *Service) Write(environmentID, owner, path, content string, createParents bool) (any, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, nil, "file_write")
+	if err != nil {
 		return nil, err
 	}
+	defer guard.Close()
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return nil, err
 	}
 	result, err := rt.Write(path, content, createParents)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); err != nil {
 		return nil, err
 	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
@@ -753,15 +761,20 @@ func (s *Service) Write(environmentID, owner, path, content string, createParent
 }
 
 func (s *Service) Edit(environmentID, owner, path, oldText, newText string, expected int) (any, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, nil, "file_edit")
+	if err != nil {
 		return nil, err
 	}
+	defer guard.Close()
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return nil, err
 	}
 	result, err := rt.Edit(path, oldText, newText, expected)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); err != nil {
 		return nil, err
 	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
@@ -771,15 +784,20 @@ func (s *Service) Edit(environmentID, owner, path, oldText, newText string, expe
 }
 
 func (s *Service) Delete(environmentID, owner, path string) (any, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, nil, "file_delete")
+	if err != nil {
 		return nil, err
 	}
+	defer guard.Close()
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return nil, err
 	}
 	result, err := rt.Delete(path)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); err != nil {
 		return nil, err
 	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
@@ -789,9 +807,11 @@ func (s *Service) Delete(environmentID, owner, path string) (any, error) {
 }
 
 func (s *Service) Exec(ctx context.Context, environmentID, owner, executable string, args []string, cwd string, timeoutMS int64, maxOutputBytes int) (any, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, nil, "exec")
+	if err != nil {
 		return nil, err
 	}
+	defer guard.Close()
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return nil, err
@@ -809,7 +829,7 @@ func (s *Service) Exec(ctx context.Context, environmentID, owner, executable str
 				heartbeatDone <- nil
 				return
 			case <-ticker.C:
-				if _, heartbeatErr := s.Environments.HeartbeatWriter(environmentID, owner); heartbeatErr != nil {
+				if _, heartbeatErr := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); heartbeatErr != nil {
 					heartbeatDone <- heartbeatErr
 					cancel()
 					return
@@ -841,6 +861,9 @@ func (s *Service) Exec(ctx context.Context, environmentID, owner, executable str
 	if execErr != nil {
 		return nil, execErr
 	}
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); err != nil {
+		return nil, err
+	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return nil, err
 	}
@@ -864,6 +887,11 @@ func (s *Service) RunVerifier(ctx context.Context, environmentID, owner, verifie
 	if err != nil {
 		return verifier.Result{}, err
 	}
+	_, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, prepared.WriterLease, "verifier")
+	if err != nil {
+		return verifier.Result{}, err
+	}
+	defer guard.Close()
 	definition := prepared.Definition
 	rt := prepared.Runtime
 
@@ -879,7 +907,7 @@ func (s *Service) RunVerifier(ctx context.Context, environmentID, owner, verifie
 				heartbeatDone <- nil
 				return
 			case <-ticker.C:
-				if _, heartbeatErr := s.Environments.HeartbeatWriter(environmentID, owner); heartbeatErr != nil {
+				if _, heartbeatErr := s.Environments.RequireWriterLease(environmentID, owner, prepared.WriterLease); heartbeatErr != nil {
 					heartbeatDone <- heartbeatErr
 					cancel()
 					return
@@ -920,6 +948,9 @@ func (s *Service) RunVerifier(ctx context.Context, environmentID, owner, verifie
 		return verifier.Result{}, classifyErr
 	}
 	result.ExecutionMode = "host"
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, prepared.WriterLease); err != nil {
+		return verifier.Result{}, err
+	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return verifier.Result{}, err
 	}
@@ -951,15 +982,20 @@ func (s *Service) GitBranch(ctx context.Context, environmentID string) (any, err
 }
 
 func (s *Service) GitCommit(ctx context.Context, environmentID, owner, message string) (any, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, nil, "git_commit")
+	if err != nil {
 		return nil, err
 	}
+	defer guard.Close()
 	rt, _, err := s.Runtime(environmentID)
 	if err != nil {
 		return nil, err
 	}
 	result, err := rt.GitCommit(ctx, message)
 	if err != nil {
+		return nil, err
+	}
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, authority.Writer); err != nil {
 		return nil, err
 	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {

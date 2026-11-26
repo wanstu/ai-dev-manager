@@ -11,7 +11,9 @@ import (
 
 func TestGatewayDiagnosticsReportsRuntimeAndSafeAccessState(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	service := New(app.New(statePath))
+	application := app.New(statePath)
+	service := New(application)
+	statePath = application.Store.Path()
 
 	diagnostics, err := service.GatewayDiagnostics()
 	if err != nil {

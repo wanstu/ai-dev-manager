@@ -30,16 +30,34 @@ type Client struct {
 	beforeCall func(context.Context) error
 }
 
+type ProcessResources struct {
+	SampledAt    time.Time `json:"sampled_at"`
+	CPUTimeMS    uint64    `json:"cpu_time_ms"`
+	CPUPercent   *float64  `json:"cpu_percent,omitempty"`
+	MemoryBytes  uint64    `json:"memory_bytes"`
+	ProcessCount int       `json:"process_count"`
+	Scope        string    `json:"scope"`
+	Complete     bool      `json:"complete"`
+}
 type ProcessStatus struct {
-	ID             string     `json:"id"`
-	EnvironmentID  string     `json:"environment_id"`
-	State          string     `json:"state"`
-	PID            int        `json:"pid,omitempty"`
-	StartedAt      time.Time  `json:"started_at"`
-	ExitedAt       *time.Time `json:"exited_at,omitempty"`
-	ExitCode       *int       `json:"exit_code,omitempty"`
-	ListeningPorts []int      `json:"listening_ports,omitempty"`
-	ErrorKind      string     `json:"error_kind,omitempty"`
+	HistoryOnly    bool              `json:"history_only,omitempty"`
+	HistoryNote    string            `json:"history_note,omitempty"`
+	Resources      *ProcessResources `json:"resources,omitempty"`
+	ResourceError  string            `json:"resource_error,omitempty"`
+	UptimeSeconds  int64             `json:"uptime_seconds"`
+	ExitReason     string            `json:"exit_reason,omitempty"`
+	Executable     string            `json:"executable"`
+	Cwd            string            `json:"cwd,omitempty"`
+	GatewayPID     int               `json:"gateway_pid"`
+	ID             string            `json:"id"`
+	EnvironmentID  string            `json:"environment_id"`
+	State          string            `json:"state"`
+	PID            int               `json:"pid,omitempty"`
+	StartedAt      time.Time         `json:"started_at"`
+	ExitedAt       *time.Time        `json:"exited_at,omitempty"`
+	ExitCode       *int              `json:"exit_code,omitempty"`
+	ListeningPorts []int             `json:"listening_ports,omitempty"`
+	ErrorKind      string            `json:"error_kind,omitempty"`
 }
 
 type ProcessLogs struct {
@@ -91,18 +109,28 @@ type WriterHeartbeatSource struct {
 	ObservedAt     time.Time `json:"observed_at,omitempty"`
 }
 
+type PendingWriterOperation struct {
+	EnvironmentID string    `json:"environment_id"`
+	Kind          string    `json:"kind"`
+	HostPID       int       `json:"host_pid"`
+	StartedAt     time.Time `json:"started_at"`
+}
 type WriterDiagnostics struct {
-	EnvironmentID            string                  `json:"environment_id"`
-	Active                   bool                    `json:"active"`
-	OwnerFingerprint         string                  `json:"owner_fingerprint,omitempty"`
-	AcquiredAt               *time.Time              `json:"acquired_at,omitempty"`
-	LastSeenAt               *time.Time              `json:"last_seen_at,omitempty"`
-	ExpiresAt                *time.Time              `json:"expires_at,omitempty"`
-	HeartbeatIntervalSeconds int64                   `json:"heartbeat_interval_seconds,omitempty"`
-	Attribution              string                  `json:"attribution"`
-	GatewayOwner             RuntimeOwnerInfo        `json:"gateway_owner"`
-	HeartbeatSources         []WriterHeartbeatSource `json:"heartbeat_sources"`
-	Note                     string                  `json:"note,omitempty"`
+	PendingOperations        []PendingWriterOperation `json:"pending_operations"`
+	HandoffPending           bool                     `json:"handoff_pending"`
+	HandoffCheckError        string                   `json:"handoff_check_error,omitempty"`
+	EnvironmentID            string                   `json:"environment_id"`
+	Active                   bool                     `json:"active"`
+	OwnerFingerprint         string                   `json:"owner_fingerprint,omitempty"`
+	LastRenewalAction        string                   `json:"last_renewal_action,omitempty"`
+	AcquiredAt               *time.Time               `json:"acquired_at,omitempty"`
+	LastSeenAt               *time.Time               `json:"last_seen_at,omitempty"`
+	ExpiresAt                *time.Time               `json:"expires_at,omitempty"`
+	HeartbeatIntervalSeconds int64                    `json:"heartbeat_interval_seconds,omitempty"`
+	Attribution              string                   `json:"attribution"`
+	GatewayOwner             RuntimeOwnerInfo         `json:"gateway_owner"`
+	HeartbeatSources         []WriterHeartbeatSource  `json:"heartbeat_sources"`
+	Note                     string                   `json:"note,omitempty"`
 }
 
 func New(endpoint string) *Client {
@@ -395,6 +423,10 @@ func (c *Client) VerifierRun(environmentID, writerOwner, verifierID string, maxO
 	})
 }
 
+func (c *Client) ProcessStart(environmentID, executable string, args []string, cwd string) (ProcessStatus, error) {
+	return callAdmin[ProcessStatus](c, context.Background(), "process_start", map[string]any{"environment_id": environmentID, "executable": executable, "args": args, "cwd": cwd})
+}
+
 func (c *Client) ProcessList(environmentID string) ([]ProcessStatus, error) {
 	return callAdmin[[]ProcessStatus](c, context.Background(), "process_list", map[string]any{"environment_id": environmentID})
 }
@@ -425,6 +457,10 @@ func (c *Client) RunCancel(environmentID, writerOwner, runID string) (RunStatus,
 
 func (c *Client) WriterAcquire(environmentID, owner string) (model.Environment, error) {
 	return callAdmin[model.Environment](c, context.Background(), "environment_writer_acquire", map[string]any{"environment_id": environmentID, "owner": owner})
+}
+
+func (c *Client) WriterTakeover(environmentID, owner string) (model.Environment, error) {
+	return callAdmin[model.Environment](c, context.Background(), "environment_writer_acquire", map[string]any{"environment_id": environmentID, "owner": owner, "force": true})
 }
 
 func (c *Client) WriterHeartbeat(environmentID, owner string) (model.Environment, error) {
@@ -769,4 +805,50 @@ func (c *Client) EnvironmentMemoryDelete(environmentID, key string) error {
 
 func (c *Client) MCPProbe(ctx context.Context, mcpID string) (app.MCPHealthStatus, error) {
 	return callAdmin[app.MCPHealthStatus](c, ctx, "mcp_probe", map[string]any{"id": mcpID})
+}
+
+func memoryTool(id, action string, args map[string]any) string {
+	if id == "" {
+		return "memory_global_" + action
+	}
+	args["environment_id"] = id
+	return "memory_environment_" + action
+}
+func (c *Client) MemoryHistory(id, key string, revision *int64) (memory.HistoryResult, error) {
+	args := map[string]any{"key": key}
+	if revision != nil {
+		args["revision"] = *revision
+	}
+	return callAdmin[memory.HistoryResult](c, context.Background(), memoryTool(id, "history", args), args)
+}
+func (c *Client) MemoryRestore(id, key string, revision, expected int64) (memory.Entry, error) {
+	args := map[string]any{"key": key, "revision": revision, "expected_revision": expected}
+	return callAdmin[memory.Entry](c, context.Background(), memoryTool(id, "restore", args), args)
+}
+func (c *Client) MemoryTrash(id string) ([]memory.TrashEntry, error) {
+	args := map[string]any{}
+	return callAdmin[[]memory.TrashEntry](c, context.Background(), memoryTool(id, "trash", args), args)
+}
+func (c *Client) MemoryPurge(id, key string, expected int64) error {
+	args := map[string]any{"key": key, "expected_revision": expected}
+	return callAdminNoResult(c, context.Background(), memoryTool(id, "purge", args), args)
+}
+func (c *Client) MemoryDuplicates(id string) (memory.DuplicateResult, error) {
+	args := map[string]any{}
+	return callAdmin[memory.DuplicateResult](c, context.Background(), memoryTool(id, "duplicates", args), args)
+}
+func (c *Client) MemoryOrganize(id string, changes []memory.Change, dryRun bool) (memory.OrganizeResult, error) {
+	args := map[string]any{"changes": changes, "dry_run": dryRun}
+	return callAdmin[memory.OrganizeResult](c, context.Background(), memoryTool(id, "organize", args), args)
+}
+
+func (c *Client) MemorySimilar(id string, threshold float64, limit int) (memory.SimilarResult, error) {
+	args := map[string]any{"threshold": threshold, "limit": limit}
+	return callAdmin[memory.SimilarResult](c, context.Background(), memoryTool(id, "similar", args), args)
+}
+func (c *Client) MemoryProjectScope(id string) (memory.ProjectScope, error) {
+	return callAdmin[memory.ProjectScope](c, context.Background(), "memory_environment_project_scope", map[string]any{"environment_id": id})
+}
+func (c *Client) MemoryHandoff(id, target string, items []memory.HandoffItem, dryRun bool) (memory.HandoffResult, error) {
+	return callAdmin[memory.HandoffResult](c, context.Background(), "memory_environment_handoff", map[string]any{"environment_id": id, "target_environment_id": target, "items": items, "dry_run": dryRun})
 }

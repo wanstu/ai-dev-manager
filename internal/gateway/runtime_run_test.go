@@ -231,7 +231,7 @@ func TestAgentRunOwnerCloseCancelsActiveRun(t *testing.T) {
 	}
 }
 
-func TestAgentRunStartRenewsWriterLease(t *testing.T) {
+func TestAgentRunDoesNotRenewWriterLease(t *testing.T) {
 	service, environmentID, _ := agentRunTestService(t)
 	before, err := service.Environments.Get(environmentID)
 	if err != nil || before.Writer == nil {
@@ -251,8 +251,8 @@ func TestAgentRunStartRenewsWriterLease(t *testing.T) {
 	if err != nil || after.Writer == nil {
 		t.Fatalf("writer after run: env=%+v err=%v", after, err)
 	}
-	if !after.Writer.LastSeenAt.After(before.Writer.LastSeenAt) || !after.Writer.ExpiresAt.After(before.Writer.ExpiresAt) {
-		t.Fatalf("run_start did not renew writer lease: before=%+v after=%+v", before.Writer, after.Writer)
+	if !after.Writer.LastSeenAt.Equal(before.Writer.LastSeenAt) || !after.Writer.ExpiresAt.Equal(before.Writer.ExpiresAt) {
+		t.Fatalf("run changed writer lease: before=%+v after=%+v", before.Writer, after.Writer)
 	}
 }
 
@@ -327,5 +327,84 @@ func TestAgentRunCommandHelper(t *testing.T) {
 		time.Sleep(2 * time.Second)
 	default:
 		fmt.Fprintln(os.Stdout, "phase8-success")
+	}
+}
+
+func TestWriterReplacementCancelsOldRunEvenWithSameOwner(t *testing.T) {
+	service, environmentID, root := agentRunTestService(t)
+	portFile := filepath.Join(root, "replacement.port")
+	t.Setenv("ADM_TEST_DEV_PROCESS_HELPER", "1")
+	t.Setenv("ADM_TEST_DEV_PROCESS_PORT_FILE", portFile)
+	owner := newRuntimeOwner(service)
+	defer owner.Close()
+	started, err := owner.StartAgentRun(environmentID, agentRunTestWriter, os.Args[0], []string{"-test.run=^TestDevProcessHelper$"}, "", 30000, 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := waitDevProcessPortFile(t, portFile)
+	if _, err := service.Environments.ReleaseWriter(environmentID, agentRunTestWriter, false); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := service.Environments.AcquireWriter(environmentID, agentRunTestWriter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := waitAgentRunTerminal(t, owner, environmentID, started.ID)
+	if status.State != agentRunCanceled || status.ErrorKind != "writer_heartbeat_failed" {
+		t.Fatalf("old run: %+v", status)
+	}
+	waitPortReleased(t, port)
+	current, err := service.Environments.Get(environmentID)
+	if err != nil || current.Writer == nil || current.Writer.ID != replacement.Writer.ID || !current.Writer.ExpiresAt.Equal(replacement.Writer.ExpiresAt) {
+		t.Fatalf("replacement lease changed: %+v %v", current.Writer, err)
+	}
+}
+
+func TestWriterHandoffBlocksNewMutationsUntilPriorOperationFinishes(t *testing.T) {
+	service, id, root := agentRunTestService(t)
+	// An explicit held guard makes the race deterministic independently of
+	// how rapidly the old worker responds to cancellation.
+	old, guard, err := service.Environments.BeginWriterOperation(id, agentRunTestWriter, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	replacement, err := service.Environments.TakeoverWriter(id, "admin-replacement")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement.Writer.ID == old.Writer.ID {
+		t.Fatal("takeover did not replace lease")
+	}
+	other := app.New(service.Store.Path())
+	if _, err := other.Write(id, "admin-replacement", "handoff.txt", "new", true); err == nil || !strings.Contains(err.Error(), "writer_handoff_pending") {
+		t.Fatalf("new write before drain: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "handoff.txt")); !os.IsNotExist(err) {
+		t.Fatalf("blocked write touched file: %v", err)
+	}
+	owner := newRuntimeOwner(other)
+	defer owner.Close()
+	diagnostics, err := owner.WriterDiagnostics(id)
+	if err != nil || !diagnostics.HandoffPending || len(diagnostics.PendingOperations) != 1 || diagnostics.PendingOperations[0].HostPID != os.Getpid() {
+		t.Fatalf("missing live handoff diagnostics: %+v %v", diagnostics, err)
+	}
+	if _, err := owner.StartAgentRun(id, "admin-replacement", os.Args[0], []string{"-test.run=^TestAgentRunCommandHelper$"}, "", 5000, 4096); err == nil || !strings.Contains(err.Error(), "writer_handoff_pending") {
+		t.Fatalf("new run before drain: %v", err)
+	}
+	guard.Close()
+	diagnostics, err = owner.WriterDiagnostics(id)
+	if err != nil || diagnostics.HandoffPending {
+		t.Fatalf("stale handoff diagnostics: %+v %v", diagnostics, err)
+	}
+	if _, err := other.Write(id, "admin-replacement", "handoff.txt", "new", true); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "handoff.txt"))
+	if err != nil || string(data) != "new" {
+		t.Fatalf("new write %q %v", data, err)
+	}
+	if _, _, err := other.Environments.BeginWriterOperation(id, agentRunTestWriter, old.Writer); err == nil {
+		t.Fatal("old lease authorized")
 	}
 }

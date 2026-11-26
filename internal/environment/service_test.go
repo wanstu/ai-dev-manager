@@ -216,7 +216,7 @@ func TestRequireWriterRejectsLegacyOverlappingActiveLease(t *testing.T) {
 	}
 }
 
-func TestWriterLeaseRenewsOnAcquireRequireAndTouch(t *testing.T) {
+func TestWriterLeaseRenewsOnlyOnExplicitAcquireAndHeartbeat(t *testing.T) {
 	service, envA, _, now := newLeaseTestService(t)
 
 	first, err := service.AcquireWriter(envA.ID, "session-a")
@@ -244,8 +244,8 @@ func TestWriterLeaseRenewsOnAcquireRequireAndTouch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !required.Writer.ExpiresAt.After(secondExpiry) {
-		t.Fatalf("RequireWriter did not renew lease: previous=%s renewed=%s", secondExpiry, required.Writer.ExpiresAt)
+	if !required.Writer.ExpiresAt.Equal(secondExpiry) {
+		t.Fatalf("RequireWriter changed lease expiry: previous=%s renewed=%s", secondExpiry, required.Writer.ExpiresAt)
 	}
 
 	activityBefore := required.LastActivityAt
@@ -257,11 +257,19 @@ func TestWriterLeaseRenewsOnAcquireRequireAndTouch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if visible.Writer == nil || !visible.Writer.LastSeenAt.Equal(*now) {
-		t.Fatalf("Touch did not renew last_seen_at: %#v", visible.Writer)
+	if visible.Writer == nil || !visible.Writer.LastSeenAt.Equal(renewed.Writer.LastSeenAt) || !visible.Writer.ExpiresAt.Equal(secondExpiry) {
+		t.Fatalf("Touch changed lease timestamps: %#v", visible.Writer)
 	}
 	if !visible.LastActivityAt.After(activityBefore) {
 		t.Fatalf("Touch did not update last_activity_at: before=%s after=%s", activityBefore, visible.LastActivityAt)
+	}
+	heartbeat, err := service.HeartbeatWriter(envA.ID, "session-a")
+	if err != nil || heartbeat.Writer == nil || !heartbeat.Writer.ExpiresAt.After(secondExpiry) {
+		t.Fatalf("explicit heartbeat failed: %+v %v", heartbeat.Writer, err)
+	}
+	*now = heartbeat.Writer.ExpiresAt
+	if _, err := service.HeartbeatWriter(envA.ID, "session-a"); err == nil {
+		t.Fatal("expired lease must not be revived by heartbeat")
 	}
 }
 
@@ -477,4 +485,42 @@ func newLeaseTestService(t *testing.T) (*Service, model.Environment, model.Envir
 	}
 	current = time.Now().UTC().Add(time.Second)
 	return service, envA, envB, &current
+}
+
+func TestWriterLeaseIdentitySurvivesRenewalButNotReacquire(t *testing.T) {
+	service, envA, envB, _ := newLeaseTestService(t)
+	first, err := service.AcquireWriter(envA.ID, "same-owner")
+	if err != nil || first.Writer == nil || first.Writer.ID == "" {
+		t.Fatalf("acquire: %+v %v", first.Writer, err)
+	}
+	renewed, err := service.HeartbeatWriter(envA.ID, "same-owner")
+	if err != nil || !SameWriterLease(first.Writer, renewed.Writer) {
+		t.Fatalf("renewal replaced lease: %+v %v", renewed.Writer, err)
+	}
+	if _, err := service.ReleaseWriter(envA.ID, "same-owner", false); err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.AcquireWriter(envA.ID, "same-owner")
+	if err != nil || SameWriterLease(first.Writer, second.Writer) {
+		t.Fatalf("reacquire reused identity: %+v %v", second.Writer, err)
+	}
+	if _, err := service.RequireWriterLease(envA.ID, "same-owner", first.Writer); err == nil {
+		t.Fatal("old lease still authorized")
+	}
+	if _, err := service.ObserveWriter(envA.ID, "same-owner", WriterObservation{SourceKind: "run", SourceID: "old"}, first.Writer); err == nil {
+		t.Fatal("old task attributed to replacement lease")
+	}
+	if _, err := service.TakeoverWriter(envB.ID, "admin"); err == nil {
+		t.Fatal("takeover must not bypass physical root overlap")
+	}
+	admin, err := service.TakeoverWriter(envA.ID, "admin")
+	if err != nil || admin.Writer == nil || admin.Writer.Owner != "admin" || admin.Writer.LastRenewalAction != "admin_takeover" || SameWriterLease(second.Writer, admin.Writer) {
+		t.Fatalf("takeover: %+v %v", admin.Writer, err)
+	}
+	if _, err := service.HeartbeatWriter(envA.ID, "same-owner"); err == nil {
+		t.Fatal("old owner renewed administrator lease")
+	}
+	if _, err := service.ReleaseWriter(envA.ID, "same-owner", false); err == nil {
+		t.Fatal("old owner released administrator lease")
+	}
 }

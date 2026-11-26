@@ -243,6 +243,8 @@ func compactActionHelp(entry compactAction) map[string]any {
 
 func compactGroupAgentHint(group string) string {
 	switch group {
+	case "memory":
+		return "At task start, search relevant shared and explicitly selected Environment memory. At meaningful checkpoints, maintain verified durable project facts with environment_organize (dry-run, compare-and-set changes); avoid secrets and duplicates. Global mutations are Admin-only."
 	case "environment":
 		return "Agent development isolation rule: create a new Git worktree with action=temporary_create and arguments mode=managed_worktree, source_environment_id, owner_id, positive ttl_seconds, ASCII branch_name, and migrate_uncommitted_changes=false. Do not infer from worktree_create being Admin-only that the Agent cannot create worktrees; worktree_create is the Admin convenience path, while temporary_create is the Agent-safe path."
 	default:

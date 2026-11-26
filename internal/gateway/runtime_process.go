@@ -12,6 +12,7 @@ import (
 
 	"ai-dev-manager-v2/internal/identity"
 	runtimepkg "ai-dev-manager-v2/internal/runtime"
+	"ai-dev-manager-v2/internal/store"
 )
 
 const (
@@ -28,15 +29,24 @@ const (
 )
 
 type devProcessStatus struct {
-	ID             string          `json:"id"`
-	EnvironmentID  string          `json:"environment_id"`
-	State          devProcessState `json:"state"`
-	PID            int             `json:"pid,omitempty"`
-	StartedAt      time.Time       `json:"started_at"`
-	ExitedAt       *time.Time      `json:"exited_at,omitempty"`
-	ExitCode       *int            `json:"exit_code,omitempty"`
-	ListeningPorts []int           `json:"listening_ports,omitempty"`
-	ErrorKind      string          `json:"error_kind,omitempty"`
+	HistoryOnly    bool                         `json:"history_only,omitempty"`
+	HistoryNote    string                       `json:"history_note,omitempty"`
+	Resources      *runtimepkg.ProcessResources `json:"resources,omitempty"`
+	ResourceError  string                       `json:"resource_error,omitempty"`
+	UptimeSeconds  int64                        `json:"uptime_seconds"`
+	ExitReason     string                       `json:"exit_reason,omitempty"`
+	Executable     string                       `json:"executable"`
+	Cwd            string                       `json:"cwd,omitempty"`
+	GatewayPID     int                          `json:"gateway_pid"`
+	ID             string                       `json:"id"`
+	EnvironmentID  string                       `json:"environment_id"`
+	State          devProcessState              `json:"state"`
+	PID            int                          `json:"pid,omitempty"`
+	StartedAt      time.Time                    `json:"started_at"`
+	ExitedAt       *time.Time                   `json:"exited_at,omitempty"`
+	ExitCode       *int                         `json:"exit_code,omitempty"`
+	ListeningPorts []int                        `json:"listening_ports,omitempty"`
+	ErrorKind      string                       `json:"error_kind,omitempty"`
 }
 
 type devProcessLogs struct {
@@ -48,15 +58,23 @@ type devProcessLogs struct {
 }
 
 type ownedDevProcess struct {
-	id            string
-	environmentID string
-	executable    string
-	cwd           string
-	cmd           *exec.Cmd
-	cancel        context.CancelFunc
-	done          chan struct{}
-	stdout        *tailLogBuffer
-	stderr        *tailLogBuffer
+	record            *store.ProcessRecordHandle
+	managed           runtimepkg.ManagedProcess
+	sampleMu          sync.Mutex
+	sample            *runtimepkg.ProcessResources
+	sampleError       string
+	lastSampleAttempt time.Time
+	stopRequested     bool
+	exitReason        string
+	id                string
+	environmentID     string
+	executable        string
+	cwd               string
+	cmd               *exec.Cmd
+	cancel            context.CancelFunc
+	done              chan struct{}
+	stdout            *tailLogBuffer
+	stderr            *tailLogBuffer
 
 	mu        sync.Mutex
 	state     devProcessState
@@ -67,13 +85,21 @@ type ownedDevProcess struct {
 }
 
 // StartDevProcess treats a development service as a Gateway-owned runtime resource, not as a writer lease.
-// The current writer gates launch and stop operations, while long-lived mutation authority belongs to Agent Runs/verifiers.
+// Agent requests must have launch/stop authority. Administrator requests use
+// dedicated methods and never acquire or renew the project's writer lease.
 func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable string, args []string, cwd string, maxLogBytes int) (devProcessStatus, error) {
 	if o == nil || o.service == nil {
 		return devProcessStatus{}, fmt.Errorf("runtime owner is not initialized")
 	}
 	if _, err := o.service.Environments.RequireWriter(environmentID, writerOwner); err != nil {
 		return devProcessStatus{}, err
+	}
+	return o.StartDevProcessAdmin(environmentID, executable, args, cwd, maxLogBytes)
+}
+
+func (o *runtimeOwner) StartDevProcessAdmin(environmentID, executable string, args []string, cwd string, maxLogBytes int) (devProcessStatus, error) {
+	if o == nil || o.service == nil {
+		return devProcessStatus{}, fmt.Errorf("runtime owner is not initialized")
 	}
 	rt, _, err := o.service.Runtime(environmentID)
 	if err != nil {
@@ -104,8 +130,38 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	o.service.Log("info", "process.start", map[string]string{"environment_id": environmentID, "executable": executable, "surface": "process"})
-	if err := cmd.Start(); err != nil {
+	record := store.ProcessRecord{ID: processID, EnvironmentID: environmentID, Executable: executable, Cwd: cmd.Dir, GatewayPID: o.pid, StartedAt: time.Now().UTC()}
+	history, err := o.service.Store.BeginProcessRecord(record)
+	if err != nil {
 		cancel()
+		return devProcessStatus{}, err
+	}
+	launchFailed := func() {
+		now := time.Now().UTC()
+		record.ExitedAt = &now
+		record.ExitReason = "failed"
+		record.ErrorKind = "process_launch_failed"
+		if err := history.Update(record); err != nil {
+			o.service.Log("error", "process.history_failed", map[string]string{"process_id": processID, "error": err.Error()})
+		}
+		history.Close()
+		_ = o.service.Store.PruneProcessRecords()
+	}
+	managed, err := runtimepkg.StartManagedProcess(cmd)
+	if err != nil {
+		cancel()
+		launchFailed()
+		return devProcessStatus{}, err
+	}
+	record.PID = cmd.Process.Pid
+	if workload, ok := managed.(interface{ WorkloadPID() int }); ok {
+		record.PID = workload.WorkloadPID()
+	}
+	if err := history.Update(record); err != nil {
+		cancel()
+		_ = cmd.Wait()
+		managed.Close()
+		launchFailed()
 		return devProcessStatus{}, err
 	}
 	_ = o.service.RecordExecUsage(environmentID, executable, "process_start")
@@ -113,18 +169,22 @@ func (o *runtimeOwner) StartDevProcess(environmentID, writerOwner, executable st
 		id:            processID,
 		environmentID: environmentID,
 		executable:    executable,
-		cwd:           cwd,
+		cwd:           cmd.Dir,
+		managed:       managed,
+		record:        history,
 		cmd:           cmd,
 		cancel:        cancel,
 		done:          make(chan struct{}),
 		stdout:        stdout,
 		stderr:        stderr,
 		state:         devProcessRunning,
-		startedAt:     time.Now().UTC(),
+		startedAt:     record.StartedAt,
 	}
 	if err := o.installDevProcess(process); err != nil {
 		cancel()
 		_ = cmd.Wait()
+		managed.Close()
+		launchFailed()
 		return devProcessStatus{}, err
 	}
 	go o.waitDevProcess(process)
@@ -135,10 +195,14 @@ func (o *runtimeOwner) ListDevProcesses(environmentID string) ([]devProcessStatu
 	if _, err := o.service.Environments.Get(environmentID); err != nil {
 		return nil, err
 	}
+	return o.listDevProcesses(environmentID)
+}
+
+func (o *runtimeOwner) listDevProcesses(environmentID string) ([]devProcessStatus, error) {
 	o.mu.Lock()
 	items := make([]*ownedDevProcess, 0)
 	for _, process := range o.processes {
-		if process.environmentID == environmentID {
+		if environmentID == "" || process.environmentID == environmentID {
 			items = append(items, process)
 		}
 	}
@@ -147,16 +211,38 @@ func (o *runtimeOwner) ListDevProcesses(environmentID string) ([]devProcessStatu
 	for _, process := range items {
 		statuses = append(statuses, o.devProcessStatus(process))
 	}
+	records, err := o.service.Store.ProcessRecords()
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	for _, status := range statuses {
+		seen[status.ID] = true
+	}
+	for _, record := range records {
+		if !seen[record.ID] && (environmentID == "" || record.EnvironmentID == environmentID) {
+			statuses = append(statuses, recordStatus(record))
+		}
+	}
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].StartedAt.Before(statuses[j].StartedAt) })
 	return statuses, nil
 }
 
 func (o *runtimeOwner) DevProcessStatus(environmentID, processID string) (devProcessStatus, error) {
 	process, err := o.devProcess(environmentID, processID)
-	if err != nil {
-		return devProcessStatus{}, err
+	if err == nil {
+		return o.devProcessStatus(process), nil
 	}
-	return o.devProcessStatus(process), nil
+	records, readErr := o.service.Store.ProcessRecords()
+	if readErr != nil {
+		return devProcessStatus{}, readErr
+	}
+	for _, record := range records {
+		if record.ID == processID && record.EnvironmentID == environmentID {
+			return recordStatus(record), nil
+		}
+	}
+	return devProcessStatus{}, err
 }
 
 func (o *runtimeOwner) DevProcessLogs(environmentID, processID string) (devProcessLogs, error) {
@@ -179,10 +265,19 @@ func (o *runtimeOwner) StopDevProcess(environmentID, writerOwner, processID stri
 	if _, err := o.service.Environments.RequireWriter(environmentID, writerOwner); err != nil {
 		return devProcessStatus{}, err
 	}
+	return o.StopDevProcessAdmin(environmentID, processID)
+}
+
+func (o *runtimeOwner) StopDevProcessAdmin(environmentID, processID string) (devProcessStatus, error) {
 	process, err := o.devProcess(environmentID, processID)
 	if err != nil {
 		return devProcessStatus{}, err
 	}
+	process.mu.Lock()
+	if process.state == devProcessRunning {
+		process.stopRequested = true
+	}
+	process.mu.Unlock()
 	process.cancel()
 	if err := waitOwnedProcess(process, devProcessStopTimeout); err != nil {
 		return devProcessStatus{}, err
@@ -216,6 +311,9 @@ func (o *runtimeOwner) devProcess(environmentID, processID string) (*ownedDevPro
 func (o *runtimeOwner) devProcessStatus(process *ownedDevProcess) devProcessStatus {
 	process.mu.Lock()
 	status := devProcessStatus{
+		Executable:    process.executable,
+		Cwd:           process.cwd,
+		GatewayPID:    o.pid,
 		ID:            process.id,
 		EnvironmentID: process.environmentID,
 		State:         process.state,
@@ -223,12 +321,22 @@ func (o *runtimeOwner) devProcessStatus(process *ownedDevProcess) devProcessStat
 		ExitedAt:      process.exitedAt,
 		ExitCode:      process.exitCode,
 		ErrorKind:     process.errorKind,
+		ExitReason:    process.exitReason,
 	}
 	if process.cmd != nil && process.cmd.Process != nil {
 		status.PID = process.cmd.Process.Pid
+		if workload, ok := process.managed.(interface{ WorkloadPID() int }); ok {
+			status.PID = workload.WorkloadPID()
+		}
 	}
+	end := time.Now()
+	if status.ExitedAt != nil {
+		end = *status.ExitedAt
+	}
+	status.UptimeSeconds = max(0, int64(end.Sub(status.StartedAt).Seconds()))
 	process.mu.Unlock()
 	if status.State == devProcessRunning && status.PID > 0 {
+		status.Resources, status.ResourceError = process.sampleResources()
 		ports, err := runtimepkg.ListeningTCPPorts(status.PID)
 		if err == nil {
 			status.ListeningPorts = ports
@@ -239,6 +347,7 @@ func (o *runtimeOwner) devProcessStatus(process *ownedDevProcess) devProcessStat
 
 func (o *runtimeOwner) waitDevProcess(process *ownedDevProcess) {
 	err := process.cmd.Wait()
+	process.managed.Close()
 	now := time.Now().UTC()
 	exitCode := 0
 	kind := ""
@@ -248,11 +357,24 @@ func (o *runtimeOwner) waitDevProcess(process *ownedDevProcess) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			exitCode = -1
+			if process.cmd.ProcessState != nil {
+				exitCode = process.cmd.ProcessState.ExitCode()
+			}
 			kind = "process_wait_failed"
+			if errors.Is(err, exec.ErrWaitDelay) {
+				kind = "process_output_wait_timeout"
+			}
 		}
 	}
 	process.mu.Lock()
 	process.state = devProcessExited
+	if process.stopRequested {
+		process.exitReason = "stopped"
+	} else if err != nil {
+		process.exitReason = "failed"
+	} else {
+		process.exitReason = "completed"
+	}
 	process.exitedAt = &now
 	process.exitCode = &exitCode
 	if process.errorKind == "" {
@@ -260,6 +382,17 @@ func (o *runtimeOwner) waitDevProcess(process *ownedDevProcess) {
 	}
 	process.mu.Unlock()
 	o.service.Log("info", "process.completed", map[string]string{"environment_id": process.environmentID, "executable": process.executable, "surface": "process", "exit_code": fmt.Sprint(exitCode), "error_kind": kind})
+	status := o.devProcessStatus(process)
+	if process.record != nil {
+		record := store.ProcessRecord{ID: status.ID, EnvironmentID: status.EnvironmentID, Executable: status.Executable, Cwd: status.Cwd, GatewayPID: status.GatewayPID, PID: status.PID, StartedAt: status.StartedAt, ExitedAt: status.ExitedAt, ExitCode: status.ExitCode, ExitReason: status.ExitReason, ErrorKind: status.ErrorKind}
+		if err := process.record.Update(record); err != nil {
+			o.service.Log("error", "process.history_failed", map[string]string{"process_id": status.ID, "error": err.Error()})
+		}
+		process.record.Close()
+		if err := o.service.Store.PruneProcessRecords(); err != nil {
+			o.service.Log("error", "process.history_prune_failed", map[string]string{"error": err.Error()})
+		}
+	}
 	process.cancel()
 	close(process.done)
 }
@@ -278,6 +411,26 @@ func (o *runtimeOwner) dropDevProcessesForEnvironment(environmentID string) {
 		process.cancel()
 		_ = waitOwnedProcess(process, devProcessStopTimeout)
 	}
+	if err := o.service.Store.RemoveTerminalProcessRecords(environmentID); err != nil {
+		o.service.Log("error", "process.history_cleanup_failed", map[string]string{"error": err.Error()})
+	}
+}
+
+func recordStatus(r store.ProcessRecord) devProcessStatus {
+	status := devProcessStatus{ID: r.ID, EnvironmentID: r.EnvironmentID, Executable: r.Executable, Cwd: r.Cwd, GatewayPID: r.GatewayPID, PID: r.PID, StartedAt: r.StartedAt, ExitedAt: r.ExitedAt, ExitCode: r.ExitCode, ExitReason: r.ExitReason, ErrorKind: r.ErrorKind, HistoryOnly: true}
+	switch {
+	case r.ExitedAt != nil:
+		status.State = devProcessExited
+		status.UptimeSeconds = max(0, int64(r.ExitedAt.Sub(r.StartedAt).Seconds()))
+		status.HistoryNote = "Lifecycle record only; logs are not persisted."
+	case r.OwnerLive:
+		status.State = "other_gateway"
+		status.HistoryNote = "Another runtime holds the record; process health is not verified by this Gateway."
+	default:
+		status.State = "owner_unavailable"
+		status.HistoryNote = "Original runtime no longer holds the record; actual process state is unverified."
+	}
+	return status
 }
 
 func (o *runtimeOwner) closeDevProcesses(processes []*ownedDevProcess) error {
@@ -364,3 +517,33 @@ func (b *tailLogBuffer) Snapshot() (string, bool) {
 }
 
 var _ io.Writer = (*tailLogBuffer)(nil)
+
+func (p *ownedDevProcess) sampleResources() (*runtimepkg.ProcessResources, string) {
+	p.sampleMu.Lock()
+	defer p.sampleMu.Unlock()
+	if time.Since(p.lastSampleAttempt) < time.Second {
+		return p.sample, p.sampleError
+	}
+	p.lastSampleAttempt = time.Now()
+	if p.managed == nil {
+		return nil, "resource observation unavailable"
+	}
+	next, err := p.managed.Sample()
+	if err != nil {
+		p.sample = nil
+		p.sampleError = err.Error()
+		return nil, p.sampleError
+	}
+	// CPU is percentage of one logical core, not the entire host. Windows
+	// job CPU is cumulative; Linux live-member totals can reset on child exit.
+	if p.sample != nil && p.sample.Complete && next.Complete && next.CPUTimeMS >= p.sample.CPUTimeMS && p.sample.Scope == next.Scope && next.CPUBasis == p.sample.CPUBasis {
+		elapsed := next.SampledAt.Sub(p.sample.SampledAt).Seconds()
+		if elapsed > 0 {
+			cpu := float64(next.CPUTimeMS-p.sample.CPUTimeMS) / 1000 / elapsed * 100
+			next.CPUPercent = &cpu
+		}
+	}
+	p.sample = &next
+	p.sampleError = ""
+	return p.sample, ""
+}

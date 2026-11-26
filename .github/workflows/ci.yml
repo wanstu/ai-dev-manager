@@ -399,6 +399,41 @@ jobs:
           build_version='${{ needs.release-source-check.outputs.build_version }}'
           bash ./scripts/package-linux.sh "$build_version" "dist/adm-desktop-$build_version-linux-amd64" dist amd64
 
+      - name: Verify Linux Desktop DEB installation and upgrade
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          build_version='${{ needs.release-source-check.outputs.build_version }}'
+          deb="dist/adm-desktop-$build_version-linux-amd64.deb"
+          test -s "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = adm
+          test "$(dpkg-deb -f "$deb" Architecture)" = amd64
+          (cd dist && sha256sum -c "$(basename "$deb").sha256")
+          sudo dpkg -i "$deb"
+          dpkg -L adm
+          test -x /usr/bin/adm || { echo 'CLI executable missing'; exit 1; }
+          test -x /usr/bin/adm-desktop || { echo 'Desktop executable missing'; exit 1; }
+          installed_version="$(/usr/bin/adm version)"
+          echo "Installed CLI version: $installed_version; expected $build_version"
+          test "$installed_version" = "$build_version"
+          dpkg -s adm | grep -Fx 'Status: install ok installed'
+          # v1.4.27 Desktop DEB was published under the old adm-* asset name.
+          # Test a real upgrade on the disposable runner, not the user's host.
+          if [[ "$build_version" == 'v1.4.28' ]]; then
+            sudo dpkg -r adm
+            previous="$(mktemp -d)"
+            gh release download v1.4.27 --repo "$GITHUB_REPOSITORY" --dir "$previous" --pattern 'adm-v1.4.27-linux-amd64.deb*'
+            (cd "$previous" && sha256sum -c adm-v1.4.27-linux-amd64.deb.sha256)
+            sudo dpkg -i "$previous/adm-v1.4.27-linux-amd64.deb"
+            test "$(/usr/bin/adm version)" = v1.4.27
+            sudo dpkg -i "$deb"
+            test "$(/usr/bin/adm version)" = "$build_version"
+            test -x /usr/bin/adm-desktop
+            dpkg -s adm | grep -Fx 'Status: install ok installed'
+          fi
+
       - name: Upload Linux Desktop artifact
         uses: actions/upload-artifact@v4
         with:
@@ -568,6 +603,10 @@ jobs:
             "adm-desktop-$env:GITHUB_REF_NAME-windows-amd64.zip",
             "adm-desktop-$env:GITHUB_REF_NAME-darwin-universal.zip",
             "adm-desktop-$env:GITHUB_REF_NAME-linux-amd64",
+            "adm-desktop-$env:GITHUB_REF_NAME-linux-amd64.deb",
+            "adm-desktop-$env:GITHUB_REF_NAME-linux-amd64.tar.gz",
+            "adm-cli-$env:GITHUB_REF_NAME-linux-amd64.deb",
+            "adm-cli-$env:GITHUB_REF_NAME-linux-arm64.deb",
             "adm-$env:GITHUB_REF_NAME-linux-amd64",
             "adm-$env:GITHUB_REF_NAME-linux-arm64",
             "adm-$env:GITHUB_REF_NAME-darwin-amd64",

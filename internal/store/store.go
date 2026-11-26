@@ -30,19 +30,42 @@ func DefaultPath() (string, error) {
 	return filepath.Join(root, "ai-dev-manager-v2", "state.json"), nil
 }
 
-func New(path string) *Store { return &Store{path: path} }
+func New(path string) *Store {
+	// Resolve an existing state-file alias before deriving the stable lock path.
+	// The parent may not exist yet; a sidecar in that directory will still use
+	// the filesystem's real parent once it is created.
+	if absolute, err := filepath.Abs(path); err == nil {
+		path = absolute
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	} else if parent, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
+		path = filepath.Join(parent, filepath.Base(path))
+	}
+	return &Store{path: path}
+}
 
 func (s *Store) Path() string { return s.path }
 
 func (s *Store) Load() (model.State, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	lock, err := acquireStateLock(s.path)
+	if err != nil {
+		return model.State{}, err
+	}
+	defer lock.Close()
 	return s.loadLocked()
 }
 
 func (s *Store) Update(fn func(*model.State) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	lock, err := acquireStateLock(s.path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
 	state, err := s.loadLocked()
 	if err != nil {
 		return err
@@ -81,6 +104,16 @@ func (s *Store) saveLocked(state model.State) error {
 		state.GlobalMemory = map[string]string{}
 	}
 	normalizeRetentionState(&state)
+	// Private history must follow the owning Environment's lifetime.
+	active := make(map[string]bool, len(state.Environments))
+	for _, env := range state.Environments {
+		active[env.ID] = true
+	}
+	for id := range state.EnvironmentMemoryRecords {
+		if !active[id] {
+			delete(state.EnvironmentMemoryRecords, id)
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
@@ -88,12 +121,24 @@ func (s *Store) saveLocked(state model.State) error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+	// A unique same-directory file avoids stale fixed-name temporaries and
+	// ensures the replacement does not cross filesystem boundaries.
+	tmp, err := os.CreateTemp(filepath.Dir(s.path), "."+filepath.Base(s.path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		_ = os.Remove(tmp)
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp.Name(), s.path); err != nil {
 		return err
 	}
 	return nil

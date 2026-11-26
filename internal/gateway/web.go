@@ -21,6 +21,7 @@ import (
 	"ai-dev-manager-v2/internal/catalog"
 	"ai-dev-manager-v2/internal/codeintel"
 	"ai-dev-manager-v2/internal/management"
+	"ai-dev-manager-v2/internal/memory"
 	"ai-dev-manager-v2/internal/model"
 
 	kitui "github.com/wanstu/wails-desktop-kit/ui"
@@ -804,6 +805,100 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.management.EnvironmentSkillList(s1)
+	case "GetMemoryHistory":
+		var revision *int64
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &revision); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryHistory(s1, s2, revision)
+	case "RestoreMemory":
+		var revision, expected int64
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &revision); err != nil {
+			return nil, err
+		}
+		if err := arg(3, &expected); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryRestore(s1, s2, revision, expected)
+	case "ListMemoryTrash":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryTrash(s1)
+	case "PurgeMemory":
+		var expected int64
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &expected); err != nil {
+			return nil, err
+		}
+		return nil, h.management.MemoryPurge(s1, s2, expected)
+	case "FindSimilarMemory":
+		var threshold float64
+		var limit int
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &threshold); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &limit); err != nil {
+			return nil, err
+		}
+		return h.management.MemorySimilar(s1, threshold, limit)
+	case "GetMemoryProjectScope":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryProjectScope(s1)
+	case "HandoffMemory":
+		var items []memory.HandoffItem
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &items); err != nil {
+			return nil, err
+		}
+		if err := arg(3, &b1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryHandoff(s1, s2, items, b1)
+	case "FindMemoryDuplicates":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryDuplicates(s1)
+	case "OrganizeMemory":
+		var changes []memory.Change
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &changes); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &b1); err != nil {
+			return nil, err
+		}
+		return h.management.MemoryOrganize(s1, changes, b1)
 	case "ListGlobalMemory":
 		return h.management.GlobalMemoryList()
 	case "WriteGlobalMemory":
@@ -851,6 +946,14 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.app.WriterAcquire(s1, s2)
+	case "TakeoverRuntimeWriter":
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		return h.app.Environments.TakeoverWriter(s1, s2)
 	case "ReleaseRuntimeWriter":
 		if err := arg(0, &s1); err != nil {
 			return nil, err
@@ -888,12 +991,33 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.app.RunVerifier(ctx, s1, s2, s3, 64*1024)
+	case "StartProcess":
+		var args []string
+		if err := arg(0, &s1); err != nil {
+			return nil, err
+		}
+		if err := arg(1, &s2); err != nil {
+			return nil, err
+		}
+		if err := arg(2, &args); err != nil {
+			return nil, err
+		}
+		if err := arg(3, &s3); err != nil {
+			return nil, err
+		}
+		if h.owner == nil {
+			return nil, errors.New("Gateway runtime owner is unavailable")
+		}
+		return h.owner.StartDevProcessAdmin(s1, s2, args, s3, 0)
 	case "ListProcesses":
 		if err := arg(0, &s1); err != nil {
 			return nil, err
 		}
 		if h.owner == nil {
 			return nil, errors.New("Gateway runtime owner is unavailable")
+		}
+		if s1 == "" {
+			return h.owner.listDevProcesses("")
 		}
 		return h.owner.ListDevProcesses(s1)
 	case "GetProcessLogs":
@@ -919,6 +1043,9 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 		}
 		if h.owner == nil {
 			return nil, errors.New("Gateway runtime owner is unavailable")
+		}
+		if s2 == "" {
+			return h.owner.StopDevProcessAdmin(s1, s3)
 		}
 		return h.owner.StopDevProcess(s1, s2, s3)
 	case "ListRuns":

@@ -20,6 +20,18 @@ func (a *Adapter) AcquireRuntimeWriter(environmentID, owner string) (model.Envir
 	return a.runtime.WriterAcquire(environmentID, owner)
 }
 
+// TakeoverRuntimeWriter explicitly replaces another Writer with this Desktop session.
+func (a *Adapter) TakeoverRuntimeWriter(environmentID, owner string) (model.Environment, error) {
+	if err := a.readyRuntime(); err != nil {
+		return model.Environment{}, err
+	}
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return model.Environment{}, fmt.Errorf("writer owner is required")
+	}
+	return a.runtime.WriterTakeover(environmentID, owner)
+}
+
 func (a *Adapter) ReleaseRuntimeWriter(environmentID, owner string) (model.Environment, error) {
 	if err := a.readyRuntime(); err != nil {
 		return model.Environment{}, err
@@ -73,6 +85,14 @@ func (a *Adapter) RunVerifier(environmentID, writerOwner, verifierID string) (ve
 		return verifier.Result{}, err
 	}
 	return a.runtime.VerifierRun(environmentID, writerOwner, verifierID, 64*1024)
+}
+
+// StartProcess launches an ADM-owned development service via the Admin surface.
+func (a *Adapter) StartProcess(environmentID, executable string, args []string, cwd string) (adminmcp.ProcessStatus, error) {
+	if err := a.readyRuntime(); err != nil {
+		return adminmcp.ProcessStatus{}, err
+	}
+	return a.runtime.ProcessStart(environmentID, executable, args, cwd)
 }
 
 func (a *Adapter) ListProcesses(environmentID string) ([]adminmcp.ProcessStatus, error) {

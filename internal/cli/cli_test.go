@@ -164,8 +164,8 @@ func TestGatewayDiagnosticsUsesSelectedADMBaseURL(t *testing.T) {
 	if err := json.Unmarshal([]byte(output), &diagnostics); err != nil {
 		t.Fatalf("decode gateway diagnostics: %v\n%s", err, output)
 	}
-	if got, _ := diagnostics["state_path"].(string); got != remoteStatePath {
-		t.Fatalf("gateway diagnostics state_path=%q, want %q\n%s", got, remoteStatePath, output)
+	if got, _ := diagnostics["state_path"].(string); got != service.Store.Path() {
+		t.Fatalf("gateway diagnostics state_path=%q, want %q\n%s", got, service.Store.Path(), output)
 	}
 	for _, required := range []string{"process_pid", "readiness", "service"} {
 		if _, ok := diagnostics[required]; !ok {

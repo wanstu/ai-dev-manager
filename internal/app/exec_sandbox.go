@@ -19,6 +19,7 @@ import (
 // passed the same Runtime executable/cwd authority used by host Exec and Runs.
 // The prepared command may only be launched through the strong OS sandbox.
 type PreparedSandboxExecution struct {
+	WriterLease    *model.WriterLease
 	Environment    model.Environment
 	Runtime        *runtime.Runtime
 	Executable     string
@@ -43,7 +44,8 @@ func (s *Service) PrepareSandboxExecution(
 	cwd string,
 	surface string,
 ) (PreparedSandboxExecution, error) {
-	if _, err := s.Environments.RequireWriter(environmentID, owner); err != nil {
+	authority, err := s.Environments.RequireWriter(environmentID, owner)
+	if err != nil {
 		return PreparedSandboxExecution{}, err
 	}
 	rt, env, err := s.Runtime(environmentID)
@@ -58,12 +60,16 @@ func (s *Service) PrepareSandboxExecution(
 		}
 		return PreparedSandboxExecution{}, err
 	}
+	if !s.SandboxExecutionAvailable() {
+		return PreparedSandboxExecution{}, fmt.Errorf("strong sandbox execution is unavailable on %s", s.SandboxExecutionSupport().Platform)
+	}
 	if s.SandboxExecutionSupport().Platform == "windows" {
 		if err := s.EnsureEnvironmentSandboxAccess(ctx, env); err != nil {
 			return PreparedSandboxExecution{}, fmt.Errorf("prepare Environment strong-sandbox access: %w", err)
 		}
 	}
 	return PreparedSandboxExecution{
+		WriterLease:    authority.Writer,
 		Environment:    env,
 		Runtime:        rt,
 		Executable:     executable,
@@ -174,6 +180,12 @@ func (s *Service) ExecSandbox(
 		return nil, err
 	}
 
+	_, guard, err := s.Environments.BeginWriterOperation(environmentID, owner, prepared.WriterLease, "exec_sandbox")
+	if err != nil {
+		return nil, err
+	}
+	defer guard.Close()
+
 	commandCtx, cancel := context.WithCancel(execCtx)
 	heartbeatDone := make(chan error, 1)
 	go func() {
@@ -186,7 +198,7 @@ func (s *Service) ExecSandbox(
 				heartbeatDone <- nil
 				return
 			case <-ticker.C:
-				if _, heartbeatErr := s.Environments.HeartbeatWriter(environmentID, owner); heartbeatErr != nil {
+				if _, heartbeatErr := s.Environments.RequireWriterLease(environmentID, owner, prepared.WriterLease); heartbeatErr != nil {
 					heartbeatDone <- heartbeatErr
 					cancel()
 					return
@@ -232,6 +244,9 @@ func (s *Service) ExecSandbox(
 		"execution_mode": "sandbox",
 		"exit_code":      fmt.Sprint(result.ExitCode),
 	})
+	if _, err := s.Environments.RequireWriterLease(environmentID, owner, prepared.WriterLease); err != nil {
+		return nil, err
+	}
 	if err := s.Environments.Touch(environmentID, owner); err != nil {
 		return nil, err
 	}
