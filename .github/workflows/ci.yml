@@ -399,6 +399,22 @@ jobs:
           build_version='${{ needs.release-source-check.outputs.build_version }}'
           bash ./scripts/package-linux.sh "$build_version" "dist/adm-desktop-$build_version-linux-amd64" dist amd64
 
+      - name: Verify Linux Desktop DEB installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_version='${{ needs.release-source-check.outputs.build_version }}'
+          deb="dist/adm-desktop-$build_version-linux-amd64.deb"
+          test -s "$deb"
+          test "$(dpkg-deb -f "$deb" Package)" = adm
+          test "$(dpkg-deb -f "$deb" Architecture)" = amd64
+          (cd dist && sha256sum -c "$(basename "$deb").sha256")
+          sudo dpkg -i "$deb"
+          test -x /usr/bin/adm
+          test -x /usr/bin/adm-desktop
+          test "$(/usr/bin/adm version)" = "$build_version"
+          dpkg -s adm | grep -Fx 'Status: install ok installed'
+
       - name: Upload Linux Desktop artifact
         uses: actions/upload-artifact@v4
         with:

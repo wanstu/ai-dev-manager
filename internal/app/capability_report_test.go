@@ -278,6 +278,10 @@ func TestCapabilityReportDistinguishesStrictAndFullWithoutAllowlist(t *testing.T
 	}
 	assertFact(t, strict, runtime.CapabilityExec, model.CapabilityStateUnconfigured, "no_allowed_executables", true)
 
+	// Exercise Full independently of strong OS sandbox availability.
+	if _, err := service.SetStrongPermissionControl(false); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.SetExecFullAuthorization(true); err != nil {
 		t.Fatal(err)
 	}

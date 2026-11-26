@@ -470,6 +470,11 @@ func TestEnvironmentContextBundleReportsFullAuthorizationWithoutAllowlist(t *tes
 		t.Fatalf("strict shell.exec=%+v", strictExec)
 	}
 
+	// Isolate Full/Strict authorization from the independently enabled
+	// strong OS sandbox requirement, which may be unavailable on Linux.
+	if _, err := service.SetStrongPermissionControl(false); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.SetExecFullAuthorization(true); err != nil {
 		t.Fatal(err)
 	}
