@@ -399,8 +399,10 @@ jobs:
           build_version='${{ needs.release-source-check.outputs.build_version }}'
           bash ./scripts/package-linux.sh "$build_version" "dist/adm-desktop-$build_version-linux-amd64" dist amd64
 
-      - name: Verify Linux Desktop DEB installation
+      - name: Verify Linux Desktop DEB installation and upgrade
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           build_version='${{ needs.release-source-check.outputs.build_version }}'
@@ -414,6 +416,20 @@ jobs:
           test -x /usr/bin/adm-desktop
           test "$(/usr/bin/adm version)" = "$build_version"
           dpkg -s adm | grep -Fx 'Status: install ok installed'
+          # v1.4.27 Desktop DEB was published under the old adm-* asset name.
+          # Test a real upgrade on the disposable runner, not the user's host.
+          if [[ "$build_version" == 'v1.4.28' ]]; then
+            sudo dpkg -r adm
+            previous="$(mktemp -d)"
+            gh release download v1.4.27 --repo "$GITHUB_REPOSITORY" --dir "$previous" --pattern 'adm-v1.4.27-linux-amd64.deb*'
+            (cd "$previous" && sha256sum -c adm-v1.4.27-linux-amd64.deb.sha256)
+            sudo dpkg -i "$previous/adm-v1.4.27-linux-amd64.deb"
+            test "$(/usr/bin/adm version)" = v1.4.27
+            sudo dpkg -i "$deb"
+            test "$(/usr/bin/adm version)" = "$build_version"
+            test -x /usr/bin/adm-desktop
+            dpkg -s adm | grep -Fx 'Status: install ok installed'
+          fi
 
       - name: Upload Linux Desktop artifact
         uses: actions/upload-artifact@v4

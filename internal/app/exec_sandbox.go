@@ -48,6 +48,9 @@ func (s *Service) PrepareSandboxExecution(
 	if err != nil {
 		return PreparedSandboxExecution{}, err
 	}
+	if !s.SandboxExecutionAvailable() {
+		return PreparedSandboxExecution{}, fmt.Errorf("strong sandbox execution is unavailable on %s", s.SandboxExecutionSupport().Platform)
+	}
 	rt, env, err := s.Runtime(environmentID)
 	if err != nil {
 		return PreparedSandboxExecution{}, err

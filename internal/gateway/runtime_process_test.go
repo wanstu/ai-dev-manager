@@ -299,11 +299,10 @@ func waitGatewayProcessPort(t *testing.T, ctx context.Context, session *mcp.Clie
 				t.Fatalf("decode process status: %v", err)
 			}
 			if output.Result.ID == processID && output.Result.State == devProcessRunning {
-				if goruntime.GOOS != "windows" {
-					// This platform currently reports no listening-port facts.
-					// Keep lifecycle/log/cleanup acceptance active without requiring Windows facts.
+				if goruntime.GOOS != "windows" && goruntime.GOOS != "linux" {
+					// Keep lifecycle acceptance active on platforms without port observation.
 					if len(output.Result.ListeningPorts) != 0 {
-						t.Fatalf("non-Windows process unexpectedly reported ports: %+v", output.Result)
+						t.Fatalf("unsupported platform unexpectedly reported ports: %+v", output.Result)
 					}
 					return
 				}
