@@ -54,6 +54,28 @@ func writerOperationGeneration(lease *model.WriterLease) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(generation)))
 }
 
+// OverlappingWriter describes the actual blocking scope without exporting its credential.
+type OverlappingWriter struct {
+	EnvironmentID string    `json:"environment_id"`
+	Name          string    `json:"name"`
+	Root          string    `json:"root"`
+	ExpiresAt     time.Time `json:"expires_at"`
+}
+
+func (s *Service) OverlappingWriters(env model.Environment) ([]OverlappingWriter, error) {
+	items, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	out := []OverlappingWriter{}
+	for _, item := range items {
+		if item.ID != env.ID && item.Writer != nil && writerRootsOverlap(item.Root, env.Root) {
+			out = append(out, OverlappingWriter{item.ID, item.Name, item.Root, item.Writer.ExpiresAt})
+		}
+	}
+	return out, nil
+}
+
 type PendingWriterOperation struct {
 	EnvironmentID string    `json:"environment_id"`
 	Kind          string    `json:"kind"`

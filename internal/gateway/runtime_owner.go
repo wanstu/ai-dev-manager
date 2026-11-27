@@ -72,6 +72,8 @@ type writerHeartbeatSource struct {
 }
 
 type writerDiagnostics struct {
+	OverlappingWriters       []environmentpkg.OverlappingWriter      `json:"overlapping_writers"`
+	OverlapCheckError        string                                  `json:"overlap_check_error,omitempty"`
 	PendingOperations        []environmentpkg.PendingWriterOperation `json:"pending_operations"`
 	HandoffPending           bool                                    `json:"handoff_pending"`
 	HandoffCheckError        string                                  `json:"handoff_check_error,omitempty"`
@@ -252,6 +254,12 @@ func (o *runtimeOwner) WriterDiagnostics(environmentID string) (writerDiagnostic
 		Attribution:      "none",
 		GatewayOwner:     o.Info(),
 		HeartbeatSources: []writerHeartbeatSource{},
+	}
+	overlaps, overlapErr := o.service.Environments.OverlappingWriters(environment)
+	if overlapErr != nil {
+		diagnostics.OverlapCheckError = overlapErr.Error()
+	} else {
+		diagnostics.OverlappingWriters = overlaps
 	}
 	pending, pendingErr := o.service.Environments.PendingWriterOperations(environment)
 	if pendingErr != nil {

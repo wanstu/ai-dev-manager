@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"os/exec"
+	goruntime "runtime"
 	"time"
 )
 
@@ -20,6 +21,21 @@ type ProcessResources struct {
 	ProcessCount int       `json:"process_count"`
 	Scope        string    `json:"scope"`
 	Complete     bool      `json:"complete"`
+}
+
+// StartFiniteCommand starts a prepared short-lived command. On Windows the
+// job contains descendants even if the direct child exits before its pipes
+// drain. Call cleanup after Wait and before releasing the Writer guard.
+// Other platforms retain their existing launch/containment behavior.
+func StartFiniteCommand(cmd *exec.Cmd) (cleanup func(), err error) {
+	if goruntime.GOOS != "windows" {
+		return func() {}, cmd.Start()
+	}
+	managed, err := StartManagedProcess(cmd)
+	if err != nil {
+		return func() {}, err
+	}
+	return managed.Close, nil
 }
 
 // StartManagedProcess takes a prepared command, retaining the execution

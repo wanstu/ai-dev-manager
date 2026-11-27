@@ -165,7 +165,10 @@ const fakeBridge = String.raw`<script>
     async StopProcess(id,writerOwner,processID){ record('StopProcess',[id,writerOwner,processID]); const process=state.extraProcesses.find(p=>p.id===processID&&p.environment_id===id); if(!process) throw new Error('process not found'); process.state='exited'; return process; },
     async GetProcessLogs(id,processID){ record('GetProcessLogs',[id,processID]); if(state.delayProcessLogs && id==='env-a') await new Promise(resolve=>setTimeout(resolve,180)); return {stdout:id==='env-b'?'PROCESS_B_LOG':'PROCESS_A_LOG', stderr:'', stdout_truncated:id==='env-a', stderr_truncated:false}; },
     async ListRuns(id){ record('ListRuns',[id]); return [{id:id==='env-b'?'run-b':'run-a', state:'succeeded', executable:'go', args:['test'], stdout:id==='env-b'?'RUN_B_OUTPUT':'RUN_A_OUTPUT', stderr:'', exit_code:0, stdout_truncated:false, stderr_truncated:false}]; },
-    async GetRuntimeWriterDiagnostics(id){ record('GetRuntimeWriterDiagnostics',[id]); return {environment_id:id, attribution:id==='env-a'?'lease_observation':'none', owner_fingerprint:id==='env-a'?'writer-a':'', last_seen_at:'2026-09-12T04:00:00Z', expires_at:'2026-09-12T04:05:00Z', heartbeat_interval_seconds:30, heartbeat_sources:[], handoff_pending:id==='env-a', pending_operations:id==='env-a'?[{environment_id:'env-old',kind:'run',host_pid:1234,started_at:'2026-09-12T04:00:00Z'}]:[], gateway_owner:{pid:0}}; },
+    async AcquireRuntimeWriter(id,owner){ record('AcquireRuntimeWriter',[id,owner]); const env=snapshotA.environments.find(e=>e.environment_id===id); env.writer={owner}; delete state.writerActiveOverride; return structuredClone(env); },
+    async TakeoverRuntimeWriter(id,owner){ record('TakeoverRuntimeWriter',[id,owner]); const env=snapshotA.environments.find(e=>e.environment_id===id); env.writer={owner}; delete state.writerActiveOverride; return structuredClone(env); },
+    async ForceReleaseRuntimeWriter(id){ record('ForceReleaseRuntimeWriter',[id]); const env=snapshotA.environments.find(e=>e.environment_id===id); env.writer=null; delete state.writerActiveOverride; if(state.overlappingWriter?.environment_id===id) delete state.overlappingWriter; return structuredClone(env); },
+    async GetRuntimeWriterDiagnostics(id){ record('GetRuntimeWriterDiagnostics',[id]); if(state.failWriterDiagnostics) throw new Error('diagnostics unavailable'); return {environment_id:id, overlapping_writers:state.overlappingWriter?[state.overlappingWriter]:[], active:state.writerActiveOverride ?? Boolean(snapshotA.environments.find(e=>e.environment_id===id)?.writer), attribution:id==='env-a'?'lease_observation':'none', owner_fingerprint:id==='env-a'?'writer-a':'', last_seen_at:'2026-09-12T04:00:00Z', expires_at:'2026-09-12T04:05:00Z', heartbeat_interval_seconds:30, heartbeat_sources:[], handoff_pending:id==='env-a'&&!state.noHandoff, pending_operations:id==='env-a'&&!state.noHandoff?[{environment_id:'env-old',kind:'run',host_pid:1234,started_at:'2026-09-12T04:00:00Z'}]:[], gateway_owner:{pid:0}}; },
     async GetMemoryHistory(id,key,revision){record('GetMemoryHistory',[id,key,revision]);const items=id?(environmentMemory[id]||[]):globalMemory;const e=items.find(x=>x.key===key);if(!e)throw new Error('not found');const versions=e.history||[];const current={revision:e.revision||0,value:e.value,metadata:e.metadata};return {current_revision:current.revision,versions:[current,...versions],selected:revision==null?undefined:[current,...versions].find(x=>x.revision===revision)};},
     async OrganizeMemory(id,changes,dryRun){record('OrganizeMemory',[id,changes,dryRun]);const items=id?(environmentMemory[id] ||= []):globalMemory;for(const c of changes){const e=items.find(x=>x.key===c.key);if((e?.value??null)!==c.expected_value||(c.expected_revision!=null&&(e?.revision||0)!==c.expected_revision))throw new Error('conflict');}if(!dryRun)for(const c of changes){let e=items.find(x=>x.key===c.key);if(c.value===null){if(e)items.splice(items.indexOf(e),1);continue;}if(e){(e.history ||= []).unshift({revision:e.revision||0,value:e.value,metadata:e.metadata});e.value=c.value;e.metadata=c.metadata||e.metadata;e.revision=(e.revision||0)+1;}else items.push({key:c.key,value:c.value,metadata:c.metadata,revision:1});}return {created:1,updated:0,deleted:0};},
     async ListMemoryTrash(id){record('ListMemoryTrash',[id]);return [];},
@@ -1231,6 +1234,43 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('runtimeWriterSummary').textContent==='写入交接中','Writer disclosure summarizes pending handoff');
     check(document.getElementById('runtimeScopeLabel').textContent.includes('Environment A')||document.getElementById('runtimeScopeLabel').textContent.includes('当前环境'),'Runtime explicitly labels selected scope');
     check(document.getElementById('runtimeWriterOwnerInput').type==='password','Writer credential is masked');
+    window.__fakeADM.state.noHandoff=true;
+    // Simulate a lease changing externally without a global snapshot refresh.
+    window.__fakeADM.state.writerActiveOverride=false;
+    document.getElementById('runtimeRefreshButton').click();
+    await waitFor(()=>document.getElementById('runtimeWriterDiagnostics').textContent.includes('没有锁占用'), 'Runtime displays live released lease despite stale active snapshot');
+    check(!document.getElementById('runtimeWriterForceReleaseButton').disabled && !document.getElementById('runtimeWriterTakeoverButton').disabled,'Admin recovery is available independently of stale lock status');
+    window.__fakeADM.state.writerActiveOverride=true;
+    document.getElementById('runtimeRefreshButton').click();
+    await waitFor(()=>document.getElementById('runtimeWriterDiagnostics').textContent.includes('Owner 指纹'), 'Runtime displays live active lease');
+    delete window.__fakeADM.state.writerActiveOverride;
+    const lockFixture=window.__fakeADM.snapshotA.environments.find(e=>e.environment_id==='env-a');
+    const originalWriter=lockFixture.writer;
+    lockFixture.writer=null;
+    document.getElementById('refreshButton').click();
+    await waitFor(()=>!document.getElementById('refreshButton').disabled && document.getElementById('runtimeWriterDiagnostics').textContent.includes('没有锁占用'), 'Snapshot confirms no Writer before external acquisition');
+    lockFixture.writer={owner:'external-agent-writer'};
+    document.getElementById('runtimeRefreshButton').click();
+    await waitFor(()=>document.getElementById('runtimeWriterDiagnostics').textContent.includes('Owner 指纹'), 'External Writer appears in Runtime despite stale unlocked snapshot');
+    check(!document.getElementById('runtimeWriterTakeoverButton').disabled && !document.getElementById('runtimeWriterForceReleaseButton').disabled,'External Writer can be managed immediately');
+    document.getElementById('runtimeWriterForceReleaseButton').click();
+    await waitFor(()=>window.__fakeADM.calls.some(c=>c.name==='ForceReleaseRuntimeWriter'&&c.args[0]==='env-a'), 'Admin force release reaches backend without owner');
+    await waitFor(()=>!document.getElementById('refreshButton').disabled && document.getElementById('runtimeWriterDiagnostics').textContent.includes('没有锁占用'), 'Force release refreshes lock state');
+    window.__fakeADM.state.overlappingWriter={environment_id:'env-b',name:'Environment B',root:'C:\\fixtures\\parent',expires_at:'2026-09-12T04:05:00Z'};
+    document.getElementById('runtimeRefreshButton').click();
+    await waitFor(()=>document.getElementById('runtimeWriterSummary').textContent==='重叠目录锁占用','Overlapping Writer visible when current Environment unlocked');
+    check(document.getElementById('runtimeWriterDiagnostics').textContent.includes('Environment B')&&!document.getElementById('runtimeWriterDiagnostics').textContent.includes('没有锁占用'),'Overlapping lock never reported as unblocked');
+    [...document.querySelectorAll('#runtimeWriterDiagnostics button')].find(b=>b.textContent==='强制释放该环境的锁').click();
+    await waitFor(()=>window.__fakeADM.calls.some(c=>c.name==='ForceReleaseRuntimeWriter'&&c.args[0]==='env-b'),'Admin releases exact blocking Environment');
+    await waitFor(()=>!document.getElementById('refreshButton').disabled&&document.getElementById('runtimeWriterDiagnostics').textContent.includes('没有锁占用'),'Overlap release refreshes diagnostics');
+    window.__fakeADM.state.failWriterDiagnostics=true;
+    document.getElementById('runtimeRefreshButton').click();
+    await waitFor(()=>document.getElementById('runtimeWriterSummary').textContent==='锁状态未知','Unavailable diagnostics are not mistaken for no lock');
+    check(!document.getElementById('runtimeWriterForceReleaseButton').disabled,'Admin recovery remains available when diagnostics fail');
+    window.__fakeADM.state.failWriterDiagnostics=false;
+    lockFixture.writer=originalWriter;
+    document.getElementById('runtimeRefreshButton').click();
+    await waitFor(()=>document.getElementById('runtimeWriterDiagnostics').textContent.includes('Owner 指纹'), 'Restore active fixture for remaining tests');
     const verifierAgentButton=document.querySelector('#verifierList button[data-action="toggle-verifier-agent"][data-id="verifier-a"]');
     check(verifierAgentButton && verifierAgentButton.textContent.includes('允许 AI 运行'), 'Verifier starts with Agent host execution disabled');
     const verifierAgentCalls=window.__fakeADM.calls.filter(c=>c.name==='SetVerifierAgentHostExecution').length;

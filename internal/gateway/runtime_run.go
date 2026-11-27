@@ -263,8 +263,9 @@ func (o *runtimeOwner) CancelAgentRun(environmentID, writerOwner, runID string) 
 
 func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 	_, err := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.writerLease)
+	cleanup := func() {}
 	if err == nil {
-		err = cmd.Start()
+		cleanup, err = runtimepkg.StartFiniteCommand(cmd)
 	} else {
 		o.requestAgentRunCancel(run, "writer_heartbeat_failed", err.Error())
 	}
@@ -279,6 +280,7 @@ func (o *runtimeOwner) executeAgentRun(run *ownedAgentRun, cmd *exec.Cmd) {
 		_ = o.service.RecordExecUsage(run.environmentID, run.executable, "run_start")
 		err = cmd.Wait()
 	}
+	cleanup()
 	stdout, stdoutTruncated := run.stdout.Snapshot()
 	stderr, stderrTruncated := run.stderr.Snapshot()
 	result := runtimepkg.CommandResult{ExitCode: 0, Stdout: stdout, Stderr: stderr}
