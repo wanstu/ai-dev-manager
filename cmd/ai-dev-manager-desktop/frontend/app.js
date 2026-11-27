@@ -944,10 +944,16 @@ function disabledRuntimeAction(button, reason = '') {
   wrapper.append(button, tooltip);
   return wrapper;
 }
+// Runtime lock controls use the live diagnostics, not the older global snapshot.
+function runtimeWriterActive(environment) {
+  if (!environment || runtimeWriterDiagnosticsError || runtimeWriterDiagnostics?.environment_id !== environment.environment_id) return null;
+  return typeof runtimeWriterDiagnostics.active === 'boolean' ? runtimeWriterDiagnostics.active : null;
+}
 function runtimeWriterActionDisabledReason(environment, writerOwner, pending) {
   if (pending) return '当前有 Runtime 操作正在执行，请等待完成后再操作。';
   if (!environment) return '尚未选择 Environment。';
-  if (!environment.writer) return '当前 Environment 没有 active Writer。先获取 Writer 后才能执行此操作。';
+  if (runtimeWriterActive(environment) === null) return '当前写锁状态未知，请刷新 Runtime。';
+  if (!runtimeWriterActive(environment)) return '当前环境没有活动写锁，请先获取写锁。';
   if (!writerOwner) return '当前 Environment 有 active Writer，但当前 Desktop 会话没有 Writer Owner。需要由持锁会话操作；如果这是残留锁，可在 Environment 详情中使用“强制释放锁”。';
   return '';
 }
@@ -2197,8 +2203,27 @@ function renderRuntimeWriterDiagnostics(environment) {
       row.append(title,info);container.append(row);
     }
   }
-  if(!environment.writer){
-    const message=document.createElement('div');message.textContent='当前没有 active Writer；没有锁占用。';container.append(message);return;
+  const overlaps = safeArray(diagnostics.overlapping_writers);
+  if (diagnostics.overlap_check_error) {
+    const error = document.createElement('div'); error.className = 'warning-text'; error.textContent = '重叠目录锁检查失败：' + diagnostics.overlap_check_error; container.append(error);
+  }
+  for (const lock of overlaps) {
+    const row = document.createElement('div'); row.className = 'runtime-writer-source';
+    const title = document.createElement('strong'); title.textContent = '重叠目录被锁定：' + (lock.name || lock.environment_id);
+    const detail = document.createElement('small'); detail.textContent = lock.root + ' · 到期 ' + writerDiagnosticTime(lock.expires_at);
+    const release = document.createElement('button'); release.className = 'danger-button small-button'; release.type = 'button'; release.textContent = '强制释放该环境的锁';
+    release.addEventListener('click', async () => {
+      const scope = captureEnvironmentScope();
+      if (!await confirmInApp('强制释放重叠环境的写锁？\n' + lock.root + '\n原会话写入权限将失效。常驻进程不停止。')) return;
+      if (!environmentScopeIsCurrent(scope)) return;
+      await runMutation('释放重叠环境写锁', () => desktopAdapter().ForceReleaseRuntimeWriter(lock.environment_id));
+    });
+    row.append(title, detail, release); container.append(row);
+  }
+  if(!diagnostics.active){
+    const message=document.createElement('div');
+    message.textContent=overlaps.length?'当前环境自身无锁，但重叠目录的锁阻止写入。':diagnostics.overlap_check_error||diagnostics.handoff_check_error?'当前环境自身无锁，但写入阻塞状态未知。':diagnostics.handoff_pending?'当前环境自身无锁，但旧任务仍阻止写入。':'当前没有 active Writer；没有锁占用。';
+    container.append(message);return;
   }
   const summary = document.createElement('div');
   summary.className = 'runtime-writer-summary';
@@ -2264,9 +2289,9 @@ function renderRuntimeWriterDiagnostics(environment) {
 function renderRuntime() {
   syncRuntimeSubviewUI();
   const environment = currentEnvironment(), writerOwner = runtimeWriterOwner(), pending = Boolean(runtimePendingActionKey);
-  const activeWriter = Boolean(environment?.writer), writerAuthorized = activeWriter && Boolean(writerOwner);
+  const activeWriter = runtimeWriterActive(environment), writerAuthorized = activeWriter === true && Boolean(writerOwner);
   document.getElementById('runtimeScopeLabel').textContent=environment?'当前环境 · '+environment.name:'当前连接 · 全部环境的进程';
-  document.getElementById('runtimeWriterSummary').textContent=!environment?'尚未选择环境':runtimeWriterDiagnostics?.handoff_pending?'写入交接中':activeWriter?'锁已占用':'无活动锁';
+  document.getElementById('runtimeWriterSummary').textContent=!environment?'尚未选择环境':runtimeWriterDiagnostics?.handoff_pending?'写入交接中':safeArray(runtimeWriterDiagnostics?.overlapping_writers).length?'重叠目录锁占用':runtimeWriterDiagnostics?.overlap_check_error||runtimeWriterDiagnostics?.handoff_check_error?'锁状态未知':activeWriter===null?'锁状态未知':activeWriter?'锁已占用':'无活动锁';
   document.getElementById('runtimeRefreshTime').textContent=Object.values(runtimeListStates).includes('loading')?'正在刷新…':runtimeLastRefreshAt?'最近读取 '+new Date(runtimeLastRefreshAt).toLocaleTimeString()+(Object.values(runtimeListStates).includes('error')?' · 部分不可用':''):'尚未读取运行状态';
   const writerActionDisabledReason = runtimeWriterActionDisabledReason(environment, writerOwner, pending);
   const writerSources = safeArray(runtimeWriterDiagnostics?.heartbeat_sources);
@@ -2276,15 +2301,17 @@ function renderRuntime() {
       ? `当前 Writer 关联 ${writerSourceLabel(writerSources[0])} ${writerSources[0].id || ''}${writerSources.length > 1 ? ` 等 ${writerSources.length} 个运行项` : ''}；运行任务不会自动续期，原始 owner 凭证保持隐藏。`
       : activeWriter
         ? '当前 Environment 有 active Writer；下方会显示租约时间和可归因的续租来源，原始 owner 凭证不会回显。'
-        : '当前 Environment 没有 active Writer；可查看 owner-local 状态与日志，也可以显式获取一个 Writer。';
+        : activeWriter === null ? '当前写锁状态未知，请刷新 Runtime；管理员恢复操作仍可用。' : safeArray(runtimeWriterDiagnostics?.overlapping_writers).length ? '当前环境无锁，但重叠目录被其他环境锁定。' : runtimeWriterDiagnostics?.handoff_pending ? '当前环境无锁，但旧任务仍在退出。' : '当前环境没有活动写锁；可查看运行状态或获取写锁。';
   if (elements.runtimeWriterOwnerInput && runtimeWriterCredential.environmentID === environment?.environment_id && document.activeElement !== elements.runtimeWriterOwnerInput) elements.runtimeWriterOwnerInput.value = runtimeWriterCredential.owner || '';
   elements.runtimeWriterOwnerInput.disabled = !environment || pending;
   elements.runtimeWriterAcquireButton.disabled = !environment || pending;
-  elements.runtimeWriterTakeoverButton.disabled = !activeWriter || pending;
-  document.getElementById('runtimeWriterForceReleaseButton').disabled = !activeWriter || pending;
+  elements.runtimeWriterAcquireButton.textContent = activeWriter && !writerOwner ? '获取锁（接管）' : activeWriter ? '续期我的锁' : '获取锁';
+  // Recovery is intentionally available even if a diagnostic request fails or the lease changes after refresh.
+  elements.runtimeWriterTakeoverButton.disabled = !environment || pending;
+  document.getElementById('runtimeWriterForceReleaseButton').disabled = !environment || pending;
   document.getElementById('startManagedProcessButton').disabled = !environment || pending;
   elements.runtimeWriterReleaseButton.disabled = !environment || pending || !writerAuthorized;
-  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : writerOwner ? '当前 Desktop 会话已保存 Writer authority；下方诊断仍只展示安全指纹和占用来源，不回显原始 owner。' : activeWriter ? '检测到 active Writer。下方显示当前锁及关联任务，任务不会自动续期；原始 owner 凭证保持隐藏。' : '当前没有 active Writer。Owner 留空点击“获取 / 续租 Writer”会为本 Desktop 会话生成一个新 owner。';
+  elements.runtimeWriterHint.textContent = !environment ? '选择 Environment 后管理 Writer。' : activeWriter === null ? '写锁状态未知。管理员仍可接管或强制释放。' : writerOwner && activeWriter ? '当前 Desktop 会话已保存 Writer authority；下方诊断仍只展示安全指纹和占用来源，不回显原始 owner。' : activeWriter ? '其他会话持有写锁。管理员可以直接接管或强制释放，无须知道原 owner；续期原会话才需要其凭证。' : safeArray(runtimeWriterDiagnostics?.overlapping_writers).length ? '当前环境无锁，但其他环境锁定了重叠目录。请管理下方实际占用的锁。' : runtimeWriterDiagnostics?.handoff_pending ? '旧任务正在退出，尚不能写入。' : '当前没有活动写锁。点击“获取锁”会自动生成会话凭证。';
   renderRuntimeWriterDiagnostics(environment);
 
   renderRuntimeListState('verifiers', '当前环境没有配置验证器', (verifiers, container) => {
@@ -4566,7 +4593,7 @@ elements.runtimeSubviewTabs.addEventListener('click', (event) => {
 elements.runtimeWriterAcquireButton.addEventListener('click', async () => {
   const environment = currentEnvironment(); if (!environment) return setStatus('请先选择 Management Environment。', 'error');
   let owner = String(elements.runtimeWriterOwnerInput.value || '').trim();
-  if (!owner && environment.writer) return setStatus('当前已有 active Writer，owner 已隐藏；必须由人类显式输入正确 owner 才能续租。', 'error');
+  if (!owner && runtimeWriterActive(environment) === true) { elements.runtimeWriterTakeoverButton.click(); return; }
   if (!owner) { owner = generatedDesktopWriterOwner(); elements.runtimeWriterOwnerInput.value = owner; }
   const environmentID = environment.environment_id;
   await runMutation('获取 / 续租 Writer', async () => {
@@ -4575,8 +4602,9 @@ elements.runtimeWriterAcquireButton.addEventListener('click', async () => {
   });
 });
 elements.runtimeWriterTakeoverButton.addEventListener('click', async () => {
-  const environment = currentEnvironment(); if (!environment?.writer) return;
+  const scope = captureEnvironmentScope(), environment = currentEnvironment(); if (!environment) return;
   if (!await confirmInApp('确定以管理员身份接管当前 Writer 锁？原会话的租约立即失效；常驻 Process 不停止，依赖旧租约的任务将在检测到授权失效后取消。')) return;
+  if (!environmentScopeIsCurrent(scope)) return;
   const environmentID = environment.environment_id;
   const owner = generatedDesktopWriterOwner();
   await runMutation('管理员接管 Writer', async () => {
@@ -4587,7 +4615,7 @@ elements.runtimeWriterTakeoverButton.addEventListener('click', async () => {
 });
 document.getElementById('runtimeWriterForceReleaseButton').addEventListener('click', async () => {
   const scope = captureEnvironmentScope();
-  if (!currentEnvironment()?.writer) return;
+  if (!currentEnvironment()) return;
   if (!await confirmInApp('强制释放当前 Writer 锁？常驻进程将继续运行；原租约授权的执行任务将被取消。')) return;
   if (!environmentScopeIsCurrent(scope)) return;
   await runMutation('强制释放 Writer', async () => {
@@ -4657,7 +4685,7 @@ elements.verifierList.addEventListener('click', async (event) => {
   }
   if (button.dataset.action !== 'run-verifier') return;
   const owner = runtimeWriterOwner();
-  if (!owner || !currentEnvironment()?.writer) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能运行 verifier。', 'error');
+  if (!owner || !runtimeWriterActive(currentEnvironment())) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能运行 verifier。', 'error');
   const result = await runRuntimeAction('运行 verifier', `verifier:${verifierID}`, scope, () => desktopAdapter().RunVerifier(environmentID, owner, verifierID));
   if (result && environmentScopeIsCurrent(scope) && runtimeSubview === 'verifiers' && runtimeSubviewGeneration === viewGeneration) {
     showRuntimeOutput('verifiers', verifierID, `Verifier ${verifierID} · ${result.status || 'unknown'}`, result.stdout || '', result.stderr || '', `${result.summary || ''}${result.exit_code !== undefined ? ` · exit ${result.exit_code}` : ''}`);
@@ -4695,7 +4723,7 @@ elements.runList.addEventListener('click', async (event) => {
     showRuntimeOutput('runs', run.id, `Run ${run.id} · ${run.state || 'unknown'}`, run.stdout || '', run.stderr || '', `${run.message || ''}${run.exit_code !== undefined && run.exit_code !== null ? ` · exit ${run.exit_code}` : ''}`, truncation); return;
   }
   if (button.dataset.action === 'cancel-run') {
-    const owner = runtimeWriterOwner(); if (!owner || !currentEnvironment()?.writer) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能取消 run。', 'error');
+    const owner = runtimeWriterOwner(); if (!owner || !runtimeWriterActive(currentEnvironment())) return setStatus('当前 Desktop 会话没有可用的 active Writer authority，不能取消 run。', 'error');
     await runRuntimeAction('取消 run', `cancel-run:${runID}`, scope, () => desktopAdapter().CancelRun(environmentID, owner, runID));
   }
 });

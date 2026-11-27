@@ -28,6 +28,10 @@ See `.planning/PROJECT.md`, `.planning/ROADMAP.md`, and `.planning/rebaseline/20
 
 **Explicit boundary:** ADM supplies capabilities, lifecycle, authorization and diagnostics. Agent/GSD supplies task planning/orchestration.
 
+## 2026-11-27 Writer recovery dogfood fix
+
+Bounded fix for repeated Windows Writer handoff blockage and stale Desktop lock displays; no new phase opened. See `docs/writer-handoff-barrier.md` for behavior, scope and regression evidence. Windows Gateway tests passed in groups, including real HTTP admin/agent write recovery. Do not advance the release branch before distribution acceptance.
+
 ## Current Position
 
 Phase: 24 — Desktop/CLI Surface Boundary Split

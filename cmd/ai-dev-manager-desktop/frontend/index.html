@@ -535,7 +535,7 @@
       <details class="runtime-lock-section" open><summary><strong>写入权限 · Writer 锁</strong><span id="runtimeWriterSummary">尚未选择环境</span><span>与常驻进程独立</span></summary><div class="runtime-writer-toolbar">
         <details class="writer-credential-disclosure"><summary>会话凭证（高级）</summary><label class="filter-field"><span>Writer owner</span><input id="runtimeWriterOwnerInput" type="password" autocomplete="off" spellcheck="false" placeholder="无锁时留空可自动生成"></label></details>
         <div class="gateway-actions"><button id="runtimeWriterAcquireButton" type="button" class="secondary-button small-button">获取 / 续期</button><button id="runtimeWriterTakeoverButton" type="button" class="secondary-button small-button">管理员接管</button><button id="runtimeWriterReleaseButton" type="button" class="secondary-button small-button">释放锁</button><button id="runtimeWriterForceReleaseButton" type="button" class="danger-button small-button">强制释放</button></div>
-        <p id="runtimeWriterHint" class="subpanel-note">服务端不会返回 Writer owner。若 Writer 已被其他会话持有，必须由人类提供正确 owner 才能续租或执行受保护操作。</p>
+        <p id="runtimeWriterHint" class="subpanel-note">管理员可直接接管或强制释放其他会话的写锁，无需原 owner。高级凭证仅用于续期已有会话。</p>
         <div id="runtimeWriterDiagnostics" class="runtime-writer-diagnostics empty">选择 Environment 后显示 Writer 占用来源。</div>
       </div></details>
       <div class="runtime-scope-summary"><span id="runtimeScopeLabel">当前连接 · 所有环境</span><span id="runtimeRefreshTime">尚未读取运行状态</span></div>

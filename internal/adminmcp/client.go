@@ -115,7 +115,16 @@ type PendingWriterOperation struct {
 	HostPID       int       `json:"host_pid"`
 	StartedAt     time.Time `json:"started_at"`
 }
+type OverlappingWriter struct {
+	EnvironmentID string    `json:"environment_id"`
+	Name          string    `json:"name"`
+	Root          string    `json:"root"`
+	ExpiresAt     time.Time `json:"expires_at"`
+}
+
 type WriterDiagnostics struct {
+	OverlappingWriters       []OverlappingWriter      `json:"overlapping_writers"`
+	OverlapCheckError        string                   `json:"overlap_check_error,omitempty"`
 	PendingOperations        []PendingWriterOperation `json:"pending_operations"`
 	HandoffPending           bool                     `json:"handoff_pending"`
 	HandoffCheckError        string                   `json:"handoff_check_error,omitempty"`

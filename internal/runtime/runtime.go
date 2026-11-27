@@ -520,8 +520,9 @@ func (r *Runtime) Exec(ctx context.Context, executable string, args []string, cw
 	stderr := &limitedBuffer{limit: maxOutputBytes}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	err = cmd.Start()
-	result := CommandResult{ExitCode: 0, Stdout: stdout.String(), Stderr: stderr.String()}
+	cleanup, err := StartFiniteCommand(cmd)
+	defer cleanup()
+	result := CommandResult{ExitCode: 0}
 	if err != nil {
 		return result, err
 	}

@@ -295,8 +295,9 @@ func (o *runtimeOwner) executeSandboxVerifierRun(run *ownedVerifierRun, maxOutpu
 func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) {
 	commandStarted := time.Now()
 	_, err := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease)
+	cleanup := func() {}
 	if err == nil {
-		err = cmd.Start()
+		cleanup, err = runtimepkg.StartFiniteCommand(cmd)
 	} else {
 		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", err.Error())
 	}
@@ -311,6 +312,7 @@ func (o *runtimeOwner) executeVerifierRun(run *ownedVerifierRun, cmd *exec.Cmd) 
 		_ = o.service.RecordExecUsage(run.environmentID, run.prepared.Definition.Executable, "verifier_async_start")
 		err = cmd.Wait()
 	}
+	cleanup()
 	if _, authorityErr := o.service.Environments.RequireWriterLease(run.environmentID, run.writerOwner, run.prepared.WriterLease); authorityErr != nil {
 		o.requestVerifierRunCancel(run, "writer_heartbeat_failed", authorityErr.Error())
 	}

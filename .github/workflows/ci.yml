@@ -431,6 +431,10 @@ jobs:
               baseline=v1.4.28
               baseline_asset="adm-desktop-$baseline-linux-amd64.deb"
             fi
+            if dpkg --compare-versions "${build_version#v}" gt 1.4.29; then
+              baseline=v1.4.29
+              baseline_asset="adm-desktop-$baseline-linux-amd64.deb"
+            fi
             sudo dpkg -r adm
             previous="$(mktemp -d)"
             gh release download "$baseline" --repo "$GITHUB_REPOSITORY" --dir "$previous" --pattern "$baseline_asset" --pattern "$baseline_asset.sha256"
