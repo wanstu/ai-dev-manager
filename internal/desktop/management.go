@@ -271,6 +271,13 @@ func (a *Adapter) SetStrongPermissionControl(enabled bool) (app.StrongPermission
 	return a.management.StrongPermissionControlSet(enabled)
 }
 
+func (a *Adapter) SetGlobalMemoryAgentWrite(enabled bool) (app.StrongPermissionControlStatus, error) {
+	if err := a.ready(); err != nil {
+		return app.StrongPermissionControlStatus{}, err
+	}
+	return a.management.GlobalMemoryAgentWriteSet(enabled)
+}
+
 func (a *Adapter) GetLoggingStatus() (logging.Status, error) {
 	if err := a.ready(); err != nil {
 		return logging.Status{}, err

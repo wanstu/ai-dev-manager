@@ -1823,6 +1823,13 @@ function renderStrongPermissionControlStatus(status) {
   strongPermissionControlStatus = status || null;
   const enabled = status?.enabled !== false;
   elements.strongPermissionControl.checked = enabled;
+  elements.strongPermissionControl.disabled = !status;
+  const memoryToggle = document.getElementById('globalMemoryAgentWrite');
+  memoryToggle.checked = status?.global_memory_agent_write_enabled === true;
+  memoryToggle.disabled = !status || typeof status.global_memory_agent_write_enabled !== 'boolean';
+  document.getElementById('globalMemoryAgentWriteHint').textContent = memoryToggle.disabled
+    ? '当前服务未报告记忆授权能力，请升级或重新连接。'
+    : (memoryToggle.checked ? '已授权：Agent 可以维护共享记忆，永久清除仍仅限管理员。' : '未授权：Agent 可读取全局记忆，并维护环境私有记忆。');
   elements.strongPermissionControlModeLabel.textContent = enabled ? '已开启 · 更安全' : '已关闭 · 更灵活';
   elements.strongPermissionControlHint.textContent = status?.message || (enabled
     ? '强权限已开启：受限操作会被拦截并明确说明原因，建议保持开启。'
@@ -1833,7 +1840,7 @@ async function refreshStrongPermissionControlStatus() {
     renderStrongPermissionControlStatus(await desktopAdapter().GetStrongPermissionControlStatus());
     return '';
   } catch (error) {
-    strongPermissionControlStatus = null;
+    renderStrongPermissionControlStatus(null);
     elements.strongPermissionControl.checked = true;
     elements.strongPermissionControl.disabled = true;
     elements.strongPermissionControlHint.textContent = '强权限状态读取失败：' + errorText(error);
@@ -1871,6 +1878,23 @@ async function saveStrongPermissionControl() {
     elements.strongPermissionControl.disabled = false;
   }
 }
+async function saveGlobalMemoryAgentWrite() {
+  const toggle = document.getElementById('globalMemoryAgentWrite');
+  const requested = toggle.checked;
+  toggle.disabled = true;
+  if (requested && !await confirmInApp('允许所有持有当前 Agent 凭证的客户端修改共享记忆，包括软删除及恢复历史。记忆不得用于存放密钥或改变权限。是否授权？', {title:'授权全局记忆管理？', confirmText:'确认授权', danger:true})) {
+    renderStrongPermissionControlStatus(strongPermissionControlStatus);
+    return;
+  }
+  try {
+    renderStrongPermissionControlStatus(await desktopAdapter().SetGlobalMemoryAgentWrite(requested));
+    setStatus(requested ? '已授权 Agent 管理全局记忆' : '已撤销 Agent 全局记忆管理授权', 'success');
+  } catch (error) {
+    await refreshStrongPermissionControlStatus();
+    setStatus('全局记忆授权设置失败：' + errorText(error), 'error');
+  }
+}
+document.getElementById('globalMemoryAgentWrite')?.addEventListener('change', saveGlobalMemoryAgentWrite);
 async function saveGatewayAllowedHosts() {
   const hosts = String(elements.gatewayAllowedHosts.value || '').split(/[\n,]+/).map((v) => v.trim()).filter(Boolean);
   const ips = String(elements.gatewayAllowedClientIPs.value || '').split(/[\n,]+/).map((v) => v.trim()).filter(Boolean);

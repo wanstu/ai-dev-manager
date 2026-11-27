@@ -96,6 +96,52 @@ func TestAgentMemoryHistoryRestoreAndDuplicateTools(t *testing.T) {
 	}
 }
 
+func TestAgentMemoryExplicitGlobalDelegation(t *testing.T) {
+	service := app.New(filepath.Join(t.TempDir(), "state.json"))
+	ctx := context.Background()
+	agent := connectInMemory(t, ctx, newCompactAgentServer(service, nil))
+	defer agent.Close()
+	admin := connectInMemory(t, ctx, NewAdmin(service))
+	defer admin.Close()
+	call := func(action string, args map[string]any, wantError bool) string {
+		t.Helper()
+		r := callGatewayTool(t, ctx, agent, "adm_memory", map[string]any{"action": action, "arguments": args})
+		if r.IsError != wantError {
+			t.Fatalf("%s error=%v: %s", action, r.IsError, toolText(t, r))
+		}
+		return toolText(t, r)
+	}
+	write := map[string]any{"key": "shared", "value": "first"}
+	call("global_write", write, true)
+	call("global_agent_write_set", map[string]any{"enabled": true}, true)
+	r := callGatewayTool(t, ctx, admin, "memory_global_agent_write_set", map[string]any{"enabled": true})
+	if r.IsError {
+		t.Fatal(toolText(t, r))
+	}
+	for _, strong := range []bool{true, false} {
+		if _, err := service.SetStrongPermissionControl(strong); err != nil {
+			t.Fatal(err)
+		}
+		call("global_write", write, false)
+		call("global_organize", map[string]any{"changes": []map[string]any{{"key": "shared", "expected_value": "first", "value": "second"}}}, false)
+		call("global_delete", map[string]any{"key": "shared"}, false)
+		call("global_purge", map[string]any{"key": "shared", "expected_revision": 3}, true)
+		call("global_write", write, false)
+	}
+	history, err := service.Memory.GlobalRead("shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	call("global_restore", map[string]any{"key": "shared", "revision": 2, "expected_revision": history.Revision}, false)
+	call("global_agent_write_set", map[string]any{"enabled": false}, true)
+	r = callGatewayTool(t, ctx, admin, "memory_global_agent_write_set", map[string]any{"enabled": false})
+	if r.IsError {
+		t.Fatal(toolText(t, r))
+	}
+	call("global_write", write, true)
+	call("global_delete", map[string]any{"key": "shared"}, true)
+}
+
 func TestAgentMemoryTrashAndPurgePermissions(t *testing.T) {
 	service := app.New(filepath.Join(t.TempDir(), "state.json"))
 	ws, err := service.Workspaces.Add(t.TempDir(), "trash")

@@ -100,6 +100,7 @@ const fakeBridge = String.raw`<script>
       record('GetStrongPermissionControlStatus',[]);
       return {
         enabled:state.strongPermissionEnabled,
+        global_memory_agent_write_enabled:state.globalMemoryAgentWriteEnabled===true,
         mode:state.strongPermissionEnabled?'strong':'v1.4.4_compatible',
         compatibility:state.strongPermissionEnabled?'current':'v1.4.4',
         default_enabled:true,
@@ -110,6 +111,11 @@ const fakeBridge = String.raw`<script>
     async SetStrongPermissionControl(enabled){
       record('SetStrongPermissionControl',[enabled]);
       state.strongPermissionEnabled=Boolean(enabled);
+      return this.GetStrongPermissionControlStatus();
+    },
+    async SetGlobalMemoryAgentWrite(enabled){
+      record('SetGlobalMemoryAgentWrite',[enabled]);
+      state.globalMemoryAgentWriteEnabled=Boolean(enabled);
       return this.GetStrongPermissionControlStatus();
     },
     async DiscoverWorkspace(id,input){
@@ -542,6 +548,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('managementContextPanel').hidden, 'Exec allowlist route hides Management Context');
     const strongToggle=document.getElementById('strongPermissionControl');
     check(strongToggle.checked && !strongToggle.disabled, 'Strong permission control starts enabled and interactive');
+    const memoryPermissionToggle=document.getElementById('globalMemoryAgentWrite');
+    check(!memoryPermissionToggle.checked && !memoryPermissionToggle.disabled, 'Global memory delegation defaults off and is independently configurable');
+    memoryPermissionToggle.checked=true;
+    memoryPermissionToggle.dispatchEvent(new Event('change',{bubbles:true}));
+    await waitFor(()=>window.__fakeADM.state.globalMemoryAgentWriteEnabled && !memoryPermissionToggle.disabled, 'Explicit global memory delegation persists');
+    check(strongToggle.checked, 'Global memory delegation leaves strong permission unchanged');
+    memoryPermissionToggle.checked=false;
+    memoryPermissionToggle.dispatchEvent(new Event('change',{bubbles:true}));
+    await waitFor(()=>!window.__fakeADM.state.globalMemoryAgentWriteEnabled && !memoryPermissionToggle.disabled, 'Global memory delegation revocation persists');
     const strongSetCallsBefore=window.__fakeADM.calls.filter(c=>c.name==='SetStrongPermissionControl').length;
     window.__fakeADM.state.autoConfirmInApp=false;
     strongToggle.checked=false;

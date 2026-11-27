@@ -744,6 +744,8 @@ func addScopedTool[In, Out any](server *mcp.Server, surface serverSurface, servi
 			tool.Description += " Agent permission note: this tool remains visible for discoverability, but invocation requires the Admin surface in both strong and v1.4.4-compatible modes."
 		case agentToolPermissionStrongOnly:
 			tool.Description += " Agent permission note: this tool remains visible. It is blocked while Strong Permission Control is enabled and becomes callable in v1.4.4-compatible relaxed mode."
+		case agentToolPermissionDelegatedMemory:
+			tool.Description += " Agent permission note: requires explicit Admin delegation of reversible shared memory management. Default denied; independent of host execution settings."
 		}
 	}
 
@@ -755,7 +757,7 @@ func addScopedTool[In, Out any](server *mcp.Server, surface serverSurface, servi
 				var zero Out
 				return nil, zero, fmt.Errorf("ADM permission check failed for tool %q; strong permission state could not be read, so the Agent request was denied fail-closed: %w", tool.Name, err)
 			}
-			if permissionClass == agentToolPermissionAdminOnly || status.Enabled {
+			if permissionClass == agentToolPermissionAdminOnly || (permissionClass == agentToolPermissionStrongOnly && status.Enabled) || (permissionClass == agentToolPermissionDelegatedMemory && !status.GlobalMemoryAgentWriteEnabled) {
 				var zero Out
 				return nil, zero, agentToolPermissionError(tool.Name, permissionClass, status)
 			}
@@ -768,12 +770,16 @@ func addScopedTool[In, Out any](server *mcp.Server, surface serverSurface, servi
 type agentToolPermissionClass string
 
 const (
-	agentToolPermissionAllowed    agentToolPermissionClass = ""
-	agentToolPermissionAdminOnly  agentToolPermissionClass = "admin_only"
-	agentToolPermissionStrongOnly agentToolPermissionClass = "blocked_by_strong_permission_control"
+	agentToolPermissionAllowed         agentToolPermissionClass = ""
+	agentToolPermissionAdminOnly       agentToolPermissionClass = "admin_only"
+	agentToolPermissionStrongOnly      agentToolPermissionClass = "blocked_by_strong_permission_control"
+	agentToolPermissionDelegatedMemory agentToolPermissionClass = "admin_delegated_global_memory"
 )
 
 func agentToolPermissionError(toolName string, permissionClass agentToolPermissionClass, status app.StrongPermissionControlStatus) error {
+	if permissionClass == agentToolPermissionDelegatedMemory {
+		return fmt.Errorf("ADM permission denied for tool %q: requires explicit shared memory delegation from the Admin surface. The administrator may grant or revoke reversible global memory management in ADM settings.", toolName)
+	}
 	if permissionClass == agentToolPermissionAdminOnly {
 		return fmt.Errorf("ADM permission denied for tool %q: the tool is intentionally visible to the Agent so it can understand available capabilities, but this operation requires the Admin surface. Strong Permission Control is %s. Use the Desktop/Web admin UI or /admin/mcp for this operation; the Agent must not attempt to bypass the Admin boundary", toolName, onOff(status.Enabled))
 	}
@@ -836,6 +842,8 @@ func agentToolPermission(name string) agentToolPermissionClass {
 		return agentToolPermissionAdminOnly
 	}
 	switch name {
+	case "memory_global_write", "memory_global_delete", "memory_global_organize", "memory_global_restore":
+		return agentToolPermissionDelegatedMemory
 	case "global_exec", "global_mcp_status", "global_mcp_tools", "global_mcp_call", "global_skill_list", "global_skill_files", "global_skill_read",
 		"process_start", "environment_temporary_cleanup", "environment_worktree_destroy", "git_tag_delete":
 		return agentToolPermissionStrongOnly
@@ -856,7 +864,7 @@ func isV144AdminOnlyTool(name string) bool {
 		"skill_list", "skill_add", "skill_remove", "skill_set_default", "skill_availability_list", "skill_source_list", "skill_source_add", "skill_source_update", "skill_source_refresh", "skill_source_remove",
 		"environment_skill_set",
 		"resource_retention_inspect", "resource_retention_cleanup", "resource_retention_mark_temporary", "resource_retention_promote",
-		"memory_global_write", "memory_global_delete", "memory_global_organize", "memory_global_restore", "memory_global_purge", "memory_environment_purge",
+		"memory_global_agent_write_set", "memory_global_purge", "memory_environment_purge",
 		"strong_permission_control_set":
 		return true
 	default:
@@ -1897,6 +1905,11 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			return toolResult(content, err)
 		})
 
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_agent_write_set", Description: "Admin-only: explicitly grant or revoke Agent reversible global memory management. Does not grant permanent purge, host execution, or any other administrative permission."},
+		func(_ context.Context, _ *mcp.CallToolRequest, in StrongPermissionControlInput) (*mcp.CallToolResult, any, error) {
+			status, err := service.SetGlobalMemoryAgentWrite(in.Enabled)
+			return toolResult(status, err)
+		})
 	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_trash", Description: "List deleted shared memory keys and recoverable revisions."}, func(context.Context, *mcp.CallToolRequest, EmptyInput) (*mcp.CallToolResult, any, error) {
 		result, err := service.Memory.Trash("", true)
 		return toolResult(result, err)
@@ -1921,7 +1934,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 		result, err := service.Memory.History(in.EnvironmentID, false, in.Key, in.Revision)
 		return toolResult(result, err)
 	})
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_restore", Description: "Admin-only: restore an earlier memory revision as a new revision; expected_revision guards against concurrent changes."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryRestoreInput) (*mcp.CallToolResult, any, error) {
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_restore", Description: "Restore an earlier memory revision as a new revision; expected_revision guards against concurrent changes."}, func(_ context.Context, _ *mcp.CallToolRequest, in MemoryRestoreInput) (*mcp.CallToolResult, any, error) {
 		result, err := service.Memory.Restore("", true, in.Key, in.Revision, in.ExpectedRevision)
 		return toolResult(result, err)
 	})
@@ -1974,7 +1987,7 @@ func newServerForSurface(service *app.Service, owner *runtimeOwner, surface serv
 			items, err := service.Memory.GlobalSearch(in.Query, in.Limit, in.MaxOutputBytes)
 			return toolResult(items, err)
 		})
-	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_organize", Description: "Admin-only atomic create/update/delete/merge/rename of shared memory. Each change supplies key, expected_value (null means absent), value (null means delete). Dry-run first; all changes fail on any conflict."},
+	addScopedTool(server, surface, service, &mcp.Tool{Name: "memory_global_organize", Description: "Atomic create/update/delete/merge/rename of shared memory. Each change supplies key, expected_value (null means absent), value (null means delete). Dry-run first; all changes fail on any conflict."},
 		func(_ context.Context, _ *mcp.CallToolRequest, in MemoryOrganizeInput) (*mcp.CallToolResult, any, error) {
 			result, err := service.Memory.GlobalOrganize(in.Changes, in.DryRun)
 			return toolResult(result, err)

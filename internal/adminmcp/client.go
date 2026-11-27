@@ -331,6 +331,10 @@ func (c *Client) StrongPermissionControlSet(enabled bool) (app.StrongPermissionC
 	return callAdmin[app.StrongPermissionControlStatus](c, context.Background(), "strong_permission_control_set", map[string]any{"enabled": enabled})
 }
 
+func (c *Client) GlobalMemoryAgentWriteSet(enabled bool) (app.StrongPermissionControlStatus, error) {
+	return callAdmin[app.StrongPermissionControlStatus](c, context.Background(), "memory_global_agent_write_set", map[string]any{"enabled": enabled})
+}
+
 func (c *Client) Snapshot() (management.Snapshot, error) {
 	return callAdmin[management.Snapshot](c, context.Background(), "management_snapshot", map[string]any{})
 }

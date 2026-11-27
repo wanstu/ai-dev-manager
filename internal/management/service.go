@@ -200,6 +200,10 @@ func (s *Service) StrongPermissionControlSet(enabled bool) (app.StrongPermission
 	return s.app.SetStrongPermissionControl(enabled)
 }
 
+func (s *Service) GlobalMemoryAgentWriteSet(enabled bool) (app.StrongPermissionControlStatus, error) {
+	return s.app.SetGlobalMemoryAgentWrite(enabled)
+}
+
 func (s *Service) LoggingStatus() (logging.Status, error) {
 	return s.app.LoggingStatus(), nil
 }
