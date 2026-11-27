@@ -280,11 +280,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.__fakeADM.state.failProcesses=false;
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
-    window.dispatchEvent(new Event('focus'));
-    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='EnableSandboxHostPreparation'), 'focused Desktop detects legacy Host Prep without ACL broker and triggers repair');
-    check(window.__fakeADM.confirmations.filter(message=>message.includes('ACL broker 未运行')).length===1, 'sandbox broker migration asks once before administrator repair');
-    await waitFor(() => window.__fakeADM.state.sandboxBrokerReady && document.getElementById('sandboxHostPreparationBadge').textContent==='已启用', 'sandbox broker repair reaches verified ready state');
-    check(window.__fakeADM.calls.filter(c=>c.name==='EnableSandboxHostPreparation').length===1, 'sandbox broker migration repair runs exactly once after focus');
+    const sandboxConfirmCount = window.__fakeADM.confirmations.length;
+    for (const enabled of [false, true]) {
+      window.__fakeADM.state.strongPermissionEnabled = enabled;
+      const before = window.__fakeADM.calls.filter(c=>c.name==='GetSandboxHostPreparationStatus').length;
+      window.dispatchEvent(new Event('focus'));
+      await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='GetSandboxHostPreparationStatus').length > before, 'focus refreshes sandbox status');
+      await sleep();
+      check(window.__fakeADM.confirmations.length===sandboxConfirmCount, 'focus never opens sandbox repair modal (strong permission '+enabled+')');
+      check(!window.__fakeADM.calls.some(c=>c.name==='EnableSandboxHostPreparation'), 'focus never invokes elevated repair (strong permission '+enabled+')');
+    }
+    await waitFor(() => document.getElementById('sandboxHostPreparationBadge').textContent.includes('需修复'), 'missing broker remains visible as passive status');
+    document.getElementById('sandboxHostPreparationEnable').click();
+    await waitFor(() => window.__fakeADM.state.sandboxBrokerReady && document.getElementById('sandboxHostPreparationBadge').textContent==='已启用', 'explicit sandbox repair reaches verified ready state');
+    check(window.__fakeADM.confirmations.length===sandboxConfirmCount+1, 'explicit repair requires confirmation');
+    check(window.__fakeADM.calls.filter(c=>c.name==='EnableSandboxHostPreparation').length===1, 'only explicit repair invokes administrator setup');
     window.dispatchEvent(new Event('focus')); await sleep();
     check(window.__fakeADM.calls.filter(c=>c.name==='EnableSandboxHostPreparation').length===1, 'sandbox broker repair is not repeated after recovery');
 

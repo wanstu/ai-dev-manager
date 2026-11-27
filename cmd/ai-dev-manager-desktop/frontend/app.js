@@ -1481,8 +1481,6 @@ async function updateLaunchAtLogin() {
     elements.launchAtLogin.disabled = false;
   }
 }
-let sandboxHostRepairPrompted = false;
-
 function sandboxHostPreparationNeedsRepair(status) {
   return Boolean(
     status?.supported &&
@@ -1521,7 +1519,7 @@ function renderSandboxHostPreparation(status) {
   }
   if (brokerMissing) {
     const detail = status?.message ? ` ${status.message}` : '';
-    elements.sandboxHostPreparationSummary.textContent = `检测到强沙盒基础能力已存在，但 ACL broker 未运行。需要重新安装一次受保护的 Host Prep 任务。${detail}`;
+    elements.sandboxHostPreparationSummary.textContent = `检测到强沙盒基础能力已存在，但 ACL broker 未运行。仅在需要使用 Windows 强沙盒时，才需手动修复受保护的 Host Prep 任务。普通宿主模式无需修复。${detail}`;
     return;
   }
   if (configured) {
@@ -1534,13 +1532,12 @@ function renderSandboxHostPreparation(status) {
   }
   elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒尚未启用。启用时只需要一次 Windows 管理员确认。';
 }
-async function loadSandboxHostPreparation(showMessage = false, offerRepair = false) {
+async function loadSandboxHostPreparation(showMessage = false) {
   elements.sandboxHostPreparationRefresh.disabled = true;
   try {
     const status = await desktopAdapter().GetSandboxHostPreparationStatus();
     renderSandboxHostPreparation(status);
     if (showMessage) setStatus('强沙盒状态已刷新', 'success');
-    if (offerRepair) await maybeOfferSandboxHostRepair(status);
     return status;
   } catch (error) {
     elements.sandboxHostPreparationBadge.dataset.state = 'unconfigured';
@@ -1554,28 +1551,15 @@ async function loadSandboxHostPreparation(showMessage = false, offerRepair = fal
   }
 }
 
-async function maybeOfferSandboxHostRepair(status) {
-  if (sandboxHostRepairPrompted || !sandboxHostPreparationNeedsRepair(status)) return;
-  sandboxHostRepairPrompted = true;
-  const confirmed = await confirmInApp('检测到 Windows 强沙盒的 ACL broker 未运行。这通常发生在升级后受保护的 Host Prep 任务仍是旧版本。现在修复？\n\n修复只会更新强沙盒 Host Prep，并需要一次 Windows 管理员确认；不会给 Agent 管理员权限。');
-  if (!confirmed) {
-    setStatus('Windows 强沙盒需要修复；可在“设置”中点击“修复强沙盒”重新执行。', 'error');
-    return;
-  }
-  await enableSandboxHostPreparation({skipConfirm: true, repair: true});
-}
-
-async function enableSandboxHostPreparation(options = {}) {
+async function enableSandboxHostPreparation() {
   if (elements.sandboxHostPreparationEnable.disabled) return;
-  let repair = Boolean(options?.repair);
-  if (!repair) {
-    try {
-      repair = sandboxHostPreparationNeedsRepair(await desktopAdapter().GetSandboxHostPreparationStatus());
-    } catch (_) {
-      repair = false;
-    }
+  let repair = false;
+  try {
+    repair = sandboxHostPreparationNeedsRepair(await desktopAdapter().GetSandboxHostPreparationStatus());
+  } catch (_) {
+    repair = false;
   }
-  if (!options?.skipConfirm && !await confirmInApp(repair
+  if (!await confirmInApp(repair
     ? '修复 Windows 强沙盒需要一次管理员确认，用来更新受保护的 Host Prep 任务并启动 ACL broker。不会给 Agent 开放管理员权限。继续？'
     : '这一步需要一次 Windows 管理员确认，用来保证强沙盒在电脑重启后仍然自动可用。不会给 Agent 开放管理员权限。继续？')) return;
   elements.sandboxHostPreparationEnable.disabled = true;
@@ -5236,7 +5220,7 @@ elements.desktopThemeGradientPresetName?.addEventListener('keydown', (event) => 
   }
 });
 elements.desktopThemeRefreshButton.addEventListener('click', refreshDesktopThemeCatalog);
-window.addEventListener('focus', () => { loadDesktopPreferences(false); loadSandboxHostPreparation(false, true); });
+window.addEventListener('focus', () => { loadDesktopPreferences(false); loadSandboxHostPreparation(false); });
 window.addEventListener('keydown', (event) => { if (event.key !== 'Escape' || activeEditorDialog()) return; if (selectedEnvironmentID) closeEnvironmentDetail(); else if (editingMCPID) resetMCPEditor(true); });
 elements.gatewayAccessSaveHosts.addEventListener('click', saveGatewayAllowedHosts);
 elements.gatewayDiagnosticsCopyButton.addEventListener('click', copyGatewayDiagnosticsReport);
