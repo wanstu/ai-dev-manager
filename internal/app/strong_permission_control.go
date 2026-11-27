@@ -3,32 +3,35 @@ package app
 import "ai-dev-manager-v2/internal/model"
 
 type StrongPermissionControlStatus struct {
-	Enabled           bool   `json:"enabled"`
-	Mode              string `json:"mode"`
-	Compatibility     string `json:"compatibility"`
-	DefaultEnabled    bool   `json:"default_enabled"`
-	RequiresReconnect bool   `json:"requires_reconnect"`
-	Message           string `json:"message"`
+	Enabled                       bool   `json:"enabled"`
+	GlobalMemoryAgentWriteEnabled bool   `json:"global_memory_agent_write_enabled"`
+	Mode                          string `json:"mode"`
+	Compatibility                 string `json:"compatibility"`
+	DefaultEnabled                bool   `json:"default_enabled"`
+	RequiresReconnect             bool   `json:"requires_reconnect"`
+	Message                       string `json:"message"`
 }
 
-func strongPermissionControlStatus(disabled bool) StrongPermissionControlStatus {
+func strongPermissionControlStatus(disabled, globalMemoryAgentWriteEnabled bool) StrongPermissionControlStatus {
 	if disabled {
 		return StrongPermissionControlStatus{
-			Enabled:           false,
-			Mode:              "v1.4.4_compatible",
-			Compatibility:     "v1.4.4",
-			DefaultEnabled:    true,
-			RequiresReconnect: false,
-			Message:           "强权限控制已关闭；Agent 可以使用更多宿主机能力，开发操作更灵活但风险更高。工具仍全部可见，Admin、密钥和 Secret 等管理权限仍保持隔离。",
+			Enabled:                       false,
+			GlobalMemoryAgentWriteEnabled: globalMemoryAgentWriteEnabled,
+			Mode:                          "v1.4.4_compatible",
+			Compatibility:                 "v1.4.4",
+			DefaultEnabled:                true,
+			RequiresReconnect:             false,
+			Message:                       "强权限控制已关闭；Agent 可以使用更多宿主机能力，开发操作更灵活但风险更高。工具仍全部可见，Admin、密钥和 Secret 等管理权限仍保持隔离。",
 		}
 	}
 	return StrongPermissionControlStatus{
-		Enabled:           true,
-		Mode:              "strong",
-		Compatibility:     "current",
-		DefaultEnabled:    true,
-		RequiresReconnect: false,
-		Message:           "强权限控制已开启；Agent 工具全部可见，受限操作会被拦截并返回明确原因和操作建议。建议保持开启。",
+		Enabled:                       true,
+		GlobalMemoryAgentWriteEnabled: globalMemoryAgentWriteEnabled,
+		Mode:                          "strong",
+		Compatibility:                 "current",
+		DefaultEnabled:                true,
+		RequiresReconnect:             false,
+		Message:                       "强权限控制已开启；Agent 工具全部可见，受限操作会被拦截并返回明确原因和操作建议。建议保持开启。",
 	}
 }
 
@@ -37,7 +40,7 @@ func (s *Service) StrongPermissionControlStatus() (StrongPermissionControlStatus
 	if err != nil {
 		return StrongPermissionControlStatus{}, err
 	}
-	return strongPermissionControlStatus(state.StrongPermissionControlDisabled), nil
+	return strongPermissionControlStatus(state.StrongPermissionControlDisabled, state.GlobalMemoryAgentWriteEnabled), nil
 }
 
 func (s *Service) StrongPermissionControlEnabled() (bool, error) {
@@ -55,5 +58,16 @@ func (s *Service) SetStrongPermissionControl(enabled bool) (StrongPermissionCont
 	}); err != nil {
 		return StrongPermissionControlStatus{}, err
 	}
-	return strongPermissionControlStatus(!enabled), nil
+	return s.StrongPermissionControlStatus()
+}
+
+// SetGlobalMemoryAgentWrite is an explicit administrator delegation independent of host execution mode.
+func (s *Service) SetGlobalMemoryAgentWrite(enabled bool) (StrongPermissionControlStatus, error) {
+	if err := s.Store.Update(func(state *model.State) error {
+		state.GlobalMemoryAgentWriteEnabled = enabled
+		return nil
+	}); err != nil {
+		return StrongPermissionControlStatus{}, err
+	}
+	return s.StrongPermissionControlStatus()
 }

@@ -100,6 +100,7 @@ const fakeBridge = String.raw`<script>
       record('GetStrongPermissionControlStatus',[]);
       return {
         enabled:state.strongPermissionEnabled,
+        global_memory_agent_write_enabled:state.globalMemoryAgentWriteEnabled===true,
         mode:state.strongPermissionEnabled?'strong':'v1.4.4_compatible',
         compatibility:state.strongPermissionEnabled?'current':'v1.4.4',
         default_enabled:true,
@@ -110,6 +111,11 @@ const fakeBridge = String.raw`<script>
     async SetStrongPermissionControl(enabled){
       record('SetStrongPermissionControl',[enabled]);
       state.strongPermissionEnabled=Boolean(enabled);
+      return this.GetStrongPermissionControlStatus();
+    },
+    async SetGlobalMemoryAgentWrite(enabled){
+      record('SetGlobalMemoryAgentWrite',[enabled]);
+      state.globalMemoryAgentWriteEnabled=Boolean(enabled);
       return this.GetStrongPermissionControlStatus();
     },
     async DiscoverWorkspace(id,input){
@@ -280,11 +286,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.__fakeADM.state.failProcesses=false;
     check(window.__fakeADM.calls.some(c=>c.name==='StartLocalADM'), 'startup profile can start local ADM Service with Desktop');
     check(document.querySelectorAll('[data-management-page]:not([hidden])').length===1, 'exactly one page initially visible');
-    window.dispatchEvent(new Event('focus'));
-    await waitFor(() => window.__fakeADM.calls.some(c=>c.name==='EnableSandboxHostPreparation'), 'focused Desktop detects legacy Host Prep without ACL broker and triggers repair');
-    check(window.__fakeADM.confirmations.filter(message=>message.includes('ACL broker 未运行')).length===1, 'sandbox broker migration asks once before administrator repair');
-    await waitFor(() => window.__fakeADM.state.sandboxBrokerReady && document.getElementById('sandboxHostPreparationBadge').textContent==='已启用', 'sandbox broker repair reaches verified ready state');
-    check(window.__fakeADM.calls.filter(c=>c.name==='EnableSandboxHostPreparation').length===1, 'sandbox broker migration repair runs exactly once after focus');
+    const sandboxConfirmCount = window.__fakeADM.confirmations.length;
+    for (const enabled of [false, true]) {
+      window.__fakeADM.state.strongPermissionEnabled = enabled;
+      const before = window.__fakeADM.calls.filter(c=>c.name==='GetSandboxHostPreparationStatus').length;
+      window.dispatchEvent(new Event('focus'));
+      await waitFor(() => window.__fakeADM.calls.filter(c=>c.name==='GetSandboxHostPreparationStatus').length > before, 'focus refreshes sandbox status');
+      await sleep();
+      check(window.__fakeADM.confirmations.length===sandboxConfirmCount, 'focus never opens sandbox repair modal (strong permission '+enabled+')');
+      check(!window.__fakeADM.calls.some(c=>c.name==='EnableSandboxHostPreparation'), 'focus never invokes elevated repair (strong permission '+enabled+')');
+    }
+    await waitFor(() => document.getElementById('sandboxHostPreparationBadge').textContent.includes('需修复'), 'missing broker remains visible as passive status');
+    document.getElementById('sandboxHostPreparationEnable').click();
+    await waitFor(() => window.__fakeADM.state.sandboxBrokerReady && document.getElementById('sandboxHostPreparationBadge').textContent==='已启用', 'explicit sandbox repair reaches verified ready state');
+    check(window.__fakeADM.confirmations.length===sandboxConfirmCount+1, 'explicit repair requires confirmation');
+    check(window.__fakeADM.calls.filter(c=>c.name==='EnableSandboxHostPreparation').length===1, 'only explicit repair invokes administrator setup');
     window.dispatchEvent(new Event('focus')); await sleep();
     check(window.__fakeADM.calls.filter(c=>c.name==='EnableSandboxHostPreparation').length===1, 'sandbox broker repair is not repeated after recovery');
 
@@ -532,6 +548,15 @@ window.addEventListener('DOMContentLoaded', async () => {
     check(document.getElementById('managementContextPanel').hidden, 'Exec allowlist route hides Management Context');
     const strongToggle=document.getElementById('strongPermissionControl');
     check(strongToggle.checked && !strongToggle.disabled, 'Strong permission control starts enabled and interactive');
+    const memoryPermissionToggle=document.getElementById('globalMemoryAgentWrite');
+    check(!memoryPermissionToggle.checked && !memoryPermissionToggle.disabled, 'Global memory delegation defaults off and is independently configurable');
+    memoryPermissionToggle.checked=true;
+    memoryPermissionToggle.dispatchEvent(new Event('change',{bubbles:true}));
+    await waitFor(()=>window.__fakeADM.state.globalMemoryAgentWriteEnabled && !memoryPermissionToggle.disabled, 'Explicit global memory delegation persists');
+    check(strongToggle.checked, 'Global memory delegation leaves strong permission unchanged');
+    memoryPermissionToggle.checked=false;
+    memoryPermissionToggle.dispatchEvent(new Event('change',{bubbles:true}));
+    await waitFor(()=>!window.__fakeADM.state.globalMemoryAgentWriteEnabled && !memoryPermissionToggle.disabled, 'Global memory delegation revocation persists');
     const strongSetCallsBefore=window.__fakeADM.calls.filter(c=>c.name==='SetStrongPermissionControl').length;
     window.__fakeADM.state.autoConfirmInApp=false;
     strongToggle.checked=false;

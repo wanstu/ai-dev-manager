@@ -382,6 +382,11 @@ func (h *webManagementHandler) dispatch(ctx context.Context, call webCallRequest
 			return nil, err
 		}
 		return h.app.SetStrongPermissionControl(b1)
+	case "SetGlobalMemoryAgentWrite":
+		if err := arg(0, &b1); err != nil {
+			return nil, err
+		}
+		return h.app.SetGlobalMemoryAgentWrite(b1)
 	case "ListSkillSources":
 		return h.management.SkillSourceList()
 	case "ListSkillAvailability":

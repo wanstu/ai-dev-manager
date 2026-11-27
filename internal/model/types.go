@@ -201,6 +201,7 @@ type State struct {
 	BlockedExecutables              []string                           `json:"blocked_executables,omitempty"`
 	ExecFullAuthorization           bool                               `json:"exec_full_authorization,omitempty"`
 	StrongPermissionControlDisabled bool                               `json:"strong_permission_control_disabled,omitempty"`
+	GlobalMemoryAgentWriteEnabled   bool                               `json:"global_memory_agent_write_enabled,omitempty"`
 	AutoIndexEnvironmentIDs         []string                           `json:"auto_index_environment_ids,omitempty"`
 	ExecDenials                     []ExecDenial                       `json:"exec_denials,omitempty"`
 	ExecUsages                      []ExecUsage                        `json:"exec_usages,omitempty"`

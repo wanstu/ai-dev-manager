@@ -26,7 +26,8 @@ function confirmInApp(message, options = {}) {
  if (!dialog || !title || !body || !confirmButton || typeof dialog.showModal !== 'function') {
   return Promise.resolve(false);
  }
- if (dialog.open) dialog.close('cancel');
+ // Never replace a pending confirmation with another operation.
+ if (dialog.open || dialog.dataset.confirmationPending === 'true') return Promise.resolve(false);
  dialog.returnValue = '';
  title.textContent = String(options.title || '确认操作');
  body.textContent = String(message || '');
@@ -34,11 +35,38 @@ function confirmInApp(message, options = {}) {
  confirmButton.classList.toggle('danger-button', options.danger !== false);
  dialogOpeners.set(dialog, document.activeElement);
  document.body.classList.add('has-editor-dialog');
+ dialog.dataset.confirmationPending = 'true';
  return new Promise((resolve) => {
-  const onClose = () => resolve(dialog.returnValue === 'confirm');
-  dialog.addEventListener('close', onClose, {once:true});
-  dialog.showModal();
-  confirmButton.focus({preventScroll:true});
+  const finish = (accepted) => {
+   if (dialog.dataset.confirmationPending !== 'true') return;
+   delete dialog.dataset.confirmationPending;
+   dialog.removeEventListener('submit', onSubmit);
+   dialog.removeEventListener('cancel', onCancel);
+   dialog.removeEventListener('close', onClose);
+   if (dialog.open) dialog.close(accepted ? 'confirm' : 'cancel');
+   resolve(accepted);
+  };
+  const onSubmit = (event) => {
+   event.preventDefault();
+   finish(event.submitter === confirmButton);
+  };
+  const onCancel = (event) => {
+   event.preventDefault();
+   finish(false);
+  };
+  const onClose = () => {
+   // A queued close event for an earlier dialog must not resolve a new one.
+   if (!dialog.open) finish(dialog.returnValue === 'confirm');
+  };
+  dialog.addEventListener('submit', onSubmit);
+  dialog.addEventListener('cancel', onCancel);
+  dialog.addEventListener('close', onClose);
+  try {
+   dialog.showModal();
+   confirmButton.focus({preventScroll:true});
+  } catch (_) {
+   finish(false);
+  }
  });
 }
 document.addEventListener('click', (event) => {

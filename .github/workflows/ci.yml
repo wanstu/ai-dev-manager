@@ -175,10 +175,13 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: go vet ./...
 
-      - name: Browser acceptance for Windows Desktop updater
+      - name: Browser acceptance for Windows Desktop management and updater
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         shell: pwsh
         run: |
+          Remove-Item Env:ADM_UI_SMOKE_FOCUS -ErrorAction SilentlyContinue
+          node tests/desktop-ui/browser-smoke.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:ADM_UI_SMOKE_FOCUS = 'updater'
           node tests/desktop-ui/browser-smoke.cjs
           $env:ADM_UI_SMOKE_FOCUS = 'updater-web'
@@ -419,15 +422,21 @@ jobs:
           echo "Installed CLI version: $installed_version; expected $build_version"
           test "$installed_version" = "$build_version"
           dpkg -s adm | grep -Fx 'Status: install ok installed'
-          # v1.4.27 Desktop DEB was published under the old adm-* asset name.
           # Test a real upgrade on the disposable runner, not the user's host.
-          if [[ "$build_version" == 'v1.4.28' ]]; then
+          # v1.4.28 changed the published Desktop DEB asset prefix.
+          if [[ "$build_version" == v* ]] && dpkg --compare-versions "${build_version#v}" gt 1.4.27; then
+            baseline=v1.4.27
+            baseline_asset="adm-$baseline-linux-amd64.deb"
+            if dpkg --compare-versions "${build_version#v}" gt 1.4.28; then
+              baseline=v1.4.28
+              baseline_asset="adm-desktop-$baseline-linux-amd64.deb"
+            fi
             sudo dpkg -r adm
             previous="$(mktemp -d)"
-            gh release download v1.4.27 --repo "$GITHUB_REPOSITORY" --dir "$previous" --pattern 'adm-v1.4.27-linux-amd64.deb*'
-            (cd "$previous" && sha256sum -c adm-v1.4.27-linux-amd64.deb.sha256)
-            sudo dpkg -i "$previous/adm-v1.4.27-linux-amd64.deb"
-            test "$(/usr/bin/adm version)" = v1.4.27
+            gh release download "$baseline" --repo "$GITHUB_REPOSITORY" --dir "$previous" --pattern "$baseline_asset" --pattern "$baseline_asset.sha256"
+            (cd "$previous" && sha256sum -c "$baseline_asset.sha256")
+            sudo dpkg -i "$previous/$baseline_asset"
+            test "$(/usr/bin/adm version)" = "$baseline"
             sudo dpkg -i "$deb"
             test "$(/usr/bin/adm version)" = "$build_version"
             test -x /usr/bin/adm-desktop

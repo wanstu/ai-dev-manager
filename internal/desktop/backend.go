@@ -46,6 +46,7 @@ type managementBackend interface {
 	ExecFullAuthorizationSet(bool) (app.ExecAuthorizationStatus, error)
 	StrongPermissionControlStatus() (app.StrongPermissionControlStatus, error)
 	StrongPermissionControlSet(bool) (app.StrongPermissionControlStatus, error)
+	GlobalMemoryAgentWriteSet(bool) (app.StrongPermissionControlStatus, error)
 	LoggingStatus() (logging.Status, error)
 	GatewayAccessStatus() (app.GatewayAccessStatus, error)
 	GatewayDiagnostics() (management.GatewayDiagnostics, error)

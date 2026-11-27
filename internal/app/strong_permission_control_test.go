@@ -5,6 +5,32 @@ import (
 	"testing"
 )
 
+func TestGlobalMemoryAgentWritePersistsIndependently(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	service := New(statePath)
+	status, err := service.StrongPermissionControlStatus()
+	if err != nil || status.GlobalMemoryAgentWriteEnabled {
+		t.Fatalf("expected default denied, status=%+v err=%v", status, err)
+	}
+	status, err = service.SetGlobalMemoryAgentWrite(true)
+	if err != nil || !status.GlobalMemoryAgentWriteEnabled || !status.Enabled {
+		t.Fatalf("delegation changed strong mode: %+v err=%v", status, err)
+	}
+	reloaded := New(statePath)
+	status, err = reloaded.SetStrongPermissionControl(false)
+	if err != nil || !status.GlobalMemoryAgentWriteEnabled || status.Enabled {
+		t.Fatalf("strong mode changed delegation: %+v err=%v", status, err)
+	}
+	status, err = reloaded.SetGlobalMemoryAgentWrite(false)
+	if err != nil || status.GlobalMemoryAgentWriteEnabled || status.Enabled {
+		t.Fatalf("revocation changed strong mode: %+v err=%v", status, err)
+	}
+	status, err = New(statePath).StrongPermissionControlStatus()
+	if err != nil || status.GlobalMemoryAgentWriteEnabled || status.Enabled {
+		t.Fatalf("revocation not persisted: %+v err=%v", status, err)
+	}
+}
+
 func TestStrongPermissionControlDefaultsEnabledAndPersists(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	service := New(statePath)

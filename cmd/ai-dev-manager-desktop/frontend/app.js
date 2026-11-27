@@ -1481,8 +1481,6 @@ async function updateLaunchAtLogin() {
     elements.launchAtLogin.disabled = false;
   }
 }
-let sandboxHostRepairPrompted = false;
-
 function sandboxHostPreparationNeedsRepair(status) {
   return Boolean(
     status?.supported &&
@@ -1521,7 +1519,7 @@ function renderSandboxHostPreparation(status) {
   }
   if (brokerMissing) {
     const detail = status?.message ? ` ${status.message}` : '';
-    elements.sandboxHostPreparationSummary.textContent = `检测到强沙盒基础能力已存在，但 ACL broker 未运行。需要重新安装一次受保护的 Host Prep 任务。${detail}`;
+    elements.sandboxHostPreparationSummary.textContent = `检测到强沙盒基础能力已存在，但 ACL broker 未运行。仅在需要使用 Windows 强沙盒时，才需手动修复受保护的 Host Prep 任务。普通宿主模式无需修复。${detail}`;
     return;
   }
   if (configured) {
@@ -1534,13 +1532,12 @@ function renderSandboxHostPreparation(status) {
   }
   elements.sandboxHostPreparationSummary.textContent = status?.message || '强沙盒尚未启用。启用时只需要一次 Windows 管理员确认。';
 }
-async function loadSandboxHostPreparation(showMessage = false, offerRepair = false) {
+async function loadSandboxHostPreparation(showMessage = false) {
   elements.sandboxHostPreparationRefresh.disabled = true;
   try {
     const status = await desktopAdapter().GetSandboxHostPreparationStatus();
     renderSandboxHostPreparation(status);
     if (showMessage) setStatus('强沙盒状态已刷新', 'success');
-    if (offerRepair) await maybeOfferSandboxHostRepair(status);
     return status;
   } catch (error) {
     elements.sandboxHostPreparationBadge.dataset.state = 'unconfigured';
@@ -1554,28 +1551,15 @@ async function loadSandboxHostPreparation(showMessage = false, offerRepair = fal
   }
 }
 
-async function maybeOfferSandboxHostRepair(status) {
-  if (sandboxHostRepairPrompted || !sandboxHostPreparationNeedsRepair(status)) return;
-  sandboxHostRepairPrompted = true;
-  const confirmed = await confirmInApp('检测到 Windows 强沙盒的 ACL broker 未运行。这通常发生在升级后受保护的 Host Prep 任务仍是旧版本。现在修复？\n\n修复只会更新强沙盒 Host Prep，并需要一次 Windows 管理员确认；不会给 Agent 管理员权限。');
-  if (!confirmed) {
-    setStatus('Windows 强沙盒需要修复；可在“设置”中点击“修复强沙盒”重新执行。', 'error');
-    return;
-  }
-  await enableSandboxHostPreparation({skipConfirm: true, repair: true});
-}
-
-async function enableSandboxHostPreparation(options = {}) {
+async function enableSandboxHostPreparation() {
   if (elements.sandboxHostPreparationEnable.disabled) return;
-  let repair = Boolean(options?.repair);
-  if (!repair) {
-    try {
-      repair = sandboxHostPreparationNeedsRepair(await desktopAdapter().GetSandboxHostPreparationStatus());
-    } catch (_) {
-      repair = false;
-    }
+  let repair = false;
+  try {
+    repair = sandboxHostPreparationNeedsRepair(await desktopAdapter().GetSandboxHostPreparationStatus());
+  } catch (_) {
+    repair = false;
   }
-  if (!options?.skipConfirm && !await confirmInApp(repair
+  if (!await confirmInApp(repair
     ? '修复 Windows 强沙盒需要一次管理员确认，用来更新受保护的 Host Prep 任务并启动 ACL broker。不会给 Agent 开放管理员权限。继续？'
     : '这一步需要一次 Windows 管理员确认，用来保证强沙盒在电脑重启后仍然自动可用。不会给 Agent 开放管理员权限。继续？')) return;
   elements.sandboxHostPreparationEnable.disabled = true;
@@ -1839,6 +1823,13 @@ function renderStrongPermissionControlStatus(status) {
   strongPermissionControlStatus = status || null;
   const enabled = status?.enabled !== false;
   elements.strongPermissionControl.checked = enabled;
+  elements.strongPermissionControl.disabled = !status;
+  const memoryToggle = document.getElementById('globalMemoryAgentWrite');
+  memoryToggle.checked = status?.global_memory_agent_write_enabled === true;
+  memoryToggle.disabled = !status || typeof status.global_memory_agent_write_enabled !== 'boolean';
+  document.getElementById('globalMemoryAgentWriteHint').textContent = memoryToggle.disabled
+    ? '当前服务未报告记忆授权能力，请升级或重新连接。'
+    : (memoryToggle.checked ? '已授权：Agent 可以维护共享记忆，永久清除仍仅限管理员。' : '未授权：Agent 可读取全局记忆，并维护环境私有记忆。');
   elements.strongPermissionControlModeLabel.textContent = enabled ? '已开启 · 更安全' : '已关闭 · 更灵活';
   elements.strongPermissionControlHint.textContent = status?.message || (enabled
     ? '强权限已开启：受限操作会被拦截并明确说明原因，建议保持开启。'
@@ -1849,7 +1840,7 @@ async function refreshStrongPermissionControlStatus() {
     renderStrongPermissionControlStatus(await desktopAdapter().GetStrongPermissionControlStatus());
     return '';
   } catch (error) {
-    strongPermissionControlStatus = null;
+    renderStrongPermissionControlStatus(null);
     elements.strongPermissionControl.checked = true;
     elements.strongPermissionControl.disabled = true;
     elements.strongPermissionControlHint.textContent = '强权限状态读取失败：' + errorText(error);
@@ -1887,6 +1878,23 @@ async function saveStrongPermissionControl() {
     elements.strongPermissionControl.disabled = false;
   }
 }
+async function saveGlobalMemoryAgentWrite() {
+  const toggle = document.getElementById('globalMemoryAgentWrite');
+  const requested = toggle.checked;
+  toggle.disabled = true;
+  if (requested && !await confirmInApp('允许所有持有当前 Agent 凭证的客户端修改共享记忆，包括软删除及恢复历史。记忆不得用于存放密钥或改变权限。是否授权？', {title:'授权全局记忆管理？', confirmText:'确认授权', danger:true})) {
+    renderStrongPermissionControlStatus(strongPermissionControlStatus);
+    return;
+  }
+  try {
+    renderStrongPermissionControlStatus(await desktopAdapter().SetGlobalMemoryAgentWrite(requested));
+    setStatus(requested ? '已授权 Agent 管理全局记忆' : '已撤销 Agent 全局记忆管理授权', 'success');
+  } catch (error) {
+    await refreshStrongPermissionControlStatus();
+    setStatus('全局记忆授权设置失败：' + errorText(error), 'error');
+  }
+}
+document.getElementById('globalMemoryAgentWrite')?.addEventListener('change', saveGlobalMemoryAgentWrite);
 async function saveGatewayAllowedHosts() {
   const hosts = String(elements.gatewayAllowedHosts.value || '').split(/[\n,]+/).map((v) => v.trim()).filter(Boolean);
   const ips = String(elements.gatewayAllowedClientIPs.value || '').split(/[\n,]+/).map((v) => v.trim()).filter(Boolean);
@@ -5236,7 +5244,7 @@ elements.desktopThemeGradientPresetName?.addEventListener('keydown', (event) => 
   }
 });
 elements.desktopThemeRefreshButton.addEventListener('click', refreshDesktopThemeCatalog);
-window.addEventListener('focus', () => { loadDesktopPreferences(false); loadSandboxHostPreparation(false, true); });
+window.addEventListener('focus', () => { loadDesktopPreferences(false); loadSandboxHostPreparation(false); });
 window.addEventListener('keydown', (event) => { if (event.key !== 'Escape' || activeEditorDialog()) return; if (selectedEnvironmentID) closeEnvironmentDetail(); else if (editingMCPID) resetMCPEditor(true); });
 elements.gatewayAccessSaveHosts.addEventListener('click', saveGatewayAllowedHosts);
 elements.gatewayDiagnosticsCopyButton.addEventListener('click', copyGatewayDiagnosticsReport);

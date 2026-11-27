@@ -2,7 +2,7 @@
 
 ## 作用域与权限
 
-- 全局记忆：所有 Agent 可读、可搜索；写入、删除及批量整理仍由 Admin 管理。
+- 全局记忆：所有 Agent 可读、可搜索。管理员可在权限设置中独立授权 Agent 新增、修改、软删除、批量整理和恢复历史；默认不授权。永久清除仍为 Admin 专属，Agent 不可自行授权。
 - 环境私有记忆：Agent 可显式指定 environment_id 读取、搜索、增加、更新、删除及批量整理。不需要 Writer 锁，也不会续期。
 - 环境 ID 是明确的存储作用域，不是独立的用户身份认证边界。现有 Agent 凭证可访问其可见环境；不得把作用域选择误称为多租户授权。
 - 临时环境的私有记忆随环境清理消失。不要自动将其复制到其他环境；长期项目知识应保存至明确选定、获授权的持久环境。
@@ -23,7 +23,7 @@
 新增：
 - global_search：共享记忆搜索。
 - environment_search：指定环境搜索。
-- global_organize：Admin 批量整理。
+- global_organize：原子批量整理（Admin 或已获明确授权的 Agent）。
 - environment_organize：指定环境批量整理。
 
 搜索参数：query（多个空格分隔关键词全部匹配；忽略大小写；匹配 Key 权重优先于正文），limit（默认 20，最多 100），max_output_bytes（默认 16384，范围 256～65536）。返回 entries、total_matches、omitted；超预算条目不会返回部分正文，必要时通过 list/read 查阅完整记录。环境搜索还要求 environment_id。
